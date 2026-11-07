@@ -115,6 +115,7 @@ vi.mock('../../components/ReportMessageSheet', () => ({
     }, 'Submit'),
 }));
 
+import { busyError } from '@beanpool/core';
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
 
 describe('MessageRequestsPane on phone', () => {
@@ -330,6 +331,39 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(blockMocks.blockUser).not.toHaveBeenCalled();
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    // Deciding review of #2960 (round 2): a busy network's 429 (core busyError) was read as the moderators' hourly limit, so
+    // Report blocked the sender with no report and said "You have sent a lot of reports recently". Now it is no answer from the
+    // node: nothing is blocked, the busy sentence shows, the card stays and the member can try Report again.
+    it('a report met by a busy network blocks nobody, says the busy sentence, and the card stays for a second try', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(busyError('2'));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).not.toHaveBeenCalled();
+        expect(alerts.said[0].title).toBe('Busy right now. Try again in a moment.');
+        expect(alerts.said[0].title).not.toMatch(/lot of reports|blocked/);
+        expect(onChanged).not.toHaveBeenCalled();
+        expect(screen.getByTestId('request-report')).toBeTruthy();
+    });
+
+    it('Accept or Ignore met by a busy network says the busy sentence, never the offline words, and the card stays', async () => {
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(busyError(null));
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+        fireEvent.click(screen.getByTestId('request-accept'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('Busy right now. Try again in a moment.');
+        cleanup();
+
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(busyError(null));
+        renderCard({ onChanged });
+        fireEvent.click(screen.getByTestId('request-decline'));
+        await waitFor(() => expect(alerts.said.length).toBe(2));
+        expect(alerts.said[1].title).toBe('Busy right now. Try again in a moment.');
         expect(onChanged).not.toHaveBeenCalled();
     });
 

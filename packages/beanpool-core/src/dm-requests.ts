@@ -4,6 +4,7 @@
  * added them, written to them or traded with them waits as a request.
  */
 import { t } from './words.js';
+import { isBusyError, busyWords } from './busy-answer.js';
 
 /**
  * What waits for a member in one community, in counts alone (GET /api/me/unread): both apps read it, and it names nobody
@@ -129,6 +130,9 @@ export function requestAfterRead<T extends DmRequestCore, R extends DmRequestCor
 
 /** What a request card or the chat's request bar says when Accept or Ignore didn't go through. */
 export function decisionFailureWords(e: unknown): string {
+    // A busy network (HTTP 429 from the proxy in front of the node) is not "out of reach" and not the node's refusal: it says
+    // so in its one sentence, and the card stays for a second try.
+    if (isBusyError(e)) return busyWords();
     const err = e as { status?: unknown; message?: unknown; unsaid?: unknown } | null | undefined;
     // The node answered and refused (a standby, a request that is gone): its own words. A page that wasn't the node's (a
     // proxy's), or no answer at all, is the community out of reach.
@@ -147,9 +151,16 @@ export type RequestReportOutcome = 'reported' | 'over_limit' | 'refused' | 'no_l
 
 /**
  * A report's failure, as Report on a request reads it: the node's refusal, which never costs a member their block, or null
- * for no answer from it (offline, a 5xx), which throws as ever: the card stays and a second try sends the report.
+ * for no answer from it (offline, a 5xx, or a busy network's 429), which throws as ever: the card stays and a second try
+ * sends the report.
+ *
+ * A busy network's 429 (`isBusyError`: the proxy in front of the node answered, not the node) is NOT the moderators' hourly
+ * limit. Read as `over_limit` it would block the sender with no report at all (Child safety included) and tell the member
+ * a falsehood, with no second try. The node's own report limit is its JSON 429 (`{ error: 'rate_limited', message }`),
+ * which is no busy error and stays `over_limit`.
  */
 export function requestReportRefused(e: unknown): 'over_limit' | 'refused' | null {
+    if (isBusyError(e)) return null;
     const status = (e as { status?: unknown } | null | undefined)?.status;
     if (status === 429) return 'over_limit';
     return typeof status === 'number' && status >= 400 && status < 500 ? 'refused' : null;

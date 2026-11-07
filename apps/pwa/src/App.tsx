@@ -32,7 +32,7 @@ import { MarketplacePage } from './pages/MarketplacePage';
 import type { PostType } from './lib/marketplace';
 import { LedgerPage } from './pages/LedgerPage';
 import { readsOwn, useCommunityInfo, useFeatureMode } from './lib/features';
-import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type InviteRole } from './lib/node-invites';
+import { onlyAdminsInvite, readInviteRole, roleReadRefused, mayInviteHere, takesKnocks, type InviteRole } from './lib/node-invites';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
 import { webAppBehindServer } from './lib/app-version';
@@ -188,10 +188,7 @@ export function App() {
         let alive = true;
         request<{ role?: unknown }>('GET', '/api/node-admin/me')
             .then((body) => { if (alive) setInviteRole(readInviteRole(body?.role)); })
-            .catch((e) => {
-                const status = (e as { status?: unknown } | null)?.status;
-                if (alive && typeof status === 'number' && status < 500) setInviteRole(null);
-            });
+            .catch((e) => { if (alive && roleReadRefused(e)) setInviteRole(null); });
         return () => { alive = false; };
     }, [doorAdmins, identity?.publicKey]);
     const canSeeKnocks = invitesMode !== 'preview' && takesKnocks(nodeInfo) && mayInviteHere(nodeInfo, inviteRole);

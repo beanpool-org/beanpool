@@ -20,6 +20,7 @@
 
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isBusyStatus } from '@beanpool/core';
 import { phoneLockPrompt, timeDoorPrompt } from './LocalAuth';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
@@ -80,7 +81,9 @@ export async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): 
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
-        if (!res.ok) return res.status < 500 ? NO_ROLE : null;
+        // A refusal is an answer (no role) and is remembered for ten minutes. A 429 is not one: the network in front of the node
+        // is busy (or its gateway's limit), and it says nothing of this member's role, so it is "not heard" and not remembered.
+        if (!res.ok) return res.status < 500 && !isBusyStatus(res.status) ? NO_ROLE : null;
         const body = await res.json() as { role?: unknown; communityName?: unknown; coreSettings?: unknown };
         const role = canManageNode(body.role) ? body.role : null;
         // Only an owner's or admin's: a node never says it to anyone else, and a phone never reads it for anyone else.

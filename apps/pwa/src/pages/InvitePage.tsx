@@ -27,7 +27,7 @@ import { VoucherCardModal } from '../components/VoucherCardModal';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
 import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
 import {
-    communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
+    communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
 } from '../lib/node-invites';
 
@@ -118,9 +118,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         request<{ role?: unknown }>('GET', '/api/node-admin/me')
             .then((body) => { if (!cancelled) setRole(readInviteRole(body?.role)); })
             .catch((e) => {
-                // A refusal (not a member) is an answer: no role. No answer at all leaves it unknown.
-                const status = (e as { status?: unknown } | null)?.status;
-                if (!cancelled && typeof status === 'number' && status < 500) setRole(null);
+                // A refusal (not a member) is an answer: no role. No answer at all, or a busy network's 429, leaves it unknown.
+                if (!cancelled && roleReadRefused(e)) setRole(null);
             });
         return () => { cancelled = true; };
     }, [doorAdmins]);

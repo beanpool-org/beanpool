@@ -18,7 +18,7 @@ import { useCommunityInfo } from '../lib/features';
 import { loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { handOver } from '../lib/hand-over';
 import { inviteAndShareLink, makeInviteForShare, offersInviteAndShare } from '../lib/invite-and-share';
-import { onlyAdminsInvite, readInviteRole, type InviteRole } from '../lib/node-invites';
+import { onlyAdminsInvite, readInviteRole, roleReadRefused, type InviteRole } from '../lib/node-invites';
 import { nodeOrigin } from './EventExtras';
 import { VouchPresetChoice } from './VouchPresetChoice';
 import type { SharePart } from './ShareMenu';
@@ -62,10 +62,7 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
         let cancelled = false;
         request<{ role?: unknown }>('GET', '/api/node-admin/me')
             .then((body) => { if (!cancelled) setRole(readInviteRole(body?.role)); })
-            .catch((e) => {
-                const status = (e as { status?: unknown } | null)?.status;
-                if (!cancelled && typeof status === 'number' && status < 500) setRole(null);
-            });
+            .catch((e) => { if (!cancelled && roleReadRefused(e)) setRole(null); });
         return () => { cancelled = true; };
     }, [offered, identity, adminsOnly]);
 

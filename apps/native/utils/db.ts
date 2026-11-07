@@ -36,6 +36,7 @@ import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
+import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -2283,7 +2284,7 @@ export async function createPost(post: any) {
                 const json = JSON.parse(txt);
                 if (json.error) errMsg = json.error;
             } catch (e) {
-                if (txt) errMsg = txt;
+                if (txt) errMsg = refusalTextOf(res.status, txt, errMsg);
             }
             // Auto-heal: server may not yet know about the user's avatar if the
             // onboarding publish failed. Push the profile and retry once.
@@ -2377,7 +2378,7 @@ export async function votePoll(postId: string, optionId: string, otherWords?: st
             const j = JSON.parse(txt);
             if (j.error) errMsg = j.error;
         } catch {
-            if (txt) errMsg = txt;
+            if (txt) errMsg = refusalTextOf(res.status, txt, errMsg);
         }
         throw new Error(errMsg);
     }
@@ -2462,7 +2463,7 @@ export async function rsvpEvent(postId: string, status: EventRsvpStatus | null) 
             const j = JSON.parse(txt);
             if (j.error) errMsg = j.error;
         } catch {
-            if (txt) errMsg = txt;
+            if (txt) errMsg = refusalTextOf(res.status, txt, errMsg);
         }
         throw new Error(errMsg);
     }
@@ -2555,7 +2556,7 @@ export async function fetchMyEvents(): Promise<MyEvent[]> {
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = `Could not read your events (${res.status})`;
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     const data = await res.json();
@@ -2595,7 +2596,7 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = 'Could not save your reminder';
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     return await res.json();
@@ -2630,7 +2631,7 @@ export async function setEventDateCancelled(postId: string, date: string, cancel
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = 'Could not change that date';
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     const out = await res.json();
@@ -2766,7 +2767,7 @@ export async function closePoll(postId: string) {
             const j = JSON.parse(txt);
             if (j.error) errMsg = j.error;
         } catch {
-            if (txt) errMsg = txt;
+            if (txt) errMsg = refusalTextOf(res.status, txt, errMsg);
         }
         throw new Error(errMsg);
     }
@@ -7033,7 +7034,7 @@ async function _deliverPendingMessage(
                 const json = JSON.parse(txt);
                 if (json.error) errMsg = json.error;
             } catch {
-                if (txt) errMsg = txt;
+                if (txt) errMsg = refusalTextOf(res.status, txt, errMsg);
             }
             throw new Error(errMsg);
         }
@@ -7150,7 +7151,7 @@ export async function editMessage(conversationId: string, messageId: string, new
     if (!res.ok) {
         const txt = await res.text();
         let errMsg = 'Failed to edit message.';
-        try { const j = JSON.parse(txt); if (j.error) errMsg = j.error; } catch { if (txt) errMsg = txt; }
+        try { const j = JSON.parse(txt); if (j.error) errMsg = j.error; } catch { if (txt) errMsg = refusalTextOf(res.status, txt, errMsg); }
         throw new Error(errMsg);
     }
     const data = await res.json();
@@ -7336,7 +7337,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
         if (!res.ok) {
             const txt = await res.text();
             let errMsg = 'Failed to create conversation thread.';
-            try { const json = JSON.parse(txt); if (json.error) errMsg = json.error; } catch (e) { if (txt) errMsg = txt; }
+            try { const json = JSON.parse(txt); if (json.error) errMsg = json.error; } catch (e) { if (txt) errMsg = refusalTextOf(res.status, txt, errMsg); }
             throw new Error(errMsg);
         }
         const data = await res.json();
@@ -7521,19 +7522,27 @@ export async function redeemInvite(
 
         if (!res.ok) {
             let errorMsg = `Failed to redeem invite (HTTP ${res.status})`;
+            // A 429 first: the network in front of the node is busy (Cloudflare's page matches "cloudflare" and "<html" below
+            // and would read as "unreachable"). Say so in the one busy sentence. The node's own JSON 429 is not busy: its
+            // `error` is read below from the text already taken.
+            let textBody: string | null = null;
+            if (isBusyStatus(res.status)) {
+                textBody = await res.text().catch(() => '');
+                if (isBusyAnswer(res.status, textBody)) throw busyError(res.headers?.get?.('Retry-After'));
+            }
             if (res.status === 530 || res.status === 502 || res.status === 503 || res.status === 504) {
                 errorMsg = `Relay Node Offline: The selected community node is currently unreachable (HTTP ${res.status}).`;
             } else {
                 try {
-                    const textBody = await res.text();
+                    const bodyText: string = textBody !== null ? textBody : await res.text();
                     try {
-                        const errJson = JSON.parse(textBody);
+                        const errJson = JSON.parse(bodyText);
                         if (errJson.error) errorMsg = errJson.error;
                     } catch {
-                        if (textBody.toLowerCase().includes('cloudflare') || textBody.toLowerCase().includes('<html')) {
+                        if (bodyText.toLowerCase().includes('cloudflare') || bodyText.toLowerCase().includes('<html')) {
                             errorMsg = `Relay Node Offline: The selected community node is currently unreachable.`;
                         } else {
-                            errorMsg += `: [Text] ${textBody.substring(0, 100)}`;
+                            errorMsg += `: [Text] ${bodyText.substring(0, 100)}`;
                         }
                     }
                 } catch (e: any) {
@@ -7867,8 +7876,12 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         // The node's code beside its sentence (`shop_paused`: an Offer in a shop closed for now), so a screen can say why.
         let nodeCode: string | undefined;
+        // What the body was, for telling a busy network's answer from the node's own: the JSON when it parsed, else its text.
+        let errBody: unknown;
+        let errText = '';
         try {
             const errJson = await res.json();
+            errBody = errJson;
             // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
             if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
@@ -7877,9 +7890,15 @@ async function _signedRequest(endpoint: string, payload: any) {
         } catch {
             try {
                 const txt = await res.text();
-                if (txt) errorMsg = txt;
+                if (txt) errText = txt;
             } catch {}
         }
+        // The network in front of the node is too busy (a 429 that is not the node's own JSON, such as Cloudflare's page):
+        // one sentence, never its page, never "offline", never a sign-out or a key note (core busy-answer.ts). A write is
+        // never sent again by itself: it may be the member's second tap that lands twice.
+        if (isBusyAnswer(res.status, errBody ?? errText)) throw busyError(res.headers?.get?.('Retry-After'));
+        // A proxy's page on any other status is not words: the generic `Server returned N` stands.
+        if (errText) errorMsg = refusalTextOf(res.status, errText, errorMsg);
         // Auto-heal stale server profile: if the user has a local avatar but the
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
@@ -7968,28 +7987,45 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
-    // The language this phone writes in, as on a signed POST: a refused read comes back in it too (not signed, not stored).
-    let headers: Record<string, string> = { 'Accept': 'application/json', ...languageHeader(), ...(options?.customHeaders || {}) };
-    const identity = await loadIdentity();
-    let signed = false;
-    if (identity?.privateKey && identity?.publicKey) {
-        try {
-            // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
-            const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
-            headers = { ...headers, ...signedHeaders };
-            signed = true;
-        } catch (e) {
-            console.warn('[signedGet] Could not sign GET request:', e);
+    // One ask: signed afresh each time (a signature carries its own nonce, so an ask is never sent twice as it was).
+    const ask = async (): Promise<Response> => {
+        // The language this phone writes in, as on a signed POST: a refused read comes back in it too (not signed, not stored).
+        let headers: Record<string, string> = { 'Accept': 'application/json', ...languageHeader(), ...(options?.customHeaders || {}) };
+        const identity = await loadIdentity();
+        let signed = false;
+        if (identity?.privateKey && identity?.publicKey) {
+            try {
+                // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
+                const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
+                headers = { ...headers, ...signedHeaders };
+                signed = true;
+            } catch (e) {
+                console.warn('[signedGet] Could not sign GET request:', e);
+            }
         }
-    }
 
-    const res = await fetch(`${anchorUrl}${path}`, {
-        method: 'GET',
-        headers,
-        signal: options?.signal,
-    });
-    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
-    return res;
+        const res = await fetch(`${anchorUrl}${path}`, {
+            method: 'GET',
+            headers,
+            signal: options?.signal,
+        });
+        if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
+        return res;
+    };
+
+    const first = await ask();
+    // A busy network's 429 (not the node's own JSON one): a read is safe to ask again, ONCE, after the wait it named (core
+    // busy-answer.ts). A second 429 is handed back as it is, for the caller's own not-ok path; never a loop.
+    if (first.ok || !isBusyStatus(first.status) || !(await answerIsBusy(first))) return first;
+    await waitBeforeRetry(retryAfterMs(first.headers?.get?.('Retry-After')), options?.signal);
+    return ask();
+}
+
+/** Whether a 429 is the busy network's, not the node's own: read from a copy, so the caller's body is untouched. */
+async function answerIsBusy(res: Response): Promise<boolean> {
+    if (typeof res.clone !== 'function') return true;
+    const text = await res.clone().text().catch(() => '');
+    return isBusyAnswer(res.status, text);
 }
 
 /**
@@ -9253,7 +9289,7 @@ export async function fetchGroupSuccession(groupId: string): Promise<GroupSucces
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = `Could not read the lead vote (${res.status})`;
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     return await res.json();

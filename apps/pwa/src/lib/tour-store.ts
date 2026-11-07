@@ -11,7 +11,7 @@
  * Every storage read and write is guarded: a browser that keeps nothing still gets the tour, never an error.
  */
 import { useEffect, useState } from 'react';
-import { readTourProgress, readTourRecord, type TourNodeFacts, type TourProgress, type TourRecord } from '@beanpool/core';
+import { isBusyStatus, readTourProgress, readTourRecord, type TourNodeFacts, type TourProgress, type TourRecord } from '@beanpool/core';
 
 const progressKey = (publicKey: string) => `beanpool_tour_progress_${publicKey}`;
 const pendingKey = (publicKey: string) => `beanpool_tour_pending_${publicKey}`;
@@ -122,6 +122,16 @@ export const readProgress = (publicKey: string): TourProgress | null => readTour
 /** A Done or Skip the node didn't take: kept here and sent on the next Home open. */
 export const pendingTourRecord = (publicKey: string): TourRecord | null => readTourRecord(readJson(pendingKey(publicKey)));
 export const keepPendingTourRecord = (publicKey: string, record: TourRecord | null): void => writeJson(pendingKey(publicKey), record);
+
+/**
+ * Whether the node refused the tour record outright (4xx: a node from before the tour), so the phone's word ends the card
+ * and nothing is kept to send again. Not a 429: the network in front of the node is busy, which says nothing about the
+ * record, so it is kept and sent on the next Home open. No answer at all, or a 5xx, is kept too.
+ */
+export function tourRecordRefused(err: unknown): boolean {
+    const status = (err as { status?: unknown } | null | undefined)?.status;
+    return typeof status === 'number' && status >= 400 && status < 500 && !isBusyStatus(status);
+}
 
 // ── The "?"'s screen context and its opening ──────────────────────────────────────────────────────────────────────────
 

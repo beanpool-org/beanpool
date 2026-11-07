@@ -207,6 +207,21 @@ describe("the header's remembered role (so non-admins never ask for the queue)",
         expect(calls).toHaveLength(1);
     });
 
+    // Deciding review of #2960 (round 2), the 429 sweep: a busy network's 429 was "a refusal" (no role), and a refusal is
+    // remembered for ten minutes, so an admin lost the header's shield for ten minutes of a busy moment. A 429 is not heard.
+    it('a 429 (a busy network) is no answer about the role: not "no role", and not remembered', async () => {
+        const url = 'https://cache-busy.example';
+        mockFetch({ '/api/node-admin/me': { status: 429, body: { error: 'x' } } });
+        expect(await cachedNodeRoleHeard(url, identity, T)).toBeNull();
+        const calls = mockFetch({ '/api/node-admin/me': me('admin') });
+        expect((await cachedNodeRole(url, identity, T + 1)).role).toBe('admin');
+        expect(calls).toHaveLength(1);
+        // A real refusal is still an answer, and is remembered.
+        const refused = 'https://cache-busy-b.example';
+        mockFetch({ '/api/node-admin/me': { status: 403, body: { error: 'not a member' } } });
+        expect((await cachedNodeRoleHeard(refused, identity, T))?.role).toBeNull();
+    });
+
     it('forgetting asks again at once (a refused queue looks like a demotion); Settings can hand over a fresh answer', async () => {
         const url = 'https://cache-f.example';
         mockFetch({ '/api/node-admin/me': me('admin') });

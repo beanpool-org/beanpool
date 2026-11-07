@@ -97,7 +97,7 @@ import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
 import {
-    keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
+    keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { CategoryTile } from '../components/CategoryTile';
@@ -2164,8 +2164,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         } catch (err) {
             // Offline or a node that is down: kept in this browser and sent on the next Home open. A node that refuses it
             // outright (4xx: a node from before the tour) drops it, as the phone does: the layout write ends the card here.
-            const status = (err as { status?: number } | null)?.status;
-            keepPendingTourRecord(pk, typeof status === 'number' && status >= 400 && status < 500 ? null : record);
+            // A busy network's 429 is no refusal: the record is kept (lib/tour-store.ts tourRecordRefused).
+            keepPendingTourRecord(pk, tourRecordRefused(err) ? null : record);
         }
     }
     function applyTourEnd(kind: 'done' | 'skipped') {

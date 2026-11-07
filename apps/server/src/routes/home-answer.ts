@@ -111,6 +111,7 @@ import { listedCommunityCount } from '../engine/directory-cache.js';
 import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, juryOf, openScopedDecisionsFor, titleForMembers, isBranchVote, removalSubjects } from '../decisions-engine.js';
 import { seatedJuror } from '../engine/removal-jury.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
+import { keptListingRead, readsListingsAsAnyone } from './home-listings.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
 export const HOME_CARD_IDS = [
@@ -919,12 +920,33 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     };
 }
 
-/** The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas).
- *  Where anyone can join in a minute, a member's read is the neighbourhood read (engine PostFilter.neighbourhood). */
-function postsFor(c: Ctx, filter: Parameters<typeof getPosts>[0]): MarketplacePost[] {
-    const posts = getPosts({ ...filter, viewerPubkey: c.member ? c.me! : undefined, coarse: c.member ? undefined : true,
-        neighbourhood: c.member && getProfileSwitches().openMembership ? true : undefined });
-    return c.member ? posts : posts.map(guestPost);
+/**
+ * The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas, read as
+ * the board reads it for a visitor: `guest`, so no author's standing is worked out for a copy guestPost then empties).
+ * Where anyone can join in a minute, a member's read is the neighbourhood read (engine PostFilter.neighbourhood). No card
+ * carries an author's badge, so a member's read works none out (`withoutTier`; load rehearsal 7 Nov, §8 fix 6).
+ *
+ * `keep`: a read that may be kept for the next reader it is the same for (home-listings.ts): a visitor's, or a member's
+ * while their read is the read made for nobody (readsListingsAsAnyone). The filter is the key, with the kind of read,
+ * so everything the read is made of is in it. What is kept is frozen: a card makes its own rows from it.
+ */
+function postsFor(c: Ctx, filter: NonNullable<Parameters<typeof getPosts>[0]>, keep = false): MarketplacePost[] {
+    if (!c.member) {
+        const read = () => getPosts({ ...filter, viewerPubkey: undefined, coarse: true, guest: true }).map(guestPost);
+        return keep ? keptListingRead(`guest\n${JSON.stringify(filter)}`, () => frozen(read())) : read();
+    }
+    const neighbourhood = getProfileSwitches().openMembership ? true : undefined;
+    if (keep && readsListingsAsAnyone(c.me!)) {
+        return keptListingRead(`anyone\n${neighbourhood ? 'neighbourhood' : 'exact'}\n${JSON.stringify(filter)}`,
+            () => frozen(getPosts({ ...filter, viewerPubkey: undefined, neighbourhood, withoutTier: true })));
+    }
+    return getPosts({ ...filter, viewerPubkey: c.me!, neighbourhood, withoutTier: true });
+}
+
+/** A kept read, frozen with each of its posts: a card that changed one in place would change every reader's. */
+function frozen(posts: MarketplacePost[]): MarketplacePost[] {
+    for (const p of posts) Object.freeze(p);
+    return Object.freeze(posts) as MarketplacePost[];
 }
 
 /**
@@ -1011,10 +1033,11 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
     // Nearest first where the listings come that way (the global profile's "Near you") and there is a point; newest
     // first elsewhere. A distance on each wherever there is a point (every node understands one, G4).
     const near = c.point && c.switches.distanceSortDefault;
+    // Kept per point and listings version for the next reader it is the same for (postsFor `keep`, home-listings.ts).
     const pool = postsFor(c, {
         types: ['offer', 'need'], limit: MARKET_POOL + 1,
-        near: c.point ? { ...c.point } : undefined, sortByDistance: !!near, measureAtMost: c.point ? ONE_PASS_MAX_MEASURED : undefined,
-    }).filter(p => p.status === 'active' && p.active !== false);
+        near: c.point ? { lat: c.point.lat, lng: c.point.lng } : undefined, sortByDistance: !!near, measureAtMost: c.point ? ONE_PASS_MAX_MEASURED : undefined,
+    }, true).filter(p => p.status === 'active' && p.active !== false);
     const since = c.now - MARKET_DAYS * DAY_MS;
     const recent = pool.filter(p => Date.parse(p.createdAt) >= since);
     // The live pinned Offers and Needs first (at most PINS_MAX), whatever their age; the card keeps its few, the pool fills below.
@@ -1151,7 +1174,7 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
         return { open: mine.length, soonestClosesAt: soonestOf(mine), polls: 0, pollsMore: false, items: rowsOf(mine), poll: null };
     }
 
-    const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined })
+    const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined, withoutTier: true })
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
     // The first open poll, its question as asked: the newest live pinned one when there is one (read by id, so it is the first

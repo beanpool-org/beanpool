@@ -439,6 +439,13 @@ export interface PostFilter {
      */
     guest?: boolean;
     /**
+     * The caller never reads the author's badge, `authorEnergyCycled` (apps/server routes/home-answer.ts: no Home card
+     * carries it), so the author's trust profile is not worked out for this read and the badge is left 0, as a visitor's
+     * read leaves it. Which posts there are, their order and every other field are as without it. Set only where nothing
+     * the read returns is shown with a badge.
+     */
+    withoutTier?: boolean;
+    /**
      * The most posts a read with a point measures in its one pass (postRowsNear), for a read a request from outside makes
      * (apps/server routes/marketplace.ts sets ONE_PASS_MAX_MEASURED). Without it the one pass (a filter circles don't
      * take, a radius, a reader far from every post, a page deeper than circles go) measures and sorts every post the
@@ -817,8 +824,9 @@ export function generateSearchKeywords(title: string, description: string, categ
  * A post row as the reader gets it. `forGuest`: a visitor's read (PostFilter.guest), whose copy guestPost makes with a
  * neutral value for the author's standing and face, so neither is worked out here: they stand as guestPost leaves them.
  * `tierByAuthor`: the badges already worked out in this read, by author, so an author's is worked out once a read.
+ * `withoutTier`: the caller never shows the badge (PostFilter.withoutTier), so it is not worked out and stands at 0.
  */
-export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false, tierByAuthor?: Map<string, number>): MarketplacePost {
+export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false, tierByAuthor?: Map<string, number>, withoutTier = false): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     const freeTags = freeTagsOf(row.free_tags);
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
@@ -828,7 +836,8 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
     // leaves out the known grant (the admins' confirmation stays private; Marty, 21 Oct). The apps only ever turn it into
     // the badge (tierForCredit), which the threshold gives exactly.
     let trustPoints = 0;
-    if (!forGuest) {
+    // `withoutTier` (PostFilter.withoutTier): a read whose caller never shows the badge leaves it 0, as a visitor's read does.
+    if (!forGuest && !withoutTier) {
         const known = tierByAuthor?.get(row.author_pubkey);
         if (known !== undefined) {
             trustPoints = known;
@@ -1457,6 +1466,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     neighbourhood: () => true,
     // What is read of each post, not which posts.
     guest: () => true,
+    withoutTier: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     // The pins are read apart from the circles, wherever they are (postRowsWithPins); the rest of the page is any other's.
@@ -2466,7 +2476,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // the node's CPU, the market and Home's market card). The read runs at one database state, so once an author is the same.
     const tierByAuthor = new Map<string, number>();
     for (const r of rows) {
-        const post = rowToPost(db, r, photosByPost, !!filter?.guest, tierByAuthor);
+        const post = rowToPost(db, r, photosByPost, !!filter?.guest, tierByAuthor, !!filter?.withoutTier);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
             // A removal says nothing of where the post was, so it carries no distance either.

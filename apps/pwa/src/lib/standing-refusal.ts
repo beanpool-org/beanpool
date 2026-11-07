@@ -107,6 +107,9 @@ export type SyncStatusAction =
  * - A 429 (the network in front of the node is busy) → the chip keeps what it showed; a 5xx does too while the live socket is up
  */
 export function statusReducer(state: SyncStatusState, action: SyncStatusAction): SyncStatusState {
+    // A probe's answer says nothing about the live socket, so every probe keeps what the socket last said: a later 5xx with
+    // the socket still up must find it (the socket's own change fires again only on its next message).
+    const socket = state.wsConnected === undefined ? {} : { wsConnected: state.wsConnected };
     switch (action.type) {
         case 'probe_success':
             return {
@@ -114,17 +117,18 @@ export function statusReducer(state: SyncStatusState, action: SyncStatusAction):
                 isMember: action.isMember,
                 mode: action.isMember ? 'online' : 'guest',
                 sentence: null,
+                ...socket,
             };
         case 'probe_error': {
             const standing = standingFromRefusal(action.error);
-            if (standing) return { isHttpOnline: true, isMember: false, mode: 'guest', sentence: standing.sentence };
+            if (standing) return { isHttpOnline: true, isMember: false, mode: 'guest', sentence: standing.sentence, ...socket };
             // The network in front of the node is busy (429), or the node answered a 5xx while its live socket is up:
             // something answered, so the chip keeps what it showed and the next probe judges again. "Offline" is for when
             // nothing answered, or a 5xx with the socket down too (a tunnel with no node behind it, 530).
             const status = (action.error as { status?: unknown } | null)?.status;
             if (isBusyStatus(status)) return state;
             if (typeof status === 'number' && status >= 500 && status <= 599 && state.wsConnected === true) return state;
-            return { isHttpOnline: false, isMember: state.isMember, mode: 'offline', sentence: null, ...(state.wsConnected === undefined ? {} : { wsConnected: state.wsConnected }) };
+            return { isHttpOnline: false, isMember: state.isMember, mode: 'offline', sentence: null, ...socket };
         }
         case 'ws_change': {
             const mode: SyncMode = action.connected

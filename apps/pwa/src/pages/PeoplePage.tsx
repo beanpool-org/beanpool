@@ -23,7 +23,7 @@ import { readMyArea } from '../lib/member-area';
 import { type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { Sentence } from '../components/Sentence';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type InviteRole } from '../lib/node-invites';
+import { onlyAdminsInvite, readInviteRole, roleReadRefused, mayInviteHere, takesKnocks, type InviteRole } from '../lib/node-invites';
 
 interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
@@ -142,10 +142,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
         let alive = true;
         request<{ role?: unknown }>('GET', '/api/node-admin/me')
             .then((body) => { if (alive) setPageRole(readInviteRole(body?.role)); })
-            .catch((e) => {
-                const status = (e as { status?: unknown } | null)?.status;
-                if (alive && typeof status === 'number' && status < 500) setPageRole(null);
-            });
+            .catch((e) => { if (alive && roleReadRefused(e)) setPageRole(null); });
         return () => { alive = false; };
     }, [pageDoorAdmins]);
 

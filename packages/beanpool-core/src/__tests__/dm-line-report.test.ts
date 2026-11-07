@@ -12,6 +12,7 @@ import {
     dmLineSignedBy, signDmLine, type DmLineSigBinding,
 } from '../dm-line-report.js';
 import { requestReportNotSentWords, requestReportRefused } from '../dm-requests.js';
+import { busyError, isBusyError } from '../busy-answer.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 
 // ed25519 is frozen, so the verifies are counted here: every other use of it passes through unchanged.
@@ -168,6 +169,23 @@ describe('Report on a request, when no report went', () => {
         for (const e of [new Error('Network request failed'), { status: 500 }, { status: 502 }, { status: 0 }, { status: '404' }, null, undefined]) {
             expect(requestReportRefused(e)).toBeNull();
         }
+    });
+
+    // Deciding review of #2960 (round 2): a busy network's 429 (Cloudflare in front of the node) was read as the moderators'
+    // hourly limit, so Report on a request blocked the sender with NO report (Child safety included) and said "You have sent a
+    // lot of reports recently". It is no answer from the node: it throws, the card stays, and a second try sends the report.
+    it('a busy network is no answer from the node: no over_limit, no block without the report', () => {
+        expect(requestReportRefused(busyError(null))).toBeNull();
+        expect(requestReportRefused(busyError('7'))).toBeNull();
+        // The code says busy, whatever else the error carries.
+        expect(requestReportRefused(Object.assign(new Error('x'), { code: 'busy', status: 429, nodeAnswered: false }))).toBeNull();
+    });
+
+    it("the node's own report limit (its JSON 429) is no busy error and stays over_limit", () => {
+        const own = Object.assign(new Error('You have sent a lot of reports recently.'), { status: 429, code: 'rate_limited', nodeAnswered: true });
+        expect(isBusyError(own)).toBe(false);
+        expect(requestReportRefused(own)).toBe('over_limit');
+        expect(requestReportRefused({ status: 429, code: 'rate_limited' })).toBe('over_limit');
     });
 
     it('says why in a sentence of its own for each, and that they are blocked', () => {

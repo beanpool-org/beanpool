@@ -7,9 +7,11 @@
  * Report on a request always blocks. A line its sender deleted leaves a tombstone and the request waiting: nothing is left to
  * hand over (`no_line`). A line the node refuses blocks too (`refused`). In both the block carries a report of the person,
  * with the member's reason, so a sender can't take the moderators out of it by deleting their line: Child safety still alerts,
- * and a report that can't be sent yet is queued (blocklist.ts). Over the hourly limit (429, `over_limit`) it blocks with no
- * report: someone flooded with requests is who reaches it. A report that went needs no second one. Only no answer from the
- * node at all stops it, and that throws as any report does, for a second try.
+ * and a report that can't be sent yet is queued (blocklist.ts). Over the hourly limit (the node's own JSON 429,
+ * `over_limit`) it blocks with no report: someone flooded with requests is who reaches it. A report that went needs no second
+ * one. Only no answer from the node at all stops it, and that throws as any report does, for a second try. A busy network's
+ * 429 (core busyError: the proxy in front of the node answered, not the node) is no answer from the node: it is not the
+ * hourly limit, blocks nobody and throws the busy sentence.
  */
 import { requestReportRefused, t, type RequestReportOutcome } from '@beanpool/core';
 import { reportDmLine } from './db';

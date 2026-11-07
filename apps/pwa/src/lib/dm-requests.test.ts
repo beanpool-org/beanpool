@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { busyError } from '@beanpool/core';
 import { type DmRequestCore, requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
 
 // The rules lib/dm-requests.ts reads from the node's answers (PR #2392 at 7d20c62d; shapes as its routes give them).
@@ -129,6 +130,11 @@ describe('the words when a decision fails', () => {
         expect(decisionFailureWords(new TypeError('Failed to fetch'))).toBe('Connect to your community to accept or decline.');
         expect(decisionFailureWords(Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true }))).toBe('Connect to your community to accept or decline.');
         expect(decisionFailureWords(null)).toBe('Connect to your community to accept or decline.');
+    });
+    // Deciding review of #2960 (round 2): Accept or Ignore during a busy 429 said the offline words.
+    it('a busy network (429, code busy): the busy sentence, never the offline one', () => {
+        expect(decisionFailureWords(busyError(null))).toBe('Busy right now. Try again in a moment.');
+        expect(decisionFailureWords(Object.assign(new Error('Busy right now. Try again in a moment.'), { status: 429, code: 'busy', unsaid: true }))).toBe('Busy right now. Try again in a moment.');
     });
     it('the node\'s refusal: its own words', () => {
         const gone = Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found' });

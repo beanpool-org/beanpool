@@ -12,7 +12,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { TOUR_PREF_KEY, readTourProgress, readTourRecord, type TourProgress, type TourRecord } from '@beanpool/core';
+import { TOUR_PREF_KEY, isBusyStatus, readTourProgress, readTourRecord, type TourProgress, type TourRecord } from '@beanpool/core';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
@@ -118,7 +118,8 @@ export async function readProgress(publicKey: string): Promise<TourProgress | nu
 export async function saveTourRecord(url: string, identity: BeanPoolIdentity, record: TourRecord): Promise<boolean> {
     try {
         const res = await signedPost(url, '/api/members/preferences', { publicKey: identity.publicKey, preferences: { [TOUR_PREF_KEY]: record } }, identity);
-        if (res.ok || (res.status >= 400 && res.status < 500)) {
+        // A 429 is not a refusal: the network in front of the node is busy, so the record is kept and sent again.
+        if (res.ok || (res.status >= 400 && res.status < 500 && !isBusyStatus(res.status))) {
             await AsyncStorage.removeItem(pendingKey(identity.publicKey)).catch(() => {});
             return res.ok;
         }

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../db', () => ({ reportDmLine: vi.fn() }));
 vi.mock('../blocklist', () => ({ blockUser: vi.fn(), isUserBlocked: vi.fn() }));
 
+import { busyError } from '@beanpool/core';
 import { reportDmLine } from '../db';
 import { blockUser, isUserBlocked } from '../blocklist';
 import { ReportedNotBlockedError, reportRequestAndBlock, requestLineIn, wordsOfLine } from '../request-report';
@@ -95,6 +96,27 @@ describe('reportRequestAndBlock', () => {
 
     it('over the hourly limit it blocks and reports nobody: a report of the person would meet the same limit', async () => {
         vi.mocked(reportDmLine).mockRejectedValueOnce(refusal(429));
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).resolves.toBe('over_limit');
+        expect(blockUser).toHaveBeenCalledWith('bo');
+    });
+
+    // Deciding review of #2960 (round 2): a busy network's 429 (Cloudflare in front of the node; core busyError, status 429,
+    // code `busy`, no node answer) was read as the moderators' hourly limit, so Report blocked the sender with NO report
+    // (Child safety included) and said "You have sent a lot of reports recently". It is no answer from the node.
+    it('a busy network blocks nobody and reports nobody: the busy sentence throws, the sheet stays for a second try', async () => {
+        vi.mocked(reportDmLine).mockRejectedValueOnce(busyError('3'));
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Child safety: they asked my age', ME)).rejects.toThrow('Busy right now. Try again in a moment.');
+        expect(blockUser).not.toHaveBeenCalled();
+        // The second try sends the report, with its reason, and only then blocks.
+        vi.mocked(reportDmLine).mockResolvedValueOnce(undefined as never);
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Child safety: they asked my age', ME)).resolves.toBe('reported');
+        expect(reportDmLine).toHaveBeenLastCalledWith('c1', 'l1', 'Buy my crypto', 'Child safety: they asked my age');
+        expect(blockUser).toHaveBeenCalledTimes(1);
+        expect(blockUser).toHaveBeenCalledWith('bo');
+    });
+
+    it("the node's own report limit (its JSON 429, a node answer) is no busy error: it still blocks without a report", async () => {
+        vi.mocked(reportDmLine).mockRejectedValueOnce(Object.assign(new Error('You have sent a lot of reports recently.'), { status: 429, code: 'rate_limited', nodeAnswered: true }));
         await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).resolves.toBe('over_limit');
         expect(blockUser).toHaveBeenCalledWith('bo');
     });

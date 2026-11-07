@@ -8,6 +8,7 @@ import {
     BUSY_CODE, BUSY_RETRY_DEFAULT_MS, BUSY_RETRY_MAX_MS, BUSY_RETRY_MIN_MS, busyError, busyWords, isBusyAnswer, isBusyError,
     isBusyStatus, isCloudflareRateLimitBody, isNodeAnswerBody, isProxyPage, refusalTextOf, retryAfterMs, waitBeforeRetry,
 } from '../busy-answer';
+import { decisionFailureWords } from '../dm-requests';
 import { pseudoLocalise, setLanguage } from '../words';
 
 afterEach(() => setLanguage('en'));
@@ -156,5 +157,30 @@ describe('waitBeforeRetry', () => {
         const gone = new AbortController();
         gone.abort();
         await expect(waitBeforeRetry(30_000, gone.signal)).resolves.toBeUndefined();
+    });
+});
+
+// Deciding review of #2960 (round 2): Accept or Ignore on a message request during a busy 429 read "Connect to your community
+// to accept or decline." (the offline words). A busy network says its own sentence, and the node's refusals still say theirs.
+describe('Accept or Ignore on a request, when the network is busy', () => {
+    it('says the busy sentence for a busy error, from either app (the web error, and the phone error rebuilt with its code)', () => {
+        expect(decisionFailureWords(busyError(null))).toBe(busyWords());
+        expect(decisionFailureWords({ status: 429, message: busyWords(), code: 'busy', unsaid: true })).toBe(busyWords());
+        expect(busyWords()).toBe('Busy right now. Try again in a moment.');
+    });
+
+    it("says it in the member's current language, not the language the error was made in", () => {
+        const err = busyError(null);
+        setLanguage('xx');
+        expect(decisionFailureWords(err)).toBe(pseudoLocalise('Busy right now. Try again in a moment.'));
+    });
+
+    it("still says the offline words for no answer, a 5xx or a proxy page, and the node's own words for its refusal", () => {
+        const offline = 'Connect to your community to accept or decline.';
+        expect(decisionFailureWords(new TypeError('Failed to fetch'))).toBe(offline);
+        expect(decisionFailureWords({ status: 502, message: 'Bad Gateway', unsaid: true })).toBe(offline);
+        expect(decisionFailureWords(null)).toBe(offline);
+        expect(decisionFailureWords({ status: 429, message: 'Too many requests, slow down.', code: 'rate_limited' })).toBe('Too many requests, slow down.');
+        expect(decisionFailureWords({ status: 404, message: 'There is no message request for you in this chat.', code: 'request_not_found' })).toBe('There is no message request for you in this chat.');
     });
 });

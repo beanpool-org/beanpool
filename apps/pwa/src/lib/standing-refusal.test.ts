@@ -249,6 +249,39 @@ describe('statusReducer: a busy network is not an offline node (busy-answer.ts)'
         expect(statusReducer(online, { type: 'probe_error', error: { status: 404 } }).mode).toBe('offline');
     });
 
+    // Deciding review of #2960 (round 2): probe_success rebuilt the state without wsConnected, so after any successful probe
+    // a 5xx with the socket still up turned the chip Offline again (the socket's own change fires only on its next message).
+    it('a successful probe keeps what the socket said: ws up, probe ok, then a 5xx keeps the mode', () => {
+        const start: SyncStatusState = { isHttpOnline: null, isMember: null, mode: 'offline', sentence: null };
+        const up = statusReducer(start, { type: 'ws_change', connected: true });
+        const ok = statusReducer(up, { type: 'probe_success', isMember: true });
+        expect(ok).toMatchObject({ isHttpOnline: true, isMember: true, mode: 'online', wsConnected: true });
+        const later = statusReducer(ok, { type: 'probe_error', error: Object.assign(new Error('Service Unavailable'), { status: 503 }) });
+        expect(later).toBe(ok);
+        expect(later.mode).toBe('online');
+    });
+
+    it('a successful probe with no socket news adds no wsConnected, and a 5xx then is offline as before', () => {
+        const start: SyncStatusState = { isHttpOnline: null, isMember: null, mode: 'offline', sentence: null };
+        const ok = statusReducer(start, { type: 'probe_success', isMember: true });
+        expect(ok).toEqual({ isHttpOnline: true, isMember: true, mode: 'online', sentence: null });
+        expect(statusReducer(ok, { type: 'probe_error', error: { status: 503 } }).mode).toBe('offline');
+    });
+
+    it('a probe that gets a standing refusal (guest) keeps the socket too, so a later 5xx with the socket up keeps guest', () => {
+        const up: SyncStatusState = { isHttpOnline: true, isMember: true, mode: 'online', sentence: null, wsConnected: true };
+        const guest = statusReducer(up, { type: 'probe_error', error: Object.assign(new Error('Closed'), { status: 403, code: 'account_closed' }) });
+        expect(guest).toMatchObject({ mode: 'guest', wsConnected: true });
+        expect(statusReducer(guest, { type: 'probe_error', error: { status: 502 } })).toBe(guest);
+    });
+
+    it('a probe after the socket went down keeps that, so a 5xx is offline', () => {
+        const down: SyncStatusState = { isHttpOnline: true, isMember: true, mode: 'online', sentence: null, wsConnected: false };
+        const ok = statusReducer(down, { type: 'probe_success', isMember: true });
+        expect(ok.wsConnected).toBe(false);
+        expect(statusReducer(ok, { type: 'probe_error', error: { status: 503 } }).mode).toBe('offline');
+    });
+
     it("the socket's own changes are remembered, so the next probe error can tell", () => {
         const up = statusReducer({ ...online, wsConnected: undefined }, { type: 'ws_change', connected: true });
         expect(up.wsConnected).toBe(true);

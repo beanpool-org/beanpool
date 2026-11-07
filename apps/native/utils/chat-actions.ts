@@ -530,6 +530,8 @@ export function shouldShowChatLoadError(s: { loadError: string | null; messageCo
 export interface ChatActionError {
     status?: number | null;
     message?: string | null;
+    /** The stable code an error carries (`busy` for a busy network's 429, core busyError). */
+    code?: string | null;
     /**
      * True when the node's error body carried a JSON `error` field — the route exists and this is the node's
      * own answer. A route an older node does not have cannot answer at all: Koa returns a bare 404 whose body
@@ -576,10 +578,11 @@ export function requestIsGone(err: { code?: unknown } | null | undefined): boole
  * What Accept or Ignore says when it didn't go through, in the web's words (core decisionFailureWords): the node's own
  * sentence when it answered and refused (a standby, an accepted request), else the community out of reach. A body that
  * wasn't the node's (a proxy's `Server returned 502`, no JSON `error` field) is no answer of its (utils/db _signedRequest's
- * `nodeAnswered`, the web's `unsaid` turned round).
+ * `nodeAnswered`, the web's `unsaid` turned round). A busy network's 429 (code `busy`) reads as its own sentence, not as
+ * out of reach.
  */
 export function requestDecisionFailureWords(err: ChatActionError | null | undefined): string {
-    return decisionFailureWords({ status: err?.status, message: err?.message, unsaid: !err?.nodeAnswered });
+    return decisionFailureWords({ status: err?.status, message: err?.message, code: err?.code, unsaid: !err?.nodeAnswered });
 }
 
 /**

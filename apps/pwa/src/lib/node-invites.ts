@@ -9,7 +9,7 @@
  * from, translated where they are shown (INVITE_WORDS). Nothing here handles a key or a signature.
  */
 
-import { t, word } from '@beanpool/core';
+import { isBusyStatus, t, word } from '@beanpool/core';
 import type { CommunityInfo } from './api';
 
 export function invitesOn(info: CommunityInfo | null | undefined): boolean {
@@ -65,6 +65,16 @@ export type InviteRole = 'owner' | 'admin' | 'moderator' | null;
 
 export function readInviteRole(role: unknown): InviteRole {
     return role === 'owner' || role === 'admin' || role === 'moderator' ? role : null;
+}
+
+/**
+ * Whether a failed read of the member's role is the node's refusal (a 4xx: not a member, an older node), which is an answer:
+ * no role. No answer at all, a 5xx, and a 429 (the network in front of the node is busy, or its gateway's limit) are not:
+ * they say nothing of the role, so it stays unknown and the entry the role would hide is not taken away for a busy moment.
+ */
+export function roleReadRefused(err: unknown): boolean {
+    const status = (err as { status?: unknown } | null | undefined)?.status;
+    return typeof status === 'number' && status < 500 && !isBusyStatus(status);
 }
 
 /**

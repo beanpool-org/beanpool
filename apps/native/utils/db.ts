@@ -2556,7 +2556,7 @@ export async function fetchMyEvents(): Promise<MyEvent[]> {
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = `Could not read your events (${res.status})`;
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     const data = await res.json();
@@ -2596,7 +2596,7 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = 'Could not save your reminder';
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     return await res.json();
@@ -2631,7 +2631,7 @@ export async function setEventDateCancelled(postId: string, date: string, cancel
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = 'Could not change that date';
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     const out = await res.json();
@@ -9289,7 +9289,7 @@ export async function fetchGroupSuccession(groupId: string): Promise<GroupSucces
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let message = `Could not read the lead vote (${res.status})`;
-        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = refusalTextOf(res.status, txt, message); }
         throw new Error(message);
     }
     return await res.json();

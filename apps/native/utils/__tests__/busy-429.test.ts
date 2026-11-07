@@ -29,7 +29,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { pseudoLocalise, setLanguage } from '@beanpool/core';
-import { redeemInvite, signedGet, signedRequest } from '../db';
+import { fetchGroupSuccession, fetchMyEvents, redeemInvite, setEventDateCancelled, setEventReminder, signedGet, signedRequest } from '../db';
 import { buildSignedHeaders } from '../crypto';
 import { chatActionErrorMessage } from '../chat-actions';
 
@@ -235,5 +235,47 @@ describe('an invite redeemed against a busy network', () => {
         fetchMock.mockResolvedValue(nodeJson(429, { error: 'Too many attempts. Try again in 30s' }));
         const e = await thrown(redeemInvite('ABC-123', 'Me', ME));
         expect(e.message).toBe('Too many attempts. Try again in 30s');
+    });
+});
+
+describe('direct reads and writes whose refusal text became the message (a proxy page is never shown)', () => {
+    const noPage = (e: any) => expect(e.message).not.toMatch(/<|cloudflare|1015|rate limited|Too Many|\(429\)/i);
+
+    it('a read through signedGet (my events, the lead vote) is asked once more, then says the sentence, not the page', async () => {
+        vi.useFakeTimers();
+        for (const read of [() => fetchMyEvents(), () => fetchGroupSuccession('g1')]) {
+            fetchMock.mockReset();
+            fetchMock.mockImplementation(async () => cloudflare(429, CF_HTML, '1'));
+            const p = thrown(read());
+            await vi.advanceTimersByTimeAsync(60_000);
+            const e = await p;
+            expect(e.message).toBe(BUSY);
+            noPage(e);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        }
+    });
+
+    it('a write that fetches directly (a reminder, cancelling one date) says the sentence and is never sent again', async () => {
+        vi.useFakeTimers();
+        for (const write of [() => setEventReminder('p1', [60]), () => setEventDateCancelled('p1', '2026-12-01', true)]) {
+            fetchMock.mockReset();
+            fetchMock.mockResolvedValue(cloudflare(429, 'error code: 1015', '1'));
+            const p = thrown(write());
+            await vi.advanceTimersByTimeAsync(60_000);
+            const e = await p;
+            expect(e.message).toBe(BUSY);
+            noPage(e);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        }
+    });
+
+    it('a Cloudflare page on another status keeps the sentence the function already had, not the page', async () => {
+        fetchMock.mockResolvedValue(cloudflare(502, '<html><body>Bad gateway</body></html>'));
+        expect((await thrown(setEventReminder('p1', null))).message).toBe('Could not save your reminder');
+    });
+
+    it('the node\'s own refusal text (plain, not a page) still comes through as it did', async () => {
+        fetchMock.mockResolvedValue(cloudflare(403, 'Only people going can set a reminder.'));
+        expect((await thrown(setEventReminder('p1', null))).message).toBe('Only people going can set a reminder.');
     });
 });

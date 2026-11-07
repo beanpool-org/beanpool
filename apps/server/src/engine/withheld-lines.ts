@@ -361,9 +361,15 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
             peerLastReadAt: null, myLastReadAt: c.owner_last_read_at ?? null,
         } as unknown as T;
     });
-    const lastLine = db.prepare('SELECT MAX(timestamp) AS at FROM messages WHERE conversation_id = ?');
-    const entries = [...listed, ...added].map((c, place) => {
-        const real = (lastLine.get(c.id) as { at: string | null }).at;
+    const allConvs = [...listed, ...added];
+    // Bolt: Batch latest message timestamps across listed conversations to avoid N+1 queries.
+    const realLastLines = new Map<string, string | null>(
+        (db.prepare(`SELECT conversation_id, MAX(timestamp) AS at FROM messages WHERE conversation_id IN (SELECT value FROM json_each(?)) GROUP BY conversation_id`)
+            .all(JSON.stringify(allConvs.map(c => c.id))) as { conversation_id: string; at: string | null }[])
+            .map(r => [r.conversation_id, r.at])
+    );
+    const entries = allConvs.map((c, place) => {
+        const real = realLastLines.get(c.id) ?? null;
         const own = lastOwn.get(c.id);
         if (own && (!real || own.at > real)) return { c: { ...c, lastMsgType: own.type, lastSysType: null } as T, at: own.at as string | null, place };
         return { c, at: real, place };

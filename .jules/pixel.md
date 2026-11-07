@@ -233,3 +233,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-20 - Add accessibilityLabel and busy state to remove everything button in WaysBackList
 **Learning:** In account protection ways back, the "Remove everything" action button conditionally replaces its text with an ActivityIndicator during removal and disables interaction when busy, but lacked an explicit `accessibilityLabel={t(WAYS_BACK_LINES.removeEverything)}` and `accessibilityState={{ disabled: busy, busy }}`, leaving screen readers without an accessible name or state feedback during async operations.
 **Action:** Always provide explicit `accessibilityLabel` and `accessibilityState={{ disabled: busy, busy }}` on action buttons whose visible text is conditionally replaced by an ActivityIndicator when busy.
+
+## 2027-02-27 - Add accessibilityState to PinSheet action buttons
+**Learning:** In `PinSheet.tsx`, interactive buttons (the backdrop dismiss button, pin option choice rows, and cancel button) become disabled while `submitting` is true or during active pin operations, but lacked `accessibilityState={{ disabled: submitting }}`, leaving screen readers without disabled state announcements.
+**Action:** Always provide explicit `accessibilityState={{ disabled: submitting }}` on action buttons and option rows that disable during asynchronous form submissions.

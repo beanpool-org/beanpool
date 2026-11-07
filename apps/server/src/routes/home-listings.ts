@@ -58,7 +58,6 @@ export const homeListingReads = { made: 0, kept: 0 };
 export function forgetHomeListings(): void {
     kept.clear();
     keptStamp = '';
-    peerAuthors = null;
 }
 
 /** How many reads are kept now (the suite). */
@@ -108,18 +107,18 @@ export function keptListingRead<T>(key: string, read: () => T, now = Date.now())
 }
 
 /**
- * The authors of the copies held from other nodes (origin_node set), which no index finds by author: read once per posts
- * version, and never kept longer than KEPT_MAX_MS.
+ * The one question readsListingsAsAnyone asks, a statement of its own so the suite plans it: every EXISTS finds its row from
+ * an index (posts by author, by target, by assignee, by group; the copies from other nodes by idx_posts_copy_authors), none
+ * scans the posts table.
  */
-let peerAuthors: { stamp: number; at: number; authors: Set<string> } | null = null;
-function authorsOfPeerCopies(now: number): Set<string> {
-    const v = getPostsVersion();
-    if (!peerAuthors || peerAuthors.stamp !== v || now - peerAuthors.at >= KEPT_MAX_MS || now < peerAuthors.at) {
-        const rows = db.prepare('SELECT DISTINCT author_pubkey AS a FROM posts WHERE origin_node IS NOT NULL').all() as { a: string }[];
-        peerAuthors = { stamp: v, at: now, authors: new Set(rows.map(r => r.a)) };
-    }
-    return peerAuthors.authors;
-}
+export const ANYONE_SQL = `SELECT
+        EXISTS(SELECT 1 FROM posts WHERE author_pubkey = @me AND origin_node IS NULL)
+     OR EXISTS(SELECT 1 FROM posts WHERE author_pubkey = @me AND origin_node IS NOT NULL)
+     OR EXISTS(SELECT 1 FROM posts WHERE target_pubkey = @me)
+     OR EXISTS(SELECT 1 FROM posts WHERE assigned_to = @me)
+     OR EXISTS(SELECT 1 FROM group_members gm JOIN posts p ON p.target_group_id = gm.group_id
+                WHERE gm.member_pubkey = @me AND COALESCE(p.audience_scope, 'public') != 'public')
+     OR EXISTS(SELECT 1 FROM treasury_operators WHERE member_pubkey = @me) AS own`;
 
 let anyoneStmt: ReturnType<typeof db.prepare> | null = null;
 let anyoneDb: typeof db | null = null;
@@ -131,17 +130,10 @@ let anyoneDb: typeof db | null = null;
  * keeper's row for any enterprise (engine enterprisesKeptBy, without its active-member condition) makes it false. Wider than the read's own rules on purpose: a false here only costs the member's
  * read being made for them, as before.
  */
-export function readsListingsAsAnyone(member: string, now = Date.now()): boolean {
+export function readsListingsAsAnyone(member: string): boolean {
     if (!anyoneStmt || anyoneDb !== db) {
         anyoneDb = db;
-        anyoneStmt = db.prepare(`SELECT
-                EXISTS(SELECT 1 FROM posts WHERE author_pubkey = @me AND origin_node IS NULL)
-             OR EXISTS(SELECT 1 FROM posts WHERE target_pubkey = @me)
-             OR EXISTS(SELECT 1 FROM posts WHERE assigned_to = @me)
-             OR EXISTS(SELECT 1 FROM group_members gm JOIN posts p ON p.target_group_id = gm.group_id
-                        WHERE gm.member_pubkey = @me AND COALESCE(p.audience_scope, 'public') != 'public')
-             OR EXISTS(SELECT 1 FROM treasury_operators WHERE member_pubkey = @me) AS own`);
+        anyoneStmt = db.prepare(ANYONE_SQL);
     }
-    if ((anyoneStmt.get({ me: member }) as { own: number }).own) return false;
-    return !authorsOfPeerCopies(now).has(member);
+    return !(anyoneStmt.get({ me: member }) as { own: number }).own;
 }

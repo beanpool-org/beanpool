@@ -2283,6 +2283,11 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
 -- visitor is not a signup, and a federated listing is not somebody getting started here.
 CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;
+-- The other half of that split: "does this member have a copy held from another node?" (routes/home-listings.ts
+-- readsListingsAsAnyone, asked by every member's Home read). Copies are a few in a hundred posts, so the index is small, and
+-- the question is one seek where it was a scan of the whole table (about 25 ms at 100,000 posts). A plain partial index:
+-- no function in it, so a boot of an older release opens the file as before.
+CREATE INDEX IF NOT EXISTS idx_posts_copy_authors ON posts(author_pubkey) WHERE origin_node IS NOT NULL;
 
 -- 20b. Web app visits a day (engine/web-visits.ts), shown to the operator on the manager's Home.
 -- One row per UTC day and these three columns only: never an address, a browser, a hash, a cookie or a member.

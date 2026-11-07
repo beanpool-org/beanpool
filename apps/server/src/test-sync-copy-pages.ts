@@ -726,8 +726,13 @@ async function main(): Promise<void> {
         const e = await open();
         require_(e.status === 200 && e.page.last === false, `a copy opens (${e.status})`);
         await main.send('flood', { kind: 'messages', n: 2000, prefix: 'wal', conversationId, author: ann.pk });
-        const checkpoint = () => {
-            const conn = new Database(path.join(dir, 'state.db'), { timeout: 0 });
+        // A truncating checkpoint has to wait for every reader of the WAL to finish. `waitMs` is how long SQLite's busy handler
+        // may wait for a lock M holds. 0 asks only whether it can finish this instant, the question while the copy's read is
+        // open (that read never lets go, so waiting would only add time). After the copy closed it must wait: M's own reads
+        // (a timer's, a request's) hold a read lock for a moment, longer when M is not scheduled, and an attempt that gives up
+        // at once loses to them (measured on an idle Mac with no copy open: 3 of 633 immediate attempts came back busy).
+        const checkpoint = (waitMs = 0) => {
+            const conn = new Database(path.join(dir, 'state.db'), { timeout: waitMs });
             try {
                 const [cp] = conn.pragma('wal_checkpoint(TRUNCATE)') as { busy: number; log: number; checkpointed: number }[];
                 return cp;
@@ -741,7 +746,7 @@ async function main(): Promise<void> {
         assert(pinned.busy === 1 && walPinned > 0, `while it is open, a truncating checkpoint can't finish and the WAL keeps ${walPinned} bytes (${JSON.stringify(pinned)})`);
         await sleep(2600);
         const expired = await get(e.page.copyId, 1);
-        const freed = checkpoint();
+        const freed = checkpoint(10_000);
         assert(expired.status === 404, `no page asked for in 1.5 s, the copy is gone (${expired.status} ${expired.text.slice(0, 80)})`);
         assert(freed.busy === 0 && walSize() === 0, `and the checkpoint truncates the WAL after it (${JSON.stringify(freed)}, ${walSize()} bytes)`);
         await main.send('set-env', { vars: { SYNC_COPY_IDLE_MS: '', SYNC_COPY_MAX_MS: '2000' } });

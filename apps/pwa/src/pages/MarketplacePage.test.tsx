@@ -113,6 +113,14 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
     });
 
     it('opens with the words in the search box, once, and the list narrowed to them', async () => {
+        // The node narrows a search to its words, as the real one does. A node that answered every search with every listing
+        // would put Bicycle Repair back when the page's debounced read (300 ms after the words went in) landed, and "the list
+        // narrowed to them" would hold only until then: a runner that took longer than that to reach the check failed it.
+        const everything = [...posts, { ...posts[0], id: 'post-2', title: 'Fresh eggs', description: 'A dozen', category: 'food' }];
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation((async (filter: { q?: string }) => {
+            const words = (filter?.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+            return everything.filter(p => words.length === 0 || words.some(w => `${p.title} ${p.description}`.toLowerCase().includes(w)));
+        }) as any);
         const onSearchOpened = vi.fn();
         render(<MarketplacePage identity={identity} openSearch="  eggs " onSearchOpened={onSearchOpened} />);
         await screen.findByText('Fresh eggs');
@@ -1087,8 +1095,15 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         // Simulate save refusal by the node
         vi.spyOn(api, 'updateMarketplacePost').mockRejectedValue(new Error('shop_public_only'));
 
-        render(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
+        const view = render(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
         const editBtn = await screen.findByRole('button', { name: /Edit Post/i });
+        // findBy* returns on the commit that shows the button, before React has run that commit's passive effects. One of them
+        // (a listing's edit ends with it: MarketplacePage.tsx, keyed on selectedPost?.id) clears the form on the commit where
+        // the id first appears. A click in that gap sets the form's state first and the queued effect clears it after: the
+        // form never opens and the toggle never comes. React runs every pending effect before it renders again, so render once
+        // more and the gap is closed on whatever clock this machine keeps (act(async () => {}) closes only the last millisecond
+        // of it: RTL drains with a 0 ms timer, React flushes from setImmediate).
+        view.rerender(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
         fireEvent.click(editBtn);
 
         // Put this in your shop should be visible for public offer

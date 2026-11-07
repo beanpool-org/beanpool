@@ -96,6 +96,15 @@ async function call(method: string, p: string, opts: { body?: unknown; raw?: str
     return { status: res.status, body, text, headers: res.headers };
 }
 const show = (r: Reply) => `${r.status} ${r.text.slice(0, 160)}`;
+/** True as soon as `cond()` holds, false once `limitMs` has passed: a wait on a condition, the limit only ends a hang. */
+async function until(cond: () => boolean, limitMs = 30_000): Promise<boolean> {
+    const end = Date.now() + limitMs;
+    while (!cond()) {
+        if (Date.now() > end) return false;
+        await new Promise(r => setTimeout(r, 10));
+    }
+    return true;
+}
 const asSession = (id: string | null): Record<string, string> => ({ 'X-Admin-Session': id ?? '' });
 const bearer = (t: string): Record<string, string> => ({ Authorization: `Bearer ${t}` });
 
@@ -772,17 +781,17 @@ async function main(): Promise<void> {
         // bodies end, and the places are free at once, not at the read deadline.
         const S = await makeToken(owner, 'Olive\'s slow line');
         const stillArriving = Array.from({ length: PHOTO_UPLOADS_AT_ONCE }, () => stillSending(S.token));
-        let busy: Reply | null = null;
-        let busyCounted = true;
-        for (let i = 0; i < 20 && busy?.status !== 503; i++) {
-            await new Promise(r => setTimeout(r, 150));
-            const before = agentPhotosToday(S.id);
-            busy = await upload(S.token, smallWebp, 'image/webp');
-            busyCounted = agentPhotosToday(S.id) !== before;
-        }
-        assert(busy?.status === 503 && busy.headers.get('retry-after') === '5' && !busyCounted
+        // Wait until the server has taken them all, not for a clock. Each body is counted as a photo and takes its place in
+        // the same turn (photo-upload-route.ts: admitAgentPhoto, then `reading++`, nothing awaited between), so the count is
+        // the places filled. An upload sent sooner is taken into a place the last body needs (that body is refused, and no
+        // upload after it ever meets a full server), or has its "before" counted ahead of that body (a 503 that looks counted).
+        const placesFull = await until(() => agentPhotosToday(S.id) === PHOTO_UPLOADS_AT_ONCE);
+        const before = agentPhotosToday(S.id);
+        const busy = await upload(S.token, smallWebp, 'image/webp');
+        const busyCounted = agentPhotosToday(S.id) !== before;
+        assert(placesFull && busy.status === 503 && busy.headers.get('retry-after') === '5' && !busyCounted
             && busy.body?.error === 'This server is taking other photos now: send it again in a few seconds.',
-            `${PHOTO_UPLOADS_AT_ONCE} bodies still arriving → one more upload 503 with Retry-After 5, in words, not counted (${busy ? show(busy) : 'no answer'})`);
+            `${PHOTO_UPLOADS_AT_ONCE} bodies still arriving → one more upload 503 with Retry-After 5, in words, not counted (${placesFull ? '' : `only ${before} reached the server; `}${show(busy)})`);
         const left = Date.now();
         stillArriving.forEach(s => s.leave());
         let afterLeft: Reply | null = null;

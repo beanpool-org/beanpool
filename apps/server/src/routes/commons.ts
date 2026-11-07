@@ -284,12 +284,13 @@ router.post('/api/commons/decisions', async (ctx) => {
         ctx.body = { error: word('Authentication required to propose a decision') };
         return;
     }
-    if (!title || !touches || !effect) {
+    if (!title || typeof title !== 'string' || !title.trim() || !touches || !effect) {
         ctx.status = 400;
         ctx.body = { error: 'title, touches, and effect are required' };
         return;
     }
-    if (!description || description.trim().length < 10) {
+    // Validate description is a string before calling trim() to avoid runtime TypeError crash
+    if (typeof description !== 'string' || description.trim().length < 10) {
         ctx.status = 400;
         ctx.body = { error: 'description must be at least 10 characters for governance accountability' };
         return;
@@ -300,7 +301,7 @@ router.post('/api/commons/decisions', async (ctx) => {
         assertNotMuted(actor);
         const decision = createDecision({
             authorPubkey: actor,
-            title,
+            title: title.trim(),
             description: description.trim(),
             touches,
             effect,

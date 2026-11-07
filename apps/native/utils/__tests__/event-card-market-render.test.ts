@@ -311,8 +311,17 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
     // time in November) from 16:00 to 21:00, read on a Gold Coast phone (Queensland, an hour behind).
     describe('a reader whose clock is not the place\'s', () => {
         const savedTz = process.env.TZ;
-        beforeEach(() => { process.env.TZ = 'Australia/Brisbane'; });
-        afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; });
+        // These fixtures are fixed dates (7 Nov 2026). The clock is pinned before them, so a card never reads them as ENDED
+        // once the real day has passed (the 7 Nov 13:31 red on main). Only Date is faked; the render's timers stay real.
+        beforeEach(() => {
+            process.env.TZ = 'Australia/Brisbane';
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(new Date('2026-11-04T00:00:00.000Z'));
+        });
+        afterEach(() => {
+            vi.useRealTimers();
+            if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz;
+        });
         const BYRON: any = {
             ...MARKET, title: 'Byron Bay Twilight Market', eventPlaceName: 'Railway Park',
             eventStartAt: '2026-11-07T05:00:00.000Z', eventEndAt: '2026-11-07T10:00:00.000Z',

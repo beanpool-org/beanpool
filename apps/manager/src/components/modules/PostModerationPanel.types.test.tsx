@@ -12,7 +12,8 @@ import { PostModerationPanel, heldTakedowns, takenDownWords, putBackWords, chipC
  */
 
 const NODE = { id: 'n1', url: 'https://node.example', name: 'Node' } as any;
-const FINAL = '2026-11-08T10:00:00.000Z';
+// A week from the real now, as the server sets it: a fixed date here went past on 8 Nov 2026 and turned the line into "due".
+const FINAL = new Date(Date.now() + 7 * 86_400_000).toISOString();
 
 const POSTS: PostModerationItem[] = [
     { id: 'p-offer', type: 'offer', title: 'Sourdough', authorCallsign: 'Bob', createdAt: '2026-11-01T08:00:00.000Z' },

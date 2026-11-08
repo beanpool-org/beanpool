@@ -11,6 +11,8 @@ Some communities' admins keep a **names list**: who the members are, by real nam
 
 An entry holds your name and, sometimes, a short note an admin writes, like how the community knows you. Nothing else: no address, no date of birth, no ID number.
 
+An admin can add your name to the list when they invite you.
+
 ## Who can read it
 
 **Only your community's owners and admins, on their own phones.** Your name is sealed on an admin's phone before it is sent to your community's server. The server keeps scrambled text: a backup, a copy, BeanPool, or anyone who steals the database holds nothing readable.

@@ -13,3 +13,7 @@
 
 
 
+
+# The project's own Cloudflare address serves the same pages as beanpool.org; search engines must list beanpool.org only.
+https://beanpool-org.pages.dev/*
+  X-Robots-Tag: noindex

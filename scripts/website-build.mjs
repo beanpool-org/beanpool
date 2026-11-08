@@ -336,6 +336,59 @@ export function buildHreflangTags(page) {
     return lines.join('\n');
 }
 
+/** The page's own address on beanpool.org in one language: extensionless, like the hreflang tags. */
+export function pageUrl(page, lang) {
+    const slug = page === 'index.html' ? '' : page.replace(/\.html$/, '');
+    return lang === 'en' ? `https://beanpool.org/${slug}` : `https://beanpool.org/${lang}/${slug}`;
+}
+
+/**
+ * The canonical tag: tells search engines this address is the page, not the copy at beanpool-org.pages.dev or a ?query variant.
+ * The 404 page has none: it is served at every unknown address.
+ */
+export function buildCanonicalTag(page, lang) {
+    if (page === '404.html') return '';
+    return `    <link rel="canonical" href="${pageUrl(page, lang)}">`;
+}
+
+function injectHeadLinks(out, page, lang) {
+    const canonical = buildCanonicalTag(page, lang);
+    out = out.replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/gi, '');
+    out = out.replace(/(\s*<link\s+rel="alternate"\s+hreflang="[^"]*"\s+href="[^"]*"\s*\/?>)+/gi, '');
+    const block = canonical ? `${canonical}\n${buildHreflangTags(page)}` : buildHreflangTags(page);
+    return out.replace(/<\/head>/i, `${block}\n</head>`);
+}
+
+export const SITEMAP_FILE = path.join(WEBSITE_DIR, 'sitemap.xml');
+
+/**
+ * sitemap.xml: every page in every language it is published in (the 404 page left out), each with its language alternates,
+ * so search engines find all 25 languages. Built from the same page lists as the hreflang tags; --check keeps it in step.
+ */
+export function buildSitemap(websiteDir = WEBSITE_DIR) {
+    const published = (page, lang) => fs.existsSync(lang === 'en' ? path.join(websiteDir, page) : path.join(websiteDir, lang, page));
+    const lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">'
+    ];
+    for (const page of ALL_PAGES) {
+        if (page === '404.html') continue;
+        const langs = LANGS.filter((lang) => published(page, lang));
+        for (const lang of langs) {
+            lines.push('  <url>', `    <loc>${pageUrl(page, lang)}</loc>`);
+            if (langs.length > 1) {
+                for (const alt of langs) {
+                    lines.push(`    <xhtml:link rel="alternate" hreflang="${alt}" href="${pageUrl(page, alt)}"/>`);
+                }
+                lines.push(`    <xhtml:link rel="alternate" hreflang="x-default" href="${pageUrl(page, 'en')}"/>`);
+            }
+            lines.push('  </url>');
+        }
+    }
+    lines.push('</urlset>', '');
+    return lines.join('\n');
+}
+
 /**
  * Returns the 25 language links with correct href, hreflang, name and isCurrent flag.
  * One source of truth for both the footer language row and the top menu language selector.
@@ -476,10 +529,8 @@ export function formatEnglishPage(page, html) {
     // 1. Ensure <html lang="en">
     out = out.replace(/<html(?:\s+lang="[^"]*")?/i, '<html lang="en"');
 
-    // 2. Insert or replace hreflang tags inside <head>
-    const hreflangBlock = buildHreflangTags(page);
-    out = out.replace(/(\s*<link\s+rel="alternate"\s+hreflang="[^"]*"\s+href="[^"]*"\s*\/?>)+/gi, '');
-    out = out.replace(/<\/head>/i, `${hreflangBlock}\n</head>`);
+    // 2. Insert or replace the canonical and hreflang tags inside <head>
+    out = injectHeadLinks(out, page, 'en');
 
     // 3. Insert or replace footer languages row inside <footer>
     if (out.includes('<footer>')) {
@@ -584,10 +635,8 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
         return `href="https://play.google.com/store/apps/details?${cleanQuery}&amp;hl=${lang}"`;
     });
 
-    // 5. Insert hreflang tags
-    const hreflangBlock = buildHreflangTags(page);
-    out = out.replace(/(\s*<link\s+rel="alternate"\s+hreflang="[^"]*"\s+href="[^"]*"\s*\/?>)+/gi, '');
-    out = out.replace(/<\/head>/i, `${hreflangBlock}\n</head>`);
+    // 5. Insert the canonical and hreflang tags
+    out = injectHeadLinks(out, page, lang);
 
     // 6. Insert footer language row
     if (out.includes('<footer>')) {
@@ -816,6 +865,9 @@ export function buildAll() {
 
     // 3. The sign-in return pages (beanpool.org's four and the web app's own)
     buildAuthPages();
+
+    // 4. sitemap.xml, from the pages now on disk
+    fs.writeFileSync(SITEMAP_FILE, buildSitemap(), 'utf8');
 }
 
 /**
@@ -1003,6 +1055,10 @@ export function checkWebsite() {
     }
 
     errors.push(...checkAuthPages());
+
+    if (!fs.existsSync(SITEMAP_FILE) || fs.readFileSync(SITEMAP_FILE, 'utf8') !== buildSitemap()) {
+        errors.push("apps/website/sitemap.xml is out of date; run 'node scripts/website-build.mjs'");
+    }
 
     return errors;
 }

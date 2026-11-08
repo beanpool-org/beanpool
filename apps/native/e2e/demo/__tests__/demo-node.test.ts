@@ -27,7 +27,7 @@ const SERVER_DIR = path.resolve(DEMO_DIR, '../../../server');
 const DAY = 86_400_000;
 
 type World = {
-    members: Record<string, string>; posts: Record<string, string>; events: Record<string, string>; poll: string;
+    members: Record<string, string>; posts: Record<string, string>; earlier: Record<string, string>; events: Record<string, string>; poll: string;
     trades: string[]; openDeal: { transactionId: string; postId: string }; dm: string; sam: string;
 };
 
@@ -120,8 +120,13 @@ describe('Riverbend: the town (design §2)', () => {
         expect([going.n, interested.n]).toEqual([12, 4]);
         expect((await one("SELECT COUNT(*) AS n FROM event_rsvps WHERE post_id = ? AND member_pubkey = ? AND status = 'going'", [seed.id, world.sam])).n).toBe(1);
         for (const e of events) expect(Date.parse(e.event_start_at)).toBeGreaterThan(Date.now());
-        const polls = await rows("SELECT p.id, p.poll_closes_at FROM posts p WHERE p.type = 'poll' AND p.status = 'active'");
+        const polls = await rows("SELECT p.id, p.created_at, p.poll_closes_at FROM posts p WHERE p.type = 'poll' AND p.status = 'active'");
         expect(polls).toHaveLength(1);
+        // The node offers a poll 3, 7 or 14 days and closes it that long after it opened: this poll keeps that, so "closes
+        // tomorrow" is true of a 3-day poll that opened two days ago, not of one that opened half a day ago.
+        expect([3, 7, 14]).toContain(riverbend.poll.durationDays);
+        expect(Date.parse(polls[0].poll_closes_at) - Date.parse(polls[0].created_at)).toBe(riverbend.poll.durationDays * DAY);
+        expect(Date.parse(polls[0].created_at)).toBeLessThan(Date.now());
         expect((await one('SELECT COUNT(*) AS n FROM poll_votes WHERE post_id = ?', [polls[0].id])).n).toBe(9);
         expect((await one('SELECT COUNT(*) AS n FROM poll_votes WHERE post_id = ? AND voter_pubkey = ?', [polls[0].id, world.sam])).n).toBe(0);
         const closesIn = Date.parse(polls[0].poll_closes_at) - Date.now();
@@ -166,6 +171,49 @@ describe('Riverbend: the books (design §2 "Ledger")', () => {
         const commons = await one("SELECT ROUND(balance, 4) AS b FROM accounts WHERE public_key = 'COMMONS_POOL'");
         expect(commons.b).toBeGreaterThan(0);
         expect(commons.b).toBeLessThanOrEqual(fees.f);
+    });
+});
+
+describe('Riverbend: every date reads true (a Ledger line beside a listing page)', () => {
+    const before = (a: string, b: string) => Date.parse(a) < Date.parse(b);
+
+    it('has no deal dated before the post it was for, before a member joined, or before it began', async () => {
+        const deals = await rows(`SELECT t.id, t.created_at AS dealt, t.completed_at, p.title, p.created_at AS posted,
+                b.joined_at AS buyer_joined, s.joined_at AS seller_joined
+            FROM marketplace_transactions t JOIN posts p ON p.id = t.post_id
+            JOIN members b ON b.public_key = t.buyer_pubkey JOIN members s ON s.public_key = t.seller_pubkey`);
+        // The 16 completed trades and the one open deal, none lost to a join.
+        expect(deals).toHaveLength(riverbend.trades.length + 1);
+        expect(deals.filter((d) => before(d.dealt, d.posted)).map((d) => `${d.title}: dealt ${d.dealt}, posted ${d.posted}`)).toEqual([]);
+        expect(deals.filter((d) => before(d.dealt, d.buyer_joined) || before(d.dealt, d.seller_joined)).map((d) => d.title)).toEqual([]);
+        expect(deals.filter((d) => d.completed_at && before(d.completed_at, d.dealt)).map((d) => d.title)).toEqual([]);
+    });
+
+    it('has no post dated before its author joined, and none in the future', async () => {
+        const posts = await rows(`SELECT p.title, p.created_at, m.joined_at FROM posts p JOIN members m ON m.public_key = p.author_pubkey WHERE ${PEOPLE}`);
+        expect(posts.length).toBeGreaterThan(14);
+        expect(posts.filter((p) => before(p.created_at, p.joined_at)).map((p) => p.title)).toEqual([]);
+        expect(posts.filter((p) => Date.parse(p.created_at) > Date.now()).map((p) => p.title)).toEqual([]);
+    });
+
+    it('books each trade older than its listing on an earlier posting of the same Offer, finished and off the board', async () => {
+        const withEarlier = riverbend.listings.filter((l) => 'earlierDaysAgo' in l).map((l) => l.id);
+        expect(Object.keys(world.earlier).sort()).toEqual([...withEarlier].sort());
+        expect(withEarlier.length).toBeGreaterThan(0);
+        const used = (await rows('SELECT DISTINCT post_id FROM marketplace_transactions')).map((r) => r.post_id);
+        for (const [key, id] of Object.entries(world.earlier)) {
+            const live = await one('SELECT title, author_pubkey, created_at FROM posts WHERE id = ?', [world.posts[key]]);
+            const earlier = await one('SELECT title, author_pubkey, status, active, created_at, completed_at FROM posts WHERE id = ?', [id]);
+            expect(earlier, key).toMatchObject({ title: live.title, author_pubkey: live.author_pubkey, status: 'completed', active: 0 });
+            expect(before(earlier.created_at, live.created_at), key).toBe(true);
+            // It ended when the listing in the Market went up (two clock reads apart, a few ms).
+            expect(Math.abs(Date.parse(earlier.completed_at) - Date.parse(live.created_at)), key).toBeLessThan(5_000);
+            expect(used, key).toContain(id);
+        }
+        // Every trade the data dates before its listing is among them: none is booked on a listing that was not up yet.
+        const older = riverbend.trades.filter((t) => t.daysAgo * 24 > riverbend.listings.find((l) => l.id === t.listing)!.ageHours);
+        expect(older.length).toBe(12);
+        for (const t of older) expect(withEarlier, t.listing).toContain(t.listing);
     });
 });
 

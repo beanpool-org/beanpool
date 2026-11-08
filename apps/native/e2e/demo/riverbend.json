@@ -191,6 +191,7 @@
       "priceType": "fixed",
       "photo": "sourdough-loaves",
       "ageHours": 3,
+      "earlierDaysAgo": 21,
       "repeatable": true,
       "at": {
         "dLat": -0.012,
@@ -208,6 +209,7 @@
       "priceType": "fixed",
       "photo": "duck-eggs",
       "ageHours": 5,
+      "earlierDaysAgo": 22,
       "repeatable": true,
       "at": {
         "dLat": 0.021,
@@ -225,6 +227,7 @@
       "priceType": "fixed",
       "photo": "bike-fix",
       "ageHours": 7,
+      "earlierDaysAgo": 16,
       "repeatable": true,
       "at": {
         "dLat": 0.008,
@@ -242,6 +245,7 @@
       "priceType": "hourly",
       "photo": "mending",
       "ageHours": 26,
+      "earlierDaysAgo": 10,
       "repeatable": true,
       "at": {
         "dLat": 0.002,
@@ -265,15 +269,15 @@
       }
     },
     {
-      "id": "post-hole-digger",
+      "id": "wheelbarrow",
       "author": "tomasz",
       "type": "offer",
       "category": "tools",
-      "title": "Borrow a post-hole digger",
-      "description": "Heavy-duty, with a long handle. Yours for up to three days, wash it before it comes home.",
+      "title": "Borrow a wheelbarrow and spade",
+      "description": "A steel barrow and a long-handled spade, enough for a weekend of garden jobs. Yours for up to three days, wash them before they come home.",
       "credits": 5,
       "priceType": "daily",
-      "photo": "post-hole-digger",
+      "photo": "wheelbarrow-and-spade",
       "ageHours": 52,
       "lendable": true,
       "lendMaxDays": 3,
@@ -328,6 +332,7 @@
       "priceType": "fixed",
       "photo": "firewood-trailer",
       "ageHours": 100,
+      "earlierDaysAgo": 15,
       "repeatable": true,
       "at": {
         "dLat": -0.036,
@@ -378,6 +383,7 @@
       "priceType": "hourly",
       "photo": "guitar-lessons",
       "ageHours": 190,
+      "earlierDaysAgo": 17,
       "repeatable": true,
       "at": {
         "dLat": 0.021,
@@ -395,6 +401,7 @@
       "priceType": "hourly",
       "photo": "lawn-mowing",
       "ageHours": 220,
+      "earlierDaysAgo": 23,
       "repeatable": true,
       "at": {
         "dLat": 0.004,
@@ -526,7 +533,7 @@
     ],
     "durationDays": 3,
     "closesInHours": 24,
-    "ageHours": 12,
+    "_closes": "The node offers a poll 3, 7 or 14 days, and closes it that long after it opened. So a 3-day poll that closes tomorrow opened durationDays x 24 - closesInHours = 48 hours ago: demo-node.ts derives that, nothing here sets its age.",
     "at": {
       "dLat": -0.004,
       "dLng": 0.004
@@ -658,5 +665,6 @@
     "_note": "Between the fixed Needs you (first) and Your community (last). Decide is where the node shows the first open poll: Needs you lists deals, unread chats and Decisions, never a Market poll."
   },
   "_credit": "grantedCredit is members.earned_credit: a credit-limit input that moves no Beans (200 is the Resident badge, 100 a small line). All Beans move through trades.",
+  "_earlier": "A listing's earlierDaysAgo is an earlier posting of the same Offer by the same member, finished when the listing now in the Market went up. A trade older than the listing in the Market is booked on that earlier posting, so no Ledger line is dated before the Offer it was for (a seller who re-lists a loaf each week has a Ledger like this).",
   "_trades": "Sam: four sales of lawn mowing (5 hours, 100 Beans, 1.5 in the Commons fee) and three purchases (44.5 Beans), so 54 Beans, then 12 held in trust for the open deal: +42 exactly."
 }

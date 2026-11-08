@@ -62,6 +62,8 @@ interface Listing {
     id: string; author: string; type: 'offer' | 'need'; category: string; title: string; description: string; credits: number;
     priceType: 'fixed' | 'hourly' | 'daily'; photo: string; ageHours: number; repeatable?: boolean; lendable?: boolean;
     lendMaxDays?: number; lendTerms?: string; replacementValue?: string; at: At;
+    /** When an earlier posting of this same Offer went up, in days: the home of every trade older than this listing (see `trade`). */
+    earlierDaysAgo?: number;
 }
 interface EventSeed {
     id: string; host: string; title: string; description: string; category: string; weekday: 'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA';
@@ -77,7 +79,7 @@ interface Riverbend {
     listings: Listing[];
     pastOffers: { id: string; author: string; category: string; title: string; description: string; credits: number; photo: string; daysAgo: number }[];
     events: EventSeed[];
-    poll: { id: string; author: string; title: string; description: string; options: { id: string; text: string; votes: number }[]; durationDays: number; closesInHours: number; ageHours: number; at: At };
+    poll: { id: string; author: string; title: string; description: string; options: { id: string; text: string; votes: number }[]; durationDays: number; closesInHours: number; at: At };
     trades: { listing: string; buyer: string; hours?: number; daysAgo: number }[];
     openDeal: { listing: string; buyer: string; daysAgo: number };
     dm: { with: string; lines: { by: string; text: string; minutesAgo: number }[] };
@@ -144,6 +146,8 @@ async function main(): Promise<void> {
     const world = {
         members: {} as Record<string, string>,
         posts: {} as Record<string, string>,
+        /** The finished earlier posting of a listing that has one (riverbend.json `earlierDaysAgo`), by the listing's key. */
+        earlier: {} as Record<string, string>,
         events: {} as Record<string, string>,
         poll: '' as string,
         trades: [] as string[],
@@ -212,13 +216,25 @@ async function main(): Promise<void> {
         const when = ago(o.daysAgo);
         db.prepare("UPDATE posts SET status = 'completed', active = 0, created_at = ?, updated_at = ?, completed_at = ? WHERE id = ?").run(when, when, when, post.id);
     }
-    const listingOrder = [...R.listings].sort((a, b) => b.ageHours - a.ageHours);
-    for (const l of listingOrder) {
+    const listOne = (l: Listing) => {
         const where = at(l.at);
         const post = se.createPost(l.type, l.category, l.title, l.description, l.credits, l.priceType, pk(l.author), where.lat, where.lng,
             [photoDataUrl(l.photo)], l.repeatable === true, undefined, false,
             l.lendable ? ({ lendable: true, lendMaxDays: l.lendMaxDays, lendTerms: l.lendTerms, replacementValue: l.replacementValue } as any) : ({} as any));
         if (!post) throw new Error(`the node would not list ${l.id}`);
+        return post;
+    };
+    // A member who has traded for weeks has put the same Offer up before: the earlier posting of it (riverbend.json
+    // earlierDaysAgo), which stays up while the trades older than the listing in the Market happen and is finished when that
+    // listing goes up. A deal is never dated before the posting it was for, so a Ledger line and a listing page agree.
+    for (const l of R.listings.filter((x) => x.earlierDaysAgo != null)) {
+        const earlier = listOne(l);
+        world.earlier[l.id] = earlier.id;
+        db.prepare('UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?').run(ago(l.earlierDaysAgo!), ago(l.earlierDaysAgo!), earlier.id);
+    }
+    const listingOrder = [...R.listings].sort((a, b) => b.ageHours - a.ageHours);
+    for (const l of listingOrder) {
+        const post = listOne(l);
         world.posts[l.id] = post.id;
         db.prepare('UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?').run(createdAt(l.ageHours), createdAt(l.ageHours), post.id);
     }
@@ -243,17 +259,24 @@ async function main(): Promise<void> {
             { pollOptions: p.options.map((o) => ({ id: o.id, text: o.text })), durationDays: p.durationDays } as any);
         if (!post) throw new Error('the node would not list the poll');
         world.poll = post.id;
-        // The node offers 3, 7 or 14 days; this one closes tomorrow, as the design's Home reads "Poll closes tomorrow".
-        db.prepare('UPDATE posts SET created_at = ?, updated_at = ?, poll_closes_at = ? WHERE id = ?')
-            .run(createdAt(p.ageHours), createdAt(p.ageHours), new Date(Date.now() + p.closesInHours * 3_600_000).toISOString(), post.id);
+        // The node offers 3, 7 or 14 days and closes a poll that long after it opened. This one closes tomorrow, as the design's Home
+        // reads "Poll closes tomorrow", so it opened durationDays x 24 - closesInHours hours ago (48 for 3 days and 24 hours): the close
+        // time is exactly durationDays after the open time, never a length the node does not offer.
+        if (!(p.durationDays * 24 > p.closesInHours)) throw new Error('riverbend.json: the poll would close before it opened');
+        const closesAt = new Date(Date.now() + p.closesInHours * 3_600_000);
+        const opened = new Date(closesAt.getTime() - p.durationDays * DAY).toISOString();
+        db.prepare('UPDATE posts SET created_at = ?, updated_at = ?, poll_closes_at = ? WHERE id = ?').run(opened, opened, closesAt.toISOString(), post.id);
     }
 
     // ── Beans: the engine's own accept and release; the clocks of each trade then moved back ──
     const maxRow = (table: string) => (db.prepare(`SELECT COALESCE(MAX(rowid), 0) AS m FROM ${table}`).get() as { m: number }).m;
     const trade = (listing: string, buyer: string, hours: number | undefined, daysAgo: number, release: boolean): string => {
         const marks = { transactions: maxRow('transactions'), messages: maxRow('messages') };
-        const postId = world.posts[listing];
-        if (!postId) throw new Error(`a trade names a listing that is not seeded: ${listing}`);
+        const l = R.listings.find((x) => x.id === listing);
+        if (!l || !world.posts[listing]) throw new Error(`a trade names a listing that is not seeded: ${listing}`);
+        // The posting the deal was for: the listing in the Market if it was up by then, else the earlier posting of the same Offer.
+        const postId = daysAgo * 24 <= l.ageHours ? world.posts[listing] : world.earlier[listing];
+        if (!postId) throw new Error(`a trade is dated before its listing went up, and ${listing} has no earlierDaysAgo`);
         const tx = se.acceptPost(postId, pk(buyer), hours);
         if (release) {
             const done = se.completePostTransaction(tx.id, pk(buyer), hours);
@@ -265,10 +288,17 @@ async function main(): Promise<void> {
         db.prepare('UPDATE messages SET timestamp = ? WHERE rowid > ?').run(then, marks.messages);
         db.prepare('UPDATE marketplace_transactions SET created_at = ?, completed_at = ?, updated_at = ? WHERE id = ?')
             .run(then, release ? doneAt : null, release ? doneAt : then, tx.id);
+        const posted = (db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at: string }).created_at;
+        if (Date.parse(posted) > Date.parse(then)) throw new Error(`a trade is dated before the posting it was for: ${listing}`);
         return tx.id;
     };
     for (const t of R.trades) world.trades.push(trade(t.listing, t.buyer, t.hours, t.daysAgo, true));
     world.openDeal = { transactionId: trade(R.openDeal.listing, R.openDeal.buyer, undefined, R.openDeal.daysAgo, false), postId: world.posts[R.openDeal.listing] };
+    // Each earlier posting ended when the listing now in the Market went up (a finished post, as the two past Offers above).
+    for (const l of R.listings.filter((x) => world.earlier[x.id])) {
+        const ended = createdAt(l.ageHours);
+        db.prepare("UPDATE posts SET status = 'completed', active = 0, completed_at = ?, updated_at = ? WHERE id = ?").run(ended, ended, world.earlier[l.id]);
+    }
 
     // ── RSVPs and votes: the host's guests are the town's names-only members, and Sam where riverbend.json says ──
     const guests = R.otherMembers.map((n) => pk(`other:${n}`));

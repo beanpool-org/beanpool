@@ -86,6 +86,8 @@ describe('the welcome screen reads pastes and checks with these', () => {
         expect(welcome).not.toMatch(/\[\?&\]invite=\(\[\^&\]\+\)/);
         expect(welcome).toMatch(/read = readInviteText\(fullUrl\);/);
         expect(welcome).toMatch(/if \(holdsInvite\(content\)\) \{\s*await processFullUrl\(content\);/);
+        // A code pasted alone never clears the listing an earlier invite-and-share link noted.
+        expect(welcome).toMatch(/if \(\/\[\?&\]invite=\/\.test\(fullUrl\)\) noteLandingPost\(code, postIdFromInviteLink\(fullUrl\)\);/);
     });
     it("the two wrong-address answers name the address, and 'expired' is said only for the node's own reason", () => {
         expect(welcome).toMatch(/case 'invites_off':\s*return t\('\{address\} doesn’t use invites/);

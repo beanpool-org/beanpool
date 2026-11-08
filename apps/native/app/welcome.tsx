@@ -868,7 +868,9 @@ export default function WelcomeScreen() {
         const code = read.code ?? (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-')) ? fullUrl : null);
         if (code) {
             setInviteCode(code);
-            noteLandingPost(code, postIdFromInviteLink(fullUrl));
+            // The listing an invite-and-share link was sent from rides on its link only: a code pasted alone leaves the one
+            // an earlier link noted as it was, as before.
+            if (/[?&]invite=/.test(fullUrl)) noteLandingPost(code, postIdFromInviteLink(fullUrl));
         }
         setMode('create');
     }, [t]);

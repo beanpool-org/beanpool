@@ -14,8 +14,16 @@ const WEBSITE_HOSTS: ReadonlySet<string> = new Set(['beanpool.org', 'www.beanpoo
 /** A standard code (`INV-` and two groups of 4) or an offline ticket's short form, standing alone as a word. */
 const CODE_IN_TEXT = /(?:^|[^A-Za-z0-9-])((?:INV|BP)-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})(?![A-Za-z0-9-])/i;
 
-/** A bare host (`byron.beanpool.org`, `bp.example.net:8443`) standing alone as a word, ending a sentence or not. */
-const BARE_HOST = /(?:^|[\s(<"'])((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d{1,5})?)(?=$|[\s)>"'.,;:!?])/g;
+/** A host and its port, if any: `byron.beanpool.org`, `bp.example.net:8443`. */
+const HOST = String.raw`(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d{1,5})?`;
+
+/**
+ * A bare host standing alone: after any character that can't be part of a host (a space, a full-width colon as in the
+ * ja/zh messages' "アドレス：", a bracket; never a dot, `/` or `@`), and never cut short. The host is read whole once
+ * (a lookahead captured and matched again, as an atomic group), then refused if it runs on, so "byron.beanpool.org/"
+ * or "…org。" is the whole host and never the "byron.beanpool" a backtrack would leave (review 4507903022).
+ */
+const BARE_HOST = new RegExp(String.raw`(?:^|[^A-Za-z0-9.\-/@])(?=(${HOST}))\1(?![A-Za-z0-9-]|\.[A-Za-z0-9]|:\d)`, 'g');
 
 /**
  * The invite code in `raw`, as written, or null when it holds none. An `invite=` in a link first (it may be a long
@@ -52,7 +60,7 @@ export function communityAddressIn(raw: string): string | null {
         const host = m[1].toLowerCase();
         if (WEBSITE_HOSTS.has(host.replace(/:\d+$/, ''))) continue;
         // A host inside a link (`https://a.b/…`) is the link's: the caller reads links with their own parser.
-        const before = text.slice(0, m.index ?? 0);
+        const before = text.slice(0, (m.index ?? 0) + m[0].length - m[1].length);
         if (/[a-z]+:\/\/\S*$/i.test(before)) continue;
         found = host;
     }

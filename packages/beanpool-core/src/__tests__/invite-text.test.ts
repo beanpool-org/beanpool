@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { communityAddressIn, inviteCodeIn } from '../invite-text';
 import { inviteShareText } from '../invite-share-text';
+import { setLanguage, type UiLang } from '../words.js';
 
 // The message a member's Share sends (Rob's on Byron, 8 Nov), exactly as the share builds it.
 const MESSAGE = inviteShareText({
@@ -46,5 +50,52 @@ describe('communityAddressIn', () => {
     });
     it('reads an address with a port, ending a sentence, in any case', () => {
         expect(communityAddressIn('Community address: BP.Example.net:8443.')).toBe('bp.example.net:8443');
+    });
+});
+
+describe('communityAddressIn never cuts a host short (review 4507903022)', () => {
+    it('reads the whole host when a slash, a full stop of another script or an invisible mark follows it', () => {
+        expect(communityAddressIn('Community address: byron.beanpool.org/')).toBe('byron.beanpool.org');
+        expect(communityAddressIn('Community address: byron.beanpool.org。')).toBe('byron.beanpool.org');
+        expect(communityAddressIn('Community address: byron.beanpool.org\u200B')).toBe('byron.beanpool.org');
+        expect(communityAddressIn('Community address: byron.beanpool.org\u200F')).toBe('byron.beanpool.org');
+        expect(communityAddressIn('Community address: byron.beanpool.org]')).toBe('byron.beanpool.org');
+    });
+    it('reads a host after a full-width colon', () => {
+        expect(communityAddressIn('社区地址：byron.beanpool.org')).toBe('byron.beanpool.org');
+        expect(communityAddressIn('コミュニティのアドレス：byron.beanpool.org')).toBe('byron.beanpool.org');
+    });
+    it('is no host at all rather than a shorter one', () => {
+        expect(communityAddressIn('Community address: byron.beanpool.org.1')).toBeNull();
+        expect(communityAddressIn('Community address: byron.beanpool.org:123456')).toBeNull();
+    });
+    it('still finds none in an email address, the website or a link', () => {
+        expect(communityAddressIn('rob@byron.beanpool.org')).toBeNull();
+        expect(communityAddressIn('beanpool.org/')).toBeNull();
+        expect(communityAddressIn('see https://byron.beanpool.org/?invite=INV-K7Q2-BSXA')).toBeNull();
+        expect(communityAddressIn('https://a.example/?x=byron.beanpool.org')).toBeNull();
+    });
+});
+
+describe("every language's share message names its community and its code", () => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../words');
+    const files = readdirSync(root).filter((f) => f.endsWith('.json'));
+    const link = 'https://byron.beanpool.org/?invite=INV-K7Q2-BSXA';
+    afterAll(() => setLanguage('en'));
+
+    it('has every catalogue to read', () => {
+        expect(files.length).toBeGreaterThanOrEqual(24);
+    });
+    it.each(files)('%s: the whole message, and the message without its link', (file) => {
+        const lang = file.replace(/\.json$/, '') as UiLang;
+        setLanguage(lang, [JSON.parse(readFileSync(join(root, file), 'utf8'))]);
+        const message = inviteShareText({ name: 'Byron Shire BeanPool', link, code: 'INV-K7Q2-BSXA', address: 'byron.beanpool.org' });
+        setLanguage('en');
+        expect(message).toContain(link);
+        const withoutLink = message.replace(link, '');
+        for (const text of [message, withoutLink]) {
+            expect(communityAddressIn(text)).toBe('byron.beanpool.org');
+            expect(inviteCodeIn(text)).toBe('INV-K7Q2-BSXA');
+        }
     });
 });

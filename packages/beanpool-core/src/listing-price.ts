@@ -46,11 +46,3 @@ export function freePriceWords(credits: unknown, type: string | null | undefined
 export function freePriceLabel(credits: unknown, type: string | null | undefined): string | null {
     return isFreePrice(credits) && type === 'need' ? t(FREE_PRICE_WORDS.needLabel) : null;
 }
-
-/**
- * A priced line as one string, where a card writes it in words ("20 Beans /hr"): `priced` is that line when there is a
- * price, and this returns "Free" instead when there is not. For a share line or a screen reader's label.
- */
-export function priceOrFree(credits: unknown, type: string | null | undefined, priced: string, form: FreePriceForm = 'short'): string {
-    return freePriceWords(credits, type, form) ?? priced;
-}

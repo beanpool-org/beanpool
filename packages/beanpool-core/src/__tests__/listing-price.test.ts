@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLanguage } from '../words.js';
-import { FREE_PRICE_WORDS, freePriceLabel, freePriceWords, isFreePrice, priceOrFree } from '../listing-price.js';
+import { FREE_PRICE_WORDS, freePriceLabel, freePriceWords, isFreePrice } from '../listing-price.js';
 
 afterEach(() => setLanguage('en'));
 
@@ -62,15 +62,6 @@ describe('freePriceLabel: the box label over a free Need', () => {
         expect(freePriceLabel(0, 'offer')).toBeNull();
         expect(freePriceLabel(40, 'need')).toBeNull();
         expect(freePriceLabel(undefined, 'need')).toBeNull();
-    });
-});
-
-describe('priceOrFree: a priced line, or Free', () => {
-    it('keeps the line a card wrote when there is a price, and says Free when there is none to pay', () => {
-        expect(priceOrFree(20, 'offer', '20 Beans /hr')).toBe('20 Beans /hr');
-        expect(priceOrFree(0, 'offer', '0 Beans /hr')).toBe('Free');
-        expect(priceOrFree(0, 'need', '0 Beans', 'box')).toBe('Free help wanted');
-        expect(priceOrFree(undefined, 'need', '? Beans')).toBe('? Beans');
     });
 });
 

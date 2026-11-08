@@ -296,6 +296,11 @@ export const standingLines = {
         ? tn(count, 'This stops {n} standing deal after its current month.', 'This stops {n} standing deals after their current month.')
         : tn(count, 'This stops {n} standing deal after its current week.', 'This stops {n} standing deals after their current week.')),
     authMismatch: () => t("The standing deal's agreement doesn't match this listing. Close it and try again."),
+    releaseByItself: (unit: StandingPeriodUnit) => (unit === 'month'
+        ? t("This month's Beans go to them by themselves at the month's end. Hold it back first to settle it yourself.")
+        : t("This week's Beans go to them by themselves at the week's end. Hold it back first to settle it yourself.")),
+    payerOnly: () => t('Only the one who pays can do this.'),
+    notRunning: () => t("This standing deal isn't running by itself just now, so there is nothing to hold back."),
     alreadyStanding: () => t('You already have a standing deal on this. Stop it first.'),
 
     // §3 Short funds

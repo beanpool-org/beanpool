@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -85,6 +85,10 @@ import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
+import {
+    tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
+    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart,
+} from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine, onHold,
@@ -1173,7 +1177,18 @@ function armMainServerTimers(): void {
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
+        // Standing deals (engine/standing-deals.ts): each period's Beans to the payee at its end and the next period held,
+        // short payers tried again, and warned ahead. Main server only, like the rest; Beans off moves nothing.
+        try { runStandingDeals(); } catch (e) { console.warn('[Standing] Standing deals tick failed:', e); }
     }), 60 * 1000);
+}
+
+/**
+ * Run the standing deals that are due (engine/standing-deals.ts tickStandingDeals) with this node's escrow callbacks. The main
+ * server's minute tick calls it; on a standby it does nothing. Never throws.
+ */
+export function runStandingDeals(now?: number): ReturnType<typeof tickStandingDeals> {
+    return tickStandingDeals({ ...getEscrowCb(), clearEnterpriseFloorCache }, now);
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
@@ -1447,6 +1462,9 @@ export function runMarketplaceHygiene(): void {
         WHERE t.status='pending'
           AND t.created_at < datetime('now', ?)
           AND (t.last_reminded_at IS NULL OR t.last_reminded_at < datetime('now', ?))
+          -- A standing deal's period running by itself is released by the node at its end (engine/standing-deals.ts):
+          -- nobody is asked to release it. One held back is a plain held deal again, and is nudged like any.
+          AND NOT EXISTS (SELECT 1 FROM standing_deals sd WHERE sd.id = t.standing_id AND sd.current_tx_id = t.id AND sd.phase = 'held')
     `).all(`-${ESCROW_NUDGE_DAYS} days`, `-${ESCROW_NUDGE_DAYS} days`) as any[];
     for (const row of lingering) {
         // A loan (a lendable Offer, S3) is asked about the thing, not the Beans: the borrower is the one who says it's back.
@@ -6830,7 +6848,7 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction | null {
     assertLedgerWritable();
     return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
@@ -6845,7 +6863,7 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction {
     assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
@@ -6862,6 +6880,23 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
     assertLedgerWritable();
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
+}
+
+// A standing deal's Stop, Hold back and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
+// holds, so each refuses on a standby first, as every step of a trade does.
+export function stopStandingDeal(id: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return stopStandingDealEngine(getEscrowCb(), id, actor);
+}
+
+export function holdBackStandingDeal(id: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return holdBackStandingDealEngine(getEscrowCb(), id, actor);
+}
+
+export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {
+    assertLedgerWritable();
+    return extendStandingDealEngine(getEscrowCb(), id, actor, standing);
 }
 
 export type { EscrowDisputeAction };
@@ -8963,6 +8998,9 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
     // next persistCommonsBalance() would make the wrong figure durable. Reachable, not theoretical —
     // adminPruneBranch drives this recursively over a whole invite subtree.
     conservingTransaction(() => {
+        // Their standing deals end at once (engine/standing-deals.ts): nothing more is held for or from them. A period still
+        // held stays for the other side to close, as every open deal of a removed member does.
+        endStandingDealsOf(publicKey);
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
@@ -9149,6 +9187,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     const repliesErased: string[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
+        // Their standing deals end (engine/standing-deals.ts): the guard above already refused while a period is held.
+        endStandingDealsOf(publicKey);
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
@@ -10547,9 +10587,12 @@ export function isOnHoliday(publicKey: string): boolean {
 // Holiday mode may only be switched ON when this is zero: going away mid-deal would strand a
 // counterparty's escrow or an open request.
 export function countOpenTrades(publicKey: string): number {
+    // A standing deal's period where this member is the payee doesn't count (DESIGN-standing-deals-fable §2.5): a payee may
+    // go on holiday while their standing deals run. The payer is held back by setHolidayMode's own standing-deal check.
     const row = db.prepare(
-        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')`
-    ).get(publicKey, publicKey) as any;
+        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')
+           AND NOT (standing_id IS NOT NULL AND seller_pubkey = ?)`
+    ).get(publicKey, publicKey, publicKey) as any;
     return row?.n || 0;
 }
 
@@ -10569,6 +10612,14 @@ export function assertNotOnHoliday(publicKey: string): void {
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
     if (!getActingMember(publicKey)) throw new Error(word('Member not found'));
+    // A payer with a standing deal still running (between its periods too) stops it first (DESIGN-standing-deals-fable §2.5).
+    const standingTitle = enabled ? standingDealBlockingHoliday(publicKey) : null;
+    if (standingTitle !== null) {
+        const err: any = new Error(standingLines.holidayPayer(standingTitle));
+        err.openTrades = Math.max(1, countOpenTrades(publicKey));
+        err.code = 'standing_deal_running';
+        throw err;
+    }
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(trn(open, 'You have {n} active trade in progress. Complete or cancel it before switching on holiday mode.',

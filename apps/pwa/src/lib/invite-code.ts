@@ -7,13 +7,27 @@
  * ticket is signed (components/ShowcasePreviews.test.tsx runs every spelling of each example code through the node's
  * own check).
  */
+import { communityAddressIn, inviteCodeIn } from '@beanpool/core';
 
 export function extractInviteToken(raw: string): string {
-    const inviteMatch = raw.match(/[?&]invite=([^&]+)/);
-    if (inviteMatch) {
-        return decodeURIComponent(inviteMatch[1]);
-    }
-    return raw;
+    // The code alone, however much of a member's invite message was pasted (core invite-text.ts): a link's `invite=` up to
+    // the first space, else an INV- code anywhere. Before 9 Nov the words after a link were read into it, and a message
+    // pasted without its link was shaped from its first eight letters ("If the li…" → BP-IFTH-ELIN, "not recognised").
+    return inviteCodeIn(raw) ?? raw;
+}
+
+/**
+ * The community a pasted invite names (its link's host, else the message's "Community address" line), when that is not
+ * the community this page is (`hereOrigin`; '' asks only whether the paste names one), else null. Said only once this community has refused the code
+ * (WelcomePage handleCreate): a community with two names takes an invite made under either, and an invite that names
+ * another community is that community's to redeem.
+ */
+export function inviteNamesAnotherCommunity(raw: string, hereOrigin: string | null | undefined): string | null {
+    const linked = /https?:\/\/([^/?#\s]+)/i.exec(String(raw ?? ''))?.[1]?.toLowerCase() ?? null;
+    const named = linked ?? communityAddressIn(raw);
+    if (!named || hereOrigin === null || hereOrigin === undefined) return null;
+    const here = hereOrigin.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+    return named === here ? null : named;
 }
 
 /** Strip everything except alphanumeric, uppercase, and format as BP-XXXX-XXXX */

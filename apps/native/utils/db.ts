@@ -7426,8 +7426,12 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
+    /**
+     * `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). The phone's
+     * own two (inviteCheckMiss), never a node's: `invites_off`, the address takes no invites (the global community);
+     * `not_a_community`, nothing at the address answers as a BeanPool community (the website, a name nobody runs).
+     */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only' | 'invites_off' | 'not_a_community';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }
@@ -7438,6 +7442,27 @@ export interface InviteCheck {
 // callers must fail OPEN and let redeemInvite give the definitive answer later.
 // An offline ticket goes with its `BP-`: the node reads a code as a ticket only by
 // it (engine/members.ts checkInvite). The redeem is the one that sends it without.
+/**
+ * A check that found no invite step at the address, so nothing is made or sent there (9 Nov: a code typed with the
+ * address beanpool.org, which the invite message names as where to install from, or with the global community's, went on
+ * to a redeem that could only fail, in words about a node): the global community, whose invites are off (404
+ * `feature_off`), or an address where nothing answers as a BeanPool community does (a 404 or 405 that is a web page, not a
+ * node's JSON). Anything else (busy, down, no answer in time, a node's own JSON) is null, and the redeem decides, as before.
+ */
+export function inviteCheckMiss(status: number, body: string): InviteCheck | null {
+    if (status !== 404 && status !== 405) return null;
+    let answer: unknown = null;
+    try {
+        answer = JSON.parse(body);
+    } catch {
+        return { valid: false, reason: 'not_a_community' };
+    }
+    if (answer && typeof answer === 'object') {
+        return (answer as { code?: unknown }).code === 'feature_off' ? { valid: false, reason: 'invites_off' } : null;
+    }
+    return { valid: false, reason: 'not_a_community' };
+}
+
 export async function checkInvite(code: string, nodeUrl: string): Promise<InviteCheck | null> {
     try {
         const controller = new AbortController();
@@ -7448,7 +7473,7 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal,
             });
-            if (!res.ok) return null;
+            if (!res.ok) return inviteCheckMiss(res.status, await res.text().catch(() => ''));
             const data = await res.json();
             if (typeof data?.valid !== 'boolean') return null;
             return data;

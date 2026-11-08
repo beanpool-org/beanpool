@@ -52,7 +52,7 @@ import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPa
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
-import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
+import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -875,6 +875,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         return () => { cancelled = true; };
     }, []);
 
+    /** The invite field's latest input when it named a community (a link, or the message's address line), else null. */
+    const invitePasted = useRef<string | null>(null);
+
     async function handleCreate() {
         const trimmedCallsign = callsign.trim();
         const trimmedCode = normaliseInviteCode(inviteCode);
@@ -915,13 +918,22 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // the key is saved (review 4111871900). Used by another key, the redeem refuses it and nothing is saved.
             const usedMaybeByThisKey = check?.reason === 'used' && inviteKey.current !== null;
             if (check && !check.valid && !usedMaybeByThisKey) {
-                setError(check.reason === 'used'
+                // A code this community doesn't know (or, invites off here, can't take) that the paste says is another
+                // community's: that community is named, with where to go, never "not recognised" (9 Nov, Byron's invites).
+                const elsewhere = check.reason === 'invalid' || check.reason === 'invites_off'
+                    ? inviteNamesAnotherCommunity(invitePasted.current ?? inviteCode, nodeOrigin(getNodeApiUrl() || window.location.origin))
+                    : null;
+                setError(elsewhere
+                    ? t('This invite is for {address}. Open the invite link you were sent, or go to {address} and join there.', { address: elsewhere })
+                    : check.reason === 'used'
                     ? t('This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.')
                     : check.reason === 'expired'
                         ? t('This invite has expired — invites last 30 days. Ask whoever invited you for a fresh one.')
                         : check.reason === 'admins_only'
                             ? MEMBER_TICKET_REFUSED_TEXT
-                            : t("That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one."));
+                            : check.reason === 'invites_off'
+                                ? t('This community doesn’t use invites, so this code isn’t for it. Open the invite link you were sent, or go to the community address in your invite message.')
+                                : t("That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one."));
                 setLoading(false);
                 return;
             }
@@ -2731,7 +2743,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 id="inviteCode"
                                 type="text"
                                 value={inviteCode}
-                                onChange={(e) => setInviteCode(formatInviteCode(e.target.value))}
+                                onChange={(e) => {
+                                    // The field keeps the code alone; what a paste said about its community is kept beside it,
+                                    // for the answer when this community refuses the code (handleCreate), only while that paste
+                                    // is the latest input: any edit after it (select all and type) is a code the paste never spoke for.
+                                    invitePasted.current = inviteNamesAnotherCommunity(e.target.value, '') !== null ? e.target.value : null;
+                                    setInviteCode(formatInviteCode(e.target.value));
+                                }}
                                 placeholder={t('e.g. BP-7K3X-9M2W')}
                                 maxLength={800}
                                 disabled={loading}

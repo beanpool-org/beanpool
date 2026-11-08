@@ -118,6 +118,17 @@ export const vouchPresets = {
     noOfflineVouch: VOUCH_PRESET_WORDS.noOfflineVouch,
 } as const;
 
+/**
+ * The two boxes the owners' and admins' invite form shows under the vouch presets (DESIGN-invites-and-names-list-amend3-fable.md
+ * §1 and §4). The phone's form draws them live (slice A2). The web app holds no names-list key, so until the web list is built
+ * (Marty, 8 Nov, Q2: phone first) it draws both greyed with `webLater` under them (slice A3).
+ */
+export const INVITE_ADDS_WORDS = {
+    addToNames: word('Add them to the names list'),
+    makeVoucher: word('Make them a voucher'),
+    webLater: word('On the phone for now: the names list’s keys live on the admins’ phones.'),
+} as const;
+
 export const ledger = {
     vouchedBy: VOUCH_PRESET_WORDS.ledgerVouchedBy,
     budget: VOUCH_PRESET_WORDS.ledgerBudget,

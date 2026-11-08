@@ -54,6 +54,8 @@ export * from './post-type-lines.js';
 export * from './invite-ask.js';
 export * from './invite-and-share.js';
 export * from './invite-share-text.js';
+// What a pasted invite says (its code, the community it is for), read the same in both apps' invite step.
+export * from './invite-text.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
 export * from './peek-ticket.js';

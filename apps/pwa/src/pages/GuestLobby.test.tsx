@@ -11,6 +11,7 @@ import { generateIdentity, loadIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, t
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import * as gate from '../lib/visitor-lobby-gate';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+import { resetOwnCommunityCardOnce } from '../lib/join-names';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
 import * as sync from '../lib/sync';
@@ -81,6 +82,8 @@ const VISITOR_READS_EXACT = new Set([
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
     '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
+    // A community's public card (front doors S15): its name, for the Join card's heading (join names N1).
+    '/api/community/card',
     // Home in one read: public only with the visitors' view on (HOME_READ_EXACT), as here.
     '/api/home',
 ]);
@@ -152,6 +155,10 @@ function homeBody(member: boolean, profile: 'global' | 'local' = 'global') {
     };
 }
 
+/** What the stubbed node answers to GET /api/community/card, and to global's list by host (GET /api/global/communities?host=). */
+let stubbedCard: unknown = {};
+let stubbedListed: unknown[] = [];
+
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -174,6 +181,8 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         try { body = typeof init.body === 'string' ? JSON.parse(init.body) as Sent : undefined; } catch { body = undefined; }
         calls.push({ path, headers: (init.headers ?? {}) as Record<string, string>, method: init.method ?? 'GET', body });
         if (path === '/api/community/info') return json(200, info);
+        if (path === '/api/community/card') return json(200, stubbedCard);
+        if (path === '/api/global/communities') return json(200, { communities: stubbedListed });
         if (path === '/api/community/health') return json(200, health);
         if (path === '/api/marketplace/posts') {
             const id = new URLSearchParams(url.split('?')[1] ?? '').get('id');
@@ -200,6 +209,9 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
 }
 
 beforeEach(() => {
+    stubbedCard = {};
+    stubbedListed = [];
+    resetOwnCommunityCardOnce();
     stubMatchMedia();
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetCapturedAuthReturn();
@@ -1034,5 +1046,110 @@ describe("a sign-in in a page that heard another tab's sign-out: the account sig
         const from = calls.length;
         await lobbyRestore(member);
         await homeIsTheirs(calls, from, member);
+    });
+});
+
+/*
+ * Every join screen says which community (DESIGN-shared-listing-door-fable.md §2.5 and §2.4, slice N1). Damo, 9 Nov: "it's
+ * not intuitive for a new user WHAT NODE they are even joining". At the app's global: "Join the global community"; at a
+ * self-hoster's open community or a local one: "Join {its name}" (the card's name, else its address). And when the lobby
+ * was opened with ?ask=<host> (a community's card sent the visitor here), one line at the top says this is not that community.
+ */
+describe('the Join card says which community it joins (N1)', () => {
+    const OURS = { ...GLOBAL, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' };
+    const HALL = { ...GLOBAL, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' };
+    const heading = (card: HTMLElement) => card.querySelector('h2')!;
+    const CARD = (name: string | null, host: string) => ({ name, host, members: 12, area: null, joining: 'open', askUrl: null, globalUrl: null });
+
+    it('at the global community: "Join the global community", and it reads no card to find out', async () => {
+        const calls = stubNode(OURS);
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        expect(heading(card)).toHaveTextContent('Join the global community');
+        expect(card).not.toHaveTextContent('Join BeanPool');
+        expect(calls.map(c => c.path)).not.toContain('/api/community/card');
+    });
+
+    it("at a self-hoster's open community: \"Join {its name}\", from its card", async () => {
+        stubbedCard = CARD('Hall Community', 'hall.example.org');
+        stubNode(HALL);
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        await waitFor(() => expect(heading(card)).toHaveTextContent('Join Hall Community'));
+        expect(card).not.toHaveTextContent(/global community/i);
+        expect(card).not.toHaveTextContent('Join BeanPool');
+    });
+
+    it('at a local community that shows visitors its listings: "Join {its name}"', async () => {
+        stubbedCard = CARD('Mullum Community', 'mullum.example.org');
+        stubNode({ ...GLOBAL, profile: 'local' });
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        await waitFor(() => expect(heading(card)).toHaveTextContent('Join Mullum Community'));
+    });
+
+    it('a community with no name of its own, or a card that does not answer: "Join {its address}", never "Join BeanPool"', async () => {
+        stubbedCard = CARD(null, 'hall.example.org');
+        stubNode(HALL);
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        await waitFor(() => expect(heading(card)).toHaveTextContent('Join hall.example.org'));
+        cleanup();
+        resetCommunityInfoOnce();
+        resetOwnCommunityCardOnce();
+
+        stubbedCard = {};
+        stubNode(HALL);
+        await openLobby();
+        const bare = await screen.findByTestId('lobby-join-card');
+        expect(heading(bare)).toHaveTextContent(/^Join \S+$/);
+        expect(bare).not.toHaveTextContent('Join BeanPool');
+    });
+
+    describe('?ask=<host>: the line that says this is not that community (§2.4)', () => {
+        const BYRON = { key: 'k-byron', name: 'Byron Shire BeanPool', url: 'https://byron.beanpool.org', memberCount: 36, acceptingKnocks: true };
+
+        it('at the global community with ?ask=: one line at the top of the card, with the asked community\'s name from global\'s list', async () => {
+            window.history.replaceState(null, '', '/app?ask=byron.beanpool.org');
+            stubbedListed = [BYRON];
+            stubNode(OURS);
+            await openLobby();
+            const card = await screen.findByTestId('lobby-join-card');
+            const line = within(card).getByTestId('lobby-asked-elsewhere');
+            await waitFor(() => expect(line).toHaveTextContent(
+                'This is the global community, not Byron Shire BeanPool. Join here first, then find Byron Shire BeanPool under Find a community.'));
+            // At the top: before the heading. Nothing about where any button goes changes.
+            expect(card.firstElementChild).toBe(line);
+            expect(heading(card)).toHaveTextContent('Join the global community');
+            expect(within(card).queryByRole('link', { name: /ask .* directly/i })).toBeNull();
+        });
+
+        it('a community global does not list: the line names its host', async () => {
+            window.history.replaceState(null, '', '/app?ask=ghost.example.org');
+            stubbedListed = [];
+            stubNode(OURS);
+            await openLobby();
+            const line = within(await screen.findByTestId('lobby-join-card')).getByTestId('lobby-asked-elsewhere');
+            await waitFor(() => expect(line).toHaveTextContent(
+                'This is the global community, not ghost.example.org. Join here first, then find ghost.example.org under Find a community.'));
+        });
+
+        it('with no ?ask=: no line', async () => {
+            stubbedListed = [BYRON];
+            stubNode(OURS);
+            await openLobby();
+            const card = await screen.findByTestId('lobby-join-card');
+            expect(within(card).queryByTestId('lobby-asked-elsewhere')).toBeNull();
+        });
+
+        it("a self-hoster's community with ?ask= is not the global community, so it never says it is", async () => {
+            window.history.replaceState(null, '', '/app?ask=byron.beanpool.org');
+            stubbedCard = CARD('Hall Community', 'hall.example.org');
+            stubNode(HALL);
+            await openLobby();
+            const card = await screen.findByTestId('lobby-join-card');
+            await waitFor(() => expect(heading(card)).toHaveTextContent('Join Hall Community'));
+            expect(within(card).queryByTestId('lobby-asked-elsewhere')).toBeNull();
+        });
     });
 });

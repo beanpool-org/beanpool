@@ -229,6 +229,33 @@ describe('screens 0 to 3: from the lobby to leaving for the provider', () => {
     });
 });
 
+describe('the first screen says which community it joins (join names N1, §2.5)', () => {
+    const firstHeading = async () => (await screen.findByTestId('join-screen-lobby')).querySelector('h3')!;
+
+    it("at the app's global community: \"Join the global community\"", async () => {
+        stubNode({});
+        renderJoin({ appsGlobal: true });
+        expect(await firstHeading()).toHaveTextContent('Join the global community');
+    });
+
+    it("at a self-hoster's open community or a local one: \"Join {its name}\", the name WelcomePage read from its card", async () => {
+        stubNode({});
+        renderJoin({ communityName: 'Hall Community' });
+        const h = await firstHeading();
+        expect(h).toHaveTextContent('Join Hall Community');
+        expect(h).not.toHaveTextContent(/global community/i);
+    });
+
+    it('no name of its own: "Join {its address}", never "Join BeanPool"; and it asks the node for nothing to say so', async () => {
+        const node = stubNode({});
+        renderJoin();
+        const h = await firstHeading();
+        expect(h).toHaveTextContent(/^Join \S+$/);
+        expect(h).not.toHaveTextContent('Join BeanPool');
+        expect(node.calls.map((c) => c.path)).not.toContain('/api/community/card');
+    });
+});
+
 describe('screen 4: the return, and each door answer → its screen', () => {
     it('200: the identity moves into the app slot with the name the node gave, and the pending join goes', async () => {
         await seedPending();

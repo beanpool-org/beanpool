@@ -550,11 +550,10 @@ const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
  * for the address). Without the camera there are two routes to that screen, by what the phone has (Marty claimed
  * apollobay.beanpool.org by hand on 9 Nov and it took four tries; DESIGN-new-operator-path-fable.md §Recommendations 2):
  * no account yet, the first screen's "Installed BeanPool on a server? Claim it" (app/welcome.tsx); with an account, the
- * bean at the top (the BeanPool sheet, app/beanpool.tsx) → "Set up a new community server" (components/SetUpServerRow.tsx),
- * or "Add a community" → "Community address" → "Add & Connect" → "Claim ‹name›" (Settings' advanced address field).
- * Two of those arrive in the phone slices of the same design, not here: the "Set up a new community server" row on the
- * BeanPool sheet (S1, lane operator-claim-phone) and the no-owner card with "Claim ‹name›" after "Add & Connect" (S2); until
- * they are on main, the named row exists on Find a community and Start a community only. test-claim-cli checks each label
+ * bean at the top (the BeanPool sheet, app/beanpool.tsx) → "Set up a new community server" (components/SetUpServerRow.tsx).
+ * That row on the BeanPool sheet arrives with S1 (lane operator-claim-phone); until it is on main it exists on Find a
+ * community and Start a community only. The "Add a community" → "Add & Connect" → "Claim ‹name›" route is S2's to add to
+ * these steps, with S2's no-owner card. test-claim-cli checks each label
  * that exists is still in those files, and notes the sheet row as a TODO. The last line is the one "what next" (Decision 3).
  */
 function phoneSteps(address: string | null): string[] {
@@ -577,8 +576,7 @@ function phoneSteps(address: string | null): string[] {
         '  3. No camera, and no account yet? Open BeanPool and, at the bottom of its first screen, tap "Installed BeanPool on a server? Claim it".',
         `     Type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
         '  4. No camera, and an account already? Open BeanPool, tap the bean at the top, then tap "Set up a new community server":',
-        `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code" and tap "Claim and become owner".`,
-        `     Or tap "Add a community" instead: type ${where} under "Community address", tap "Add & Connect", tap "Claim ‹name›", then type the code under "Claim code" and tap "Claim and become owner".`,
+        `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
         'That phone becomes the owner. The code works once.',
         '',
         'Then open Settings: confirm your Core settings, make a recovery code, add a second owner and invite your first members.',

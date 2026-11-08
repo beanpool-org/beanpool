@@ -10,7 +10,7 @@
  *      the order a phone needs it: the QR first, the Address line, the one-time code, the steps. The steps, numbered
  *      (install the app from its store, then scan: the claim makes the account, with no invite and nothing of ours, so
  *      no "Explore BeanPool worldwide"; or, without a camera, the two routes by what the phone has: no account, the
- *      first screen's claim link; an account, the bean at the top → "Set up a new community server" or "Add a
+ *      first screen's claim link; an account, the bean at the top → "Set up a new community server"; S2 adds "Add a
  *      community"), name the phone's own labels, each still in the phone's source (claim-community.tsx, welcome.tsx,
  *      beanpool.tsx, SetUpServerRow.tsx, settings.tsx). Then the one "what next" (Settings: Core settings, a recovery
  *      code, a second owner, the first members).
@@ -254,8 +254,7 @@ async function main(): Promise<void> {
                 '  3. No camera, and no account yet? Open BeanPool and, at the bottom of its first screen, tap "Installed BeanPool on a server? Claim it".',
                 `     Type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
                 '  4. No camera, and an account already? Open BeanPool, tap the bean at the top, then tap "Set up a new community server":',
-                `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code" and tap "Claim and become owner".`,
-                `     Or tap "Add a community" instead: type ${where} under "Community address", tap "Add & Connect", tap "Claim ‹name›", then type the code under "Claim code" and tap "Claim and become owner".`,
+                `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
                 'That phone becomes the owner. The code works once.',
                 '',
                 'Then open Settings: confirm your Core settings, make a recovery code, add a second owner and invite your first members.',

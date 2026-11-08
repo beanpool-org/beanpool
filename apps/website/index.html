@@ -456,6 +456,53 @@
         </div>
     </section>
 
+    <!-- A look inside: five screens of the phone app, each in light and dark (the picture follows the visitor's setting). The pictures are shared by all 25 languages: website-build.mjs points the copies' assets/ paths at ../assets/ (src and srcset). -->
+    <section id="see-it">
+        <div class="container">
+            <div class="section-header">
+                <h2>A look inside</h2>
+                <p>The same app on phone and web. This is the phone.</p>
+            </div>
+            <div class="see-it-grid">
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-home-dark-360.webp 1x, assets/screenshots/phone-home-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-home-light-360.webp" srcset="assets/screenshots/phone-home-light-360.webp 1x, assets/screenshots/phone-home-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="BeanPool's Home screen on a phone, for an invented community called Riverbend: two things that need you, your Beans balance, a seed swap coming up and new offers in the Market.">
+                    </picture>
+                    <figcaption>Your community, on one screen</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-market-dark-360.webp 1x, assets/screenshots/phone-market-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-market-light-360.webp" srcset="assets/screenshots/phone-market-light-360.webp 1x, assets/screenshots/phone-market-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="The Market on a phone: newest first, offers and needs with photos and prices in Beans, such as sourdough loaves for 12 Beans, and a poll tile.">
+                    </picture>
+                    <figcaption>Offer what you can, ask freely</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-listing-dark-360.webp 1x, assets/screenshots/phone-listing-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-listing-light-360.webp" srcset="assets/screenshots/phone-listing-light-360.webp 1x, assets/screenshots/phone-listing-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="One listing on a phone: Sourdough loaves for 12 Beans, with a photo of the bread, the seller Amara with her badge and rating, and buttons to trade or ask.">
+                    </picture>
+                    <figcaption>Agree a price in Beans</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-deal-dark-360.webp 1x, assets/screenshots/phone-deal-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-deal-light-360.webp" srcset="assets/screenshots/phone-deal-light-360.webp 1x, assets/screenshots/phone-deal-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="A chat with Amara on a phone, with a strip saying 12 Beans are held in trust and three short messages that arrange a pick-up.">
+                    </picture>
+                    <figcaption>Beans held until it's done</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-ledger-dark-360.webp 1x, assets/screenshots/phone-ledger-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-ledger-light-360.webp" srcset="assets/screenshots/phone-ledger-light-360.webp 1x, assets/screenshots/phone-ledger-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="The Ledger on a phone: a balance of 42 Beans, a credit bar, a history of trades over three weeks and one trade held in trust.">
+                    </picture>
+                    <figcaption>Every trade in your own Ledger</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
     <!-- What you can do: one card per part of the app, in the app's own words -->
     <section id="features">
         <div class="container">

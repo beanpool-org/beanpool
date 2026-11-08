@@ -552,7 +552,10 @@ const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
  * no account yet, the first screen's "Installed BeanPool on a server? Claim it" (app/welcome.tsx); with an account, the
  * bean at the top (the BeanPool sheet, app/beanpool.tsx) → "Set up a new community server" (components/SetUpServerRow.tsx),
  * or "Add a community" → "Community address" → "Add & Connect" → "Claim ‹name›" (Settings' advanced address field).
- * test-claim-cli checks each label is still in those files. The last line is the one "what next" (Decision 3).
+ * Two of those arrive in the phone slices of the same design, not here: the "Set up a new community server" row on the
+ * BeanPool sheet (S1, lane operator-claim-phone) and the no-owner card with "Claim ‹name›" after "Add & Connect" (S2); until
+ * they are on main, the named row exists on Find a community and Start a community only. test-claim-cli checks each label
+ * that exists is still in those files, and notes the sheet row as a TODO. The last line is the one "what next" (Decision 3).
  */
 function phoneSteps(address: string | null): string[] {
     const made = 'That makes your account on the phone, with 12 words to write on paper.';

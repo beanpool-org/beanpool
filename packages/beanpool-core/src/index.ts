@@ -120,6 +120,7 @@ export * from './start-something.js';
 export * from './starter-offers.js';
 export * from './starter-sheet.js';
 export * from './deal-step.js';
+export * from './standing-deal.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './market-fill.js';

@@ -115,6 +115,7 @@ const node = vi.hoisted(() => ({
     online: true,
     inviteDown: false,
     inviteRefusal: null as string | null,
+    vouchersDown: false,
     generated: [] as Array<Record<string, unknown>>,
     bound: [] as Array<{ entryId: string; body: Record<string, unknown> }>,
 }));
@@ -197,7 +198,7 @@ beforeEach(() => {
     list.refuse = null;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
-        generated: [], bound: [],
+        vouchersDown: false, generated: [], bound: [],
     });
 
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
@@ -211,6 +212,8 @@ beforeEach(() => {
         }
         // GET /api/names/vouchers answers owners and committee admins only (routes/names-list.ts).
         if (u === `${NODE}/api/names/vouchers`) {
+            if (!node.online) throw new TypeError('Network request failed');
+            if (node.vouchersDown) return json({ error: 'Something went wrong.' }, 500);
             return node.committee
                 ? json({ vouchers: [], settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 100 } })
                 : json({ code: 'committee_only', error: COMMITTEE_ONLY }, 403);
@@ -339,7 +342,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         expect(node.bound).toEqual([]);
     });
 
-    it('no connection on the screen: the voucher box greyed, "Needs a connection…"', async () => {
+    it('no connection: the voucher box greyed, "Needs a connection…", never the committee sentence', async () => {
         node.role = 'owner';
         node.committee = true;
         node.online = false;
@@ -347,6 +350,17 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         await press('invite-names-box');
         expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(true);
         expect(q('invite-voucher-why')?.textContent).toBe(t('Needs a connection. You can make them a voucher from the list once they’ve joined.'));
+    });
+
+    it('the committee’s answer not heard (the read failed): greyed, and no sentence that would be untrue', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        node.vouchersDown = true;
+        await open();
+        await press('invite-names-box');
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(true);
+        expect(q('invite-voucher-why')).toBeNull();
+        expect(host.textContent).not.toContain(t(COMMITTEE_ONLY));
     });
 
     it('the connection drops at the invite with a level chosen: no ticket (a ticket never carries a level); the entry stands', async () => {

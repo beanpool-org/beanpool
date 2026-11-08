@@ -222,6 +222,9 @@ export default function PeopleScreen() {
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
     const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; settings: VoucherSettings } | null>(null);
+    // Whether the node said this member is on the credit committee (it answers GET /api/names/vouchers only for them; a 403 is
+    // its no). Undefined while not heard, or when the ask failed: never read as a no.
+    const [onCommittee, setOnCommittee] = useState<boolean | undefined>(undefined);
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
 
     const [members, setMembers] = useState<any[]>([]);
@@ -297,13 +300,13 @@ export default function PeopleScreen() {
     }, [anchorUrl, identity?.publicKey, isGuest, view]);
     // Owners and admins of a local community: "Add them to the names list" and "Make them a voucher" under the presets
     // (DESIGN-invites-and-names-list-amend3-fable.md §1, phone first). The committee is whoever the node answers
-    // GET /api/names/vouchers for (vouchersData, read on Invites); the stepper starts at the community's default budget.
+    // GET /api/names/vouchers for (onCommittee, read on Invites); the stepper starts at the community's default budget.
     // The role: the one above where only admins invite; elsewhere asked for this alone, on Invites only (useRoleOnInvites).
     const openDoorRole = useRoleOnInvites({ anchorUrl, identity: identity ?? null, ask: !doorAdminsOnly && makesInvites && !invitesPreview && !isGuest && view === 'invites' });
     const inviteNames = useInviteNames({
         anchorUrl, identity: identity ?? null, online: isOnline,
         offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(doorAdminsOnly ? inviteRole : openDoorRole, nodeProfile?.profile),
-        committee: vouchersData !== null, voucherBudget: vouchersData?.settings?.voucherBudget,
+        committee: onCommittee, voucherBudget: vouchersData?.settings?.voucherBudget,
     });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
@@ -349,11 +352,13 @@ export default function PeopleScreen() {
         const res = await fetchVouchers(u, identity);
         if (res.ok) setVouchersData(res.value);
         else setVouchersData(null);
+        setOnCommittee(res.ok ? true : res.status === 403 ? false : undefined);
     }, [anchorUrl, identity]);
 
     useEffect(() => {
         if (view !== 'invites') {
             setVouchersData(null);
+            setOnCommittee(undefined);
         }
     }, [view]);
 

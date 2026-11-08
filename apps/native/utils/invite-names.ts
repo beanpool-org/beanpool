@@ -20,21 +20,23 @@ export function offersNamesBoxes(role: string | null | undefined, profile: 'loca
 }
 
 /** Why "Make them a voucher" is greyed, or null when it can be ticked. */
-export type VoucherBoxWhy = 'committee_only' | 'needs_signal' | 'needs_names' | null;
+export type VoucherBoxWhy = 'needs_signal' | 'not_heard' | 'committee_only' | 'needs_names' | null;
 
 /**
- * "Make them a voucher": only for the credit committee (owners and committee admins: the node answers GET /api/names/vouchers
- * only to them), only with a connection (a ticket never carries a level), and only with the names box ticked (amend2 §2: a
- * voucher made from an invite is a names-list entry's).
+ * "Make them a voucher": only with a connection (a ticket never carries a level), only for the credit committee (owners and
+ * committee admins: the node answers GET /api/names/vouchers only to them; `committee` undefined while its answer isn't heard,
+ * which is never read as a no), and only with the names box ticked (amend2 §2: a voucher made with an invite comes with a
+ * names-list entry). No connection is said first: offline, the committee's answer can't be heard either.
  */
-export function voucherBoxWhy(o: { committee: boolean; online: boolean; namesTicked: boolean }): VoucherBoxWhy {
-    if (!o.committee) return 'committee_only';
+export function voucherBoxWhy(o: { committee: boolean | undefined; online: boolean; namesTicked: boolean }): VoucherBoxWhy {
     if (!o.online) return 'needs_signal';
+    if (o.committee === undefined) return 'not_heard';
+    if (!o.committee) return 'committee_only';
     if (!o.namesTicked) return 'needs_names';
     return null;
 }
 
-/** The sentence under a greyed "Make them a voucher". */
+/** The sentence under a greyed "Make them a voucher"; none while the node's answer isn't heard (nothing true to say yet). */
 export function voucherBoxWords(why: VoucherBoxWhy): string | null {
     if (why === 'committee_only') return t('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.');
     if (why === 'needs_signal') return t('Needs a connection. You can make them a voucher from the list once they’ve joined.');

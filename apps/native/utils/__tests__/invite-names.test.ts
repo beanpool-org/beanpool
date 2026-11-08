@@ -44,9 +44,15 @@ describe('"Make them a voucher": greyed, and why', () => {
         expect(voucherBoxWhy({ committee: false, online: true, namesTicked: true })).toBe('committee_only');
         expect(voucherBoxWords('committee_only')).toBe('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.');
     });
-    it('needs a connection: a ticket never carries a level', () => {
+    it('needs a connection: a ticket never carries a level; said first, since offline the committee’s answer can’t be heard', () => {
         expect(voucherBoxWhy({ committee: true, online: false, namesTicked: true })).toBe('needs_signal');
+        expect(voucherBoxWhy({ committee: undefined, online: false, namesTicked: true })).toBe('needs_signal');
+        expect(voucherBoxWhy({ committee: false, online: false, namesTicked: false })).toBe('needs_signal');
         expect(voucherBoxWords('needs_signal')).toBe('Needs a connection. You can make them a voucher from the list once they’ve joined.');
+    });
+    it('the committee’s answer not heard yet is never read as a no: greyed, and nothing said', () => {
+        expect(voucherBoxWhy({ committee: undefined, online: true, namesTicked: true })).toBe('not_heard');
+        expect(voucherBoxWords('not_heard')).toBeNull();
     });
     it('only with the names box ticked', () => {
         expect(voucherBoxWhy({ committee: true, online: true, namesTicked: false })).toBe('needs_names');

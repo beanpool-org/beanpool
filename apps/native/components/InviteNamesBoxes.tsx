@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatNumber, t } from '@beanpool/core';
+import { formatNumber, t, INVITE_ADDS_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
@@ -80,10 +80,11 @@ export interface InviteNames {
 /**
  * The boxes' state for People → Invites. `offered`: an owner or admin of a local community where invites are made (the caller
  * decides, utils/invite-names.ts offersNamesBoxes). `committee`: the node answered GET /api/names/vouchers (only owners and
- * committee admins get an answer). `voucherBudget`: the community's default budget, where the stepper starts.
+ * committee admins get an answer; a 403 is false; undefined while not heard). `voucherBudget`: the community's default budget,
+ * where the stepper starts.
  */
 export function useInviteNames(o: {
-    anchorUrl: string; identity: BeanPoolIdentity | null; offered: boolean; committee: boolean; online: boolean; voucherBudget?: number | null;
+    anchorUrl: string; identity: BeanPoolIdentity | null; offered: boolean; committee: boolean | undefined; online: boolean; voucherBudget?: number | null;
 }): InviteNames {
     const { anchorUrl, identity, offered, committee, online } = o;
     const [namesTicked, setNamesTicked] = useState(false);
@@ -103,26 +104,39 @@ export function useInviteNames(o: {
     }, [o.voucherBudget]);
     const setLevel = useCallback((v: number) => { levelTouched.current = true; setLevelState(v); }, []);
 
-    // The list opens when the box is ticked (again after a refusal, on the next tick), and afresh after a change of community.
+    // The list opens when the box is ticked (again after a refusal, on the next tick). A change of community starts the boxes
+    // again: a name typed for one community never carries into another, and an open still in flight for the old one is
+    // dropped and asked again (`retry`) rather than left waiting.
     const opening = useRef(false);
     const anchorNow = useRef(anchorUrl);
     anchorNow.current = anchorUrl;
-    useEffect(() => { setOpened(null); setList({ kind: 'idle' }); }, [anchorUrl, identity?.publicKey]);
+    const [retry, setRetry] = useState(0);
+    useEffect(() => {
+        setOpened(null);
+        setList({ kind: 'idle' });
+        setNamesTicked(false);
+        setName('');
+        setVoucherTicked(false);
+        addId.current = newEntryId();
+    }, [anchorUrl, identity?.publicKey]);
     useEffect(() => {
         if (!offered || !namesTicked || !identity || !anchorUrl || opened || opening.current) return;
         opening.current = true;
         const forAnchor = anchorUrl;
         setList({ kind: 'opening' });
         openNamesList(anchorUrl, identity, STORE).then((r) => {
-            if (anchorNow.current !== forAnchor) return;
+            opening.current = false;
+            if (anchorNow.current !== forAnchor) { setRetry((n) => n + 1); return; }
             if (!r.ok) { setList({ kind: 'refused', message: say(r.message) }); return; }
             if (!r.value.list) { setList({ kind: 'refused', message: say(NAMES_COPY.notReady) }); return; }
             setOpened(r.value);
             setList({ kind: 'open' });
         }).catch(() => {
-            if (anchorNow.current === forAnchor) setList({ kind: 'refused', message: say(NAMES_COPY.notReady) });
-        }).finally(() => { opening.current = false; });
-    }, [offered, namesTicked, identity, anchorUrl, opened]);
+            opening.current = false;
+            if (anchorNow.current !== forAnchor) setRetry((n) => n + 1);
+            else setList({ kind: 'refused', message: say(NAMES_COPY.notReady) });
+        });
+    }, [offered, namesTicked, identity, anchorUrl, opened, retry]);
 
     const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
     const same = useMemo(() => (namesTicked ? sameNameOnList(name, entries, opened) : null), [namesTicked, name, entries, opened]);
@@ -195,7 +209,7 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
     const up = budgetLevelUp(names.level);
     return (
         <View style={styles.block} testID="invite-names">
-            <Box checked={names.namesTicked} label={t('Add them to the names list')} onPress={() => names.setNamesTicked(!names.namesTicked)} testID="invite-names-box" />
+            <Box checked={names.namesTicked} label={t(INVITE_ADDS_WORDS.addToNames)} onPress={() => names.setNamesTicked(!names.namesTicked)} testID="invite-names-box" />
             {names.namesTicked ? (
                 <View style={styles.inner}>
                     <TextInput
@@ -244,11 +258,11 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
             <Box
                 checked={voucherOn}
                 disabled={why !== null}
-                label={t('Make them a voucher')}
+                label={t(INVITE_ADDS_WORDS.makeVoucher)}
                 onPress={() => names.setVoucherTicked(!names.voucherTicked)}
                 testID="invite-voucher-box"
             />
-            {why !== null ? (
+            {voucherBoxWords(why) ? (
                 <Text style={[styles.hint, styles.inner]} maxFontSizeMultiplier={1.3} testID="invite-voucher-why">{voucherBoxWords(why)}</Text>
             ) : null}
             {voucherOn ? (

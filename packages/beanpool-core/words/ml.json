@@ -1306,7 +1306,7 @@
   "Five tags at most": "പരമാവധി 5 ടാഗുകൾ",
   "Flour\u0004tag": "മാവ്",
   "Flowers\u0004tag": "പൂക്കൾ",
-  "Free\u0004price": "സൗജന്യം",
+  "Free\u0004a listing with no price": "സൗജന്യം",
   "Free\u0004tag": "സൗജന്യം",
   "Freight\u0004tag": "ചരക്കുഗതാഗതം",
   "From this phone's last known place.": "ഈ ഫോണിന്റെ അവസാനം അറിയപ്പെട്ട സ്ഥലത്തു നിന്ന്.",
@@ -2248,5 +2248,7 @@
   "Busy right now. Try again in a moment.": "ഇപ്പോൾ തിരക്കിലാണ്. അൽപ്പം കഴിഞ്ഞ് വീണ്ടും ശ്രമിക്കുക.",
   "Add them to the names list": "പേരുകളുടെ പട്ടികയിൽ ചേർക്കുക",
   "Make them a voucher": "അവരെ ഗ്യാരന്റർ ആക്കുക",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "ഇപ്പോൾ ഫോണിൽ മാത്രം: പേരുകളുടെ പട്ടികയുടെ കീകൾ അഡ്മിൻമാരുടെ ഫോണുകളിലാണ്."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "ഇപ്പോൾ ഫോണിൽ മാത്രം: പേരുകളുടെ പട്ടികയുടെ കീകൾ അഡ്മിൻമാരുടെ ഫോണുകളിലാണ്.",
+  "Ask a question with 2–4 options in the feed": "ഫീഡിൽ 2–4 ഓപ്ഷനുകളുള്ള ഒരു ചോദ്യം ചോദിക്കുക",
+  "A gathering with a time and a place": "സമയവും സ്ഥലവുമുള്ള ഒത്തുചേരൽ"
 }

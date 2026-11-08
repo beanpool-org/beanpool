@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, freePriceWords, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -1841,8 +1841,11 @@ export default function PublicProfileScreen() {
                                                                 </View>
                                                                 {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                                    {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). */}
+                                                                    {freePriceWords(p.credits, p.type) ? <Text style={styles.creditAmount}>{freePriceWords(p.credits, p.type)}</Text> : <>
                                                                     <Text style={styles.creditAmount}>{p.credits ?? '?'}</Text>
                                                                     <Image accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" source={require('../assets/images/bean.png')} style={styles.beanIcon} />
+                                                                    </>}
                                                                 </View>
                                                                 )}
                                                             </View>

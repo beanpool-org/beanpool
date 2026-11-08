@@ -7,5 +7,9 @@
             ]
         }
     },
-    "extends": "expo/tsconfig.base"
+    "extends": "expo/tsconfig.base",
+    // `exclude` replaces the list in expo/tsconfig.base, so that list is repeated here (babel.config.js, metro.config.js,
+    // jest.config.js, android, ios) with one more entry: the demo node is server-side code (it runs the node's own source under
+    // tsx), and e2e/demo/tsconfig.json checks it with the server's settings, not these.
+    "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "android", "ios", "e2e/demo/demo-node.ts"]
 }

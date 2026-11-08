@@ -1306,7 +1306,7 @@
   "Five tags at most": "En fazla beş etiket",
   "Flour\u0004tag": "Un",
   "Flowers\u0004tag": "Çiçekler",
-  "Free\u0004price": "Ücretsiz",
+  "Free\u0004a listing with no price": "Ücretsiz",
   "Free\u0004tag": "Ücretsiz",
   "Freight\u0004tag": "Yük taşımacılığı",
   "From this phone's last known place.": "Bu telefonun bilinen son yerinden.",
@@ -2248,5 +2248,7 @@
   "Busy right now. Try again in a moment.": "Şu anda yoğun. Birazdan tekrar dene.",
   "Add them to the names list": "İsimler listesine ekle",
   "Make them a voucher": "Onu kefil yap",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "Şimdilik telefonda: isimler listesinin anahtarları yöneticilerin telefonlarında."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "Şimdilik telefonda: isimler listesinin anahtarları yöneticilerin telefonlarında.",
+  "Ask a question with 2–4 options in the feed": "Akışta 2–4 seçenekli bir soru sor",
+  "A gathering with a time and a place": "Zamanı ve yeri olan bir buluşma"
 }

@@ -146,10 +146,17 @@ vi.mock('../../app/ThemeContext', async () => {
 const ME = { publicKey: 'me-key', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
-// Their own screens and sweeps (the poll and event composers, the pricing guide), closed until opened; none is opened here.
-vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
-// The event form says only whether it is open: the listing screen opens it for `?newPost=event`.
-vi.mock('../../components/NewEventModal', () => ({ NewEventModal: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'event-form' }) : null) }));
+// The poll and event composers are their own screens and sweeps. Each says only whether it is open, and goes through the Modal as
+// the real one does (its `onShow`, and iOS's refusals and dismissals: profile-events-words-harness.ts), so a form asked for at a
+// bad moment is not drawn here either. The listing screen opens them for `?newPost=poll|event` and for the chooser's pick.
+vi.mock('../../components/NewPollModal', async () => {
+    const { Modal } = await import('react-native');
+    return { NewPollModal: ({ visible, onShow }: { visible: boolean; onShow?: () => void }) => createElement(Modal as any, { visible, onShow }, createElement('div', { 'data-testid': 'poll-form' })) };
+});
+vi.mock('../../components/NewEventModal', async () => {
+    const { Modal } = await import('react-native');
+    return { NewEventModal: ({ visible, onShow }: { visible: boolean; onShow?: () => void }) => createElement(Modal as any, { visible, onShow }, createElement('div', { 'data-testid': 'event-form' })) };
+});
 vi.mock('../../components/info-content/PricingInfoModal', () => ({ PricingInfoModal: () => null }));
 vi.mock('../../components/PricingGuideModal', () => ({ PricingGuideModal: () => null }));
 vi.mock('../node-post', () => ({
@@ -170,7 +177,7 @@ import NewListingScreen from '../../app/new-listing';
 import { router } from 'expo-router';
 import { createStack, presentation } from './stack-sim';
 import { modalControl } from './profile-events-words-harness';
-import { MODAL_SHOW_GUARD_MS, PRESENTED_FALLBACK_MS } from '../screen-presented';
+import { AFTER_DISMISS_FALLBACK_MS, MODAL_SHOW_GUARD_MS, PRESENTED_FALLBACK_MS } from '../screen-presented';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -243,7 +250,7 @@ beforeEach(() => {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
-afterEach(() => { vi.useRealTimers(); presentation.reset(); modalControl.refuse = false; act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); presentation.reset(); modalControl.reset(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: unknown = createElement(MapScreen)) {
@@ -721,6 +728,93 @@ describe('the listing screen is never left empty on top (iOS Market freeze, 9 No
         await click(host.querySelector('[data-modal] [aria-label="Cancel"]'), 'Cancel');
         await wait(MODAL_SHOW_GUARD_MS + 300);
         expect(nav.pushed).toEqual(['back']);
+    });
+});
+
+/**
+ * Round 2 of #2984. The chooser on the listing screen calls onClose and then onSelect in one press, so a Poll or Event Modal was
+ * asked for in the same commit that began closing the chooser. iOS cannot present while another controller is still being
+ * dismissed (React Native never retries), so the form was refused and the guard above sent the member back to the Map after a
+ * second: the pick silently failed. On iOS the pick now waits for the chooser's `onDismiss` (NewPostTypeSheet, useAfterDismiss).
+ * `modalControl.ios` is iOS's dismissal (profile-events-words-harness.ts): a Modal asked for while one is closing is refused
+ * for good, and `finishClosing()` is the dismissal ending. Android's Dialogs stack, so nothing waits there.
+ */
+describe('a Poll or Event picked in the listing screen\'s chooser opens on iOS too (round 2)', () => {
+    const choosers = () => Array.from(host.querySelectorAll('[data-modal]')).filter((m) => m.textContent?.includes('Create New Post'));
+    const forms = { poll: () => host.querySelector('[data-testid="poll-form"]'), event: () => host.querySelector('[data-testid="event-form"]') };
+    const wait = async (ms: number) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); };
+    const pick = (label: string) => click(host.querySelector(`[data-modal] [aria-label^="${label}:"]`), `${label} in the chooser`);
+    const dismissalEnds = async () => { await act(async () => { modalControl.finishClosing(); }); await settle(); };
+
+    for (const [type, label] of [['poll', 'Community Poll'], ['event', 'Event']] as const) {
+        it(`iOS: ${label} waits for the chooser to finish closing, then opens; the member is not sent back`, async () => {
+            modalControl.ios = true;
+            params.now = {};
+            await renderIn('en', listing());
+            expect(choosers(), 'the chooser is up').toHaveLength(1);
+            await pick(label);
+            expect(choosers(), 'the chooser is going').toHaveLength(0);
+            expect(forms[type](), 'not asked for while the chooser is still closing').toBeNull();
+            await dismissalEnds();
+            expect(forms[type](), `the ${type} form is up`).not.toBeNull();
+            await wait(MODAL_SHOW_GUARD_MS + 300);
+            expect(forms[type](), 'and stays up').not.toBeNull();
+            expect(nav.pushed, 'nothing sent the member back').toEqual([]);
+        });
+
+        it(`Android: ${label} opens at once (a Dialog stacks); nothing waits`, async () => {
+            params.now = {};
+            await renderIn('en', listing());
+            await pick(label);
+            expect(forms[type]()).not.toBeNull();
+            expect(nav.pushed).toEqual([]);
+        });
+    }
+
+    it('iOS: the Map\'s ADD POST → chooser → Community Poll opens the poll form on the listing screen, with the Map under it', async () => {
+        modalControl.ios = true;
+        nav.stack = createStack();
+        await renderIn('en', nav.stack.host({ index: MapScreen, 'new-listing': NewListingScreen, other: () => null }));
+        await click(buttonHolding('ADD POST'), 'ADD POST');
+        expect(nav.stack.names()).toEqual(['index', 'new-listing']);
+        await pick('Community Poll');
+        await dismissalEnds();
+        expect(forms.poll()).not.toBeNull();
+        await wait(MODAL_SHOW_GUARD_MS + 300);
+        expect(forms.poll(), 'still up past the guard').not.toBeNull();
+        expect(nav.stack.names(), 'the listing screen was not left').toEqual(['index', 'new-listing']);
+    });
+
+    it('iOS: an Offer is not held (a view in the screen, not a Modal): the form is up before the chooser has finished closing', async () => {
+        modalControl.ios = true;
+        params.now = {};
+        await renderIn('en', listing());
+        await pick('Offer');
+        expect(host.querySelector('input[placeholder]'), 'the Offer form, with the chooser still closing').not.toBeNull();
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('iOS: a chooser that never says it has gone (the event lost) does not drop the pick: it opens after the floor', async () => {
+        modalControl.ios = true;
+        params.now = {};
+        await renderIn('en', listing());
+        await pick('Community Poll');
+        modalControl.closing.clear(); // gone, but no `onDismiss` ever came
+        await wait(AFTER_DISMISS_FALLBACK_MS / 2);
+        expect(forms.poll(), 'still waiting for the dismissal').toBeNull();
+        await wait(AFTER_DISMISS_FALLBACK_MS / 2 + 300);
+        expect(forms.poll()).not.toBeNull();
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('iOS: Cancel still takes the member back (a cancel is not a pick)', async () => {
+        modalControl.ios = true;
+        params.now = {};
+        await renderIn('en', listing());
+        await click(host.querySelector('[data-modal] [aria-label="Cancel"]'), 'Cancel');
+        await wait(50);
+        expect(nav.pushed).toEqual(['back']);
+        expect(forms.poll()).toBeNull();
     });
 });
 

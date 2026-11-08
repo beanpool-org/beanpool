@@ -355,8 +355,6 @@ export default function NewListingScreen() {
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)/map');
     };
-    /** The chooser calls onClose before onSelect: a close with a choice behind it is not a leave. */
-    const chooserLeave = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     /**
      * The empty screen is the failure: a Modal this screen asked for (the chooser, a poll, an event) that the platform
@@ -1129,8 +1127,11 @@ export default function NewListingScreen() {
             <NewPostTypeSheet
                 visible={showNewPostTypePicker}
                 onShow={chooserShown}
-                onClose={() => { setShowNewPostTypePicker(false); chooserLeave.current = setTimeout(leave, 0); }}
-                onSelect={(type) => { if (chooserLeave.current) clearTimeout(chooserLeave.current); startCompose(type); }}
+                // A close with a choice behind it is not a leave (`choosing`): on iOS a Poll or Event choice arrives only once the
+                // chooser has gone, later than any timer here could wait (components/NewPostTypeSheet.tsx). A cancel leaves, a moment
+                // on so a close on its way to the look door is not taken for one.
+                onClose={(choosing) => { setShowNewPostTypePicker(false); if (!choosing) setTimeout(leave, 0); }}
+                onSelect={(type) => { startCompose(type); }}
             />
 
             <NewPollModal

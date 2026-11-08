@@ -26,7 +26,9 @@ import { createRoot, type Root } from 'react-dom/client';
 const PANEL_WIDTH = 304;
 const alerts = vi.hoisted(() => ({ said: [] as string[] }));
 
-vi.mock('react-native', () => {
+vi.mock('react-native', async () => {
+    // Modal and Platform are the shared harness's: iOS's refusals and dismissals are `modalControl`'s (profile-events-words-harness.ts).
+    const { modalStandIn, platformStandIn } = await import('./profile-events-words-harness');
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
@@ -62,7 +64,7 @@ vi.mock('react-native', () => {
     class Value { constructor(public v = 0) {} setValue() {} setOffset() {} stopAnimation() {} interpolate() { return this; } addListener() { return ''; } removeListener() {} removeAllListeners() {} }
     const animation = () => ({ start(cb?: () => void) { cb?.(); }, stop() {} });
     return {
-        Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
+        Platform: platformStandIn(),
         Image: el('img'),
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
         FlatList,
@@ -72,7 +74,7 @@ vi.mock('react-native', () => {
         },
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
         TouchableOpacity: el('button'), SafeAreaView: el('div'), RefreshControl: () => null, ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
-        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
+        Modal: modalStandIn,
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: { alert: (title: string, body?: string) => { alerts.said.push(title); if (body) alerts.said.push(body); } },
         Linking: { openURL: async () => {}, openSettings: async () => {} },
@@ -139,9 +141,16 @@ const ME = { publicKey: 'me-key', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 // A member's picture: drawn from what they chose, never words.
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
-// The poll and event composers are their own screens (NewPollModal, NewEventModal), for a later sweep; closed here.
-vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
-vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
+// The poll and event composers are their own screens (NewPollModal, NewEventModal), for a later sweep. Each says only whether it is
+// open, through the Modal as the real one is (its `onShow`, and iOS's refusals), with a button that closes it as its ✕ does.
+vi.mock('../../components/NewPollModal', async () => {
+    const { Modal } = await import('react-native');
+    return { NewPollModal: ({ visible, onClose }: { visible: boolean; onClose: () => void }) => createElement(Modal as any, { visible }, createElement('button', { 'data-testid': 'poll-form', onClick: onClose }, 'poll form')) };
+});
+vi.mock('../../components/NewEventModal', async () => {
+    const { Modal } = await import('react-native');
+    return { NewEventModal: ({ visible, onClose }: { visible: boolean; onClose: () => void }) => createElement(Modal as any, { visible }, createElement('button', { 'data-testid': 'event-form', onClick: onClose }, 'event form')) };
+});
 vi.mock('../home-store', () => ({ readPhoneInterests: async () => interests.now, saveInterests: async () => {} }));
 const interests = vi.hoisted(() => ({ now: [] as string[] }));
 vi.mock('../node-post', () => ({
@@ -159,6 +168,7 @@ import { FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS } from '../map-filters';
 import { TILE_LETTER_DP, TILE_PANEL_PADDING, longestWordLength } from '../filter-chips';
 import MarketScreen from '../../app/(tabs)/market';
+import { modalControl } from './profile-events-words-harness';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -247,7 +257,7 @@ beforeEach(() => {
     rememberProfile(LOCAL);
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { modalControl.reset(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: unknown = createElement(MarketScreen)) {
@@ -346,6 +356,51 @@ describe('the Market\'s post buttons open its own chooser: no listing screen is 
         await click(host.querySelector('[data-modal] [aria-label^="Community Poll:"]'), 'Poll in the chooser');
         expect(nav.pushed).toEqual([]);
         expect(chooser()).toBeNull();
+        expect(host.querySelector('[data-testid="poll-form"]'), 'the poll form is up (Android)').not.toBeNull();
+    });
+
+    /**
+     * Round 2 of #2984. The chooser's pick asked for the poll or event Modal in the same commit that began closing the chooser.
+     * iOS cannot present while another controller is still being dismissed; React Native then holds the Modal as presented and
+     * never asks again, so nothing was drawn, `showNewPollModal` stayed true, and every later Poll tap (the +, ADD POST, these
+     * buttons) set true on true and did nothing until the Market remounted. On iOS the pick waits for the chooser's `onDismiss`.
+     */
+    describe('iOS: a Poll or Event pick opens its form once the chooser has finished closing, and can be opened again', () => {
+        const form = (type: 'poll' | 'event') => host.querySelector(`[data-testid="${type}-form"]`);
+        const dismissalEnds = async () => { await act(async () => { modalControl.finishClosing(); }); await settle(); };
+        const chooserOpenedBy = async () => { await click(buttonHolding('Post your first Offer'), 'Post your first Offer'); };
+        const pick = (label: string) => click(host.querySelector(`[data-modal] [aria-label^="${label}:"]`), `${label} in the chooser`);
+
+        for (const [type, label] of [['poll', 'Community Poll'], ['event', 'Event']] as const) {
+            it(`${label}: waits for the chooser to go, opens, and opens again after it is closed`, async () => {
+                modalControl.ios = true;
+                await renderIn('en');
+                await chooserOpenedBy();
+                await pick(label);
+                expect(chooser(), 'the chooser is going').toBeNull();
+                expect(form(type), 'not asked for while the chooser is still closing').toBeNull();
+                await dismissalEnds();
+                expect(form(type), `the ${type} form is up`).not.toBeNull();
+                expect(nav.pushed, 'no listing screen').toEqual([]);
+
+                // ✕ on the form, then the same pick again: the second time it must open too (it never did once refused).
+                await click(form(type), `✕ on the ${type} form`);
+                expect(form(type)).toBeNull();
+                await dismissalEnds();
+                await chooserOpenedBy();
+                await pick(label);
+                await dismissalEnds();
+                expect(form(type), `the ${type} form opens a second time`).not.toBeNull();
+            });
+        }
+
+        it('an Offer or a Need is not held: the listing screen is pushed at once', async () => {
+            modalControl.ios = true;
+            await renderIn('en');
+            await chooserOpenedBy();
+            await pick('Need');
+            expect(nav.pushed).toEqual([{ pathname: '/new-listing', params: { newPost: 'need' } }]);
+        });
     });
 });
 

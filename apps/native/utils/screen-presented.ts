@@ -13,6 +13,12 @@
  *     fired), give up and leave the screen. Whatever else goes wrong, it can never sit empty over the opener.
  *
  * The timers are a floor, not the way in: the navigation event is what normally opens things (about 300 ms for the fade).
+ *
+ * The same refusal happens one Modal after another: a chooser's pick that opens a Poll or Event form in the SAME commit that
+ * starts closing the chooser (round 2 of #2984: the Map's +, the Market's +, Home's +). UIKit drops a present while the
+ * presenter is still dismissing another controller, so the form is refused, and React Native has already marked it
+ * presented. The member got nothing (or, on the listing screen, was sent back by guard 2). On iOS the pick waits for the
+ * chooser's `onDismiss` (useAfterDismiss), the way components/SharePost.tsx holds its next sheet.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -76,4 +82,38 @@ export function useModalShowGuard(visible: boolean, giveUp: () => void, ms: numb
         shown.current = true;
         if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     }, []);
+}
+
+/** If a Modal never reports its `onDismiss` (the event was lost), run what was held after this long, so a pick is never dropped. */
+export const AFTER_DISMISS_FALLBACK_MS = 1500;
+
+/**
+ * Hold a value until a Modal that is closing has gone, then run `run` with it, once. `hold(value)` starts the wait; pass the
+ * returned `release` as that Modal's `onDismiss` (iOS fires it when UIKit's dismissal has finished). A floor timer
+ * (`ms`) runs it anyway if the event never comes, and leaving the screen drops what is held. A second `hold` replaces the
+ * first: one pick at a time. Where a platform does not need the wait (Android's Dialogs stack), do not call `hold`: run at once.
+ */
+export function useAfterDismiss<T>(run: (value: T) => void, ms: number = AFTER_DISMISS_FALLBACK_MS): { hold: (value: T) => void; release: () => void } {
+    const held = useRef<{ value: T } | null>(null);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const runRef = useRef(run);
+    runRef.current = run;
+
+    const release = useCallback(() => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        const h = held.current;
+        held.current = null;
+        if (h) runRef.current(h.value);
+    }, []);
+    const hold = useCallback((value: T) => {
+        held.current = { value };
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(release, ms);
+    }, [ms, release]);
+    useEffect(() => () => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        held.current = null;
+    }, []);
+
+    return { hold, release };
 }

@@ -9,12 +9,69 @@
  * bracket bypassed t(). What members, communities and servers wrote (names, a bio, an event's title, a node's own words)
  * is named by each test and taken out first.
  */
-import { createElement, Fragment, useEffect, type ReactNode } from 'react';
+import { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+
+/**
+ * What the platform does with a Modal, for the tests that need iOS (the iOS Market freeze, 9 Nov, and its round 2). By default a
+ * Modal draws while `visible` and reports `onShow`, as Android's Dialog and the web do. A test sets these and calls `reset()` after:
+ *  - `refuse`: iOS refusing every Modal asked for (the screen under it was still being presented): nothing is drawn and
+ *    `onShow` never fires.
+ *  - `ios`: Platform.OS is 'ios', and a Modal that closes (`visible` goes false) stays closing until `finishClosing()`, as UIKit's
+ *    dismissal takes its fade. A Modal asked for while any other is closing is refused for good: React Native has marked it
+ *    presented and never asks UIKit again (RCTModalHostViewComponentView), so it stays dark until its `visible` goes false and
+ *    true again. `finishClosing()` is the dismissals ending: each closed Modal's `onDismiss` fires, as iOS's does.
+ */
+export const modalControl = {
+    refuse: false,
+    ios: false,
+    closing: new Map<symbol, () => void>(),
+    finishClosing() {
+        const done = [...this.closing.values()];
+        this.closing.clear();
+        for (const d of done) d();
+    },
+    reset() { this.refuse = false; this.ios = false; this.closing.clear(); },
+};
+
+/**
+ * Platform.OS: 'android' as the render tests have always run, 'ios' while `modalControl.ios` is set, and whatever a test assigns
+ * to it (map-light-dark-render.test.ts sets it itself). `select` stays as it was: Android's value, unless `modalControl.ios`.
+ */
+export function platformStandIn(version?: number) {
+    let assigned: string | undefined;
+    const os = () => assigned ?? (modalControl.ios ? 'ios' : 'android');
+    return {
+        get OS() { return os(); },
+        set OS(v: string) { assigned = v; },
+        ...(version === undefined ? {} : { Version: version }),
+        select: (o: Record<string, unknown>) => (modalControl.ios ? o.ios : o.android) ?? o.default,
+    };
+}
+
+/** React Native's Modal as `modalControl` has it (see above). Shared by the render tests that draw their own react-native mock. */
+export function modalStandIn({ visible, children, onShow, onDismiss }: { visible: boolean; children?: unknown; onShow?: () => void; onDismiss?: () => void }) {
+    const id = useRef(Symbol('modal')).current;
+    const [refused, setRefused] = useState(false);
+    const up = useRef(false);
+    const dismissed = useRef(onDismiss);
+    dismissed.current = onDismiss;
+    // Closing is noted in the commit that hides it, before any Modal asked for in that same commit decides (effects run after).
+    useLayoutEffect(() => {
+        if (!visible && up.current) {
+            up.current = false;
+            if (modalControl.ios) modalControl.closing.set(id, () => dismissed.current?.());
+        }
+    }, [visible]);
+    useEffect(() => {
+        if (!visible) { setRefused(false); return; }
+        if (modalControl.refuse || (modalControl.ios && modalControl.closing.size > 0)) { setRefused(true); return; }
+        up.current = true;
+        onShow?.();
+    }, [visible]);
+    return visible && !refused && !modalControl.refuse ? createElement('div', { 'data-modal': 'true' }, children as any) : null;
+}
 
 /** What the screen said in alerts: titles, bodies and buttons in order; `buttons` the last alert's, to press one. */
-/** A test makes the platform refuse every Modal asked for: `modalControl.refuse = true` (reset it after). */
-export const modalControl = { refuse: false };
-
 export interface Said { said: string[]; buttons: Array<{ text?: string; onPress?: () => unknown }> }
 
 const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', checkbox: 'checkbox', alert: 'alert', switch: 'switch', radio: 'radio', imagebutton: 'button', list: 'list' };
@@ -60,19 +117,14 @@ export function nativeMock(said: Said) {
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
     const anim = () => ({ start: (cb?: () => void) => cb?.(), stop: () => {} });
     return {
-        Platform: { OS: 'android', Version: 34, select: (o: Record<string, unknown>) => o.android ?? o.default },
+        Platform: platformStandIn(34),
         View: el('div'), Text: el('span'), Pressable: el('button'), TouchableOpacity: el('button'), ScrollView: el('div'), TextInput: el('input'),
         SafeAreaView: el('div'), Switch: el('button'), Image: el('img'), KeyboardAvoidingView: el('div'),
         ActivityIndicator: (props: { accessibilityLabel?: string }) => createElement('span', { 'data-spinner': 'true', ...(props.accessibilityLabel ? { 'aria-label': props.accessibilityLabel } : {}) }),
         RefreshControl: () => null,
         FlatList, SectionList: FlatList,
-        // A Modal that is up reports `onShow`, as React Native's does. `modalControl.refuse` is iOS refusing one asked for while
-        // the screen under it was still being presented: nothing is drawn and `onShow` never fires (utils/screen-presented.ts).
-        Modal: ({ visible, children, onShow }: { visible: boolean; children?: unknown; onShow?: () => void }) => {
-            const up = visible && !modalControl.refuse;
-            useEffect(() => { if (up) onShow?.(); }, [up]);
-            return up ? createElement('div', { 'data-modal': 'true' }, children as any) : null;
-        },
+        // A Modal that is up reports `onShow`, as React Native's does; iOS's refusals and dismissals are `modalControl`'s (above).
+        Modal: modalStandIn,
         Animated: { View: el('div'), Text: el('span'), FlatList, Value, add: () => new Value(0), multiply: () => new Value(0), timing: anim, spring: anim, loop: anim, sequence: anim, parallel: anim, event: () => () => {}, createAnimatedComponent: (c: unknown) => c },
         Easing: { inOut: () => () => 0, ease: () => 0, linear: () => 0, out: () => () => 0 },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },

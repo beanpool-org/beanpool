@@ -127,7 +127,14 @@ export interface TableHashes {
  * server hashes `members` and `invite_codes` over one more column each, and the new tables too. REPLICA_FORMAT stays:
  * each side's import writes only the columns and tables its own database has.
  */
-export const TABLE_HASHES_VERSION = 22;
+/**
+ * 23: invite_codes gains voucher_level and voucher_outcome (a names-bound invite that makes its joiner a voucher,
+ * DESIGN-invites-and-names-list-amend3-fable.md slice A1). Raised for the same reason as 8: a standby updated before its
+ * main server hashes `invite_codes` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the promise
+ * on an invite nobody has used yet (after a takeover from such a copy that person still joins, confirmed, and the committee
+ * can make them a voucher from the list), and the outcome line on a used one.
+ */
+export const TABLE_HASHES_VERSION = 23;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

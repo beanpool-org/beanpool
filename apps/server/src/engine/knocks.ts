@@ -635,7 +635,8 @@ export interface KnockNamesBinding {
 /**
  * `vouchAmount`: a vouch the invite carries, from the answering member's own budget, as on any invite (engine/vouchers.ts;
  * amend2 §4, the design §2's "answering a request to join"); a refused vouch throws its VoucherError, and nothing commits.
- * An invite bound to a names-list entry carries none (generateInvite): confirmed on joining, they get the known floor.
+ * An invite bound to a names-list entry carries it too (Marty, 8 Nov, amend3 Q1): confirmed on joining, they get the known
+ * floor and the vouch, which add up on their floor.
  */
 export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding, vouchAmount?: unknown): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {

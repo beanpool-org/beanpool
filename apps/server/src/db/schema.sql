@@ -183,6 +183,14 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- VOUCH_PRESETS, held from its maker's budget when the code was made and landing on the joiner at the redeem. NULL for
     -- every other invite; an offline ticket never carries one. Declared here for the same reason as genesis_type.
     vouch_amount INTEGER,
+    -- A voucher budget the invite promises (DESIGN-invites-and-names-list-amend3-fable.md §2, engine/vouchers.ts
+    -- landInviteVoucher): 100 to 2,000 in 100s, written only with names_entry_id, by an owner or a credit-committee admin.
+    -- Nothing is allocated when the code is made; whoever joins with it, confirmed against the entry, is made a voucher with
+    -- this budget then. `voucher_outcome` is what the redeem (or, with two admins to confirm, the second confirmation) did
+    -- with it: 'made', 'awaiting_second', or why not. NULL for every other invite. Declared here for the same reason as
+    -- genesis_type.
+    voucher_level INTEGER,
+    voucher_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

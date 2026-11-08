@@ -41,14 +41,14 @@ function focusRingRules(): Rule[] {
 function specificity(selector: string): [number, number, number] {
     if (/:(is|where|not|has)\(/.test(selector)) throw new Error(`this test does not weigh ${selector}`);
     let [ids, classes, elements] = [0, 0, 0];
-    const rest = selector
+    // Each kind is counted, then cut out so the next kind does not count its letters again.
+    selector
         .replace(/\[[^\]]*\]/g, () => { classes++; return ' '; })
         .replace(/#[\w-]+/g, () => { ids++; return ' '; })
         .replace(/::[\w-]+/g, () => { elements++; return ' '; })
         .replace(/:[\w-]+/g, () => { classes++; return ' '; })
         .replace(/\.[\w-]+/g, () => { classes++; return ' '; })
         .replace(/[a-zA-Z][\w-]*/g, () => { elements++; return ' '; });
-    void rest;
     return [ids, classes, elements];
 }
 

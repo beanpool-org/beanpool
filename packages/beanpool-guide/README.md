@@ -31,10 +31,12 @@ pnpm --filter @beanpool/guide screenshots
 (or `pnpm --filter @beanpool/manager manual-shots`)
 
 This script (`apps/manager/e2e/manual-shots.mjs`):
-1. Boots the local manager app against the mock API harness (`apps/manager/e2e/harness.mjs`).
-2. Navigates through all 5 Settings sections and key modals.
+1. Boots the local manager app against the mock API harness (`apps/manager/e2e/harness.mjs`), on a healthy server of eight invented members (`apps/manager/e2e/manual-fixtures.mjs` edits the stress fixtures the phone-width check uses), shown under a made-up public address, never `127.0.0.1`.
+2. Walks the Settings screens the manual describes, each scrolled to the subject its text is about (the `SUBJECTS` table in the script), plus the member card and the Home backup warning.
 3. Renders each viewport into an HTML5 `<canvas>` inside Chromium to encode high-quality WebP images without requiring external binaries (`cwebp` or `sharp`).
-4. Writes the resulting files into `packages/beanpool-guide/operators/images/`.
+4. Writes the resulting files into `packages/beanpool-guide/operators/images/`, and stops with an error if a picture it wrote is used by no manual page, or a page uses one it did not write.
+
+After retaking, `pnpm --filter @beanpool/guide generate` copies the pictures to `apps/manager/public/images/` (and the one on the website, which the director's publish commits).
 
 ---
 

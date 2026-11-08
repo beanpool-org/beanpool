@@ -32,6 +32,7 @@ import {
 } from '../lib/api';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
+import { forgetKnockMark, knockWaitingKey } from '../lib/knock-key';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchKnownRule } from '../lib/known-rule';
@@ -69,6 +70,18 @@ interface Props {
     onBack?: () => void;
     /** `/api/community/info` as the lobby already read it, so the page doesn't ask again. */
     initialInfo?: CommunityInfo;
+    /**
+     * Ask to join this community from here (DESIGN-shared-listing-door-fable.md §2.1): the card's form sent the request,
+     * and this browser now holds the key it asked with and waits (App's waiting page). Without it the card has no form.
+     */
+    onAsked?: (identity: BeanPoolIdentity) => void;
+    /**
+     * A member said yes to this browser's request: the invite, redeemed with the key the request was signed with (the
+     * invite is bound to it), then the wizard as after any invite, with the 12 words shown for the first time.
+     */
+    knockYes?: { invite: string; name: string };
+    /** Back to the waiting page, from a yes that couldn't be joined, or from the invite form, while a request waits. */
+    onBackToRequest?: () => void;
 }
 
 /** What an invite-sent record keeps of the code or ticket a key went with: its SHA-256, never the code itself. */
@@ -316,7 +329,7 @@ function WordsAreEnglish() {
     );
 }
 
-export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
+export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, knockYes, onBackToRequest }: Props) {
     // Its words change the moment the language does, also where it is shown on its own (lib/language.ts).
     useLanguage();
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
@@ -606,6 +619,16 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         stuckOnSentInvite('unreachable', kept.callsign);
     }
 
+    // A yes to this browser's request: joined as the page opens, once nothing else from here waits to be settled first.
+    const knockJoinStarted = useRef(false);
+    useEffect(() => {
+        if (!knockYes || knockJoinStarted.current) return;
+        if (door === 'checking' || sentJoin !== 'none' || sentInvite !== 'none') return;
+        knockJoinStarted.current = true;
+        void handleCreate(knockYes.invite);
+        // handleCreate reads refs and state setters only.
+    }, [knockYes, door, sentJoin, sentInvite]);
+
     function retrySentInvite() {
         if (typeof sentInvite !== 'object' || sentInvite.busy) return;
         if (door === 'unreachable') setDoorCheck((n) => n + 1);
@@ -619,6 +642,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      */
     function enterAsInvited(member: BeanPoolIdentity, asked: string, earlier = false) {
         inviteKey.current = null;
+        // A key a request to join made is a member now: never read as waiting again (lib/knock-key.ts).
+        forgetKnockMark(member.publicKey);
         setPendingIdentity(member);
         // Redeemed already, so the final step has nothing left to redeem.
         setInviteRedeemed(true);
@@ -878,16 +903,20 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     /** The invite field's latest input when it named a community (a link, or the message's address line), else null. */
     const invitePasted = useRef<string | null>(null);
 
-    async function handleCreate() {
-        const trimmedCallsign = callsign.trim();
-        const trimmedCode = normaliseInviteCode(inviteCode);
+    /**
+     * `knockInvite`: the invite a member's yes to this browser's request made (`knockYes`). It is redeemed with the key the
+     * request was signed with, under the name that request gave, with nothing typed.
+     */
+    async function handleCreate(knockInvite?: string) {
+        let trimmedCallsign = callsign.trim();
+        const trimmedCode = normaliseInviteCode(knockInvite ?? inviteCode);
 
         if (!trimmedCode) {
             setError(t('An invite code is required to join this node.'));
             return;
         }
 
-        if (trimmedCallsign.length < 2) {
+        if (knockInvite === undefined && trimmedCallsign.length < 2) {
             setError(t('Callsign must be at least 2 characters.'));
             return;
         }
@@ -907,6 +936,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 checkSentInviteAgain();
                 return;
             }
+            // A browser waiting on its request to join holds the key that request was signed with (lib/knock-key.ts):
+            // any invite here joins with that key, never a second one (one key per browser), and a yes's invite is bound
+            // to it. The yes goes in under the name the request gave.
+            const held = inviteKey.current ? null : await knockWaitingKey();
+            if (knockInvite !== undefined) trimmedCallsign = held?.callsign.trim() || trimmedCallsign;
 
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result
@@ -944,7 +978,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // "already a member", and the key is saved then.
             const identity = inviteKey.current
                 ? { ...inviteKey.current, callsign: trimmedCallsign }
-                : await generateIdentity(trimmedCallsign);
+                : held
+                    ? { ...held, callsign: trimmedCallsign }
+                    : await generateIdentity(trimmedCallsign);
             inviteKey.current = identity;
             // Nothing is spent on a key this browser couldn't keep: another account saved here, or a join that went out
             // from this browser and waits to be settled (asked about first). The save below decides it again.
@@ -2705,13 +2741,44 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         </>
                     ) : door === 'checking' || sentJoin === 'checking' || sentInvite === 'checking' || sentInvite === 'kept' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t('One moment…')}</p>
+                    ) : knockYes ? (
+                        /* ===== A YES TO THIS BROWSER'S REQUEST: joined with the key it asked with (shared-listing door A1) ===== */
+                        <div data-testid="knock-join" style={{ textAlign: 'left' }}>
+                            <h3 dir="auto" style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
+                                {t('Join {name}', { name: knockYes.name })}
+                            </h3>
+                            {error && !loading ? (
+                                <>
+                                    <p role="alert" data-testid="knock-join-error" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>{error}</p>
+                                    <button type="button" data-testid="knock-join-retry" onClick={() => { setError(null); void handleCreate(knockYes.invite); }}
+                                        className="block w-full min-h-[48px] px-4 py-3 mb-3 rounded-xl text-base font-bold border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer">
+                                        {t('Try again')}
+                                    </button>
+                                </>
+                            ) : (
+                                <p role="status" style={{ fontSize: '0.95rem', marginBottom: '1rem' }}>{t('Joining…')}</p>
+                            )}
+                            {onBackToRequest && (
+                                <button type="button" data-testid="knock-join-back" onClick={onBackToRequest} disabled={loading}
+                                    className="block w-full min-h-[48px] px-4 py-3 rounded-xl text-base font-bold bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer disabled:opacity-60">
+                                    {t('← Back to my request')}
+                                </button>
+                            )}
+                        </div>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
+                            {onBackToRequest && (
+                                <button type="button" data-testid="welcome-back-to-request" onClick={onBackToRequest}
+                                    className="block w-full min-h-[48px] px-4 py-3 mb-4 rounded-xl text-base font-bold bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer">
+                                    {t('← Back to my request')}
+                                </button>
+                            )}
                             {localCommunity && communityCard && communityCard !== 'loading' && (
                                 <CommunityCardPanel
                                     card={communityCard}
-                                    compact={welcomeDoor === 'invite'}
+                                    compact={welcomeDoor === 'invite' || !!onBackToRequest}
+                                    ask={onAsked ? { onAsked, open: welcomeDoor === 'ask' } : undefined}
                                     onSignIn={() => { setShowNewUser(false); setShowMemberOptions(true); setError(null); }}
                                 />
                             )}
@@ -2800,7 +2867,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             )}
 
                             <button
-                                onClick={handleCreate}
+                                onClick={() => void handleCreate()}
                                 disabled={loading}
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',

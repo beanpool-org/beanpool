@@ -7,7 +7,7 @@
  * here, free of React Native imports, so vitest can hold both screens to the same four options.
  */
 
-import { t, word, type WordKey } from '@beanpool/core';
+import { POST_TYPE_LINES, t, word, type WordKey } from '@beanpool/core';
 
 export type ComposePostType = 'offer' | 'need' | 'poll' | 'event';
 
@@ -28,38 +28,38 @@ export interface ComposeOption {
 }
 
 /**
- * All four choices, in the order they are shown. The wording is the Market tab's, kept verbatim so the two
- * entry points read identically — a member who learns the list on one tab recognises it on the other.
+ * All four choices, in the order they are shown. The line under each is core's (POST_TYPE_LINES), the same one the web's
+ * and the new-listing form's toggles show, so every place a member picks a kind says the same thing.
  */
 export const NEW_POST_TYPES: readonly ComposeOption[] = [
     {
         id: 'offer',
         emoji: '📦',
         title: word('Offer'),
-        description: word('List goods, skills, food, or tools on the map'),
+        description: POST_TYPE_LINES.offer,
     },
     {
         id: 'need',
         emoji: '❤️',
         title: word('Need'),
-        description: word('Ask your neighbours for something you need'),
+        description: POST_TYPE_LINES.need,
     },
     {
         id: 'poll',
         emoji: '🗳️',
         title: word('Community Poll'),
-        description: word('Ask a question with 2–4 options in the feed'),
+        description: POST_TYPE_LINES.poll,
     },
     {
         id: 'event',
         // Not 📅: Android draws that emoji with a date printed on it ("JUL 17"), which reads as the event's.
         emoji: '👥',
         title: word('Event'),
-        description: word('A gathering with a time and a place'),
+        description: POST_TYPE_LINES.event,
     },
 ] as const;
 
-/** "Offer: List goods, skills, food, or tools on the map" — the row's screen-reader label. */
+/** "Offer: Something you'll give or do for others" — the row's screen-reader label. */
 export function composeOptionA11yLabel(option: ComposeOption): string {
     return t('{title}: {description}', { title: t(option.title), description: t(option.description) });
 }

@@ -134,7 +134,16 @@ export interface TableHashes {
  * on an invite nobody has used yet (after a takeover from such a copy that person still joins, confirmed, and the committee
  * can make them a voucher from the list), and the outcome line on a used one.
  */
-export const TABLE_HASHES_VERSION = 23;
+/**
+ * 24: standing deals (engine/standing-deals.ts, DESIGN-standing-deals-fable.md slice S1): a new plain table, standing_deals,
+ * and marketplace_transactions gains standing_id and period_no. Raised for the same reason as 4: a standby updated before its
+ * main server hashes `marketplace_transactions` over two more columns, and the new table too. REPLICA_FORMAT stays, as for
+ * 22: each side's import writes only the columns and tables its own database has. What an older importer drops (a main
+ * server updated first may hold standing deals its standby doesn't keep yet) is the arrangement: after a takeover from such
+ * a copy each period still held is a plain held deal its two members settle, and nothing more is held, since no hold is made
+ * without the signed authorisation the dropped row keeps.
+ */
+export const TABLE_HASHES_VERSION = 24;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

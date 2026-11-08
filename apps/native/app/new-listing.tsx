@@ -27,7 +27,7 @@ import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
-import { formatNumber, t, upperCase } from '@beanpool/core';
+import { POST_TYPE_LINES, formatNumber, t, upperCase } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
@@ -109,6 +109,8 @@ export default function NewListingScreen() {
         typeBtnNeed: { backgroundColor: colors.action.fab, borderColor: colors.action.fab },
         typeBtnText: { fontSize: 15, fontWeight: '800', color: colors.text.secondary },
         typeBtnTextActive: { color: '#fff' },
+        // The one short line under each choice (core's POST_TYPE_LINES): centred, wrapping to the button's width at 320 dp x 1.3.
+        typeBtnHint: { fontSize: 12, fontWeight: '500', color: colors.text.secondary, textAlign: 'center', marginTop: 2, paddingHorizontal: 6 },
 
         // Category picker
         pickerWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 40, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 6, overflow: 'hidden' },
@@ -809,9 +811,11 @@ export default function NewListingScreen() {
                             <View style={styles.typeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'offer' }} style={[styles.typeBtn, postType === 'offer' && styles.typeBtnOffer]} onPress={() => setPostType('offer')}>
                                     <Text style={[styles.typeBtnText, postType === 'offer' && styles.typeBtnTextActive]}>{t('🟢 Offer')}</Text>
+                                    <Text style={[styles.typeBtnHint, postType === 'offer' && styles.typeBtnTextActive]} testID="type-hint-offer">{t(POST_TYPE_LINES.offer)}</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'need' }} style={[styles.typeBtn, postType === 'need' && styles.typeBtnNeed]} onPress={() => setPostType('need')}>
                                     <Text style={[styles.typeBtnText, postType === 'need' && styles.typeBtnTextActive]}>{t('🟠 Need')}</Text>
+                                    <Text style={[styles.typeBtnHint, postType === 'need' && styles.typeBtnTextActive]} testID="type-hint-need">{t(POST_TYPE_LINES.need)}</Text>
                                 </Pressable>
                             </View>
 

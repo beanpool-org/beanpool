@@ -14,6 +14,7 @@ import { registerMember } from '../lib/api';
 import { openWithNodeName } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
+import { inviteShareText } from '@beanpool/core';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
 type Handler = (body: any, call: Call) => Response | Promise<Response>;
@@ -1372,5 +1373,47 @@ describe('a sent door join that can no longer land, beside a kept invite key, on
         expect(screen.queryByText(/An invite sent from this browser is still being checked/)).toBeNull();
         await screen.findByText(/Choose your look/);
         expect((await loadIdentity())?.publicKey).toBe(doorKey.publicKey);
+    });
+});
+
+describe('a pasted invite names its community only while the field holds what it pasted (review 4507903702)', () => {
+    // Community X's message, pasted on this page (another community): the field keeps the code alone.
+    const X_MESSAGE = inviteShareText({
+        name: 'Byron Shire BeanPool',
+        link: 'https://byron.beanpool.org/?invite=INV-K7Q2-BSXA',
+        code: 'INV-K7Q2-BSXA',
+        address: 'byron.beanpool.org',
+    });
+    const ELSEWHERE = 'This invite is for byron.beanpool.org. Open the invite link you were sent, or go to byron.beanpool.org and join there.';
+    const NOT_RECOGNISED = "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.";
+
+    async function pasteThenSubmit(typedAfter: string[]) {
+        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'invalid' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        const field = screen.getByLabelText('Invite Code');
+        fireEvent.change(field, { target: { value: X_MESSAGE } });
+        expect(field).toHaveValue('INV-K7Q2-BSXA');
+        // Select all and type over it: one keystroke at a time, so the field is never empty.
+        for (const value of typedAfter) fireEvent.change(field, { target: { value } });
+        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
+        tryAgain();
+        await waitFor(() => expect(node.calls.some((c) => c.path.startsWith('/api/invite/check'))).toBe(true));
+        return node;
+    }
+
+    it('submitted as pasted, a code this community refuses is named as the other community\'s', async () => {
+        const node = await pasteThenSubmit([]);
+        expect(await screen.findByText(ELSEWHERE)).toBeInTheDocument();
+        expect(node.redeems()).toHaveLength(0);
+    });
+
+    it('typed over after the paste, the code is the typed one, and a refusal is "not recognised", never the earlier paste\'s community', async () => {
+        const typed = 'INV-M4P8-QZRX';
+        const node = await pasteThenSubmit(Array.from({ length: typed.length }, (_, i) => typed.slice(0, i + 1)));
+        expect(await screen.findByText(NOT_RECOGNISED)).toBeInTheDocument();
+        expect(screen.queryByText(ELSEWHERE)).toBeNull();
+        expect(node.calls.find((c) => c.path.startsWith('/api/invite/check'))?.path).toContain(encodeURIComponent(typed));
+        expect(node.redeems()).toHaveLength(0);
     });
 });

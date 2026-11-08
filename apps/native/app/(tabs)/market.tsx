@@ -21,7 +21,7 @@ import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsShee
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
-import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { ListingPrice } from '../../components/ListingPrice';
 import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
@@ -1818,11 +1818,7 @@ export default function MarketScreen() {
                         )}
                         {!isPulse && showsBeans && !copy && (
                             <View style={[shell.gridBadge, shell.gridPriceEnd]}>
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={shell.gridPriceText}
-                                    asView={true}
-                                />
+                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} />
                             </View>
                         )}
                         </View>
@@ -1917,11 +1913,7 @@ export default function MarketScreen() {
                         </View>
                         <View style={shell.compactEnd}>
                             {!isPulse && showsBeans && !copy && (
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={shell.compactPrice}
-                                    asView={true}
-                                />
+                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} />
                             )}
                             {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs, PULSE the warning one. */}
                             <CardChip
@@ -1974,11 +1966,7 @@ export default function MarketScreen() {
                                 {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
                             {!isPulse && showsBeans && !copy && (
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={[styles.price, { fontSize: 16 }]}
-                                    asView={true}
-                                />
+                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} />
                             )}
                         </View>
 

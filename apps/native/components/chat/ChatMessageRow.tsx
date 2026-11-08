@@ -14,6 +14,7 @@ import { useTheme } from '../../app/ThemeContext';
 import type { ChatMessage, MessageActions, ChatKind } from '../../utils/chat-actions';
 import { ChatBubble, type ChatQuote } from './ChatBubble';
 import { ChatEmojiPicker, ChatMessageActions } from './ChatMessageActions';
+import { useCopyMessage } from './useCopyMessage';
 import type { ChatStyles } from './styles';
 
 interface Props {
@@ -51,7 +52,9 @@ export function ChatMessageRow({
     onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport, onPickEmoji, onPressUrl,
     authorLabel, quote, attachment, status, footer, editing,
 }: Props) {
-    const actionBar = showActions ? (
+    // Report and Copy sit under the line, so a line that offers only those draws no round-button bar beside it.
+    const hasRoundButtons = actions.reply || actions.react || actions.edit || actions.delete || actions.remove;
+    const actionBar = showActions && hasRoundButtons ? (
         <ChatMessageActions
             actions={actions}
             isMe={isMe}
@@ -65,6 +68,9 @@ export function ChatMessageRow({
         />
     ) : null;
     const { colors } = useTheme();
+    // Copy: one hold or tap away from the bubble, in every kind of chat (utils/chat-actions canCopyMessage).
+    const { answer: copyAnswer, copy } = useCopyMessage(actions.copy ? item.text : undefined);
+    const copyShown = copyAnswer === 'copied' ? t('Copied') : copyAnswer === 'failed' ? t('Could not copy') : t('Copy message');
 
     return (
         <View style={[styles.messageRowContainer, isMe ? styles.messageRowMe : styles.messageRowOther]}>
@@ -81,6 +87,9 @@ export function ChatMessageRow({
                     authorLabel={authorLabel}
                     quote={quote}
                     onPress={onPressBubble}
+                    // Press and hold opens what a tap opens, never closes it: a second hold must not hide the Copy button.
+                    onLongPress={(event: any) => { if (!showActions) onPressBubble(event); }}
+                    onCopy={actions.copy ? () => { void copy(); } : undefined}
                     onPressUrl={onPressUrl}
                     attachment={attachment}
                     status={status}
@@ -96,7 +105,19 @@ export function ChatMessageRow({
                     </Text>
                 </View>
             )}
-            {/* Under the line, not a fourth round button: beside a wide bubble at 320dp those already reach the edge. */}
+            {/* Under the line, not another round button: beside a wide bubble at 320dp those already reach the edge. */}
+            {showActions && actions.copy && (
+                <Pressable
+                    accessibilityRole="button"
+                    // The name is the words the button shows (WCAG 2.5.3), "Copied" included.
+                    accessibilityLabel={copyShown}
+                    onPress={() => { void copy(); }}
+                    style={[styles.copyLineButton, isMe && { alignSelf: 'flex-end' }]}
+                >
+                    <MaterialCommunityIcons name={copyAnswer === 'copied' ? 'check' : 'content-copy'} size={18} color={colors.text.body} />
+                    <Text style={styles.copyLineText}>{copyShown}</Text>
+                </Pressable>
+            )}
             {showActions && actions.report && onReport && (
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Report message')} onPress={onReport} style={[styles.reportLineButton, isMe && { alignSelf: 'flex-end' }]}>
                     <MaterialCommunityIcons name="flag-outline" size={18} color={colors.text.body} />

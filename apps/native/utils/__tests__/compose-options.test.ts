@@ -26,11 +26,11 @@ describe('the compose chooser', () => {
         expect(NEW_POST_TYPES.map(o => o.id)).toEqual(['offer', 'need', 'poll', 'event']);
     });
 
-    it('words each one the way the Market tab always has', () => {
+    it('says plainly what each kind is: an Offer is what you give or do, a Need is what you look for (Marty, 9 Nov)', () => {
         expect(NEW_POST_TYPES.map(o => o.title)).toEqual(['Offer', 'Need', 'Community Poll', 'Event']);
         expect(NEW_POST_TYPES.map(o => o.description)).toEqual([
-            'List goods, skills, food, or tools on the map',
-            'Ask your neighbours for something you need',
+            "Something you'll give or do for others",
+            "Something you're looking for",
             'Ask a question with 2–4 options in the feed',
             'A gathering with a time and a place',
         ]);

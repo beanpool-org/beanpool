@@ -7,6 +7,7 @@
  */
 import { COMMUNITY_CARD_WORDS } from './community-card.js';
 import { t, tn } from './words.js';
+import { FREE_PRICE_WORDS } from './listing-price.js';
 
 /** A copy's from-line and its door, as the node sends them on `shownFrom`. */
 export interface ShownFromLine {
@@ -82,7 +83,7 @@ export function eventCopyColumn(post: { shownCopy?: unknown; shownFrom?: unknown
 /** A price in Beans, in words: 'Free' at nothing, as a listing with no price reads. */
 export function beansPriceWords(price: CopyPrice): string {
     const n = price.beans;
-    if (!n) return t('Free', undefined, 'price');
+    if (!n) return t(FREE_PRICE_WORDS.short);
     switch (price.per) {
         case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour');
         case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day');

@@ -11,7 +11,7 @@
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekGroupNote, pollWeekNotice } from '@beanpool/core';
-import { upperCase } from '@beanpool/core';
+import { POST_TYPE_LINES, upperCase } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -2748,14 +2748,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
                 {/* Type toggle */}
                 {!eventEdit && (<>
-                <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mb-4">
+                {/* One short line under each choice (core's POST_TYPE_LINES, as the phone's chooser says it): the button's own name stays
+                    its title, and the line is its description. Two columns, so a line has room at 320 px with 1.3x text. */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
                     {(['offer', 'need', 'poll', 'event'] as const).map(tName => (
+                        <div key={tName} className="min-w-0">
                         <button
-                            key={tName}
                             type="button"
                             aria-pressed={newPostType === tName}
+                            aria-describedby={`new-post-type-line-${tName}`}
                             onClick={() => { setNewPostType(tName); setValidationErrors(new Set()); if (tName !== 'event') setEventIsCopy(false); }}
-                            className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
+                            className={`w-full py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === tName
                                     ? (tName === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-md scale-[1.02]' : tName === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : tName === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
@@ -2763,6 +2766,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         >
                             {tName === 'offer' ? t('🟢 Offer') : tName === 'need' ? t('🟠 Need') : tName === 'event' ? t('Event') : t('🗳️ Poll')}
                         </button>
+                        <p id={`new-post-type-line-${tName}`} data-testid={`new-post-type-line-${tName}`} className="m-0 mt-1 px-1 text-center text-xs leading-snug text-nature-600 dark:text-nature-300 break-words">
+                            {t(POST_TYPE_LINES[tName])}
+                        </p>
+                        </div>
                     ))}
                 </div>
 

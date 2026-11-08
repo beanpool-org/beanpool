@@ -5,6 +5,7 @@
 
 import { formatNumber, t } from './words.js';
 import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
+import type { StandingPhase } from './standing-deal.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -16,7 +17,12 @@ export type DealState =
     | 'done-to-review'   // completed, I have not reviewed
     | 'done'
     | 'cancelled'
-    | 'declined';
+    | 'declined'
+    // A standing deal's current period (DESIGN-standing-deals-fable §1.2, §1.4): running by itself, short of the next
+    // period's Beans, or held back by the payer (or by the node, when it couldn't carry on).
+    | 'standing'
+    | 'short'
+    | 'held-back';
 
 export interface DealStep {
     role: DealRole;
@@ -43,6 +49,22 @@ export interface DealRow {
     postRepeatable?: boolean;
     postLendable?: boolean;
     postType?: string | null;
+    /** The standing deal this row is a period of (null on a one-off deal). */
+    standingId?: string | null;
+    /** Which period of it (from 1). */
+    periodNo?: number | null;
+    /**
+     * The standing deal's phase, on its CURRENT period's row only (the node's transactions read): an older period's row is
+     * a finished deal like any other, and carries none.
+     */
+    standingPhase?: StandingPhase | null;
+    /** Either side has tapped Stop: the period under way settles and nothing more is held. */
+    standingStopped?: boolean;
+}
+
+/** A row that is the current period of a standing deal still running (any phase but ended). */
+export function isLiveStanding(tx: DealRow): boolean {
+    return !!tx.standingId && !!tx.standingPhase && tx.standingPhase !== 'ended';
 }
 
 const SEVEN_DAYS_MS = 7 * 86_400_000;
@@ -66,7 +88,11 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
 
     let state: DealState;
 
-    if (tx.status === 'requested') {
+    if (isLiveStanding(tx)) {
+        // A standing deal running by itself badges nobody (decision 3: no monthly tap); short and held back are the
+        // payer's step (§2.2 Home "Needs you" only for those, payer).
+        state = tx.standingPhase === 'short' ? 'short' : tx.standingPhase === 'held_back' ? 'held-back' : 'standing';
+    } else if (tx.status === 'requested') {
         state = isAuthor ? 'to-answer' : 'asked';
     } else if (tx.status === 'pending') {
         state = isPayer ? 'to-release' : 'to-deliver';
@@ -81,13 +107,14 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
         state = 'cancelled';
     }
 
-    const needsMe = isParty && (state === 'to-answer' || state === 'to-release');
+    const needsMe = isParty && (state === 'to-answer' || state === 'to-release'
+        || (isPayer && (state === 'short' || state === 'held-back')));
 
     let pressing = false;
     if (needsMe) {
-        if (state === 'to-answer') {
+        if (state === 'to-answer' || state === 'short') {
             pressing = true;
-        } else if (state === 'to-release') {
+        } else if (state === 'to-release' || state === 'held-back') {
             const createdMs = tx.createdAt ? Date.parse(tx.createdAt) : NaN;
             pressing = !Number.isNaN(createdMs) && (now - createdMs >= SEVEN_DAYS_MS);
         }
@@ -111,7 +138,7 @@ export function dealsNeedingMe<T extends DealRow = DealRow>(txs: T[], me: string
  */
 export function openDeals<T extends DealRow = DealRow>(txs: T[], me?: string): T[] {
     return txs
-        .filter(t => (t.status === 'requested' || t.status === 'pending') && (!me || t.buyerPublicKey === me || t.sellerPublicKey === me))
+        .filter(t => (t.status === 'requested' || t.status === 'pending' || isLiveStanding(t)) && (!me || t.buyerPublicKey === me || t.sellerPublicKey === me))
         .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
@@ -145,6 +172,12 @@ export function dealStateWords(step: DealStep, otherName: string | null, until?:
             return t('Cancelled');
         case 'declined':
             return t('Declined');
+        case 'standing':
+            return t('Standing deal · runs by itself');
+        case 'short':
+            return step.role === 'payer' ? t("Waiting on you: the next period isn't covered") : t("The next period isn't covered yet");
+        case 'held-back':
+            return step.role === 'payer' ? t('Held back · waiting on you: release or cancel') : t('Held back · the schedule is paused');
     }
 }
 
@@ -183,6 +216,10 @@ export interface DealMoves<T extends DealRow = DealRow> {
     answer: boolean;
     /** Withdraw a request: the one who asked (cancelPostRequest). */
     withdraw: boolean;
+    /** Stop a standing deal after the period under way: either side, or a keeper of either (POST /api/marketplace/standing/:id/stop). */
+    stop: boolean;
+    /** Hold back the period under way: the payer, while it runs by itself (POST /api/marketplace/standing/:id/hold-back). */
+    holdBack: boolean;
 }
 
 /**
@@ -202,15 +239,20 @@ export function dealMoves<T extends DealRow>(tx: T, me: string, keeperOf: readon
     const step = dealStep(tx, actingAs, now);
     const held = tx.status === 'pending';
     const asKeeper = actingAs !== me;
+    const live = isLiveStanding(tx);
+    const payer = tx.buyerPublicKey === actingAs;
     return {
         tx,
         actingAs,
         asKeeper,
         step,
-        release: held && tx.buyerPublicKey === actingAs,
+        // A period running by itself is released by the node at its end; the payer settles it only once held back.
+        release: held && payer && (!live || tx.standingPhase === 'held_back'),
         cancelHold: held && !asKeeper,
         answer: step.state === 'to-answer',
         withdraw: step.state === 'asked' && !asKeeper,
+        stop: live && !tx.standingStopped,
+        holdBack: live && held && payer && tx.standingPhase === 'held',
     };
 }
 
@@ -228,12 +270,17 @@ export interface ListingDeals<T extends DealRow = DealRow> {
     own: boolean;
     /** Requests waiting on its own people to answer, newest first. */
     requests: DealMoves<T>[];
-    /** Deals held in trust the member stands on: for its own people every deal on it (a recurring listing can have several). */
+    /**
+     * Deals held in trust the member stands on: for its own people every deal on it (a recurring listing can have several).
+     * Not a standing deal's period while it runs by itself (that is `standing`); one held back is here.
+     */
     held: DealMoves<T>[];
     /** The member's own request, still waiting. */
     asked: DealMoves<T> | null;
     /** The member's last finished deal on it, for "You've had this before" (never for its own people). */
     lastDone: DealMoves<T> | null;
+    /** The standing deals running on it that the member stands on (their current period each), newest first. */
+    standing: DealMoves<T>[];
     /** A one-off listing in someone else's deal just now. */
     takenByOther: boolean;
     /** Accept, Ask or Offer to fulfil may show: not its own people, and no deal of the member's own under way on it. */
@@ -241,7 +288,7 @@ export interface ListingDeals<T extends DealRow = DealRow> {
 }
 
 const newestFirst = (a: DealMoves, b: DealMoves) => (b.tx.createdAt || '').localeCompare(a.tx.createdAt || '');
-const isOpen = (m: DealMoves) => m.tx.status === 'pending' || m.tx.status === 'requested';
+const isOpen = (m: DealMoves) => m.tx.status === 'pending' || m.tx.status === 'requested' || isLiveStanding(m.tx);
 
 /**
  * What a listing's page shows of its deals, for the member reading it (DESIGN-deals-fable §3.2): `txs` are the deals the
@@ -276,9 +323,12 @@ export function listingDeals<T extends DealRow>(
     return {
         own,
         requests: own ? mine.filter(m => m.answer) : [],
-        held: mine.filter(m => m.tx.status === 'pending'),
+        // A standing period running by itself shows in `standing`, not as a deal to release; one held back is a plain held
+        // deal again (§1.2), so it shows here too.
+        held: mine.filter(m => m.tx.status === 'pending' && !(isLiveStanding(m.tx) && m.tx.standingPhase !== 'held_back')),
         asked: mine.find(m => m.withdraw) ?? null,
         lastDone: done[0] ?? null,
+        standing: mine.filter(m => isLiveStanding(m.tx)),
         takenByOther: !own && listing.status === 'pending' && !openAny,
         // One open deal per member per listing (the node's deal_open): the member's own key, not an enterprise they keep.
         canTakeUp: !own && !mine.some(m => m.actingAs === me && isOpen(m)),

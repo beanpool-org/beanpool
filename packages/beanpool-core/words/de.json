@@ -1312,7 +1312,7 @@
   "Five tags at most": "Höchstens fünf Stichwörter",
   "Flour\u0004tag": "Mehl",
   "Flowers\u0004tag": "Blumen",
-  "Free\u0004price": "Kostenlos",
+  "Free\u0004a listing with no price": "Kostenlos",
   "Free\u0004tag": "Gratis",
   "Freight\u0004tag": "Fracht",
   "From this phone's last known place.": "Vom zuletzt bekannten Ort dieses Telefons.",
@@ -2248,5 +2248,7 @@
   "Busy right now. Try again in a moment.": "Gerade viel los. Versuche es gleich noch einmal.",
   "Add them to the names list": "Zur Namensliste hinzufügen",
   "Make them a voucher": "Zum Bürgen ernennen",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "Vorerst auf dem Telefon: Die Schlüssel der Namensliste liegen auf den Telefonen der Admins."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "Vorerst auf dem Telefon: Die Schlüssel der Namensliste liegen auf den Telefonen der Admins.",
+  "Ask a question with 2–4 options in the feed": "Stelle eine Frage mit 2–4 Optionen im Feed",
+  "A gathering with a time and a place": "Ein Treffen mit Zeit und Ort"
 }

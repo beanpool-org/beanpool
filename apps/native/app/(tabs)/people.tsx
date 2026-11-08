@@ -306,6 +306,7 @@ export default function PeopleScreen() {
     const inviteNames = useInviteNames({
         anchorUrl, identity: identity ?? null, online: isOnline,
         offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(doorAdminsOnly ? inviteRole : openDoorRole, nodeProfile?.profile),
+        here: view === 'invites',
         committee: onCommittee, voucherBudget: vouchersData?.settings?.voucherBudget,
     });
     const [knockCount, setKnockCount] = useState(0);

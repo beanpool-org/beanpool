@@ -3,8 +3,8 @@
  * People → Invites for owners and admins (DESIGN-invites-and-names-list-amend3-fable.md §1–§2, slice A2; Marty, 8 Nov: Q1 allow
  * both, Q2 phone first): the two boxes are absent for a member; the voucher box is greyed for an admin off the credit committee,
  * without a connection, or until the names box is ticked; the presets stay with the names box ticked; the bound invite's body
- * carries a level only with an entry and a vouch only when picked; a ticket never carries a level; the duplicate warning; and the
- * entry written but the invite refused.
+ * carries a level only with an entry and a vouch only when picked; a ticket never carries a level; the duplicate warning; the
+ * entry written but the invite refused; and the entry's id, kept only for the same person tried again unchanged (#2974 round 2).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
@@ -55,11 +55,22 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+// Focus as the navigator gives it: `nav.blur()` leaves the tab (each focus effect's clean-up runs), `nav.focus()` comes back.
+const nav = vi.hoisted(() => {
+    const listeners = new Set<(on: boolean) => void>();
+    const say = (on: boolean) => { nav.on = on; for (const l of listeners) l(on); };
+    const nav = { on: true, listeners, blur: () => say(false), focus: () => say(true) };
+    return nav;
+});
 vi.mock('expo-router', async () => {
-    const { useEffect } = await import('react');
+    const { useEffect, useState } = await import('react');
     return {
         router: { push() {}, navigate() {}, setParams() {}, replace() {} },
-        useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const [on, setOn] = useState(nav.on);
+            useEffect(() => { nav.listeners.add(setOn); return () => { nav.listeners.delete(setOn); }; }, []);
+            useEffect(() => (on ? cb() : undefined), [cb, on]);
+        },
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => ({ view: 'invites' }),
     };
@@ -124,25 +135,43 @@ vi.mock('../node-admin', () => ({
     askNodeRole: async () => ({ role: node.role, communityName: null }), persistNodeRole: async () => {}, readPersistedNodeRole: async () => undefined, rememberNodeRole: () => {},
 }));
 // The names list's own flows: the open (and its entries, as this phone opens them) and the sealed add are faked here; the
-// bound invite is core's real inviteForNamesEntry, so the body it sends is the one on the wire.
-const list = vi.hoisted(() => ({ saved: [] as Array<{ name: string; note: string; addId?: string }>, opens: 0, refuse: null as string | null }));
+// bound invite is core's real inviteForNamesEntry, so the body it sends is the one on the wire. The fake add answers as the
+// node does (engine/names-list.ts): an add whose id is on the list already is `entry_exists`, judged by the id alone, the
+// entry keeps the text it was first written with, and core counts that as landed (names-list-flows.ts). An open is a
+// snapshot of the list as it stood then.
+const list = vi.hoisted(() => ({
+    saved: [] as Array<{ name: string; note: string; addId?: string }>,
+    onNode: [] as Array<{ id: string; name: string }>,
+    opens: 0,
+    refuse: null as string | null,
+}));
 vi.mock('../names-list', async (importOriginal) => {
     const real = await importOriginal<typeof import('../names-list')>();
-    const opened = {
-        state: { admins: [{ pubkey: 'damo-key', callsign: 'damo' }], callsigns: {} }, plan: { kind: 'ready' }, pin: {}, ring: {}, generations: new Map(),
-        list: { entries: [{ id: 'entry-jane', ciphertext: 'x', keyId: 'k1', createdBy: 'damo-key', createdAt: '', updatedBy: 'damo-key', updatedAt: '' }], confirmations: [] },
-        notices: [], made: null, sentTo: [],
-    };
+    const row = (id: string, by: string) => ({ id, ciphertext: 'x', keyId: 'k1', createdBy: by, createdAt: '', updatedBy: by, updatedAt: '' });
+    const names = (): Record<string, string> => ({ 'entry-jane': 'Jane Albury', ...Object.fromEntries(list.onNode.map((e) => [e.id, e.name])) });
     return {
         ...real,
-        openNamesList: async () => { list.opens++; return list.refuse ? { ok: false, status: 0, code: null, message: list.refuse } : { ok: true, value: opened }; },
-        openEntries: () => [{
-            id: 'entry-jane', keyId: 'k1', createdAt: '', updatedAt: '', text: { name: 'Jane Albury', note: '' }, locked: null, key: null,
+        openNamesList: async () => {
+            list.opens++;
+            if (list.refuse) return { ok: false, status: 0, code: null, message: list.refuse };
+            return {
+                ok: true,
+                value: {
+                    state: { admins: [{ pubkey: 'damo-key', callsign: 'damo' }], callsigns: {} }, plan: { kind: 'ready' }, pin: {}, ring: {}, generations: new Map(),
+                    list: { entries: [row('entry-jane', 'damo-key'), ...list.onNode.map((e) => row(e.id, 'a-member-key'))], confirmations: [] },
+                    notices: [], made: null, sentTo: [],
+                },
+            };
+        },
+        openEntries: (l: { entries: Array<{ id: string }> }) => l.entries.map((e) => ({
+            id: e.id, keyId: 'k1', createdAt: '', updatedAt: '', text: { name: names()[e.id], note: '' }, locked: null, key: null,
             holders: [], notTrusting: [], checkedHere: [], confirmation: null, voucher: null,
-        }],
+        })),
         saveNamesEntry: async (_a: string, _i: unknown, _s: unknown, _o: unknown, text: { name: string; note: string }, _entryId?: string, addId?: string) => {
             list.saved.push({ ...text, addId });
-            return { ok: true, value: { id: 'entry-new', keyId: 'k1', ciphertext: 'sealed', opened: null } };
+            const id = addId ?? `no-id-${list.saved.length}`;
+            if (!list.onNode.some((e) => e.id === id)) list.onNode.push({ id, name: text.name });
+            return { ok: true, value: { id, keyId: 'k1', ciphertext: 'sealed', opened: null } };
         },
     };
 });
@@ -194,8 +223,10 @@ beforeEach(() => {
     tickets.args.length = 0;
     alerts.said.length = 0;
     list.saved.length = 0;
+    list.onNode.length = 0;
     list.opens = 0;
     list.refuse = null;
+    nav.on = true;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
         vouchersDown: false, generated: [], bound: [],
@@ -313,7 +344,8 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
 
         expect(list.saved).toHaveLength(1);
         expect(list.saved[0].name).toBe('Rowan Penhallow');
-        expect(node.bound).toEqual([{ entryId: 'entry-new', body: { vouchAmount: 50, voucherLevel: 1100 } }]);
+        expect(list.saved[0].addId, 'the entry’s id, chosen on this phone').toMatch(/\S/);
+        expect(node.bound).toEqual([{ entryId: list.saved[0].addId, body: { vouchAmount: 50, voucherLevel: 1100 } }]);
         expect(node.generated, 'no plain invite, and the name never went to the node').toEqual([]);
         expect(tickets.made).toBe(0);
         expect(alerts.said).toEqual([]);
@@ -329,7 +361,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         await press('invite-names-box');
         await type('invite-names-name', 'Ida Quiller');
         await generate();
-        expect(node.bound).toEqual([{ entryId: 'entry-new', body: {} }]);
+        expect(node.bound).toEqual([{ entryId: list.saved[0].addId, body: {} }]);
     });
 
     it('a plain invite (names box not ticked) never carries a level', async () => {
@@ -386,7 +418,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         node.inviteDown = true;
         await generate();
         expect(tickets.made).toBe(1);
-        expect(tickets.args[0]).toEqual([NODE, 'a-member-key', 'aa', { namesEntryId: 'entry-new' }]);
+        expect(tickets.args[0]).toEqual([NODE, 'a-member-key', 'aa', { namesEntryId: list.saved[0].addId }]);
         expect(JSON.stringify(tickets.args[0])).not.toMatch(/level|vouch/i);
     });
 
@@ -438,5 +470,119 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         expect(list.saved).toEqual([]);
         expect(node.bound).toEqual([]);
         expect(alerts.said[0][0]).toBe(t('Not added to the names list'));
+    });
+
+    // #2974 round 2 (deciding review, InviteNamesBoxes.tsx:152): the node checks an add by its id alone, so the id kept after a
+    // refused invite must never carry another person's name.
+    describe('the entry’s id: kept only for the same person tried again unchanged', () => {
+        const REFUSED = 'You have only 20 left in your vouching budget.';
+        const tegansEntryRefused = async () => {
+            node.role = 'owner';
+            node.committee = true;
+            node.inviteRefusal = REFUSED;
+            await open();
+            await press('invite-names-box');
+            await type('invite-names-name', 'Tegan Rule');
+            await press('invite-vouch-50');
+            await generate();
+            expect(alerts.said[0]?.[0]).toBe(t('Invite not made'));
+            expect(list.onNode).toEqual([{ id: list.saved[0].addId, name: 'Tegan Rule' }]);
+            expect(node.bound).toEqual([]);
+            alerts.said.length = 0;
+            node.inviteRefusal = null;
+            return list.saved[0].addId!;
+        };
+
+        it('the review’s steps: Tegan’s invite refused, Bob typed, Generate: Bob gets a new entry with his own name; Tegan’s is untouched and not bound', async () => {
+            const tegans = await tegansEntryRefused();
+            await type('invite-names-name', '');
+            await type('invite-names-name', 'Bob Smith');
+            await generate();
+            expect(list.saved.map((e) => e.name)).toEqual(['Tegan Rule', 'Bob Smith']);
+            const bobs = list.saved[1].addId;
+            expect(bobs, 'Bob’s entry is a new id, never Tegan’s').not.toBe(tegans);
+            expect(list.onNode, 'both names stored, each under its own id').toEqual([{ id: tegans, name: 'Tegan Rule' }, { id: bobs, name: 'Bob Smith' }]);
+            expect(node.bound.map((b) => b.entryId), 'Bob’s invite is bound to Bob’s entry, Tegan’s to nothing').toEqual([bobs]);
+            expect(alerts.said).toEqual([]);
+        });
+
+        it('the same person tried again, unchanged: the same id, so the node’s entry_exists binds Tegan’s one entry, no second one', async () => {
+            const tegans = await tegansEntryRefused();
+            await generate();
+            expect(list.saved.map((e) => e.addId)).toEqual([tegans, tegans]);
+            expect(list.onNode).toEqual([{ id: tegans, name: 'Tegan Rule' }]);
+            expect(node.bound).toEqual([{ entryId: tegans, body: { vouchAmount: 50 } }]);
+            expect(alerts.said).toEqual([]);
+        });
+
+        it('the name changed and changed back is still a change: a new id', async () => {
+            const tegans = await tegansEntryRefused();
+            await type('invite-names-name', 'Tegan Rules');
+            await type('invite-names-name', 'Tegan Rule');
+            await generate();
+            expect(list.saved[1].addId).not.toBe(tegans);
+        });
+
+        it('after the entry is added the list is opened again, so the warning sees it when the name is changed and changed back', async () => {
+            const tegans = await tegansEntryRefused();
+            expect(list.opens, 'opened at the tick, and again once Tegan’s entry was added').toBe(2);
+            await type('invite-names-name', 'Bob Smith');
+            expect(q('invite-names-same')).toBeNull();
+            await type('invite-names-name', 'tegan  rule');
+            expect(q('invite-names-same')?.textContent).toContain(t('{name} is on the list already (added by {by}, not joined yet). Invite that entry instead?', { name: 'Tegan Rule', by: t('an admin') }));
+            await press('invite-names-same-invite');
+            expect(list.saved, 'Invite that entry adds nothing').toHaveLength(1);
+            expect(node.bound.map((b) => b.entryId)).toEqual([tegans]);
+        });
+
+        it('the box unticked and ticked again: a new id, even for the same name', async () => {
+            const tegans = await tegansEntryRefused();
+            await press('invite-names-box');
+            await press('invite-names-box');
+            expect(q('invite-names-name')).toBeTruthy();
+            await type('invite-names-name', 'Tegan Rule');
+            await generate();
+            expect(list.saved).toHaveLength(2);
+            expect(list.saved[1].addId).not.toBe(tegans);
+            expect(node.bound.map((b) => b.entryId)).toEqual([list.saved[1].addId]);
+        });
+
+        it('a plain invite in between, then the box ticked again: a new id', async () => {
+            const tegans = await tegansEntryRefused();
+            await press('invite-names-box');
+            await generate();
+            expect(node.generated, 'the plain invite').toHaveLength(1);
+            await press('invite-names-box');
+            await type('invite-names-name', 'Bob Smith');
+            await generate();
+            expect(list.saved[1]).toMatchObject({ name: 'Bob Smith' });
+            expect(list.saved[1].addId).not.toBe(tegans);
+            expect(list.onNode.find((e) => e.id === tegans)?.name, 'Tegan’s entry keeps her name').toBe('Tegan Rule');
+        });
+
+        it('leaving the screen and coming back: a new id', async () => {
+            const tegans = await tegansEntryRefused();
+            await act(async () => { nav.blur(); });
+            await settle();
+            await act(async () => { nav.focus(); });
+            await settle();
+            expect(q('invite-names-name')).toBeTruthy();
+            await generate();
+            expect(list.saved).toHaveLength(2);
+            expect(list.saved[1].addId).not.toBe(tegans);
+        });
+
+        it('another of People’s views and back to Invites: a new id', async () => {
+            const tegans = await tegansEntryRefused();
+            const pill = (words: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === words) as HTMLElement;
+            await act(async () => { pill(t('👫 Friends')).click(); });
+            await settle();
+            await act(async () => { pill(t('🎟️ Invites')).click(); });
+            await settle();
+            expect(q('invite-names-name')).toBeTruthy();
+            await generate();
+            expect(list.saved).toHaveLength(2);
+            expect(list.saved[1].addId).not.toBe(tegans);
+        });
     });
 });

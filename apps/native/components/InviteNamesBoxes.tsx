@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { formatNumber, t, INVITE_ADDS_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -77,26 +78,42 @@ export interface InviteNames {
     reset: () => void;
 }
 
+/** The text an entry is sealed with, from the name typed: the same text means the same person, unchanged. */
+const entryText = (typed: string) => ({ name: typed.trim(), note: '' });
+const sameText = (a: { name: string; note: string }, b: { name: string; note: string }) => a.name === b.name && a.note === b.note;
+
 /**
  * The boxes' state for People → Invites. `offered`: an owner or admin of a local community where invites are made (the caller
- * decides, utils/invite-names.ts offersNamesBoxes). `committee`: the node answered GET /api/names/vouchers (only owners and
- * committee admins get an answer; a 403 is false; undefined while not heard). `voucherBudget`: the community's default budget,
- * where the stepper starts.
+ * decides, utils/invite-names.ts offersNamesBoxes). `here`: Invites is the view on screen (People keeps this mounted across
+ * its views). `committee`: the node answered GET /api/names/vouchers (only owners and committee admins get an answer; a 403 is
+ * false; undefined while not heard). `voucherBudget`: the community's default budget, where the stepper starts.
  */
 export function useInviteNames(o: {
-    anchorUrl: string; identity: BeanPoolIdentity | null; offered: boolean; committee: boolean | undefined; online: boolean; voucherBudget?: number | null;
+    anchorUrl: string; identity: BeanPoolIdentity | null; offered: boolean; here: boolean; committee: boolean | undefined; online: boolean; voucherBudget?: number | null;
 }): InviteNames {
-    const { anchorUrl, identity, offered, committee, online } = o;
-    const [namesTicked, setNamesTicked] = useState(false);
-    const [name, setName] = useState('');
+    const { anchorUrl, identity, offered, here, committee, online } = o;
+    const [namesTicked, setNamesTickedState] = useState(false);
+    const [name, setNameState] = useState('');
     const [voucherTicked, setVoucherTicked] = useState(false);
     const [level, setLevelState] = useState(() => nearestBudgetLevel(o.voucherBudget));
     const levelTouched = useRef(false);
     const [opened, setOpened] = useState<NamesOpened | null>(null);
     const [list, setList] = useState<InviteNames['list']>({ kind: 'idle' });
-    // One id per new entry, chosen when the box is ticked and kept until an invite is made: a Generate tried again after a lost
-    // answer adds the same entry (the node answers entry_exists), never a second one (core saveNamesEntry).
-    const addId = useRef<string>(newEntryId());
+    // The id of the entry Generate adds, kept with the exact text it was sealed with. Generate tried again for the same person,
+    // unchanged (an answer lost, or the invite refused after the entry was added), sends the same id: the node answers
+    // entry_exists and that entry is the one bound, never a second (core saveNamesEntry). Anything else is a new id: a change
+    // to the name, the box unticked or ticked again (a plain invite needs it unticked), a change of community, or leaving
+    // Invites. The node checks an add by its id alone, so an id kept under another person's name would bind their invite to
+    // the first person's entry and never store their name.
+    const kept = useRef<{ id: string; text: { name: string; note: string } } | null>(null);
+    const forget = useCallback(() => { kept.current = null; }, []);
+    const setNamesTicked = useCallback((v: boolean) => { kept.current = null; setNamesTickedState(v); }, []);
+    const setName = useCallback((v: string) => {
+        if (kept.current && !sameText(kept.current.text, entryText(v))) kept.current = null;
+        setNameState(v);
+    }, []);
+    useEffect(() => { if (!offered || !namesTicked || !here) kept.current = null; }, [offered, namesTicked, here]);
+    useFocusEffect(useCallback(() => forget, [forget]));
 
     // The community's default arrives with the vouchers block: the stepper starts there unless it was moved.
     useEffect(() => {
@@ -114,10 +131,10 @@ export function useInviteNames(o: {
     useEffect(() => {
         setOpened(null);
         setList({ kind: 'idle' });
-        setNamesTicked(false);
-        setName('');
+        setNamesTickedState(false);
+        setNameState('');
         setVoucherTicked(false);
-        addId.current = newEntryId();
+        kept.current = null;
     }, [anchorUrl, identity?.publicKey]);
     useEffect(() => {
         if (!offered || !namesTicked || !identity || !anchorUrl || opened || opening.current) return;
@@ -147,10 +164,13 @@ export function useInviteNames(o: {
         if (!existingEntryId && !name.trim()) return { kind: 'entry_not_saved', message: t('Type their real name first.') };
         if (!existingEntryId && !opened) return { kind: 'entry_not_saved', message: list.kind === 'refused' ? list.message : say(NAMES_COPY.notReady) };
         const voucherLevel = voucherTicked && voucherWhy === null ? level : null;
-        return inviteWithNamesEntry({
+        const text = entryText(name);
+        if (!existingEntryId && (!kept.current || !sameText(kept.current.text, text))) kept.current = { id: newEntryId(), text };
+        const addId = kept.current?.id;
+        const r = await inviteWithNamesEntry({
             saveEntry: async () => {
-                const r = await saveNamesEntry(anchorUrl, identity, STORE, opened!, { name: name.trim(), note: '' }, undefined, addId.current);
-                return r.ok ? { ok: true, value: { id: r.value.id } } : { ok: false, status: r.status, message: say(r.message) };
+                const saved = await saveNamesEntry(anchorUrl, identity, STORE, opened!, text, undefined, addId);
+                return saved.ok ? { ok: true, value: { id: saved.value.id } } : { ok: false, status: saved.status, message: say(saved.message) };
             },
             invite: async (entryId, body) => {
                 const r = await inviteForNamesEntry(anchorUrl, identity, entryId, body);
@@ -158,12 +178,20 @@ export function useInviteNames(o: {
             },
             offlineTicket: (entryId) => makeOfflineTicket(anchorUrl, identity.publicKey, identity.privateKey, { namesEntryId: entryId }),
         }, { vouchAmount, voucherLevel }, existingEntryId);
+        // An invite made uses the id up. An entry added but no invite made: the list is opened again (the box is still ticked),
+        // so the warning sees that entry if the name is changed now.
+        if (r.kind === 'made' && kept.current?.id === addId) kept.current = null;
+        if (r.kind === 'invite_not_made' && r.entryIsNew && anchorNow.current === anchorUrl) {
+            setOpened(null);
+            setList({ kind: 'idle' });
+        }
+        return r;
     }, [identity, anchorUrl, name, opened, list, voucherTicked, voucherWhy, level]);
 
     const reset = useCallback(() => {
-        addId.current = newEntryId();
-        setName('');
-        setNamesTicked(false);
+        kept.current = null;
+        setNameState('');
+        setNamesTickedState(false);
         setVoucherTicked(false);
         // The list just gained an entry: the next tick opens it afresh, so the warning sees it.
         setOpened(null);
@@ -191,7 +219,7 @@ function Box({ checked, disabled, label, onPress, testID }: { checked: boolean; 
             <MaterialCommunityIcons
                 name={checked ? 'checkbox-marked' : 'checkbox-blank-outline'}
                 size={24}
-                color={disabled ? colors.text.muted : checked ? colors.brand.fill : colors.text.secondary}
+                color={disabled ? colors.text.muted : checked ? colors.brand.primary : colors.text.secondary}
             />
             <Text style={styles.boxLabel} maxFontSizeMultiplier={1.3}>{label}</Text>
         </Pressable>
@@ -228,7 +256,7 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
                     </Text>
                     {names.list.kind === 'opening' ? (
                         <View style={styles.row}>
-                            <ActivityIndicator color={colors.brand.fill} />
+                            <ActivityIndicator color={colors.brand.primary} />
                             <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{t('Opening the names list…')}</Text>
                         </View>
                     ) : null}

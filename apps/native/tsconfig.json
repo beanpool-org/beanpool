@@ -7,5 +7,8 @@
             ]
         }
     },
-    "extends": "expo/tsconfig.base"
+    "extends": "expo/tsconfig.base",
+    // The demo node is server-side code (it runs the node's own source under tsx): e2e/demo/tsconfig.json checks it with the
+    // server's settings, not these.
+    "exclude": ["node_modules", "e2e/demo/demo-node.ts"]
 }

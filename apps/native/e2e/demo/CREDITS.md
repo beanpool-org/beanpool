@@ -1,8 +1,9 @@
 # Photo credits
 
 Every photograph in `photos/` is released into the public domain under **CC0 1.0** (verified on each file's Wikimedia
-Commons page, licence shown as "CC0", by `prop=imageinfo` metadata on 2026-11-08). CC0 asks for no credit; it is given here anyway.
-Each file is the Commons original resized to 800 px on its longest side and saved as JPEG (quality 35); nothing else was changed.
+Commons page, licence shown as "CC0", by `prop=imageinfo` metadata on 2026-11-09). CC0 asks for no credit; it is given here anyway.
+Each file is the Commons original scaled to 800 px on its longest side (by Commons' own thumbnail service) and saved again as JPEG
+(macOS `sips`, quality 35); nothing else was changed.
 None shows a face. They illustrate the invented "Riverbend" community in `riverbend.json`; they are not photographs of Riverbend,
 and the people and listings they sit beside are made up.
 

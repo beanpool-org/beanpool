@@ -116,7 +116,11 @@ const photoDataUrl = (name: string) => `data:image/jpeg;base64,${fs.readFileSync
 async function main(): Promise<void> {
     const root = process.env.FIXTURE_ROOT;
     if (!root) throw new Error('FIXTURE_ROOT is not set');
-    if (!process.env.BEANPOOL_DATA_DIR) throw new Error('BEANPOOL_DATA_DIR is not set (a fresh folder, never a real node\'s)');
+    const dataDir = process.env.BEANPOOL_DATA_DIR;
+    if (!dataDir) throw new Error('BEANPOOL_DATA_DIR is not set (a fresh folder, never a real node\'s)');
+    // A made-up town is written into whatever node it starts on: refuse any folder that already holds something (a real
+    // node's data, or an earlier run's), before a database is opened.
+    if (fs.existsSync(dataDir) && fs.readdirSync(dataDir).length > 0) throw new Error('BEANPOOL_DATA_DIR is not empty: the demo node starts only on a fresh folder');
     process.chdir(root);
 
     const { initTls } = await import('../../../server/src/services/tls.js');
@@ -296,8 +300,10 @@ async function main(): Promise<void> {
         if (!stored) throw new Error('the node would not store a line of the chat');
         db.prepare('UPDATE messages SET timestamp = ? WHERE id = ?').run(new Date(Date.now() - line.minutesAgo * 60_000).toISOString(), messageId);
     }
-    // Sam has read it: the lines are his and Amara's last two, not an unread badge.
-    se.markConversationRead(pk('sam'), dmId);
+    // Sam has read his chats: every deal opened one with the node's own "held in trust" line, and an unread count on Chat and
+    // Home is no picture of a settled week. (The one open deal is still waiting on him: that is Needs you.)
+    const samChats = db.prepare('SELECT conversation_id AS id FROM conversation_participants WHERE public_key = ?').all(pk('sam')) as { id: string }[];
+    for (const c of samChats) se.markConversationRead(pk('sam'), c.id);
 
     // ── Sam's Home: his own order of cards between the fixed two (core home-frame: a v2 layout) ──
     const cards = R.home.cards.map((id) => (id === 'chat'

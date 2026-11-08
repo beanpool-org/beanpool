@@ -36,7 +36,8 @@ export default defineConfig({
         environment: 'node',
         // A tool's own tests sit in its folder (tools/<id>/__tests__, DESIGN-tool-template-fable.md §1.5); the template's
         // generic ones are utils/__tests__/tools-template.test.ts.
-        include: ['utils/__tests__/**/*.test.ts', 'tools/**/__tests__/**/*.test.ts'],
+        // e2e/demo: the Riverbend demo node the store pictures are taken from (starts a real local node, so its test is slow).
+        include: ['utils/__tests__/**/*.test.ts', 'tools/**/__tests__/**/*.test.ts', 'e2e/demo/__tests__/**/*.test.ts'],
         // CI only. One four-vCPU runner hosts build, lint, test and typecheck at once, and vitest
         // otherwise sizes its pool from the machine's cores — five packages each doing that is what
         // starved the timing-sensitive suites elsewhere in this workspace into failing on a

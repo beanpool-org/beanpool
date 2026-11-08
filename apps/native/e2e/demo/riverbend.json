@@ -650,11 +650,12 @@
   "home": {
     "cards": [
       "beans",
+      "decide",
       "events",
       "market",
       "chat"
     ],
-    "_note": "Between the fixed Needs you (first) and Your community (last)."
+    "_note": "Between the fixed Needs you (first) and Your community (last). Decide is where the node shows the first open poll: Needs you lists deals, unread chats and Decisions, never a Market poll."
   },
   "_credit": "grantedCredit is members.earned_credit: a credit-limit input that moves no Beans (200 is the Resident badge, 100 a small line). All Beans move through trades.",
   "_trades": "Sam: four sales of lawn mowing (5 hours, 100 Beans, 1.5 in the Commons fee) and three purchases (44.5 Beans), so 54 Beans, then 12 held in trust for the open deal: +42 exactly."

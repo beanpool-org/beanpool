@@ -90,6 +90,27 @@ A standby server keeps the setting from the main server, and so does a standby t
 
 A community with Beans can't open its door to anyone with a sign-in: strangers would hold credit from their first day, so the server refuses it. On the global community, which has no Beans, the door is open and nobody invites; Settings shows **Open** there, with nothing to choose.
 
+## Adding a name and a budget when you invite
+
+Owners and admins can record who someone is at the moment they invite them. In the app, open **People → Invites** in a community that keeps a names list. Under **Vouch for them** there are two boxes. Members see the invite form as before, without them. The names list itself is in "Running a known community".
+
+- **Add them to the names list.** Type their real name, and a short note if it helps. The name is sealed on your phone, as every entry is, and the invite is made out to that entry. If a name like it is on the list already, the app says so and asks whether to invite that entry instead. Any owner or admin whose phone holds the list's key can tick it.
+- **Make them a voucher.** It needs the first box ticked. Only an owner or an admin on the credit committee can tick it; any other admin sees it greyed, with the reason. Pick a budget from 100 to 2,000 Beans in steps of 100. It starts at the community's default, 1,000 Beans to start. The server refuses it where Beans are switched off.
+
+**A vouch can ride along.** The **Vouch for them** choice (None, 25, 50, 75 or 100) stays when you tick the names box. It is held from your own vouching budget when the code is made, lands when they join, and comes back if the code expires or is revoked. It adds to the known floor, not replaces it: a 100 vouch and a 1,000 known floor make 1,100 Beans of credit, and all sources together never pass the community's cap (2,000 to start). For a confirmed member the two open together: while they keep an offer listed they can use all of it; with none, they can't go below zero on it.
+
+**Nothing lands until they join with that code.** Making the invite adds the name to the list, not yet confirmed, and promises the budget. No voucher exists yet. The voucher's budget comes from the community, not from yours (a vouch that rides along does come from yours). When they join with the code, in that one step they are confirmed against the entry (the known floor) and made a voucher with the budget you picked, and a notice tells them so. Where two admins confirm each member, the confirmation, and the voucher with it, wait for the second admin. After that:
+
+- **The code expires, is revoked or is never used:** nothing else happens. The name stays on the list, not confirmed, and a vouch you attached comes back.
+- **You are off the credit committee by the time they join, or Beans are switched off:** they are confirmed, not made a voucher. The entry's line on the names list says why.
+- **You are no longer an admin:** they join, but are neither confirmed nor made a voucher, and the entry says so.
+
+**A forwarded code lands on whoever uses it.** The invite is for one person, but the server can't tell who is holding the code: whoever joins with it is confirmed against that entry and made the voucher. Give it to the person yourself, as with any named invite. If it ends up in the wrong hands, the voucher's card has the controls: **Set budget to** lowers their unspent budget, and **Stop vouching** ends it (see "Running a known community"). **Revoke** on the entry takes the confirmation away.
+
+**With no signal, and on the web.** With no signal the app makes an offline ticket as before: the name box works, and the voucher box is greyed, with a line saying it needs a connection and that you can make them a voucher from the list once they have joined. A ticket the phone signs must not carry a budget the server then trusts. In the web app both boxes are greyed for now, with a line saying that the names list's keys live on the admins' phones, so the boxes work in the app only. The web app's **Vouch for them** choice works as it always has.
+
+**What is seen.** Your server learns which entry the invite is for and the budget, never the name. The link and the card the person sees before they join show neither the name, the entry nor a budget. The person can't read their entry afterwards: they learn they are known from their Ledger, and that they are a voucher from the notice.
+
 ## Where members' copies go
 
 When a member links Google, Apple or Facebook as a way back into their account, the app locks a copy of their key (and their 12 words, when the phone has them) to that sign-in, so signing in brings the account back on a new phone. Your community decides where those copies go. Open **Core settings** in Settings: **Where members' copies go** is there. Only an owner can change it, and once the core settings are locked, with **Unlock to change**. The first-time setup shows it too, before the founding invites.

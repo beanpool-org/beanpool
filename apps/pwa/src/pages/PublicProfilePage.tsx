@@ -1017,7 +1017,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     {/* A price is Beans: none where Beans are marked (the line above says where they live). */}
                                                                     {!beansMarked && (
                                                                         <div className="flex items-center gap-1" data-testid="profile-listing-price">
-                                                                            {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). */}
+                                                                            {/* Priced at 0 it reads Free, with no Beans mark: core listing-price.ts, as on every card. */}
                                                                             {freePriceWords(p.credits, p.type) ? <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{freePriceWords(p.credits, p.type)}</span> : <>
                                                                             <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
                                                                             <span className="text-[10px]">🫘</span>

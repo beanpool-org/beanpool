@@ -295,8 +295,19 @@ async function main(): Promise<void> {
     const conf6 = liveConfirmation(tamsin.pk);
     assert(j6.status === 200 && conf6?.needs_second === 1 && codeRow(b6.body.invite.code)?.names_bind_outcome === 'awaiting_second' && !voucherRow(tamsin.pk)
         && codeRow(b6.body.invite.code)?.voucher_outcome === 'awaiting_second', `6. Tamsin joins waiting for a second admin, and no budget lands yet (${show(j6)})`);
+    const nameOf6 = (pk: string) => (pk === tamsin.pk ? '@Tamsin' : pk === owen.pk ? '@Owen' : 'Someone');
+    const waiting6 = (await call(ada, 'GET', '/api/names/invites')).body?.invites?.find((i: any) => i.entryId === e6);
+    assert(waiting6?.outcome === 'awaiting_second' && boundInviteLine(waiting6, nameOf6) === '@Tamsin joined; the confirmation waits for a second admin; made a voucher once a second admin confirms them',
+        `6. while it waits, the entry's line says so (${JSON.stringify(waiting6)})`);
     const seconded = await call(ada, 'POST', `/api/names/confirmations/${conf6?.id}/second`, {});
     assert(seconded.status === 200 && seconded.body?.status === 'confirmed', `6. Ada confirms her again (${show(seconded)})`);
+    // #2970's review, note 3: the bound invite reads the confirmation as it stands now, not the redeem's 'awaiting_second'
+    // (which stays in the row as what the redeem did).
+    const after6 = (await call(ada, 'GET', '/api/names/invites')).body?.invites?.find((i: any) => i.entryId === e6);
+    const line6 = boundInviteLine(after6, nameOf6);
+    assert(after6?.outcome === 'confirmed' && after6?.voucherOutcome === 'made' && codeRow(b6.body.invite.code)?.names_bind_outcome === 'awaiting_second'
+        && line6 === '@Tamsin joined and was confirmed; made a voucher with a budget of 800 Beans',
+        `6. once seconded, GET /api/names/invites reads confirmed, and the line says so: "${line6}" (${JSON.stringify(after6)})`);
     assert(budgetOf(tamsin.pk).level === 800 && voucherRow(tamsin.pk)?.made_by === owen.pk && codeRow(b6.body.invite.code)?.voucher_outcome === 'made'
         && floorLog('voucher_made').filter((l) => l.member_pubkey === tamsin.pk).length === 1 && voucherNotices(tamsin.pk).length === 1,
         `6. then the voucher lands, made by Owen, with its line and its notice (${JSON.stringify(budgetOf(tamsin.pk))})`);
@@ -310,6 +321,10 @@ async function main(): Promise<void> {
     assert(revoked.status === 200 && !voucherRow(wynn.pk) && codeRow(b6b.body.invite.code)?.voucher_outcome === 'not_confirmed'
         && wynnNotMade.length === 1 && wynnNotMade[0].actor_pubkey === ada.pk && wynnNotMade[0].old_value === e6b,
         `6. revoked before the second admin confirms: the promise ends, one voucher_not_made line by Ada, no budget (${show(revoked)} ${JSON.stringify(wynnNotMade)})`);
+    const wynnRow = (await call(ada, 'GET', '/api/names/invites')).body?.invites?.find((i: any) => i.entryId === e6b);
+    const wynnLine = boundInviteLine(wynnRow, (pk) => (pk === wynn.pk ? '@Wynn' : 'Someone'));
+    assert(wynnRow?.outcome === null && wynnRow?.voucherOutcome === 'not_confirmed' && wynnLine === '@Wynn joined; not made a voucher',
+        `6. revoked before the second: the line no longer says it waits: "${wynnLine}" (${JSON.stringify(wynnRow)})`);
     require_((await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: false })).status === 200, 'two admins to confirm goes back off');
 
     // ── 7. The maker left the credit committee ───────────────────────────────────────────────────────────────────

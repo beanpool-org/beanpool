@@ -61,12 +61,49 @@ export function boundInviteLine(
     nameOf: (pubkey: string) => string,
 ): string {
     if (!inv.usedBy) return 'Invite made, not used yet';
-    const line = `${nameOf(inv.usedBy)} ${inv.outcome ? BIND_OUTCOME_WORDS[inv.outcome] : 'joined'}`;
-    if (!inv.voucherOutcome) return line;
-    const clause = VOUCHER_OUTCOME_WORDS[inv.voucherOutcome]
+    // An outcome this phone has no words for (a newer node's) reads as plain "joined", and adds no clause: never a throw,
+    // never "undefined". Own keys only, so a name like "constructor" is no outcome either.
+    const bound = (inv.outcome ? wordsFor(BIND_OUTCOME_WORDS, inv.outcome) : '') || 'joined';
+    const line = `${nameOf(inv.usedBy)} ${bound}`;
+    const said = inv.voucherOutcome ? wordsFor(VOUCHER_OUTCOME_WORDS, inv.voucherOutcome) : '';
+    if (!said) return line;
+    const clause = said
         .replace('{level}', formatNumber(inv.voucherLevel ?? 0))
         .replace('{maker}', inv.createdBy ? nameOf(inv.createdBy) : 'whoever made the invite');
     return `${line}; ${clause}`;
+}
+
+/** The words for `key` in `table`, or '' where the table has none of its own. */
+function wordsFor(table: Readonly<Record<string, string>>, key: string): string {
+    return Object.prototype.hasOwnProperty.call(table, key) ? table[key] ?? '' : '';
+}
+
+/**
+ * Whether an entry shows its bound invite's line: an entry nobody is confirmed against shows its newest invite, used or
+ * not (as before); a confirmed entry, or one waiting for a second admin, shows it only when the invite promised a voucher
+ * budget and says what became of it (made, waiting, or why not). Otherwise the confirmation's own line says it all.
+ */
+export function showsBoundInviteLine(inv: Pick<BoundInvite, 'voucherOutcome'> | null | undefined, confirmed: boolean): boolean {
+    if (!inv) return false;
+    return !confirmed || !!inv.voucherOutcome;
+}
+
+/**
+ * What an invite bound to an entry may carry (POST /api/names/entries/:id/invite; DESIGN-invites-and-names-list-amend3-fable.md
+ * §2 and Marty's Q1, "allow both"): a vouch preset from the maker's own budget, and, for an owner or a credit-committee admin, a
+ * voucher budget (100 to 2,000) the joiner is made a voucher with once confirmed. The node checks both.
+ */
+export interface NamesInviteBody { vouchAmount?: number | null; voucherLevel?: number | null }
+
+/**
+ * The body as sent: only what was chosen, as whole numbers. Nothing chosen is `{}`, today's body. A level rides only here, on an
+ * invite bound to an entry: the plain invite (POST /api/invite/generate) and an offline ticket never carry one.
+ */
+export function namesInviteBody(choice: NamesInviteBody): { vouchAmount?: number; voucherLevel?: number } {
+    const out: { vouchAmount?: number; voucherLevel?: number } = {};
+    if (typeof choice.vouchAmount === 'number' && Number.isFinite(choice.vouchAmount)) out.vouchAmount = choice.vouchAmount;
+    if (typeof choice.voucherLevel === 'number' && Number.isFinite(choice.voucherLevel)) out.voucherLevel = choice.voucherLevel;
+    return out;
 }
 
 /** The bound invites for one entry, newest first (the node lists them newest first). */

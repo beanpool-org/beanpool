@@ -314,3 +314,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `AdviseTheOwners` component in `apps/manager/src/components/modules/AdviseTheOwners.tsx` was untested.
 **Learning:** `nodeCredential(activeNode)` inspects `automationToken` and `adminPassword` on `NodeProfile`. Mocking `adviseOwners` and `getTfaSessionToken` allowed full assertion on collapsed state, expand/cancel transitions, input character count formatting, send button disabled state on empty/whitespace text, error alert rendering, and callback triggering on success.
 **Action:** Continue identifying remaining untested modal or panel components in `apps/manager/src/components/modules/`.
+
+## 2026-11-08 - [manager tests] ShapeRows and RowControls unit tests
+**Gap:** `ShapeRow`, `RowControls`, and helper functions (`joinDisplay`, `joinRadioTitle`, `joinRadioDescription`, `visitorsDisplay`) in `apps/manager/src/components/modules/ShapeRows.tsx` lacked a direct unit test suite.
+**Learning:** `ShapeLock.code` expects union type `ShapeLockCode` (e.g. `'server_env'`, `'auth_hatch_open'`). Testing verified expand toggle interactions, `serverBadge` interaction overrides, `auth_hatch_open` danger tint styling, `allowExpandWithLock` core lock overrides, and `RowControls` typed word gating.
+**Action:** Continue identifying remaining untested module components and helpers across `apps/manager/src/components/modules/`.

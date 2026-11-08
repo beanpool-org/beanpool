@@ -22,12 +22,20 @@ export function shareAddress(origin: string): string {
 
 /**
  * The QR picture a member shares with an invite (both apps): the file's name, `beanpool-invite-<CODE>.png`. The code is
- * kept to letters, digits and dashes and cut at 24 characters, because a self-signed paper ticket is a long string that no
- * file name can hold.
+ * kept to letters, digits and dashes. A self-signed paper ticket is a long string that no file name can hold, and every
+ * ticket starts with the same characters, so a long one is named by its first 12 and a hash of the whole ticket: two
+ * tickets never share a name (the phone keeps the picture in its cache under this name, and a shared name overwrote it).
  */
 export function invitePictureName(code: string): string {
-    const safe = code.replace(/[^A-Za-z0-9-]/g, '').slice(0, 24) || 'code';
-    return `beanpool-invite-${safe}.png`;
+    const safe = code.replace(/[^A-Za-z0-9-]/g, '') || 'code';
+    return `beanpool-invite-${safe.length <= 24 ? safe : `${safe.slice(0, 12)}-${hashOf(code)}`}.png`;
+}
+
+/** FNV-1a, 32 bits, in base 36: a short name for a long string, the same on every device. Not a secret and not a check. */
+function hashOf(text: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+    return (h >>> 0).toString(36);
 }
 
 /** The code as the picture prints it under the QR: a short code whole, a long ticket cut after 16 characters (as the card does). */

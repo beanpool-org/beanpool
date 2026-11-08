@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, OPERATOR_PAGES_ON_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
-import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite, guideBodyHash, guideSourceHash } from '../src/guide.mjs';
+import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite, guideBodyHash, guideSourceHash, renderGuideSitemap, OG_IMAGE_URL, OG_LOCALES } from '../src/guide.mjs';
 
 // Two copies of each collection are tested. What a page SAYS is pinned on the pages themselves (sourceGuides), so the
 // PR that changes the words changes the pin with them. The website and the bundles are tested on the PUBLISHED copy
@@ -1113,4 +1113,97 @@ test("ROADMAP: no 'Offline Outbox' or 'Offline Queue' is marked done (nothing in
         assert.ok(!/^- (✅|\[x\])/.test(l), `not marked done: ${l.slice(0, 60)}`);
         assert.ok(/not built/.test(l), `says it is not built: ${l.slice(0, 60)}`);
     }
+});
+
+// ─── Search and link previews: canonical, Open Graph and sitemap.xml ───────────
+
+const guideMeta = (html, key) => html.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)">`))?.[1];
+const guideCanonical = html => html.match(/<link rel="canonical" href="([^"]*)">/)?.[1];
+
+test('every guide page carries its own extensionless address as canonical and og:url, with the share image and its language', () => {
+    const { guide, out } = expectedOutputs();
+    const pages = Object.entries(out).filter(([file]) => file.startsWith(WEBSITE_DIR + path.sep) && file.endsWith('.html'));
+    assert.ok(pages.length > guide.guides.length, 'English pages, translations and the manual page');
+    for (const [file, html] of pages) {
+        const rel = path.relative(WEBSITE_DIR, file).split(path.sep);
+        const name = rel.pop();
+        const folder = rel.join('/');
+        const url = `https://beanpool.org/guide/${folder ? `${folder}/` : ''}${name === 'index.html' ? '' : name.replace(/\.html$/, '')}`;
+        assert.equal(guideCanonical(html), url, file);
+        assert.equal(guideMeta(html, 'og:url'), url, file);
+        assert.equal(guideMeta(html, 'og:image'), 'https://beanpool.org/og-image.jpg');
+        assert.equal(guideMeta(html, 'og:image:width'), '1200');
+        assert.equal(guideMeta(html, 'og:image:height'), '630');
+        assert.equal(guideMeta(html, 'og:type'), 'website');
+        assert.equal(guideMeta(html, 'twitter:card'), 'summary_large_image');
+        const lang = html.match(/<html lang="([^"]*)"/)[1];
+        assert.equal(guideMeta(html, 'og:locale'), OG_LOCALES[lang], file);
+        assert.equal(html.match(/<title>([^<]*)<\/title>/)[1], guideMeta(html, 'og:title'), `${file} og:title is its title`);
+        assert.equal(html.match(/<meta name="description" content="([^"]*)">/)[1], guideMeta(html, 'og:description'), `${file} og:description is its description`);
+    }
+});
+
+test('the guide shares its image, address and language codes with the rest of the site', async () => {
+    const site = await import('../../../scripts/website-build.mjs');
+    assert.equal(OG_IMAGE_URL, site.OG_IMAGE_URL);
+    assert.deepEqual(OG_LOCALES, site.OG_LOCALES);
+    assert.deepEqual(Object.keys(OG_LOCALES), ['en', ...GUIDE_LANGS]);
+});
+
+test('the share tags escape a title and a description with quotes and ampersands', () => {
+    const guide = {
+        schema: 2, version: 1, hash: 'h',
+        sections: [{ id: 'about', title: 'About', summary: 'S', slugs: ['a'] }],
+        guides: [{ slug: 'a', title: 'Tom & "Jerry"', summary: 'It\'s "free" & <fair>', section: 'about', related: [], blocks: [{ type: 'p', text: 'x' }] }],
+    };
+    const html = renderWebsite(guide)['a.html'];
+    assert.ok(html.includes('<meta property="og:title" content="Tom &amp; &quot;Jerry&quot; — BeanPool members\' guide">'));
+    assert.ok(html.includes('<meta property="og:description" content="It\'s &quot;free&quot; &amp; &lt;fair&gt;">'));
+    assert.equal(guideCanonical(html), 'https://beanpool.org/guide/a');
+});
+
+test('sitemap.xml lists every guide page in every language, with the language alternates and the manual page', () => {
+    const { out } = expectedOutputs();
+    const sitemap = out[path.join(WEBSITE_DIR, 'sitemap.xml')];
+    assert.ok(sitemap, 'the build writes apps/website/guide/sitemap.xml');
+    assert.ok(sitemap.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">'));
+    assert.ok(sitemap.endsWith('</urlset>\n'));
+    const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map(m => m[1]);
+    assert.equal(new Set(locs).size, locs.length, 'no address twice');
+    const canonicals = Object.entries(out)
+        .filter(([file]) => file.startsWith(WEBSITE_DIR + path.sep) && file.endsWith('.html'))
+        .map(([, html]) => guideCanonical(html));
+    assert.deepEqual([...locs].sort(), [...canonicals].sort(), 'the sitemap lists exactly the pages the guide writes, by their canonical address');
+    assert.ok(locs.includes('https://beanpool.org/guide/'));
+    assert.ok(locs.includes('https://beanpool.org/guide/operators/first-time-setup'));
+    // a page in several languages names each of them and x-default (English); the manual's page has no alternates
+    const block = url => sitemap.split('  <url>\n').find(b => b.startsWith(`    <loc>${url}</loc>`));
+    const home = block('https://beanpool.org/guide/home');
+    assert.ok(home.includes('hreflang="en" href="https://beanpool.org/guide/home"/>'));
+    assert.ok(home.includes('hreflang="x-default" href="https://beanpool.org/guide/home"/>'));
+    for (const lang of GUIDE_LANGS.filter(l => locs.includes(`https://beanpool.org/guide/${l}/home`))) {
+        assert.ok(home.includes(`hreflang="${lang}" href="https://beanpool.org/guide/${lang}/home"/>`), lang);
+    }
+    assert.ok(!block('https://beanpool.org/guide/operators/first-time-setup').includes('xhtml:link'));
+});
+
+test('renderGuideSitemap: alternates only for the languages that have the page; English index first', () => {
+    const xml = renderGuideSitemap({ '': ['b.html', 'index.html', 'a.html'], fr: ['a.html'], ja: ['a.html', 'b.html'], operators: ['setup.html'] });
+    const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map(m => m[1]);
+    assert.deepEqual(locs, [
+        'https://beanpool.org/guide/',
+        'https://beanpool.org/guide/a', 'https://beanpool.org/guide/fr/a', 'https://beanpool.org/guide/ja/a',
+        'https://beanpool.org/guide/b', 'https://beanpool.org/guide/ja/b',
+        'https://beanpool.org/guide/operators/setup',
+    ]);
+    const a = xml.split('  <url>\n').find(b => b.startsWith('    <loc>https://beanpool.org/guide/a</loc>'));
+    assert.deepEqual([...a.matchAll(/hreflang="([^"]*)"/g)].map(m => m[1]), ['en', 'fr', 'ja', 'x-default']);
+    const b = xml.split('  <url>\n').find(blk => blk.startsWith('    <loc>https://beanpool.org/guide/b</loc>'));
+    assert.deepEqual([...b.matchAll(/hreflang="([^"]*)"/g)].map(m => m[1]), ['en', 'ja', 'x-default']);
+});
+
+test("robots.txt points search engines at the guide's sitemap as well as the site's", () => {
+    const robots = fs.readFileSync(path.join(WEBSITE_DIR, '..', 'robots.txt'), 'utf8');
+    assert.ok(robots.includes('Sitemap: https://beanpool.org/sitemap.xml\n'));
+    assert.ok(robots.includes('Sitemap: https://beanpool.org/guide/sitemap.xml\n'));
 });

@@ -415,6 +415,12 @@ html, body, #root {
   color: #fff;
 }
 
+/* A link in a chat message (components/ChatLinkedText.tsx). The page's focus ring is the accent colour, which is the member's own
+   bubble: on a link there it would not show, so it is white. */
+.bp-bubble-mine .bp-chat-link:focus-visible {
+  outline-color: #fff;
+}
+
 /* Focus visible for accessibility */
 :focus-visible {
   outline: 2px solid var(--accent);

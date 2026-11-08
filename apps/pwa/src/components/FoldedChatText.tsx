@@ -13,6 +13,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { CHAT_FOLD_LINES, mayFoldChatText, t } from '@beanpool/core';
+import { ChatLinkedText, hasChatLink } from './ChatLinkedText';
 
 interface Props {
     text: string;
@@ -22,8 +23,13 @@ interface Props {
     display?: 'inline' | 'block';
     /** The bubble is the member's own (white on the accent), or someone else's. */
     mine?: boolean;
-    /** The button's ink on a bubble of another colour, a line that failed; it follows `mine` otherwise. */
+    /** The button's ink on a bubble of another colour, a line that failed; it follows `mine` otherwise. A link takes it too. */
     ink?: string;
+    /**
+     * Draw the http(s) and www. links in the words as links (ChatLinkedText). Off by default: the caller says so for words a
+     * person wrote and that opened, never for a line that did not open, a deleted one, or a chat that is still a request.
+     */
+    links?: boolean;
 }
 
 interface Measured {
@@ -46,7 +52,7 @@ function boxAround(el: HTMLElement): HTMLElement {
     return box ?? el;
 }
 
-export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false, ink = mine ? '#ffffff' : 'var(--accent)' }: Props) {
+export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false, ink, links = false }: Props) {
     const ref = useRef<HTMLSpanElement>(null);
     const [open, setOpen] = useState(false);
     // The button's name is the word it shows (WCAG 2.5.3); the longer phrase describes it.
@@ -74,7 +80,11 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
         return () => watch.disconnect();
     }, [candidate]);
 
-    if (!candidate) return <>{text}</>;
+    // The words as drawn: with their links when asked and there are any, else exactly the text. (A link inside the clamped
+    // box below counts its lines with the words: measured in Chromium 153 and WebKit 26.6, 12 lines either way.)
+    const words = links && hasChatLink(text) ? <ChatLinkedText text={text} ink={mine ? 'inherit' : ink} /> : text;
+
+    if (!candidate) return <>{words}</>;
 
     const long = known?.long === true;
     const folded = long && !open;
@@ -85,7 +95,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
     return (
         <>
             {/* A span (given a display) so it can sit in a paragraph as well as in a box. */}
-            <span ref={ref} style={style} data-testid="chat-text" data-fold={long ? (open ? 'open' : 'folded') : known ? 'whole' : 'measuring'}>{text}</span>
+            <span ref={ref} style={style} data-testid="chat-text" data-fold={long ? (open ? 'open' : 'folded') : known ? 'whole' : 'measuring'}>{words}</span>
             {long && (
                 <button
                     type="button"
@@ -106,7 +116,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                         fontWeight: 600,
                         textDecoration: 'underline',
                         textUnderlineOffset: '2px',
-                        color: ink,
+                        color: ink ?? (mine ? '#ffffff' : 'var(--accent)'),
                         cursor: 'pointer',
                     }}
                 >

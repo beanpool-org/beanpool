@@ -33,6 +33,8 @@ import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
+import { InviteNamesBoxes, useInviteNames } from '../../components/InviteNamesBoxes';
+import { offersNamesBoxes, inviteNotMadeWords } from '../../utils/invite-names';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, pausedRefusal, offlineTicketRefusal, type InviteRole,
@@ -260,13 +262,14 @@ export default function PeopleScreen() {
     // Still waiting on the global community (no answer yet, or none at all), and not closed: a connection fault is a real cause.
     const guestAtGlobalWaiting = guestAtGlobal && (globalEntry === 'checking' || globalEntry === 'unreachable');
     // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
-    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
-    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked there, and on Invites anywhere (an owner or admin
+    // gets the names-list boxes there, amend3 §1); not heard yet (or offline) counts as before, and the node refuses a
+    // member's invite itself (adminsOnlyRefusal). A role, never a tier.
     const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
     const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
     useEffect(() => {
         setInviteRole(undefined);
-        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
+        if ((!doorAdminsOnly && view !== 'invites') || !identity || !anchorUrl || isGuest) return;
         let alive = true;
         askNodeRole(anchorUrl, identity).then(async r => {
             if (r) {
@@ -293,6 +296,14 @@ export default function PeopleScreen() {
         }).catch(() => {});
         return () => { alive = false; };
     }, [anchorUrl, identity?.publicKey, isGuest, view]);
+    // Owners and admins of a local community: "Add them to the names list" and "Make them a voucher" under the presets
+    // (DESIGN-invites-and-names-list-amend3-fable.md §1, phone first). The committee is whoever the node answers
+    // GET /api/names/vouchers for (vouchersData, read on Invites); the stepper starts at the community's default budget.
+    const inviteNames = useInviteNames({
+        anchorUrl, identity: identity ?? null, online: isOnline,
+        offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(inviteRole, nodeProfile?.profile),
+        committee: vouchersData !== null, voucherBudget: vouchersData?.settings?.voucherBudget,
+    });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -512,11 +523,66 @@ export default function PeopleScreen() {
         }
     };
 
+    /**
+     * Generate with "Add them to the names list" ticked (amend3 §2): the entry sealed here and added, then the invite bound to it
+     * (or to the entry already on the list, `existingEntryId`), carrying the vouch and the voucher budget chosen. The name never
+     * goes in the invite's "for" line, which the node keeps in plain text. Where the entry stands but the invite failed, that
+     * is said, and the list is the way on.
+     */
+    const makeNamesInvite = async (chosenVouch: number | null, existingEntryId?: string) => {
+        if (!identity) return;
+        const r = await inviteNames.make(chosenVouch, existingEntryId);
+        if (r.kind === 'entry_not_saved') {
+            Alert.alert(t('Not added to the names list'), r.message);
+            return;
+        }
+        if (r.kind === 'invite_not_made') {
+            Alert.alert(t('Invite not made'), inviteNotMadeWords(r), r.entryIsNew
+                ? [{ text: t('OK') }, { text: t('Open the names list'), onPress: () => router.push('/names-list') }]
+                : [{ text: t('OK') }]);
+            return;
+        }
+        if (r.offline) {
+            Alert.alert(t('Offline Mode'), t('You are currently offline. A temporary cryptographic offline invite ticket (valid for 30 days) will be generated instead.'), [{ text: t('OK') }]);
+        }
+        setNewCode(r.code);
+        setIntendedFor('');
+        setVouchPreset(null);
+        const inviteObj = {
+            code: r.code,
+            createdBy: identity.publicKey,
+            createdAt: new Date().toISOString(),
+            ...(chosenVouch !== null && !r.offline ? { vouchAmount: chosenVouch } : {}),
+        };
+        const updated = [inviteObj, ...invites];
+        setInvites(updated);
+        await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
+        inviteNames.reset();
+        if (chosenVouch !== null && anchorUrl) void rereadMyVouching(anchorUrl, identity, setMyVouching);
+    };
+
+    /** The duplicate warning's "Invite that entry": the invite bound to the entry already on the list, nothing added. */
+    const inviteExistingEntry = async (entryId: string) => {
+        if (!identity || invitesPreview || generating) return;
+        setGenerating(true);
+        try {
+            await makeNamesInvite(myVouching?.voucher ? vouchPreset : null, entryId);
+        } catch (e: any) {
+            Alert.alert(t('Error'), e?.message || t('Failed to generate ticket'));
+        } finally {
+            setGenerating(false);
+        }
+    };
+
     const handleGenerate = async () => {
         if (!identity || invitesPreview) return;
         setGenerating(true);
         const chosenVouch = myVouching?.voucher ? vouchPreset : null;
         try {
+            if (inviteNames.offered && inviteNames.namesTicked) {
+                await makeNamesInvite(chosenVouch);
+                return;
+            }
             // First attempt Online generation via API
             try {
                 const apiPayload = {
@@ -1319,13 +1385,16 @@ export default function PeopleScreen() {
                             <Text style={styles.sectionHeader}>{t('📤 Invite Someone')}</Text>
                             <Text style={styles.sectionDesc}>{t('Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.')}</Text>
 
-                            <TextInput
-                                placeholder={t('Who is this invite for? (For your records)')}
-                                value={intendedFor}
-                                onChangeText={setIntendedFor}
-                                style={styles.input}
-                                placeholderTextColor={colors.text.muted}
-                            />
+                            {/* With the names box ticked, their real name is sealed in the list instead: this line goes to the node as written. */}
+                            {!(inviteNames.offered && inviteNames.namesTicked) && (
+                                <TextInput
+                                    placeholder={t('Who is this invite for? (For your records)')}
+                                    value={intendedFor}
+                                    onChangeText={setIntendedFor}
+                                    style={styles.input}
+                                    placeholderTextColor={colors.text.muted}
+                                />
+                            )}
 
                             {myVouching?.voucher && (
                                 <VouchPresetChoice
@@ -1335,6 +1404,8 @@ export default function PeopleScreen() {
                                     budgetTotal={myVouching.budget?.level ?? 0}
                                 />
                             )}
+
+                            <InviteNamesBoxes names={inviteNames} busy={generating} onInviteExisting={(id) => { void inviteExistingEntry(id); }} />
 
                             {invitesPreview ? (
                                 <LocalCommunityMark variant="action" feature="invites" label={isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')} />

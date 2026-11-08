@@ -3,7 +3,7 @@
  * the link first, the code to paste if the link doesn't open, the community's address. No "node", no "URL".
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { inviteShareText, shareAddress } from '../invite-share-text.js';
+import { inviteShareText, invitePictureCode, invitePictureName, shareAddress } from '../invite-share-text.js';
 import { setLanguage } from '../words.js';
 
 afterEach(() => setLanguage('en'));
@@ -40,5 +40,28 @@ describe('shareAddress', () => {
         expect(shareAddress('https://mullum.beanpool.org/')).toBe('mullum.beanpool.org');
         expect(shareAddress(' http://10.0.0.5:8443 ')).toBe('10.0.0.5:8443');
         expect(shareAddress('mullum.beanpool.org')).toBe('mullum.beanpool.org');
+    });
+});
+
+describe('the QR picture shared with an invite', () => {
+    it('is named for the code, in letters, digits and dashes', () => {
+        expect(invitePictureName('INV-ABCD-EFGH')).toBe('beanpool-invite-INV-ABCD-EFGH.png');
+        expect(invitePictureName('a/b c?d.png')).toBe('beanpool-invite-abcdpng.png');
+    });
+
+    it('is named for a long paper ticket by its first 24 safe characters, never the whole string', () => {
+        const ticket = `BP-${'eyJhbGciOiJFZDI1NTE5'.repeat(20)}`;
+        const name = invitePictureName(ticket);
+        expect(name).toBe(`beanpool-invite-${ticket.slice(0, 24)}.png`);
+        expect(name.length).toBeLessThan(60);
+    });
+
+    it('has a name even for an empty code', () => {
+        expect(invitePictureName('')).toBe('beanpool-invite-code.png');
+    });
+
+    it('prints a short code in capitals and cuts a long ticket after 16 characters', () => {
+        expect(invitePictureCode('inv-abcd')).toBe('INV-ABCD');
+        expect(invitePictureCode(`BP-${'x'.repeat(100)}`)).toBe(`BP-${'x'.repeat(13)}...`);
     });
 });

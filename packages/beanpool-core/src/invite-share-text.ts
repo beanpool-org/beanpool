@@ -19,3 +19,18 @@ export function inviteShareText(p: { name: string; link: string; code: string; a
 export function shareAddress(origin: string): string {
     return origin.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
 }
+
+/**
+ * The QR picture a member shares with an invite (both apps): the file's name, `beanpool-invite-<CODE>.png`. The code is
+ * kept to letters, digits and dashes and cut at 24 characters, because a self-signed paper ticket is a long string that no
+ * file name can hold.
+ */
+export function invitePictureName(code: string): string {
+    const safe = code.replace(/[^A-Za-z0-9-]/g, '').slice(0, 24) || 'code';
+    return `beanpool-invite-${safe}.png`;
+}
+
+/** The code as the picture prints it under the QR: a short code whole, a long ticket cut after 16 characters (as the card does). */
+export function invitePictureCode(code: string): string {
+    return code.length > 20 ? `${code.substring(0, 16)}...` : code.toUpperCase();
+}

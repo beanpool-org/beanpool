@@ -9,7 +9,7 @@ import { EverydayRuleRows } from './EverydayRuleRows';
 import { CommunityHealthPanel } from './CommunityHealthPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
-import { PostModerationPanel } from './PostModerationPanel';
+import { PostModerationPanel, type PostModerationItem } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { AssistantTakedownsPanel } from './AssistantTakedownsPanel';
 import { RequestLimitsCard } from './RequestLimitsCard';
@@ -725,7 +725,7 @@ export function PeopleSafetySection({
                     {/* Individual Post Search, Filtering & Deletion Panel */}
                     <SectionErrorBoundary sectionName="Post Moderation" resetKey={activeNode.id}>
                         <PostModerationPanel
-                            posts={nodeData?.posts as any}
+                            posts={Array.isArray(nodeData?.posts) ? (nodeData.posts as unknown as PostModerationItem[]) : null}
                             activeNode={activeNode}
                             onRefresh={onRefresh}
                             viewer={rolesViewer}
@@ -739,7 +739,7 @@ export function PeopleSafetySection({
             {selectedThreat && (
                 <ThreatReviewModal
                     threat={selectedThreat}
-                    members={nodeData?.members as any}
+                    members={Array.isArray(nodeData?.members) ? (nodeData.members as MemberItem[]) : undefined}
                     onClose={() => setSelectedThreat(null)}
                     onDismiss={() => {
                         // Only reached after onDismissReport succeeded; the server call marks it handled.

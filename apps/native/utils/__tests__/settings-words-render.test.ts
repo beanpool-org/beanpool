@@ -1227,7 +1227,8 @@ describe('Add a community by address: a server with no owner yet is claimed, not
         expect(card).not.toBeNull();
         expect(card!.textContent).toContain(pseudoLocalise('{name} has no owner yet').replace('{name}', 'Apollo Bay'));
         expect(card!.textContent).toContain(pseudoLocalise('Claim {name}').replace('{name}', 'Apollo Bay'));
-        expect(host.querySelector('[data-testid="settings-add-address"]')!.getAttribute('placeholder')).toBe('yourtown.beanpool.org');
+        // The example is a name under beanpool.org, as most communities' are, not a LAN number (was http://192.168.1.55).
+        expect(host.querySelector('[data-testid="settings-add-address"]')!.getAttribute('placeholder')).toBe(pseudoLocalise('e.g. {address}').replace('{address}', 'yourtown.beanpool.org'));
         const before = OTHERS.length;
         OTHERS.push(SERVER, TYPED, 'Apollo Bay');
         OTHERS.sort((a, b) => b.length - a.length);

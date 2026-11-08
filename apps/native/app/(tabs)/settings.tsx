@@ -2963,7 +2963,7 @@ export default function SettingsScreen() {
                         style={styles.input}
                         value={newAnchorInput}
                         onChangeText={(v) => { setNewAnchorInput(v); setOwnerless(null); }}
-                        placeholder="yourtown.beanpool.org"
+                        placeholder={t('e.g. {address}', { address: 'yourtown.beanpool.org' })}
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="none"
                         autoCorrect={false}

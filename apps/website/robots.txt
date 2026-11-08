@@ -4,3 +4,4 @@ Allow: /
 Disallow: /auth/
 
 Sitemap: https://beanpool.org/sitemap.xml
+Sitemap: https://beanpool.org/guide/sitemap.xml

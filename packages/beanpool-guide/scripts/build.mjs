@@ -41,7 +41,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadGuide, renderWebsite, renderOperatorsWebsite, serializeGuide, contentHash, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite } from '../src/guide.mjs';
+import { loadGuide, renderWebsite, renderOperatorsWebsite, serializeGuide, contentHash, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite, renderGuideSitemap } from '../src/guide.mjs';
 import { readGuideTitles, checkGuideTitles } from '../src/titles.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -139,9 +139,14 @@ export function unpublished(published, pages) {
 /** Every generated file (absolute path → exact contents; a picture as a Buffer) for these published copies. */
 export function outputsFor(published) {
     const out = {};
+    // The page file names written to each folder under apps/website/guide ('' is English), for sitemap.xml.
+    const sitemapPages = {};
+    const pagesOf = files => Object.keys(files).filter(name => name.endsWith('.html'));
     for (const c of COLLECTIONS) if (published[c.key]) out[c.json] = serializeGuide(published[c.key]);
     if (published.guide) {
-        for (const [name, text] of Object.entries(renderWebsite(published.guide))) out[path.join(WEBSITE_DIR, name)] = text;
+        const files = renderWebsite(published.guide);
+        sitemapPages[''] = pagesOf(files);
+        for (const [name, text] of Object.entries(files)) out[path.join(WEBSITE_DIR, name)] = text;
     }
     for (const lang of GUIDE_LANGS) {
         const key = `guide:${lang}`;
@@ -149,6 +154,7 @@ export function outputsFor(published) {
             out[path.join(pkgDir, 'generated', `guide.${lang}.json`)] = serializeGuide(published[key]);
             if (published.guide) {
                 const langWeb = renderLanguageWebsite(published[key], published.guide);
+                sitemapPages[lang] = pagesOf(langWeb);
                 for (const [name, text] of Object.entries(langWeb)) {
                     out[path.join(WEBSITE_DIR, lang, name)] = text;
                 }
@@ -157,7 +163,9 @@ export function outputsFor(published) {
     }
     if (OPERATOR_PAGES_ON_WEBSITE.length && published.manual) {
         const only = OPERATOR_PAGES_ON_WEBSITE;
-        for (const [name, text] of Object.entries(renderOperatorsWebsite(published.manual, { only }))) out[path.join(OPERATORS_WEBSITE_DIR, name)] = text;
+        const manualWeb = renderOperatorsWebsite(published.manual, { only });
+        sitemapPages.operators = pagesOf(manualWeb);
+        for (const [name, text] of Object.entries(manualWeb)) out[path.join(OPERATORS_WEBSITE_DIR, name)] = text;
         // The pictures those pages show, from operators/images/ as Settings gets them.
         for (const g of published.manual.guides.filter(p => only.includes(p.slug))) {
             for (const b of g.blocks.filter(blk => blk.type === 'img')) {
@@ -167,6 +175,7 @@ export function outputsFor(published) {
             }
         }
     }
+    if (published.guide) out[path.join(WEBSITE_DIR, 'sitemap.xml')] = renderGuideSitemap(sitemapPages);
     return out;
 }
 

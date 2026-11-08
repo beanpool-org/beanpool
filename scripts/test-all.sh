@@ -493,7 +493,7 @@ run_check "website_start" run_website_start
 # Every internal link on the website reaches a page in the tree (S0: no link to beanpool.org/android before its page),
 # and every domain name in an English page's words is a link. Instant. Also the sign-in return pages (apps/website/auth,
 # the web app's /auth/facebook.html): generated, English unchanged, each picks the member's language and always bounces.
-run_check "website_links" node --test scripts/website-links.test.mjs scripts/website-domain-links.test.mjs scripts/website-auth-bounce.test.mjs
+run_check "website_links" node --test scripts/website-links.test.mjs scripts/website-domain-links.test.mjs scripts/website-auth-bounce.test.mjs scripts/website-seo.test.mjs
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {

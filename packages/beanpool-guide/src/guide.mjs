@@ -282,7 +282,49 @@ function blockHtml(b, linkable = () => true) {
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
 
-function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>`, lang = 'en', source = root === '../' ? 'content' : 'operators' }) {
+/** The website's address: pages are served without ".html", and a folder's index at the folder. */
+export const SITE_URL = 'https://beanpool.org';
+
+/**
+ * A guide page's own address on beanpool.org. `folder` is where it sits under /guide/: '' for the members' guide in English,
+ * a language code for its translation, 'operators' for the manual's pages. `name` is the file ('index.html' is the folder).
+ */
+export function guideUrl(folder, name) {
+    const slug = name === 'index.html' ? '' : name.replace(/\.html$/, '');
+    return `${SITE_URL}/guide/${folder ? `${folder}/` : ''}${slug}`;
+}
+
+/** The link-preview image every page of beanpool.org shares (scripts/website-og-image.mjs in the repo draws it). */
+export const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;
+const OG_IMAGE_ALT = 'The BeanPool bean logo beside the words BeanPool and Exchange for Communities, Not Commercial Banks';
+
+/** Facebook's own locale codes (ll_CC) for og:locale; scripts/website-build.mjs keeps the same table for the site's other pages. */
+export const OG_LOCALES = Object.freeze({
+    en: 'en_AU', es: 'es_ES', pt: 'pt_BR', hi: 'hi_IN', bn: 'bn_BD', fr: 'fr_FR', ar: 'ar_AR', id: 'id_ID', ru: 'ru_RU',
+    'zh-Hans': 'zh_CN', 'zh-Hant': 'zh_TW', it: 'it_IT', de: 'de_DE', tr: 'tr_TR', sw: 'sw_KE', ml: 'ml_IN', ta: 'ta_IN',
+    uk: 'uk_UA', ur: 'ur_PK', fa: 'fa_IR', vi: 'vi_VN', el: 'el_GR', fil: 'fil_PH', ja: 'ja_JP', ko: 'ko_KR',
+});
+
+/** The canonical tag and the Open Graph + Twitter card tags: the same set scripts/website-build.mjs gives the site's other pages. */
+function shareTags({ url, title, description, lang }) {
+    const meta = (key, value, attr = 'property') => `    <meta ${attr}="${key}" content="${esc(value)}">`;
+    return [
+        `    <link rel="canonical" href="${esc(url)}">`,
+        meta('og:type', 'website'),
+        meta('og:site_name', 'BeanPool'),
+        meta('og:title', title),
+        meta('og:description', description),
+        meta('og:url', url),
+        meta('og:image', OG_IMAGE_URL),
+        meta('og:image:width', '1200'),
+        meta('og:image:height', '630'),
+        meta('og:image:alt', OG_IMAGE_ALT),
+        meta('og:locale', OG_LOCALES[lang] ?? OG_LOCALES.en),
+        meta('twitter:card', 'summary_large_image', 'name'),
+    ].join('\n');
+}
+
+function page({ title, description, body, url, root = '../', nav = `<a href="index.html">Members' guide</a>`, lang = 'en', source = root === '../' ? 'content' : 'operators' }) {
     return `<!DOCTYPE html>
 <!-- Generated from packages/beanpool-guide/${source} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
 <html lang="${esc(lang)}">
@@ -291,6 +333,7 @@ function page({ title, description, body, root = '../', nav = `<a href="index.ht
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}">
+${shareTags({ url, title, description, lang })}
     <link rel="icon" type="image/png" href="${root}favicon.png">
     <link rel="stylesheet" href="${root}fonts/fonts.css">
     <link rel="stylesheet" href="${root}style.css?v=2.5">
@@ -357,6 +400,7 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
     const manual = guide.sections.filter(s => s.id !== ABOUT_SECTION);
     const files = {};
     files['index.html'] = page({
+        url: guideUrl('', 'index.html'),
         title: "Members' guide — BeanPool",
         description: 'How BeanPool works, the rules, common questions, and a how-to for every part of the app. For members of a BeanPool community.',
         body: [
@@ -389,6 +433,7 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
         const section = guide.sections.find(s => s.id === g.section);
         const related = g.related.map(slug => bySlug.get(slug));
         files[`${g.slug}.html`] = page({
+            url: guideUrl('', `${g.slug}.html`),
             title: `${g.title} — BeanPool members' guide`,
             description: g.summary,
             body: [
@@ -406,6 +451,36 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
     }
     files['guide.json'] = serializeGuide(guide);
     return files;
+}
+
+/**
+ * apps/website/guide/sitemap.xml: every guide page in every language it is published in, each with its language alternates
+ * (a members' guide page exists in English and in each language that has translated it; the manual's page in English only).
+ * `pages` maps a folder ('' for English, a language code, 'operators') to the page file names written there ('index.html', 'a.html').
+ */
+export function renderGuideSitemap(pages) {
+    const lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+    ];
+    const entry = (folder, name, alternates) => {
+        lines.push('  <url>', `    <loc>${guideUrl(folder, name)}</loc>`);
+        if (alternates.length > 1) {
+            for (const alt of alternates) lines.push(`    <xhtml:link rel="alternate" hreflang="${alt || 'en'}" href="${guideUrl(alt, name)}"/>`);
+            lines.push(`    <xhtml:link rel="alternate" hreflang="x-default" href="${guideUrl('', name)}"/>`);
+        }
+        lines.push('  </url>');
+    };
+    const folders = ['', ...GUIDE_LANGS];
+    const members = new Set(folders.flatMap(f => pages[f] ?? []));
+    // the English index first, then the pages by name
+    for (const name of [...members].sort((a, b) => (a === 'index.html' ? -1 : b === 'index.html' ? 1 : a.localeCompare(b, 'en')))) {
+        const where = folders.filter(f => pages[f]?.includes(name));
+        for (const f of where) entry(f, name, where);
+    }
+    for (const name of [...(pages.operators ?? [])].sort((a, b) => a.localeCompare(b, 'en'))) entry('operators', name, ['operators']);
+    lines.push('</urlset>', '');
+    return lines.join('\n');
 }
 
 // ─── Language guides (slice S5b) ──────────────────────────────────────────────
@@ -554,7 +629,7 @@ export function renderLanguageWebsite(langGuide, englishGuide) {
             : '';
 
         files[`${g.slug}.html`] = page({
-            root, nav, lang, source: `content/${lang}`,
+            root, nav, lang, source: `content/${lang}`, url: guideUrl(lang, `${g.slug}.html`),
             title: `${g.title} — BeanPool members' guide`,
             description: g.summary,
             body: [
@@ -606,7 +681,7 @@ export function renderOperatorsWebsite(manual, { only = null } = {}) {
     const relatedItem = g => (published(g.slug) ? linkItem(g) : unlinkedItem(g));
     const files = {};
     if (!only) files['index.html'] = page({
-        root, nav,
+        root, nav, url: guideUrl('operators', 'index.html'),
         title: 'Operator manual — BeanPool',
         description: "How to run a BeanPool community's server: setting up, signing in, roles, members, moderation, disputes, backups, updates and troubleshooting. For owners and admins.",
         body: [
@@ -635,7 +710,7 @@ export function renderOperatorsWebsite(manual, { only = null } = {}) {
             ? `Operator manual · ${inline(section.title)}`
             : `<a href="index.html">Operator manual</a> · <a href="index.html#${section.id}">${inline(section.title)}</a>`;
         files[`${g.slug}.html`] = page({
-            root, nav,
+            root, nav, url: guideUrl('operators', `${g.slug}.html`),
             title: `${g.title} — BeanPool operator manual`,
             description: g.summary,
             body: [

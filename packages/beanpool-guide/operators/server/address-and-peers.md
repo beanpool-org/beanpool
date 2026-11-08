@@ -155,7 +155,7 @@ Among communities at about the same distance from the person looking (in steps o
 
 **Gateway & Peers** has the gateway switches:
 
-- the web app: turned off, your server still answers the API and Settings but not the web app (who can join is set under Core settings, and links with other communities on the server, `ENABLE_PEER_CONNECTORS`);
+- the web app: turned off, your server still answers the API and Settings but not the web app (who can join is set under Core settings, and links with other communities on the server);
 - the rate limit (see Rate limits);
 - which other websites may call your server.
 

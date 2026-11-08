@@ -144,7 +144,8 @@ export interface StandingAuthorisation {
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
-const HOST = /^[A-Za-z0-9.:\-[\]]{1,253}$/;
+/** A host in the one form apps sign (lower case, no port, no trailing dot), or a bracketed IPv6 address. */
+const HOST = /^(?=.{1,253}$)(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])$/;
 const NONCE = /^[A-Za-z0-9_-]{8,128}$/;
 const BEANS_2DP = /^(0|[1-9]\d{0,8})\.\d{2}$/;
 /** The largest number of periods one authorisation may name (about 19 years of months). */

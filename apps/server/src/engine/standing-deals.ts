@@ -340,8 +340,8 @@ export function tickStandingDeals(hooks: StandingHooks, now: number = Date.now()
             let sd: StandingRow | undefined = row;
             if (sd.phase === 'held') {
                 const r = settle(hooks, sd, now);
-                if (r === 'settled') out.settled++;
-                if (r === 'ended') out.ended++;
+                if (r === 'settled' || r === 'settled-ended') out.settled++;
+                if (r === 'settled-ended') out.ended++;
                 sd = readStanding(row.id);
             }
             if (sd && (sd.phase === 'due' || sd.phase === 'short') && Date.parse(sd.next_due_at) <= now) {
@@ -371,7 +371,7 @@ function holdBackByNode(hooks: StandingHooks, sd: StandingRow, reason: StandingH
 }
 
 /** The period under way has ended: release it to the payee (step 1), or hold it back for a person when that isn't safe. */
-function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' | 'ended' | 'held_back' | 'skipped' {
+function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' | 'settled-ended' | 'held_back' {
     const n = sd.periods_done + 1;
     const title = titleOf(sd.post_id);
     const row = sd.current_tx_id ? db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(sd.current_tx_id) as any : null;
@@ -413,7 +413,7 @@ function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' |
     hooks.clearEnterpriseFloorCache?.();
     tellStanding(hooks, told);
     loggedOnce.delete(sd.id);
-    return ended ? 'ended' : 'settled';
+    return ended ? 'settled-ended' : 'settled';
 }
 
 /** Why a scheduled hold can't be made at all, from the refusal: the standing deal ends with it. */
@@ -559,8 +559,10 @@ function markShort(hooks: StandingHooks, sd: StandingRow, now: number): 'short' 
     const until = dayOf(graceEnd(since));
     let told: StandingNotice[] = [];
     db.transaction(() => {
+        // Tried again in an hour, but never later than the week's end: it ends on time, not at the next hourly try.
+        const retryAt = Math.min(now + STANDING_RETRY_MS, Date.parse(since) + STANDING_GRACE_MS);
         const moved = db.prepare(`UPDATE standing_deals SET phase = 'short', short_since = ?, next_due_at = ? WHERE id = ? AND phase IN ('due', 'short') AND periods_done = ?`)
-            .run(since, new Date(now + STANDING_RETRY_MS).toISOString(), sd.id, sd.periods_done);
+            .run(since, new Date(retryAt).toISOString(), sd.id, sd.periods_done);
         if (moved.changes !== 1) return;
         const period = sd.periods_done + 1;
         if (!sd.short_since) {

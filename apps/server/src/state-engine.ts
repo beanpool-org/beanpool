@@ -87,7 +87,7 @@ import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledge
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
-    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart,
+    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart, type StandingHooks,
 } from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -1187,8 +1187,10 @@ function armMainServerTimers(): void {
  * Run the standing deals that are due (engine/standing-deals.ts tickStandingDeals) with this node's escrow callbacks. The main
  * server's minute tick calls it; on a standby it does nothing. Never throws.
  */
-export function runStandingDeals(now?: number): ReturnType<typeof tickStandingDeals> {
-    return tickStandingDeals({ ...getEscrowCb(), clearEnterpriseFloorCache }, now);
+export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => StandingHooks): ReturnType<typeof tickStandingDeals> {
+    const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+    // `wrap`: a suite's way to watch or fail the node's own primitives (a crash in the middle of a step).
+    return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */

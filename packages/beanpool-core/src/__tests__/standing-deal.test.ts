@@ -134,6 +134,9 @@ describe('the authorisation text (§6)', () => {
             swap(0, 'beanpool-standing-v2'),
             swap(1, ''),
             swap(1, 'host with space'),
+            swap(1, 'Mullum.beanpool.org'),             // not lower case
+            swap(1, 'mullum.beanpool.org:443'),         // a port
+            swap(1, 'mullum.beanpool.org.'),            // a trailing dot
             swap(2, ''),
             swap(4, 'AB'.repeat(32)),                      // upper-case payee
             swap(4, 'ab'.repeat(31)),

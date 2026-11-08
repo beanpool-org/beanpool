@@ -237,3 +237,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-27 - Add accessibilityState to PinSheet action buttons
 **Learning:** In `PinSheet.tsx`, interactive buttons (the backdrop dismiss button, pin option choice rows, and cancel button) become disabled while `submitting` is true or during active pin operations, but lacked `accessibilityState={{ disabled: submitting }}`, leaving screen readers without disabled state announcements.
 **Action:** Always provide explicit `accessibilityState={{ disabled: submitting }}` on action buttons and option rows that disable during asynchronous form submissions.
+
+## 2027-03-06 - Add accessibilityState busy to treasury-post submit button
+**Learning:** In `apps/native/app/treasury-post.tsx`, the post submit button rendered an `ActivityIndicator` during async operations and had `disabled: submitting || photos.length === 0`, but lacked `busy: submitting` in its `accessibilityState`.
+**Action:** Supply `accessibilityState={{ disabled: submitting || photos.length === 0, busy: submitting }}` on action buttons that render an `ActivityIndicator` when busy.

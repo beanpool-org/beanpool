@@ -315,7 +315,7 @@ export default function TreasuryPostScreen() {
                             onPress={handleSubmit}
                             disabled={submitting || photos.length === 0}
                             accessibilityRole="button"
-                            accessibilityState={{ disabled: submitting || photos.length === 0 }}
+                            accessibilityState={{ disabled: submitting || photos.length === 0, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />

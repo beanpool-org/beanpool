@@ -271,7 +271,7 @@ async function main(): Promise<void> {
     // ── Beans: the engine's own accept and release; the clocks of each trade then moved back ──
     const maxRow = (table: string) => (db.prepare(`SELECT COALESCE(MAX(rowid), 0) AS m FROM ${table}`).get() as { m: number }).m;
     const trade = (listing: string, buyer: string, hours: number | undefined, daysAgo: number, release: boolean): string => {
-        const marks = { transactions: maxRow('transactions'), messages: maxRow('messages') };
+        const marks = { transactions: maxRow('transactions'), messages: maxRow('messages'), activity: maxRow('activity_feed') };
         const l = R.listings.find((x) => x.id === listing);
         if (!l || !world.posts[listing]) throw new Error(`a trade names a listing that is not seeded: ${listing}`);
         // The posting the deal was for: the listing in the Market if it was up by then, else the earlier posting of the same Offer.
@@ -286,6 +286,8 @@ async function main(): Promise<void> {
         const doneAt = ago(Math.max(0, daysAgo - 0.05));
         db.prepare('UPDATE transactions SET timestamp = ? WHERE rowid > ?').run(then, marks.transactions);
         db.prepare('UPDATE messages SET timestamp = ? WHERE rowid > ?').run(then, marks.messages);
+        // The web Market's Live Pulse strip reads activity_feed (recordActivity writes it): its trade rows take the trade's time.
+        db.prepare('UPDATE activity_feed SET created_at = ? WHERE rowid > ?').run(release ? doneAt : then, marks.activity);
         db.prepare('UPDATE marketplace_transactions SET created_at = ?, completed_at = ?, updated_at = ? WHERE id = ?')
             .run(then, release ? doneAt : null, release ? doneAt : then, tx.id);
         const posted = (db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at: string }).created_at;
@@ -299,6 +301,9 @@ async function main(): Promise<void> {
         const ended = createdAt(l.ageHours);
         db.prepare("UPDATE posts SET status = 'completed', active = 0, completed_at = ?, updated_at = ? WHERE id = ?").run(ended, ended, world.earlier[l.id]);
     }
+    // Each post_created row in activity_feed takes its post's own time, so the Live Pulse strip reads "3d ago", not "just now".
+    db.prepare(`UPDATE activity_feed SET created_at = (SELECT p.created_at FROM posts p WHERE p.id = json_extract(activity_feed.metadata, '$.postId'))
+        WHERE event_type = 'post_created' AND EXISTS (SELECT 1 FROM posts p WHERE p.id = json_extract(activity_feed.metadata, '$.postId'))`).run();
 
     // ── RSVPs and votes: the host's guests are the town's names-only members, and Sam where riverbend.json says ──
     const guests = R.otherMembers.map((n) => pk(`other:${n}`));

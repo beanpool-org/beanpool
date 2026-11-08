@@ -189,6 +189,19 @@ describe('Riverbend: every date reads true (a Ledger line beside a listing page)
         expect(deals.filter((d) => d.completed_at && before(d.completed_at, d.dealt)).map((d) => d.title)).toEqual([]);
     });
 
+    it('dates the Live Pulse feed by what it reports: each trade at its trade, each new post at its post', async () => {
+        const recent = Date.now() - 10 * 60_000;
+        const feed = await rows(`SELECT a.event_type, a.created_at, json_extract(a.metadata, '$.postId') AS post_id, p.created_at AS posted
+            FROM activity_feed a LEFT JOIN posts p ON p.id = json_extract(a.metadata, '$.postId')`);
+        expect(feed.length).toBeGreaterThan(0);
+        const posts = feed.filter((r) => r.event_type === 'post_created' && r.posted);
+        expect(posts.length).toBeGreaterThan(0);
+        expect(posts.filter((r) => r.created_at !== r.posted).map((r) => `${r.post_id}: ${r.created_at} vs ${r.posted}`)).toEqual([]);
+        const trades = feed.filter((r) => r.event_type === 'trade_completed');
+        expect(trades.length).toBe(riverbend.trades.length);
+        expect(trades.filter((r) => Date.parse(r.created_at) > recent).map((r) => r.created_at)).toEqual([]);
+    });
+
     it('has no post dated before its author joined, and none in the future', async () => {
         const posts = await rows(`SELECT p.title, p.created_at, m.joined_at FROM posts p JOIN members m ON m.public_key = p.author_pubkey WHERE ${PEOPLE}`);
         expect(posts.length).toBeGreaterThan(14);

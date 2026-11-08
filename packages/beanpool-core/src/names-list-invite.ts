@@ -11,14 +11,25 @@
  */
 
 import { inviteAndShareLink } from './invite-and-share.js';
+import { formatNumber } from './words.js';
 
 /** What the node did with a binding when the invite was used (server engine/names-list.ts InviteBindOutcome). */
 export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
+
+/**
+ * What became of the voucher budget a bound invite promised (DESIGN-invites-and-names-list-amend3-fable.md §2; server
+ * engine/vouchers.ts InviteVoucherOutcome): made, waiting for the second admin, or why not.
+ */
+export type InviteVoucherOutcome = 'made' | 'awaiting_second' | 'maker_not_committee' | 'beans_off' | 'not_confirmed' | 'not_made';
 
 /** As the node lists it: never the code, which the maker's phone shows once, when it is made. */
 export interface BoundInvite {
     entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
     outcome: InviteBindOutcome | null;
+    /** The voucher budget the invite promises (100 to 2,000), or null; absent from a node before amend3. */
+    voucherLevel?: number | null;
+    /** What became of it once the invite was used, or null. */
+    voucherOutcome?: InviteVoucherOutcome | null;
 }
 
 export const BIND_OUTCOME_WORDS: Record<InviteBindOutcome, string> = {
@@ -31,10 +42,31 @@ export const BIND_OUTCOME_WORDS: Record<InviteBindOutcome, string> = {
     open_debt: 'joined, not confirmed: the entry has a debt that is still open',
 };
 
-/** One line for a bound invite on its entry: waiting, or what happened when it was used. `nameOf` gives "@callsign". */
-export function boundInviteLine(inv: Pick<BoundInvite, 'usedBy' | 'outcome'>, nameOf: (pubkey: string) => string): string {
+/** The voucher clause after a used bound invite's line: `{level}` the budget, `{maker}` "@callsign" of whoever made the invite. */
+export const VOUCHER_OUTCOME_WORDS: Record<InviteVoucherOutcome, string> = {
+    made: 'made a voucher with a budget of {level} Beans',
+    awaiting_second: 'made a voucher once a second admin confirms them',
+    maker_not_committee: 'not made a voucher: {maker} is no longer on the credit committee',
+    beans_off: 'not made a voucher: Beans are switched off in this community',
+    not_confirmed: 'not made a voucher',
+    not_made: 'not made a voucher: the credit committee can make them one from the list',
+};
+
+/**
+ * One line for a bound invite on its entry: waiting, or what happened when it was used, with what became of a voucher budget
+ * it promised. `nameOf` gives "@callsign".
+ */
+export function boundInviteLine(
+    inv: Pick<BoundInvite, 'usedBy' | 'outcome'> & Partial<Pick<BoundInvite, 'createdBy' | 'voucherLevel' | 'voucherOutcome'>>,
+    nameOf: (pubkey: string) => string,
+): string {
     if (!inv.usedBy) return 'Invite made, not used yet';
-    return `${nameOf(inv.usedBy)} ${inv.outcome ? BIND_OUTCOME_WORDS[inv.outcome] : 'joined'}`;
+    const line = `${nameOf(inv.usedBy)} ${inv.outcome ? BIND_OUTCOME_WORDS[inv.outcome] : 'joined'}`;
+    if (!inv.voucherOutcome) return line;
+    const clause = VOUCHER_OUTCOME_WORDS[inv.voucherOutcome]
+        .replace('{level}', formatNumber(inv.voucherLevel ?? 0))
+        .replace('{maker}', inv.createdBy ? nameOf(inv.createdBy) : 'whoever made the invite');
+    return `${line}; ${clause}`;
 }
 
 /** The bound invites for one entry, newest first (the node lists them newest first). */

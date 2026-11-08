@@ -72,7 +72,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
 import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
-import { vouchingAfterRevoke } from './vouchers.js';
+import { vouchingAfterRevoke, landAwaitingInviteVoucher, inviteVoucherPromiseEnds, type InviteVoucherOutcome, type TellVoucher, type VoucherNotice } from './vouchers.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -552,6 +552,8 @@ export function confirmByInvite(maker: string, entryId: string, member: string):
 export interface BoundInvite {
     entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
     outcome: InviteBindOutcome | null;
+    /** The voucher budget the invite promises (amend3 §2), or null; and what became of it once used (engine/vouchers.ts). */
+    voucherLevel: number | null; voucherOutcome: InviteVoucherOutcome | null;
 }
 
 /**
@@ -563,12 +565,17 @@ export interface BoundInvite {
 export function readBoundInvites(): BoundInvite[] {
     return (db.prepare(
         `SELECT names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
-                names_bind_outcome AS outcome
+                names_bind_outcome AS outcome, voucher_level AS voucherLevel, voucher_outcome AS voucherOutcome
          FROM invite_codes WHERE names_entry_id IS NOT NULL ORDER BY created_at DESC LIMIT 500`,
     ).all() as BoundInvite[]);
 }
 
-export function secondConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
+/**
+ * A second admin confirms. A voucher budget the member's invite promised, waiting for this (amend3 §2), lands in the same
+ * transaction (engine/vouchers.ts landAwaitingInviteVoucher, the maker's committee standing read now; never a refusal), and
+ * its notice is told by `tell` once it has committed.
+ */
+export function secondConfirmation(actor: string, id: unknown, tell?: TellVoucher): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);
     if (row.revoked_at) throw new NamesListError(409, 'revoked', word('That confirmation was revoked.'));
@@ -577,11 +584,13 @@ export function secondConfirmation(actor: string, id: unknown): { id: string; st
     if (row.member_pubkey === actor) throw new NamesListError(403, 'self_confirm', word('Another admin confirms you.'));
     const entry = entryRow(row.entry_id);
     if (!entry || !holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t confirm anyone against it.'));
-    db.transaction(() => {
+    const notice = db.transaction((): VoucherNotice | undefined => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
         workOffGoesLive(actor, row.member_pubkey, row.id);
+        return landAwaitingInviteVoucher(row.member_pubkey, row.entry_id);
     })();
+    if (notice) tell?.(notice);
     return { id: row.id, status: 'confirmed' };
 }
 
@@ -597,6 +606,8 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
         endWorkOff(actor, row.member_pubkey, row.id);
         // A budget made from the list ends with the confirmation; room already given stays (engine/vouchers.ts).
         vouchingAfterRevoke(row.member_pubkey, actor);
+        // A voucher budget an invite promised them, still waiting for a second admin, is not made.
+        inviteVoucherPromiseEnds(row.member_pubkey, actor);
     })();
     return { id: row.id, status: 'revoked' };
 }
@@ -648,6 +659,8 @@ export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account
     recordDepartedDebt(pubkey, live?.entry_id ?? steppedBackEntryOf(pubkey) ?? null, balance, reason);
     db.prepare(`UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = ?
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
+    // A voucher budget an invite promised them, still waiting for a second admin, is not made (plain rows, never a Bean).
+    inviteVoucherPromiseEnds(pubkey, 'node');
     const current = currentGeneration();
     if (current && holdersOf(current.id).has(pubkey)) markDropped(pubkey, current.id);
     dropNamesCopyOf(pubkey);

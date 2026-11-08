@@ -599,6 +599,7 @@ export const SUITES = [
     'test-shape-upgrade',
     'test-names-list',
     'test-invite-bound-name',
+    'test-invite-adds-voucher',
     'test-vouch-reset',
     'test-vouchers',
     'test-credit-gift',

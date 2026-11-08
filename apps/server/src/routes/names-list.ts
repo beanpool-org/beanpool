@@ -159,6 +159,9 @@ async function asMember(ctx: any, fn: (actor: string, body: Record<string, unkno
 
 export function createNamesListRoutes(_deps: RouteDeps): Router {
     const router = new Router();
+    // Each change to a voucher's budget tells the voucher (§10.2), once the change has committed: making one, setting a budget,
+    // stopping one, and a voucher an invite promised landing at the second admin's confirmation (amend3 §2).
+    const tell: TellVoucher = (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification });
 
     router.get('/api/names/state', (ctx) => asAdmin(ctx, (actor) => namesState(actor)));
 
@@ -188,11 +191,14 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
 
     // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
     // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
+    // Body `{ vouchAmount?, voucherLevel? }` (amend3 §2, Marty's Q1): a vouch preset from the maker's budget, held now, as on
+    // any invite; and a voucher budget (an owner or committee admin, 100 to 2,000) the joiner is given once confirmed.
     router.post('/api/names/entries/:id/invite', async (ctx) => {
         const actor = admin(ctx);
         if (!actor) return;
         try {
-            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id));
+            const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), body.vouchAmount, body.voucherLevel);
             if (!invite) return answer(ctx, 403, word('Only registered members can generate invites'), 'not_member');
             ctx.status = 201;
             ctx.body = { success: true, invite };
@@ -204,7 +210,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
 
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
-    router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id)));
+    router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id, tell)));
     router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id)));
 
     router.get('/api/names/log', (ctx) => asAdmin(ctx, () => {
@@ -248,8 +254,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         if (!isOnCreditCommittee(actor)) throw new VoucherError(403, 'committee_only', VOUCHER_WORDS.committeeOnly);
         return vouchersBlock();
     }));
-    // Making a voucher, setting a budget and stopping one each tell the voucher (§10.2), once the change has committed.
-    const tell: TellVoucher = (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification });
+    // Making a voucher, setting a budget and stopping one each tell the voucher (§10.2), as `tell` does above.
     router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body, tell), 201));
     router.post('/api/names/vouchers/settings', (ctx) => asAdmin(ctx, (actor, body) => setVoucherSettings(actor, body)));
     router.get('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => readVoucherCard(actor, ctx.params.member)));

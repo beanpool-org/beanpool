@@ -283,12 +283,14 @@ const NO_APK_RELEASE = Object.freeze({ url: '', version: '', mb: '', file: '', s
 
 /**
  * Computes canonical content hash of English HTML (sha256, first 16 hex digits).
- * Ignores dynamic frame elements (hreflang alternate tags, footer languages row, comments, whitespace) and the Android
- * download's per-release values.
+ * Ignores dynamic frame elements (hreflang alternate tags, link-preview <meta> tags, structured data, footer languages row,
+ * comments, whitespace) and the Android download's per-release values.
  */
 export function pageContentHash(html) {
     const canonical = applyApkRelease(html, NO_APK_RELEASE)
         .replace(/<link\b[^>]*\/?>/gi, '')
+        .replace(SOCIAL_META_RE, '')
+        .replace(JSON_LD_RE, '')
         .replace(/<script\b[^>]*\bsrc=[^>]*\s*(?:\/>|>[\s\S]*?<\/script>)/gi, '')
         .replace(/<div\s+class="footer-languages"[\s\S]*?<\/div>/gi, '')
         .replace(/<details\s+class="lang-menu[^"]*"[\s\S]*?<\/details>/gi, '')
@@ -351,12 +353,125 @@ export function buildCanonicalTag(page, lang) {
     return `    <link rel="canonical" href="${pageUrl(page, lang)}">`;
 }
 
+/** The link-preview image every page shares (scripts/website-og-image.mjs draws it). */
+export const OG_IMAGE_URL = 'https://beanpool.org/og-image.jpg';
+export const OG_IMAGE_ALT = 'The BeanPool bean logo beside the words BeanPool and Exchange for Communities, Not Commercial Banks';
+
+/** Facebook's own locale codes (ll_CC): og:locale takes these, not the BCP 47 tags the pages use. */
+export const OG_LOCALES = Object.freeze({
+    en: 'en_AU', es: 'es_ES', pt: 'pt_BR', hi: 'hi_IN', bn: 'bn_BD', fr: 'fr_FR', ar: 'ar_AR', id: 'id_ID', ru: 'ru_RU',
+    'zh-Hans': 'zh_CN', 'zh-Hant': 'zh_TW', it: 'it_IT', de: 'de_DE', tr: 'tr_TR', sw: 'sw_KE', ml: 'ml_IN', ta: 'ta_IN',
+    uk: 'uk_UA', ur: 'ur_PK', fa: 'fa_IR', vi: 'vi_VN', el: 'el_GR', fil: 'fil_PH', ja: 'ja_JP', ko: 'ko_KR'
+});
+
+/** The Open Graph and Twitter card <meta> tags, one per line with the head's indent; the builder owns them. */
+const SOCIAL_META_RE = /[ \t]*<meta\s+(?:property="og:|name="twitter:)[^>]*>[ \t]*\n?/gi;
+/** The structured-data script the builder writes (the only ld+json on the pages). */
+const JSON_LD_RE = /[ \t]*<script\s+type="application\/ld\+json">[\s\S]*?<\/script>[ \t]*\n?/gi;
+
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
+
+/** Text as written in the HTML source to the characters it stands for. */
+function decodeEntities(s) {
+    return s.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (m, dec, hex, name) => {
+        if (dec) return String.fromCodePoint(Number(dec));
+        if (hex) return String.fromCodePoint(parseInt(hex, 16));
+        return name.toLowerCase() in NAMED_ENTITIES ? NAMED_ENTITIES[name.toLowerCase()] : m;
+    });
+}
+
+const escapeAttr = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** The page's own <title> and meta description as plain text (entities decoded); null for one the page does not have. */
+export function readPageSummary(html) {
+    const title = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1];
+    const description = html.match(/<meta\s+name="description"\s+content="([^"]*)"/i)?.[1];
+    return {
+        title: title === undefined ? null : decodeEntities(title.trim()),
+        description: description === undefined ? null : decodeEntities(description.trim())
+    };
+}
+
+/**
+ * Open Graph + Twitter card tags: a shared link shows the page's own title and description with the share image, in the page's
+ * language. The 404 page has none: it is served at every unknown address.
+ */
+export function buildSocialTags(html, page, lang) {
+    if (page === '404.html') return '';
+    const { title, description } = readPageSummary(html);
+    const tag = (key, value, attr = 'property') => `    <meta ${attr}="${key}" content="${escapeAttr(value)}">`;
+    return [
+        tag('og:type', 'website'),
+        tag('og:site_name', 'BeanPool'),
+        ...(title ? [tag('og:title', title)] : []),
+        ...(description ? [tag('og:description', description)] : []),
+        tag('og:url', pageUrl(page, lang)),
+        tag('og:image', OG_IMAGE_URL),
+        tag('og:image:width', '1200'),
+        tag('og:image:height', '630'),
+        tag('og:image:alt', OG_IMAGE_ALT),
+        tag('og:locale', OG_LOCALES[lang]),
+        tag('twitter:card', 'summary_large_image', 'name')
+    ].join('\n');
+}
+
+const PLAY_STORE_URL = /https:\/\/play\.google\.com\/store\/apps\/details\?id=[A-Za-z0-9._]+/;
+const APP_STORE_URL = /https:\/\/apps\.apple\.com\/[a-z]{2}\/app\/[a-z0-9-]+\/id\d+/;
+
+/**
+ * Structured data for the home page: who runs BeanPool, the site, and the app. Only what the page already says; the two store
+ * addresses are read from the page's own badges (the Play one without the page's &hl= language), so they cannot drift.
+ * applicationCategory is LifestyleApplication: BeanPool is a community's way of trading help and goods, and FinanceApplication would
+ * present it as banking, which the site says it is not.
+ */
+export function buildJsonLd(html, lang) {
+    const play = html.match(PLAY_STORE_URL);
+    const apple = html.match(APP_STORE_URL);
+    if (!play || !apple) throw new Error('index.html: the Google Play and App Store links are needed for the structured data');
+    const url = pageUrl('index.html', lang);
+    const graph = {
+        '@context': 'https://schema.org',
+        '@graph': [
+            {
+                '@type': 'Organization',
+                '@id': 'https://beanpool.org/#organization',
+                name: 'The BeanPool Project',
+                url: 'https://beanpool.org/',
+                logo: 'https://beanpool.org/bean.png',
+                sameAs: ['https://github.com/beanpool-org/beanpool']
+            },
+            {
+                '@type': 'WebSite',
+                '@id': `${url}#website`,
+                name: 'BeanPool',
+                url,
+                inLanguage: lang,
+                publisher: { '@id': 'https://beanpool.org/#organization' }
+            },
+            {
+                '@type': 'SoftwareApplication',
+                '@id': 'https://beanpool.org/#app',
+                name: 'BeanPool',
+                url: 'https://beanpool.org/',
+                applicationCategory: 'LifestyleApplication',
+                operatingSystem: 'Android, iOS, Web',
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+                installUrl: [play[0], apple[0]],
+                publisher: { '@id': 'https://beanpool.org/#organization' }
+            }
+        ]
+    };
+    const json = JSON.stringify(graph, null, 2).replace(/</g, '\\u003c').split('\n').map((l) => `    ${l}`).join('\n');
+    return `    <script type="application/ld+json">\n${json}\n    </script>`;
+}
+
 function injectHeadLinks(out, page, lang) {
-    const canonical = buildCanonicalTag(page, lang);
     out = out.replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/gi, '');
     out = out.replace(/(\s*<link\s+rel="alternate"\s+hreflang="[^"]*"\s+href="[^"]*"\s*\/?>)+/gi, '');
-    const block = canonical ? `${canonical}\n${buildHreflangTags(page)}` : buildHreflangTags(page);
-    return out.replace(/<\/head>/i, `${block}\n</head>`);
+    out = out.replace(SOCIAL_META_RE, '').replace(JSON_LD_RE, '');
+    const blocks = [buildCanonicalTag(page, lang), buildHreflangTags(page), buildSocialTags(out, page, lang)];
+    if (page === 'index.html') blocks.push(buildJsonLd(out, lang));
+    return out.replace(/<\/head>/i, `${blocks.filter(Boolean).join('\n')}\n</head>`);
 }
 
 export const SITEMAP_FILE = path.join(WEBSITE_DIR, 'sitemap.xml');
@@ -387,6 +502,40 @@ export function buildSitemap(websiteDir = WEBSITE_DIR) {
     }
     lines.push('</urlset>', '');
     return lines.join('\n');
+}
+
+export const OG_IMAGE_FILE = path.join(WEBSITE_DIR, 'og-image.jpg');
+
+/** A JPEG's width and height, from its first start-of-frame marker; null if it is not a JPEG. */
+function jpegSize(buf) {
+    if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+    let i = 2;
+    while (i + 9 < buf.length) {
+        if (buf[i] !== 0xff) return null;
+        const marker = buf[i + 1];
+        const len = buf.readUInt16BE(i + 2);
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+            return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+        }
+        i += 2 + len;
+    }
+    return null;
+}
+
+/**
+ * What `--check` says about the share image every page's og:image points at: present, a 1200 x 630 JPEG (the doodle and the
+ * rainbow band as a palette PNG), light enough for a chat preview.
+ */
+export function checkOgImage(file = OG_IMAGE_FILE) {
+    const name = `apps/website/${path.basename(file)}`;
+    if (!fs.existsSync(file)) return [`${name} is missing; run 'node scripts/website-og-image.mjs'`];
+    const buf = fs.readFileSync(file);
+    const size = jpegSize(buf);
+    if (!size) return [`${name} is not a JPEG`];
+    const errors = [];
+    if (size.width !== 1200 || size.height !== 630) errors.push(`${name} is ${size.width}x${size.height}; the og:image tags say 1200x630`);
+    if (buf.length > 200 * 1024) errors.push(`${name} is ${Math.round(buf.length / 1024)} KB; keep it under 200 KB`);
+    return errors;
 }
 
 /**
@@ -1055,6 +1204,7 @@ export function checkWebsite() {
     }
 
     errors.push(...checkAuthPages());
+    errors.push(...checkOgImage());
 
     if (!fs.existsSync(SITEMAP_FILE) || fs.readFileSync(SITEMAP_FILE, 'utf8') !== buildSitemap()) {
         errors.push("apps/website/sitemap.xml is out of date; run 'node scripts/website-build.mjs'");

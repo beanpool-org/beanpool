@@ -72,7 +72,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
 import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
-import { vouchingAfterRevoke, landAwaitingInviteVoucher, inviteVoucherPromiseEnds, type InviteVoucherOutcome, type TellVoucher, type VoucherNotice } from './vouchers.js';
+import { vouchingAfterRevoke, landAwaitingInviteVoucher, endInviteVoucherPromise, type InviteVoucherOutcome, type TellVoucher, type VoucherNotice } from './vouchers.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -607,7 +607,7 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
         // A budget made from the list ends with the confirmation; room already given stays (engine/vouchers.ts).
         vouchingAfterRevoke(row.member_pubkey, actor);
         // A voucher budget an invite promised them, still waiting for a second admin, is not made.
-        inviteVoucherPromiseEnds(row.member_pubkey, actor);
+        endInviteVoucherPromise(row.member_pubkey, actor);
     })();
     return { id: row.id, status: 'revoked' };
 }
@@ -660,7 +660,7 @@ export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account
     db.prepare(`UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = ?
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
     // A voucher budget an invite promised them, still waiting for a second admin, is not made (plain rows, never a Bean).
-    inviteVoucherPromiseEnds(pubkey, 'node');
+    endInviteVoucherPromise(pubkey, 'node');
     const current = currentGeneration();
     if (current && holdersOf(current.id).has(pubkey)) markDropped(pubkey, current.id);
     dropNamesCopyOf(pubkey);

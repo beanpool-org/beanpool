@@ -779,28 +779,25 @@ export function landInviteVoucher(maker: string, entryId: string, joiner: string
 /**
  * Inside secondConfirmation's transaction: the voucher budget an invite promised this member, waiting for the second admin,
  * lands now (the maker's committee standing read now), and the invite says what became of it. The notice, if one was kept,
- * for the route to tell once it has committed. Never throws.
+ * for the route to tell once it has committed. Never a refusal: where the voucher can't land, the confirmation stands and the
+ * invite says why. A write that fails (the outcome's, say) fails the whole confirmation, as any write in it would, so a voucher
+ * never lands with its invite still saying it waits.
  */
 export function landAwaitingInviteVoucher(member: string, entryId: string): VoucherNotice | undefined {
-    try {
-        const inv = db.prepare(`SELECT code, created_by, voucher_level FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
-            AND voucher_outcome = 'awaiting_second' AND voucher_level IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
-            { code: string; created_by: string; voucher_level: number } | undefined;
-        if (!inv) return undefined;
-        const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level);
-        db.prepare('UPDATE invite_codes SET voucher_outcome = ? WHERE code = ?').run(r.outcome, inv.code);
-        return r.notice;
-    } catch (e) {
-        console.error('[Vouchers] ⚠️ Could not land a voucher waiting for a second admin:', (e as Error)?.message || e);
-        return undefined;
-    }
+    const inv = db.prepare(`SELECT code, created_by, voucher_level FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
+        AND voucher_outcome = 'awaiting_second' AND voucher_level IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
+        { code: string; created_by: string; voucher_level: number } | undefined;
+    if (!inv) return undefined;
+    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level);
+    db.prepare('UPDATE invite_codes SET voucher_outcome = ? WHERE code = ?').run(r.outcome, inv.code);
+    return r.notice;
 }
 
 /**
  * A confirmation revoked before the second admin confirmed it (engine/names-list.ts), in its transaction: the voucher budget
  * an invite promised this member is not made, and the invite says so (one `voucher_not_made` line by whoever revoked it).
  */
-export function inviteVoucherPromiseEnds(member: string, actor: string): void {
+export function endInviteVoucherPromise(member: string, actor: string): void {
     const waiting = db.prepare(`SELECT code, names_entry_id FROM invite_codes WHERE used_by = ? AND voucher_outcome = 'awaiting_second'`).all(member) as
         { code: string; names_entry_id: string }[];
     for (const w of waiting) {

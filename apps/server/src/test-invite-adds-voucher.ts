@@ -206,7 +206,8 @@ async function main(): Promise<void> {
     let invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     let linesBefore = allLines();
     const notPreset = await bind(owen, e2, { vouchAmount: 60 });
-    assert(notPreset.status === 400 && notPreset.body?.code === 'bad_amount', `2. a vouch of 60 on a bound invite: 400 bad_amount (${show(notPreset)})`);
+    assert(notPreset.status === 400 && notPreset.body?.code === 'bad_amount' && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore && allLines() === linesBefore,
+        `2. a vouch of 60 on a bound invite: 400 bad_amount, nothing written (${show(notPreset)})`);
     require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 100 })).status === 200 && budgetOf(ada.pk).left === 100, "Owen sets Ada's budget to 100");
     const adaFirst = await bind(ada, e2, { vouchAmount: 100 });
     require_(adaFirst.status === 201 && budgetOf(ada.pk).held === 100 && budgetOf(ada.pk).left === 0, `Ada's bound invite holds all 100 of hers (${show(adaFirst)})`);
@@ -299,6 +300,16 @@ async function main(): Promise<void> {
     assert(budgetOf(tamsin.pk).level === 800 && voucherRow(tamsin.pk)?.made_by === owen.pk && codeRow(b6.body.invite.code)?.voucher_outcome === 'made'
         && floorLog('voucher_made').filter((l) => l.member_pubkey === tamsin.pk).length === 1 && voucherNotices(tamsin.pk).length === 1,
         `6. then the voucher lands, made by Owen, with its line and its notice (${JSON.stringify(budgetOf(tamsin.pk))})`);
+    const e6b = await addEntry('Wynn Carrow');
+    const b6b = await bind(owen, e6b, { voucherLevel: 600 });
+    const wynn = newId('Wynn');
+    require_(b6b.status === 201 && (await redeem(wynn, b6b.body.invite.code)).status === 200 && codeRow(b6b.body.invite.code)?.voucher_outcome === 'awaiting_second',
+        'Wynn joins with another, waiting for a second admin');
+    const revoked = await call(ada, 'POST', `/api/names/confirmations/${liveConfirmation(wynn.pk)?.id}/revoke`, {});
+    const wynnNotMade = floorLog('voucher_not_made').filter((l) => l.member_pubkey === wynn.pk);
+    assert(revoked.status === 200 && !voucherRow(wynn.pk) && codeRow(b6b.body.invite.code)?.voucher_outcome === 'not_confirmed'
+        && wynnNotMade.length === 1 && wynnNotMade[0].actor_pubkey === ada.pk && wynnNotMade[0].old_value === e6b,
+        `6. revoked before the second admin confirms: the promise ends, one voucher_not_made line by Ada, no budget (${show(revoked)} ${JSON.stringify(wynnNotMade)})`);
     require_((await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: false })).status === 200, 'two admins to confirm goes back off');
 
     // ── 7. The maker left the credit committee ───────────────────────────────────────────────────────────────────
@@ -351,7 +362,7 @@ async function main(): Promise<void> {
     const byPassword = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: 1000 }, PASSWORD());
     assert(byToken.status === 401 && byPassword.status === 401 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore,
         `10. an automation token and a password session: 401, nothing written (${show(byToken)} | ${show(byPassword)})`);
-    setNodeRole('standby');
+    setNodeRole('backup');
     const onStandby = await bind(owen, e10, { voucherLevel: 1000 });
     setNodeRole('primary');
     assert(onStandby.status === 409 && onStandby.body?.code === 'standby' && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore, `10. a standby: 409 standby (${show(onStandby)})`);

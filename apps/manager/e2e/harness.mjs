@@ -130,8 +130,13 @@ export async function launch() {
  * `overrides` maps an API path to a function that edits the fixture's reply.
  * `handoffRole` is the role the hand-off link signs in as ('moderator' opens the moderator's Reports screen).
  * `colorScheme` is the phone's light or dark setting (dark unless asked).
+ * `publicOrigin` (e.g. 'https://riverbend.beanpool.org') makes the page believe it is served from that address, so Settings
+ * says that address (Home's chip, the setup wizard, the sign-in links) and not 127.0.0.1 and a random port: the manual's
+ * pictures use it (manual-shots.mjs). Every request to it is answered from the local build, so nothing leaves this machine.
+ * `rewriteBody` (optional) edits the text of every answer the fixtures give, after `overrides`: the manual's pictures use it
+ * to swap the stress fixtures' names for plain ones in one place.
  */
-export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {}, handoffRole = 'owner', colorScheme = 'dark' }) {
+export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {}, handoffRole = 'owner', colorScheme = 'dark', publicOrigin = '', rewriteBody = undefined }) {
     const context = await browser.newContext({
         viewport: { width, height },
         deviceScaleFactor: 1,
@@ -167,8 +172,20 @@ export async function openSettings(browser, origin, { width, height = 800, textS
                 : mockResponse(req.method(), url.pathname, url.searchParams, req.postData() || '');
         // A screen that shows only on some nodes (e.g. a primary rather than a standby): `overrides[path]` edits the reply.
         if (overrides[url.pathname]) json = overrides[url.pathname](json);
-        await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
+        const text = JSON.stringify(json);
+        await route.fulfill({ status, contentType: 'application/json', body: rewriteBody && text !== undefined ? rewriteBody(text) : text });
     });
+    if (publicOrigin) {
+        // Registered after the /api route above, so it is asked first: the page's own files come from the local build (the
+        // policy header with them), while /api, /proxy and the harness font are passed on to the handlers that answer them.
+        // A request this does not answer still falls to the rule above that refuses every host but 127.0.0.1.
+        const publicHost = new URL(publicOrigin).host;
+        await page.route((url) => url.host === publicHost, async (route) => {
+            const url = new URL(route.request().url());
+            if (/\/(api|proxy)\//.test(url.pathname) || url.pathname.startsWith('/__harness/')) return route.fallback();
+            await route.fulfill({ response: await route.fetch({ url: `${origin}${url.pathname}${url.search}` }) });
+        });
+    }
     await page.addInitScript(({ tab, css }) => {
         try {
             localStorage.setItem('bp_settings_active_tab', tab);
@@ -186,7 +203,7 @@ export async function openSettings(browser, origin, { width, height = 800, textS
         }
     }, { tab: screen.tab, css: (systemFont ? '' : FONT_CSS) + (textScale !== 1 ? TEXT_SCALE_CSS(textScale) : '') });
 
-    await page.goto(`${origin}/settings/${hash}`);
+    await page.goto(`${publicOrigin || origin}/settings/${hash}`);
     if (signedIn) {
         await page.waitForSelector('main', { timeout: 20000 });
         if (screen.sub) await selectSubTab(page, screen.sub);

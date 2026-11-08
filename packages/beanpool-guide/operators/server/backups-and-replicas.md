@@ -150,6 +150,8 @@ Or in the server's .env, for up to two destinations (Settings takes more, five i
 - Owners see the same on Home: "Backups off the server need attention", with what failed and when it is tried next.
 - One upload carries about 5 GB at most. A larger backup is refused in words: such a community is not covered yet.
 
+![The Backups off the server need attention card at the top of Home](images/home-backups-attention.webp)
+
 ### How long they are kept
 
 **Keep each backup** is 30 days by default. You can choose fewer, never more: a member who deletes their account is in every backup made before, and the members' guide promises that ends within 30 days. 30 days in .env is the most it reads; more is read as 30.

@@ -875,7 +875,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         return () => { cancelled = true; };
     }, []);
 
-    /** What was pasted into the invite field when it named a community (a link, or the message's address line), else null. */
+    /** The invite field's latest input when it named a community (a link, or the message's address line), else null. */
     const invitePasted = useRef<string | null>(null);
 
     async function handleCreate() {
@@ -2745,9 +2745,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 value={inviteCode}
                                 onChange={(e) => {
                                     // The field keeps the code alone; what a paste said about its community is kept beside it,
-                                    // for the answer when this community refuses the code (handleCreate), until the field is cleared.
-                                    if (inviteNamesAnotherCommunity(e.target.value, '') !== null) invitePasted.current = e.target.value;
-                                    else if (!e.target.value.trim()) invitePasted.current = null;
+                                    // for the answer when this community refuses the code (handleCreate), only while that paste
+                                    // is the latest input: any edit after it (select all and type) is a code the paste never spoke for.
+                                    invitePasted.current = inviteNamesAnotherCommunity(e.target.value, '') !== null ? e.target.value : null;
                                     setInviteCode(formatInviteCode(e.target.value));
                                 }}
                                 placeholder={t('e.g. BP-7K3X-9M2W')}

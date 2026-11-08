@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { inviteShareText } from '@beanpool/core';
 
 vi.mock('./identity', () => ({ loadIdentity: vi.fn(async () => null) }));

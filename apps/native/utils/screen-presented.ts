@@ -21,9 +21,13 @@ export const PRESENTED_FALLBACK_MS = 1500;
 /** A Modal that was asked to show and has not fired `onShow` after this long was refused by the platform. */
 export const MODAL_SHOW_GUARD_MS = 1000;
 
-/** What these hooks need of a navigation prop: react-navigation's `addListener`, for the stack's `transitionEnd`. */
+/**
+ * What these hooks need of a navigation prop: react-navigation's `addListener`, for the native stack's `transitionEnd`. The
+ * stack-agnostic NavigationProp expo-router hands out does not list that event (it is the native stack's own), so its
+ * parameters are loose here.
+ */
 export type TransitionSource = {
-    addListener: (type: 'transitionEnd', cb: (e: { data?: { closing?: boolean } }) => void) => unknown;
+    addListener: (type: any, cb: any) => unknown;
 };
 
 /**
@@ -34,14 +38,13 @@ export function useScreenPresented(navigation: TransitionSource): boolean {
     const [presented, setPresented] = useState(false);
     useEffect(() => {
         const done = () => setPresented(true);
-        const off = navigation.addListener('transitionEnd', (e) => { if (!e?.data?.closing) done(); });
+        const off = navigation.addListener('transitionEnd', (e: { data?: { closing?: boolean } }) => { if (!e?.data?.closing) done(); });
         const fallback = setTimeout(done, PRESENTED_FALLBACK_MS);
         return () => {
             clearTimeout(fallback);
             if (typeof off === 'function') off();
         };
         // The navigation prop is the screen's own for as long as it is mounted.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     return presented;
 }

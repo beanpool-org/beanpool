@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 157,
-  "hash": "1e3d69258efeecd61b3f96843a6cf344ec496e29201447ceb0166765bc115a8a",
+  "version": 158,
+  "hash": "463a1ae154b98f3094e636af5750c8da448d5fb53ed6f50d482a817895a668e4",
   "sections": [
     {
       "id": "setup",
@@ -3500,6 +3500,11 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/home-backups-attention.webp",
+          "alt": "The Backups off the server need attention card at the top of Home"
+        },
+        {
           "type": "h3",
           "text": "How long they are kept"
         },
@@ -5148,7 +5153,7 @@
         {
           "type": "ul",
           "items": [
-            "turn the market, messages, links with other communities, invites or the web app off for everyone;",
+            "the web app: turned off, your server still answers the API and Settings but not the web app (who can join is set under Core settings; links with other communities are set on the server);",
             "the rate limit (see Rate limits);",
             "which other websites may call your server."
           ]

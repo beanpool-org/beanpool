@@ -49,7 +49,7 @@ import {
     type NamesSigner,
 } from './names-list-trust.js';
 import type { HealthExceptionsBody, HealthLogLine } from './names-list-health.js';
-import type { BoundInvite } from './names-list-invite.js';
+import { namesInviteBody, type BoundInvite, type NamesInviteBody } from './names-list-invite.js';
 
 // ── What a device supplies ───────────────────────────────────────────────────────────────────
 
@@ -2031,9 +2031,13 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         return call<{ id: string }>(anchor, identity, 'POST', `${NAMES_PATH}/entries`, { id: sealed.id, ciphertext: sealed.ciphertext, keyId });
     }
 
-    /** An invite bound to this entry (community modes slice 3): redeeming it confirms the joiner against it, by this admin. */
-    function inviteForNamesEntry(anchor: string, identity: I, entryId: string) {
-        return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, {});
+    /**
+     * An invite bound to this entry (community modes slice 3): redeeming it confirms the joiner against it, by this admin.
+     * `body` (DESIGN-invites-and-names-list-amend3-fable.md §2, Q1): a vouch preset and, for the credit committee, a voucher
+     * budget the joiner is made a voucher with; only what is given is sent ({@link namesInviteBody}).
+     */
+    function inviteForNamesEntry(anchor: string, identity: I, entryId: string, body: NamesInviteBody = {}) {
+        return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, namesInviteBody(body));
     }
 
     /** Every bound invite on this community, for the admins: used or not, and what each did. */

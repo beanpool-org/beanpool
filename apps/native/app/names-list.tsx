@@ -48,7 +48,7 @@ import { VoucherCard } from '../components/VoucherCard';
 import {
     canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
 } from '../utils/voucher-rules';
-import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
+import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, showsBoundInviteLine, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
 import {
     DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
@@ -1051,6 +1051,7 @@ export default function NamesListScreen() {
                     // Its debt history (#1597): while one is open, nobody is confirmed against it; the way on is settling it.
                     const history = debtsOfEntry(debts, e.id);
                     const open = openDebtOf(debts, e.id);
+                    const invite = invitesForEntry(boundInvites, e.id)[0];
                     return (
                         <View key={e.id} style={styles.entry}>
                             {e.text ? (
@@ -1072,8 +1073,10 @@ export default function NamesListScreen() {
                                 </View>
                             ) : null}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : t('No member confirmed against it')}</Text>
-                            {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
-                                <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
+                            {/* Its newest bound invite: on an unconfirmed entry, always; on a confirmed or waiting one, when the invite
+                                promised a voucher budget, so what became of it is seen (#2970's review, note 2). */}
+                            {invite && showsBoundInviteLine(invite, !!e.confirmation) ? (
+                                <Text style={styles.entryMeta}>{boundInviteLine(invite, (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
                             ) : null}
                             {history.map((d) => (
                                 <Text key={d.id} style={[styles.entryMeta, d.status === 'open' && styles.lockedText]}>{debtLine(d, at)}</Text>

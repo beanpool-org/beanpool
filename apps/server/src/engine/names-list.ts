@@ -563,11 +563,27 @@ export interface BoundInvite {
  * a key of her own (confirmed by the maker) and second that herself.
  */
 export function readBoundInvites(): BoundInvite[] {
-    return (db.prepare(
+    const rows = db.prepare(
         `SELECT names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
                 names_bind_outcome AS outcome, voucher_level AS voucherLevel, voucher_outcome AS voucherOutcome
          FROM invite_codes WHERE names_entry_id IS NOT NULL ORDER BY created_at DESC LIMIT 500`,
-    ).all() as BoundInvite[]);
+    ).all() as BoundInvite[];
+    // `names_bind_outcome` is what the redeem did, kept as written. A redeem that left the confirmation waiting for a second
+    // admin reads as the confirmation stands now (#2970's review, note 3): seconded since, it was confirmed; revoked before a
+    // second admin came (or the member left), it waits for nothing, so the line says only that they joined (null).
+    const latest = db.prepare(
+        'SELECT needs_second, seconded_at, revoked_at FROM confirmations WHERE member_pubkey = ? AND entry_id = ? ORDER BY confirmed_at DESC LIMIT 1',
+    );
+    return rows.map((r) => (r.outcome === 'awaiting_second' && r.usedBy
+        ? { ...r, outcome: waitingOutcomeNow(latest.get(r.usedBy, r.entryId) as Pick<ConfirmationRow, 'needs_second' | 'seconded_at' | 'revoked_at'> | undefined) }
+        : r));
+}
+
+/** A redeem's `awaiting_second`, read against the latest confirmation of that member against that entry. */
+function waitingOutcomeNow(c: Pick<ConfirmationRow, 'needs_second' | 'seconded_at' | 'revoked_at'> | undefined): InviteBindOutcome | null {
+    if (!c) return null;
+    if (c.seconded_at || !c.needs_second) return 'confirmed';
+    return c.revoked_at ? null : 'awaiting_second';
 }
 
 /**

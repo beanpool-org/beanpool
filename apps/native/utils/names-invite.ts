@@ -7,5 +7,7 @@
  * Shared with the web app (DESIGN-names-list-web-fable.md S1): @beanpool/core names-list-invite.ts, moved from here
  * unchanged.
  */
-export { BIND_OUTCOME_WORDS, boundInviteLine, invitesForEntry, inviteThisPerson, inviteLink } from '@beanpool/core';
-export type { InviteBindOutcome, BoundInvite } from '@beanpool/core';
+export {
+    BIND_OUTCOME_WORDS, VOUCHER_OUTCOME_WORDS, boundInviteLine, invitesForEntry, inviteThisPerson, inviteLink, namesInviteBody, showsBoundInviteLine,
+} from '@beanpool/core';
+export type { InviteBindOutcome, InviteVoucherOutcome, BoundInvite, NamesInviteBody } from '@beanpool/core';

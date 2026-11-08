@@ -10,6 +10,7 @@
  */
 
 import { LanguageSwitch } from '../components/LanguageSwitch';
+import { StepAction } from '../components/StepAction';
 import { NodeApkLink } from '../components/NodeApkLink';
 import { BoldWords } from '../components/BoldWords';
 import { Sentence } from '../components/Sentence';
@@ -1643,22 +1644,24 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </div>
                             )}
 
-                            <button
-                                type="button"
-                                onClick={handleRename}
-                                disabled={loading}
-                                style={{
-                                    width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                    border: 'none',
-                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                    color: 'var(--bp-info-on)', fontSize: '1rem',
-                                    fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-                                    fontFamily: 'inherit', transition: 'background 0.2s',
-                                }}
-                            >
-                                {/* After RENAME_NOT_KEPT, with the node's name still in the field: write it here again. */}
-                                {loading ? t('Saving…') : renameUnsaved !== null && callsign.trim() === renameUnsaved ? t('Try again') : t('Next →')}
-                            </button>
+                            <StepAction>
+                                <button
+                                    type="button"
+                                    onClick={handleRename}
+                                    disabled={loading}
+                                    style={{
+                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
+                                        border: 'none',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        color: 'var(--bp-info-on)', fontSize: '1rem',
+                                        fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontFamily: 'inherit', transition: 'background 0.2s',
+                                    }}
+                                >
+                                    {/* After RENAME_NOT_KEPT, with the node's name still in the field: write it here again. */}
+                                    {loading ? t('Saving…') : renameUnsaved !== null && callsign.trim() === renameUnsaved ? t('Try again') : t('Next →')}
+                                </button>
+                            </StepAction>
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
@@ -1851,30 +1854,32 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
-                            <button
-                                onClick={() => {
-                                    setShowAvatarSetup(false);
-                                    if (byArea) setShowAreaStep(true);
-                                    setError(null);
-                                }}
-                                disabled={loading}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.85rem',
-                                    borderRadius: '10px',
-                                    border: 'none',
-                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                    // White on the blue (and on the grey while it sends).
-                                    color: 'var(--bp-info-on)',
-                                    fontSize: '1rem',
-                                    fontWeight: 600,
-                                    cursor: loading ? 'not-allowed' : 'pointer',
-                                    fontFamily: 'inherit',
-                                    transition: 'background 0.2s',
-                                }}
-                            >
-                                {t('Next →')}
-                            </button>
+                            <StepAction>
+                                <button
+                                    onClick={() => {
+                                        setShowAvatarSetup(false);
+                                        if (byArea) setShowAreaStep(true);
+                                        setError(null);
+                                    }}
+                                    disabled={loading}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.85rem',
+                                        borderRadius: '10px',
+                                        border: 'none',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        // White on the blue (and on the grey while it sends).
+                                        color: 'var(--bp-info-on)',
+                                        fontSize: '1rem',
+                                        fontWeight: 600,
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontFamily: 'inherit',
+                                        transition: 'background 0.2s',
+                                    }}
+                                >
+                                    {t('Next →')}
+                                </button>
+                            </StepAction>
 
                             {/* After an invite: back to the name, on the same account (backFromPhotoStep). Not after the
                                 open door, whose name is settled with its sign-in: that step has no going back to. */}
@@ -2035,20 +2040,22 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
-                            <button
-                                onClick={handleSeedConfirmed}
-                                disabled={loading}
-                                style={{
-                                    width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                    border: 'none',
-                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                    color: 'var(--bp-info-on)', fontSize: '1rem',
-                                    fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                                    fontFamily: 'inherit', transition: 'background 0.2s',
-                                }}
-                            >
-                                {loading ? t('Entering...') : t("Let's Begin! 🚀")}
-                            </button>
+                            <StepAction>
+                                <button
+                                    onClick={handleSeedConfirmed}
+                                    disabled={loading}
+                                    style={{
+                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
+                                        border: 'none',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        color: 'var(--bp-info-on)', fontSize: '1rem',
+                                        fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontFamily: 'inherit', transition: 'background 0.2s',
+                                    }}
+                                >
+                                    {loading ? t('Entering...') : t("Let's Begin! 🚀")}
+                                </button>
+                            </StepAction>
 
                             {/* Chosen at Safety Backup: the sign-in, now that nothing of onboarding is left to lose. The
                                 page leaves only once finishOnboarding has saved the photo and asked to keep the key. */}
@@ -2200,33 +2207,35 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                               stranded anyone who could not write them down right then at a
                               dead end — with an account already created on the node.
                             */}
-                            <button
-                                onClick={() => {
-                                    setAddSignInAfterTour(false);
-                                    recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                    // A member who ticked "I've written them down" has done the thing
-                                    // Settings' banner nags about. Without this, finishing onboarding
-                                    // correctly still greets them with "you haven't saved your recovery
-                                    // phrase yet" — a warning that is not true, which is how warnings
-                                    // stop being read. Only on confirm: skipping leaves it showing.
-                                    if (seedConfirmed && pendingIdentity) {
-                                        localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
-                                    }
-                                    setShowOnboardingGuide(true);
-                                    setError(null);
-                                }}
-                                disabled={loading}
-                                style={{
-                                    width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                    border: 'none',
-                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                    color: 'var(--bp-info-on)', fontSize: '1rem',
-                                    fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                                    fontFamily: 'inherit', transition: 'background 0.2s',
-                                }}
-                            >
-                                {t('Next →')}
-                            </button>
+                            <StepAction>
+                                <button
+                                    onClick={() => {
+                                        setAddSignInAfterTour(false);
+                                        recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                                        // A member who ticked "I've written them down" has done the thing
+                                        // Settings' banner nags about. Without this, finishing onboarding
+                                        // correctly still greets them with "you haven't saved your recovery
+                                        // phrase yet" — a warning that is not true, which is how warnings
+                                        // stop being read. Only on confirm: skipping leaves it showing.
+                                        if (seedConfirmed && pendingIdentity) {
+                                            localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                        }
+                                        setShowOnboardingGuide(true);
+                                        setError(null);
+                                    }}
+                                    disabled={loading}
+                                    style={{
+                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
+                                        border: 'none',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        color: 'var(--bp-info-on)', fontSize: '1rem',
+                                        fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontFamily: 'inherit', transition: 'background 0.2s',
+                                    }}
+                                >
+                                    {t('Next →')}
+                                </button>
+                            </StepAction>
 
                             {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
                                 as a second. Chosen here, it is offered at the end of the tour, and the page leaves for the
@@ -2799,21 +2808,23 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
-                            <button
-                                onClick={handleCreate}
-                                disabled={loading}
-                                style={{
-                                    width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                    border: 'none',
-                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-commit-fill)',
-                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
-                                    fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-                                    fontFamily: 'inherit', transition: 'background 0.2s',
-                                    marginBottom: '1rem',
-                                }}
-                            >
-                                {loading ? t('Creating...') : t('Create Identity & Join →')}
-                            </button>
+                            <StepAction>
+                                <button
+                                    onClick={handleCreate}
+                                    disabled={loading}
+                                    style={{
+                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
+                                        border: 'none',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-commit-fill)',
+                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                        fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontFamily: 'inherit', transition: 'background 0.2s',
+                                        marginBottom: '1rem',
+                                    }}
+                                >
+                                    {loading ? t('Creating...') : t('Create Identity & Join →')}
+                                </button>
+                            </StepAction>
 
                             {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28). Its card above
                                 says the same with its own doors (front doors S15); this is for a node too old to send one. ===== */}

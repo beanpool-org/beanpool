@@ -234,6 +234,13 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('deferred_wage_claims', 'keeper_pubkey');
     move('deferred_wage_claims', 'enterprise_pubkey');
 
+    // (s2) standing_deals (engine/standing-deals.ts): a standing deal carries on under the new key (DESIGN-standing-deals-fable
+    // §1.5). Its authorisation stays as it was signed (auth_signer, and the payee its text names): the node reads a key that
+    // was re-keyed to the one on the row as the same member (standing-deals.ts sameMember).
+    move('standing_deals', 'payer_pubkey');
+    move('standing_deals', 'payee_pubkey');
+    move('standing_deals', 'stopped_by');
+
     // (t) settlements
     move('settlements', 'buyer_pubkey');
     move('settlements', 'seller_pubkey');

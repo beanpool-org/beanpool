@@ -29,6 +29,13 @@
  * 14. The transactions read carries the standing fields, and its ETag changes when the phase does.
  * 15. A re-key of the payee, then of the payer: the standing deal carries on under each new key.
  * 16. An enterprise payee: the tick's release counts toward its earned surplus with no signer.
+ * 17. A moderator removes the listing (an admin's removal, Prune Stale Posts): the period held is refunded and its standing
+ *     deal ends at once, one between its periods too; both told; later ticks hold nothing back; the payer may go on holiday.
+ * 18. A period's row refunded or paid by a door that never told its standing deal: at the period's end, or held back, it
+ *     ends at the next tick (never stuck), and nobody is told Beans are waiting.
+ * 19. The author removes a listing: the payer between periods is told it ended, one whose period is held that it stopped.
+ * 20. The keeper who signed an enterprise's standing deal on an Offer is removed: no further period is held.
+ * 21. No unused helper is exported.
  *
  * Run: SERVER_SUITES_ONLY=test-standing-deals TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -544,6 +551,127 @@ async function main(): Promise<void> {
     assert(t16.settled >= 1 && near(surplusOf() - surplusBefore, 20) && standingRow(a16.id).phase === 'held',
         `the tick's release counts toward the enterprise's earned surplus, as a Release does (${surplusOf() - surplusBefore})`);
     assertConserved('after the enterprise payee');
+
+    // ── 17. A moderator removes the listing: each standing deal on it ends at once (round 2, the deciding review) ────────
+    console.log('── 17. A moderator removes the listing ──');
+    const vic = makeMember('Vic', 300);
+    const shed = createPost('offer', 'services', 'Bike Shed', 'A locked shed', 40, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const a17 = authorise(vic, { postId: shed.id, payee: rob.pk, beans: 40, unit: 'month', max: null });
+    const acc17 = await post(vic, '/api/marketplace/posts/accept', { postId: shed.id, buyerPublicKey: vic.pk, standing: a17.standing });
+    const wes = makeMember('Wes', 45);
+    const a17b = authorise(wes, { postId: shed.id, payee: rob.pk, beans: 40, unit: 'month', max: null });
+    const acc17b = await post(wes, '/api/marketplace/posts/accept', { postId: shed.id, buyerPublicKey: wes.pk, standing: a17b.standing });
+    assert(acc17.status === 200 && acc17b.status === 200, `two standing deals on one listing (${show(acc17)}; ${show(acc17b)})`);
+    drain(wes, 5);
+    const end17 = Date.parse(periodEnd(a17.startsAt, 'month', 1));
+    tick(end17 + 1000);
+    assert(standingRow(a17.id).phase === 'held' && standingRow(a17.id).periods_done === 1 && standingRow(a17b.id).phase === 'short',
+        `Vic's second month is held; Wes is short, between his periods (${standingRow(a17.id).phase}, ${standingRow(a17b.id).phase})`);
+    const vicBefore = bal(vic.pk);
+    const vicHeldRow = periodRows(a17.id).find(r => r.status === 'pending');
+    const modRemoved = se.adminDeletePost(shed.id);
+    const sd17 = standingRow(a17.id);
+    const sd17b = standingRow(a17b.id);
+    assert(modRemoved && near(bal(vic.pk) - vicBefore, 40) && periodRows(a17.id).find(r => r.id === vicHeldRow?.id)?.status === 'cancelled',
+        `a moderator's removal refunds the month held (${r2(bal(vic.pk) - vicBefore)} back)`);
+    assert(sd17.phase === 'ended' && sd17.ended_reason === 'cancelled', `the standing deal whose month was refunded ends with it, at once (${sd17.phase}/${sd17.ended_reason})`);
+    assert(sd17b.phase === 'ended' && sd17b.ended_reason === 'listing_gone', `the one between its periods ends too (${sd17b.phase}/${sd17b.ended_reason})`);
+    assert(keptKinds(vic.pk, a17.id).includes('standing_ended') && keptKinds(rob.pk, a17.id).includes('standing_ended')
+        && keptKinds(wes.pk, a17b.id).includes('standing_ended') && keptKinds(rob.pk, a17b.id).includes('standing_ended'), 'both sides of each are told it ended');
+    tick(Date.parse(periodEnd(a17.startsAt, 'month', 2)) + 1000);
+    tick(end17 + 40 * DAY);
+    assert(standingRow(a17.id).phase === 'ended' && standingRow(a17b.id).phase === 'ended' && periodRows(a17.id).length === 2 && periodRows(a17b.id).length === 1
+        && !keptKinds(vic.pk, a17.id).includes('standing_held_back') && !keptKinds(rob.pk, a17.id).includes('standing_held_back'),
+        'the ticks at the month\'s end and 40 days on hold nothing and hold nothing back: nobody is told refunded Beans are waiting');
+    // Prune Stale Posts takes the same door.
+    const hut = createPost('offer', 'services', 'Garden Hut', 'Shelves and a bench', 10, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const a17c = authorise(vic, { postId: hut.id, payee: rob.pk, beans: 10, unit: 'week', max: null });
+    await post(vic, '/api/marketplace/posts/accept', { postId: hut.id, buyerPublicKey: vic.pk, standing: a17c.standing });
+    const pruned = se.adminBulkDeletePosts([hut.id]);
+    assert(pruned === 1 && standingRow(a17c.id).phase === 'ended' && periodRows(a17c.id)[0].status === 'cancelled' && near(bal(`escrow_${periodRows(a17c.id)[0].id}`), 0),
+        `Prune Stale Posts: the week refunded and the standing deal ended (${standingRow(a17c.id).phase})`);
+    let vicHoliday = 'ok';
+    try { setHolidayMode(vic.pk, true); } catch (e: any) { vicHoliday = e?.message ?? 'refused'; }
+    assert(vicHoliday === 'ok', `the payer may go on holiday again (${vicHoliday})`);
+    setHolidayMode(vic.pk, false);
+    assertConserved('after the moderator removals');
+
+    // ── 18. A period's row settled by a door that never told its standing deal: it ends, it is never stuck ──────────────
+    console.log('── 18. A row settled behind its back ──');
+    const xia = makeMember('Xia', 300);
+    const loft = createPost('offer', 'services', 'Loft Storage', 'Dry and dusty', 30, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const a18 = authorise(xia, { postId: loft.id, payee: rob.pk, beans: 30, unit: 'month', max: null });
+    await post(xia, '/api/marketplace/posts/accept', { postId: loft.id, buyerPublicKey: xia.pk, standing: a18.standing });
+    // Refunded and cancelled as a door that never calls in would (the Beans conserved, the standing row untouched).
+    const r18 = periodRows(a18.id)[0];
+    assert(!!transfer(`escrow_${r18.id}`, xia.pk, 30, 'refunded by a door that never told it', 'escrow', true), 'the period is refunded behind its back');
+    db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?`).run(r18.id);
+    const t18 = tick(Date.parse(periodEnd(a18.startsAt, 'month', 1)) + 1000);
+    const sd18 = standingRow(a18.id);
+    assert(t18.ended >= 1 && sd18.phase === 'ended' && sd18.ended_reason === 'cancelled' && periodRows(a18.id).length === 1,
+        `at the month's end a period whose row was refunded ends the standing deal, not held back (${JSON.stringify(t18)}, ${sd18.phase}/${sd18.held_back_reason ?? sd18.ended_reason})`);
+    assert(keptKinds(xia.pk, a18.id).includes('standing_ended') && !keptKinds(xia.pk, a18.id).includes('standing_held_back') && !keptKinds(rob.pk, a18.id).includes('standing_held_back'),
+        'both are told it ended; nobody is told the Beans are waiting');
+    // One held back by its payer, its row then settled behind its back: the next tick ends it, whenever that is.
+    const xan = makeMember('Xan', 300);
+    const a18b = authorise(xan, { postId: loft.id, payee: rob.pk, beans: 30, unit: 'month', max: null });
+    await post(xan, '/api/marketplace/posts/accept', { postId: loft.id, buyerPublicKey: xan.pk, standing: a18b.standing });
+    await post(xan, `/api/marketplace/standing/${a18b.id}/hold-back`, {});
+    const r18b = periodRows(a18b.id)[0];
+    assert(!!transfer(`escrow_${r18b.id}`, rob.pk, 30, 'paid by a door that never told it', 'escrow', true), 'the held-back period is paid behind its back');
+    db.prepare(`UPDATE marketplace_transactions SET status = 'completed' WHERE id = ?`).run(r18b.id);
+    const xanStop = await post(xan, `/api/marketplace/standing/${a18b.id}/stop`, {});
+    assert(xanStop.status === 200 && standingRow(a18b.id).phase === 'held_back', `a Stop alone can't end it (${show(xanStop)})`);
+    tick(Date.now() + 60_000);
+    const sd18b = standingRow(a18b.id);
+    assert(sd18b.phase === 'ended' && sd18b.ended_reason === 'cant_run' && keptKinds(xan.pk, a18b.id).includes('standing_ended') && keptKinds(rob.pk, a18b.id).includes('standing_ended'),
+        `a held-back standing deal with nothing left in trust ends at the next tick, both told (${sd18b.phase}/${sd18b.ended_reason})`);
+    let xanHoliday = 'ok';
+    try { setHolidayMode(xan.pk, true); } catch (e: any) { xanHoliday = e?.message ?? 'refused'; }
+    assert(xanHoliday === 'ok', `and its payer may go on holiday (${xanHoliday})`);
+    setHolidayMode(xan.pk, false);
+    assertConserved('after the rows settled behind their backs');
+
+    // ── 19. The author removes a listing: the other side is told, between periods too ──────────────────────────────────
+    console.log('── 19. The author removes it: the payer is told ──');
+    const yan = makeMember('Yan', 50);
+    const desk = createPost('offer', 'services', 'Desk Space', 'A desk by the window', 45, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const a19 = authorise(yan, { postId: desk.id, payee: rob.pk, beans: 45, unit: 'week', max: null });
+    await post(yan, '/api/marketplace/posts/accept', { postId: desk.id, buyerPublicKey: yan.pk, standing: a19.standing });
+    drain(yan, 5);
+    tick(Date.parse(periodEnd(a19.startsAt, 'week', 1)) + 1000);
+    assert(standingRow(a19.id).phase === 'short', 'Yan is short, between his periods');
+    const zoe = makeMember('Zoe', 300);
+    const a19b = authorise(zoe, { postId: desk.id, payee: rob.pk, beans: 45, unit: 'week', max: null });
+    await post(zoe, '/api/marketplace/posts/accept', { postId: desk.id, buyerPublicKey: zoe.pk, standing: a19b.standing });
+    const deskRemoved = await post(rob, '/api/marketplace/posts/remove', { id: desk.id, authorPublicKey: rob.pk });
+    assert(deskRemoved.status === 200 && standingRow(a19.id).phase === 'ended' && standingRow(a19b.id).phase === 'held' && !!standingRow(a19b.id).stopped_at,
+        `the author removes it: the short one ends, the held one stops after its week (${show(deskRemoved)})`);
+    assert(keptKinds(yan.pk, a19.id).includes('standing_ended'), 'the payer between periods is told it ended');
+    assert(keptKinds(zoe.pk, a19b.id).includes('standing_stopped'), 'the payer whose week is held is told it stopped');
+    assert(!keptKinds(rob.pk, a19.id).includes('standing_ended') && !keptKinds(rob.pk, a19b.id).includes('standing_stopped'), 'the author who removed it is not told what they did');
+
+    // ── 20. The keeper who signed an enterprise's standing deal is a keeper no more: nothing more is held ───────────────
+    console.log('── 20. The signer is no longer a keeper ──');
+    const windows = createPost('offer', 'services', 'Window Cleaning', 'Once a month', 15, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const e20 = engineAccept(windows.id, rob.pk, 15);
+    assert(!!e20.tx, `a keeper signs an enterprise's standing deal on an Offer (${e20.err?.message ?? 'ok'})`);
+    const start20 = standingRow(e20.id).starts_at as string;
+    tick(Date.parse(periodEnd(start20, 'month', 1)) + 1000);
+    assert(standingRow(e20.id).phase === 'held' && periodRows(e20.id).length === 2, 'while the signer keeps the enterprise, the next month is held');
+    db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').run(ent.pk, keeper2.pk);
+    tick(Date.parse(periodEnd(start20, 'month', 2)) + 1000);
+    const sd20 = standingRow(e20.id);
+    const thirdHold = db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE from_pubkey = ? AND auth_payload = ?').get(ent.pk, `standing:${e20.id}:3`) as { n: number };
+    assert(sd20.phase === 'ended' && sd20.ended_reason === 'cant_run' && periodRows(e20.id).length === 2 && periodRows(e20.id)[1].status === 'completed' && thirdHold.n === 0,
+        `the signer removed as a keeper: the month held is paid, no further month is held from the enterprise (${sd20.phase}/${sd20.ended_reason}, ${periodRows(e20.id).length} rows, ${thirdHold.n} third holds)`);
+    // An enterprise keeps no notices of its own (engine/kept-notices.ts canHold): its payee is told.
+    assert(keptKinds(rob.pk, e20.id).includes('standing_ended'), 'the payee is told it ended');
+    assertConserved('after the keeper left');
+
+    // ── 21. No helper nothing calls ────────────────────────────────────────────────────────────────────────────────────
+    const standingModule = await import('./engine/standing-deals.js') as Record<string, unknown>;
+    assert(!('liveStandingPeriodsOn' in standingModule) && !('resetStandingLogs' in standingModule), 'the module exports no helper nothing calls (liveStandingPeriodsOn, resetStandingLogs)');
 
     assertConserved('at the end');
     console.log(`\n${passed}/${run} assertions passed`);

@@ -300,12 +300,6 @@ function logOnce(id: string, line: string): void {
     console.error(`[Standing] ${line}`);
 }
 
-/** For a suite: forget what was logged, as a restart does. */
-export function resetStandingLogs(): void {
-    loggedOnce.clear();
-    loggedBeansOff = false;
-}
-
 /**
  * The key a member holds now: `key` itself, or the key a re-key moved it to, followed to the end (invalidated_keys.rekeyed_to;
  * engine/key-move.ts moves the standing row, not the text its payer signed). At most a few links; a loop stops.
@@ -358,7 +352,7 @@ export function tickStandingDeals(hooks: StandingHooks, now: number = Date.now()
             if (sd.phase === 'held') {
                 const r = settle(hooks, sd, now);
                 if (r === 'settled' || r === 'settled-ended') out.settled++;
-                if (r === 'settled-ended') out.ended++;
+                if (r === 'settled-ended' || r === 'ended') out.ended++;
                 sd = readStanding(row.id);
             }
             if (sd && (sd.phase === 'due' || sd.phase === 'short') && Date.parse(sd.next_due_at) <= now) {
@@ -371,8 +365,41 @@ export function tickStandingDeals(hooks: StandingHooks, now: number = Date.now()
             logOnce(row.id, `standing deal ${row.id} could not be run: ${e?.message || e}`);
         }
     }
+    try { out.ended += endStranded(hooks); } catch (e: any) { console.warn('[Standing] Ending stranded standing deals failed:', e?.message || e); }
     try { warnAhead(hooks, now); } catch (e: any) { console.warn('[Standing] The short-ahead notices failed:', e?.message || e); }
     return out;
+}
+
+/**
+ * A period's row settled by a door that never told its standing deal (none does today: completePostTransaction,
+ * cancelPostTransaction, resolveEscrowDispute and adminDeletePost all call in): nothing is in trust for the period any more,
+ * so no person can settle it, and a deal 'held' or 'held_back' on it would never end (the deciding review of #2980: Stop
+ * leaves 'held_back' as it is, Release and Cancel need a pending row, the tick never selects 'held_back', and the payer is
+ * kept from holiday mode for good). It ends, and both are told. The row's own status says how: refunded, or settled.
+ */
+function strandedEnd(row: { status: string } | null | undefined): { reason: StandingEndReason; body: (title: string) => string } {
+    return row && (row.status === 'cancelled' || row.status === 'rejected')
+        ? { reason: 'cancelled', body: standingLines.ended }
+        : { reason: 'cant_run', body: standingLines.cantRun };
+}
+
+/** Each standing deal held or held back on a row that is no longer pending (or gone): ended (strandedEnd). Returns how many. */
+function endStranded(hooks: StandingHooks): number {
+    const stranded = db.prepare(`SELECT sd.*, mt.status AS current_status FROM standing_deals sd
+                                   LEFT JOIN marketplace_transactions mt ON mt.id = sd.current_tx_id
+                                  WHERE sd.phase IN ('held', 'held_back') AND (mt.id IS NULL OR mt.status != 'pending') LIMIT 200`)
+        .all() as Array<StandingRow & { current_status: string | null }>;
+    let ended = 0;
+    for (const sd of stranded) {
+        try {
+            logOnce(sd.id, `standing deal ${sd.id}: period ${sd.periods_done + 1}'s row is ${sd.current_status ?? 'gone'}, so nothing is in trust for it and it ends`);
+            const how = strandedEnd(sd.current_status === null ? null : { status: sd.current_status });
+            if (endIfUnmoved(hooks, sd, how.reason, how.body, ['held', 'held_back'])) ended++;
+        } catch (e: any) {
+            logOnce(sd.id, `standing deal ${sd.id} could not be ended: ${e?.message || e}`);
+        }
+    }
+    return ended;
 }
 
 /** Hold a period back by the node (the caller's transaction is opened here): a person settles it; both are told. */
@@ -388,12 +415,19 @@ function holdBackByNode(hooks: StandingHooks, sd: StandingRow, reason: StandingH
 }
 
 /** The period under way has ended: release it to the payee (step 1), or hold it back for a person when that isn't safe. */
-function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' | 'settled-ended' | 'held_back' {
+function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' | 'settled-ended' | 'held_back' | 'ended' | 'moved' {
     const n = sd.periods_done + 1;
     const title = titleOf(sd.post_id);
     const row = sd.current_tx_id ? db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(sd.current_tx_id) as any : null;
+    // Nothing in trust for the period any more (its row refunded or settled by a door that never told it, or gone): no person
+    // could settle a hold back, so it would never end. It ends (strandedEnd), and nobody is told Beans are waiting.
+    if (!row || row.status !== 'pending') {
+        logOnce(sd.id, `standing deal ${sd.id}: period ${n}'s row is ${row?.status ?? 'gone'}, so nothing is in trust for it and it ends`);
+        const how = strandedEnd(row);
+        return endIfUnmoved(hooks, sd, how.reason, how.body, ['held']) ? 'ended' : 'moved';
+    }
     // The row must be this period's, held, for no more than the authorisation allows, between these two.
-    if (!row || row.status !== 'pending' || row.standing_id !== sd.id || row.period_no !== n || row.buyer_pubkey !== sd.payer_pubkey
+    if (row.standing_id !== sd.id || row.period_no !== n || row.buyer_pubkey !== sd.payer_pubkey
         || row.seller_pubkey !== sd.payee_pubkey || !(row.credits <= sd.beans_per_period + 1e-9) || !boundsRow(sd)) {
         logOnce(sd.id, `standing deal ${sd.id}: period ${n}'s row does not match its authorisation, so the node does not release it`);
         return holdBackByNode(hooks, sd, 'cant_run', standingLines.cantRunHeld(title));
@@ -441,17 +475,29 @@ function endReasonOf(sd: StandingRow): StandingEndReason {
     return closed ? 'account_closed' : 'cant_run';
 }
 
-/** End it from the tick, with its notice to both. */
-function endFromTick(hooks: StandingHooks, sd: StandingRow, reason: StandingEndReason, body: (title: string) => string): 'ended' {
+/**
+ * End it from the tick, with its notice to both, while it is as it was read: not ended, the same periods done, and (with
+ * `phases`) in one of them on the same period's row. Whether it ended.
+ */
+function endIfUnmoved(hooks: StandingHooks, sd: StandingRow, reason: StandingEndReason, body: (title: string) => string, phases?: StandingRow['phase'][]): boolean {
     let told: StandingNotice[] = [];
+    let ended = false;
     const at = new Date().toISOString();
     db.transaction(() => {
         const fresh = readStanding(sd.id);
         if (!fresh || fresh.phase === 'ended' || fresh.periods_done !== sd.periods_done) return;
+        if (phases && (!phases.includes(fresh.phase) || fresh.current_tx_id !== sd.current_tx_id)) return;
         endStanding(fresh, reason, at);
+        ended = true;
         told = keep([sd.payer_pubkey, sd.payee_pubkey], body(titleOf(sd.post_id)), sd, 'standing_ended', { reason });
     })();
     tellStanding(hooks, told);
+    return ended;
+}
+
+/** End it from the tick, with its notice to both. */
+function endFromTick(hooks: StandingHooks, sd: StandingRow, reason: StandingEndReason, body: (title: string) => string): 'ended' {
+    endIfUnmoved(hooks, sd, reason, body);
     return 'ended';
 }
 
@@ -461,6 +507,10 @@ function endFromTick(hooks: StandingHooks, sd: StandingRow, reason: StandingEndR
  */
 function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & { oneAtATime: boolean } {
     assertFeatureOn('escrow');
+    // Whoever signed still signs for the payer, as checkStandingStart asked at the start: the payer themselves (under a
+    // re-key, their key now), or a keeper of the enterprise that pays. A keeper removed since stops spending its Beans, on an
+    // Offer as on a Need (where approvePostRequest's own keeper check, requestHoldChecks, asks it again too).
+    if (!signsFor(hooks, currentKeyOf(sd.auth_signer), sd.payer_pubkey)) throw new Error('the one who signed it no longer signs for its payer');
     const raw = db.prepare('SELECT * FROM posts WHERE id = ?').get(sd.post_id) as any;
     if (!raw) throw new Error('its listing is gone');
     // Running deals carry on while their listing is paused (§1.5); a one-off listing stays taken by its standing deal.
@@ -762,23 +812,44 @@ export function endStandingDealsOf(memberKey: string): number {
 }
 
 /**
- * Its author removed the listing (engine/posts.ts removePost): each standing deal on it stops after its current period
- * (§1.5), at once where nothing is held. Returns how many it stopped.
+ * Its author removed the listing (engine/posts.ts removePost), in the caller's transaction: each standing deal on it stops
+ * after its current period (§1.5), at once where nothing is held. Each side but the one who removed it is told: that it
+ * stopped, the period under way still paid (held); that it ended (between its periods, or short). One held back waits for
+ * its payer, who holds it, to settle the period: that ends it, and both are told then (standingPeriodSettled). Returns the
+ * notices, for tellStanding after the commit.
  */
-export function stopStandingDealsOnListing(postId: string, by: string): number {
+export function stopStandingDealsOnListing(postId: string, by: string): StandingNotice[] {
     const live = db.prepare(`SELECT * FROM standing_deals WHERE post_id = ? AND phase != 'ended'`).all(postId) as StandingRow[];
     const at = new Date().toISOString();
+    const told: StandingNotice[] = [];
     for (const sd of live) {
         db.prepare(`UPDATE standing_deals SET stopped_by = COALESCE(stopped_by, ?), stopped_at = COALESCE(stopped_at, ?) WHERE id = ?`).run(by, at, sd.id);
-        if (sd.phase === 'due' || sd.phase === 'short') endStanding(sd, 'listing_gone', at);
+        const others = [sd.payer_pubkey, sd.payee_pubkey].filter((k) => k !== by);
+        const title = titleOf(sd.post_id);
+        if (sd.phase === 'due' || sd.phase === 'short') {
+            endStanding(sd, 'listing_gone', at);
+            told.push(...keep(others, standingLines.ended(title), sd, 'standing_ended', { reason: 'listing_gone' }));
+        } else if (sd.phase === 'held' && !sd.stopped_at) {
+            told.push(...keep(others, standingLines.stoppedBy(sd.period_unit, nameOf(by), title), sd, 'standing_stopped'));
+        }
     }
-    return live.length;
+    return told;
 }
 
-/** How many standing deals on a listing hold a period now (removePost lets these through: they stop, they don't block). */
-export function liveStandingPeriodsOn(postId: string): number {
-    return (db.prepare(`SELECT COUNT(*) AS n FROM marketplace_transactions mt JOIN standing_deals sd ON sd.id = mt.standing_id
-                        WHERE mt.post_id = ? AND mt.status = 'pending'`).get(postId) as { n: number }).n;
+/**
+ * A moderator removed the listing (engine/posts.ts adminDeletePost: an admin's removal, a report resolved with removal,
+ * Prune Stale Posts, an assistant's takedown made final), in its transaction, after it refunded each period held (each
+ * ending its standing deal, standingPeriodSettled): every standing deal still running on it ends now (between its periods,
+ * short, or with no period held), and both sides are told. Returns the notices, for tellStanding after the commit.
+ */
+export function endStandingDealsOnRemovedListing(postId: string, at: string): StandingNotice[] {
+    const live = db.prepare(`SELECT * FROM standing_deals WHERE post_id = ? AND phase != 'ended'`).all(postId) as StandingRow[];
+    const told: StandingNotice[] = [];
+    for (const sd of live) {
+        endStanding(sd, 'listing_gone', at);
+        told.push(...keep([sd.payer_pubkey, sd.payee_pubkey], standingLines.ended(titleOf(sd.post_id)), sd, 'standing_ended', { reason: 'listing_gone' }));
+    }
+    return told;
 }
 
 /**

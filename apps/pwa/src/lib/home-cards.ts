@@ -18,7 +18,7 @@
  */
 
 import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
-import { copyFromLine, eventCopyOf } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, freePriceWords } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
@@ -481,7 +481,7 @@ export function askedUnit(priceType: string | null | undefined): string {
  */
 export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, beansOn: boolean, priceWords: (credits: number) => string): string {
     const price = beansOn && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (p.credits > 0 ? [priceWords(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' ') : t('Free', undefined, 'price'))
+        ? (freePriceWords(p.credits, 'need') ?? [priceWords(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' '))
         : null;
     return [price, formatRelativeTime(p.createdAt)].filter(Boolean).join(' · ');
 }

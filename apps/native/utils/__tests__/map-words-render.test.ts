@@ -387,7 +387,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(byLabel(xx('Community {name}').replace('{name}', xx('Peer {id}').replace('{id}', '99999999')))).not.toBeNull();
         expect(host.textContent).toContain(xx('Tap a community to include it'));
         // A Need while the member must list an Offer first: the note and the button say so.
-        await click(byText(xx('🟠 Need')), 'Need');
+        await click(buttonHolding(xx('🟠 Need')), 'Need');
         expect(host.textContent).toContain(xx('💡 Contributions First'));
         expect(byText(xx('🟢 List an Offer first to post Needs'))).not.toBeNull();
         expect(host.textContent).toContain(xx('1.5% fee: Fulfiller receives {amount} B.').replace('{amount}', '9.85'));
@@ -441,7 +441,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         await click(byText(xx('Confirm Pin ✓')), 'Confirm Pin ✓');
         expect(host.textContent).toContain(xx('✓ Set'));
         // A Need with every field filled, which the node refuses without a reason.
-        await click(byText(xx('🟠 Need')), 'Need');
+        await click(buttonHolding(xx('🟠 Need')), 'Need');
         await type(host.querySelector(`input[placeholder="${xx('What do you need/offer?')}"]`), 'A ladder');
         await type(host.querySelector(`input[placeholder="${xx('Describe what you need/offer...')}"]`), 'Two days');
         await click(buttonHolding(xx('Select a category...')), 'the category field');

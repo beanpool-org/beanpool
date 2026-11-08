@@ -1,7 +1,7 @@
 ---
 slug: posting
 title: Posting an Offer or a Need
-summary: Put up something you can do or give, or something you are looking for.
+summary: Put up something you'll give or do for others, or something you are looking for.
 related: a-deal-step-by-step, my-deals, map-pins, credit-line
 ---
 
@@ -18,13 +18,13 @@ In a community with Beans you need a name and a profile photo. Where there are n
 ## Posting
 
 - Tap **+ ADD POST** on the Market tab or the Map.
-- Choose **Offer** or **Need**. The form opens on the Map.
+- Choose **Offer** (something you'll give or do for others) or **Need** (something you're looking for). The line under each choice says the same. The form opens on the Map.
 - **Title:** a few words, up to 50 characters on the phone. "Sourdough loaf", "Lift to town on Fridays".
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.
 - **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
-- **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
+- **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.
 
 Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**.

@@ -1939,7 +1939,6 @@
   "Resync Error": "Σφάλμα επανασυγχρονισμού",
   "Failed to rebuild and re-sync.": "Αποτυχία αναδόμησης και επανασυγχρονισμού.",
   "Invalid URL": "Μη έγκυρο URL",
-  "Please enter a valid BeanPool Node IP address.": "Παρακαλώ εισάγαγε μια έγκυρη διεύθυνση IP διακομιστή BeanPool.",
   "Node Added": "Ο διακομιστής προστέθηκε",
   "You have successfully connected to the new community.": "Συνδέθηκες επιτυχώς στη νέα κοινότητα.",
   "Update Failed": "Η ενημέρωση απέτυχε",

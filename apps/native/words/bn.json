@@ -1939,7 +1939,6 @@
   "Resync Error": "পুনরায় সিঙ্ক করার ত্রুটি",
   "Failed to rebuild and re-sync.": "পুনর্নির্মাণ এবং পুনরায় সিঙ্ক করতে ব্যর্থ হয়েছে।",
   "Invalid URL": "অবৈধ ইউআরএল",
-  "Please enter a valid BeanPool Node IP address.": "অনুগ্রহ করে একটি বৈধ BeanPool সার্ভার আইপি ঠিকানা লিখুন।",
   "Node Added": "সার্ভার যোগ করা হয়েছে",
   "You have successfully connected to the new community.": "আপনি সফলভাবে নতুন কমিউনিটিতে সংযুক্ত হয়েছেন।",
   "Update Failed": "আপডেট ব্যর্থ হয়েছে",

@@ -204,7 +204,7 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain(xx('NOTHING NEAR YOU?'));
         expect(host.textContent).toContain(xx('Start a community'));
         expect(host.textContent).toContain(xx('Only the area (about 10 km) is kept, never where you are exactly.'));
-        expect(host.querySelector(`[placeholder="${xx('Community name')}"]`)).not.toBeNull();
+        expect(host.querySelector(`[placeholder="${xx('Community name or address')}"]`)).not.toBeNull();
         expect(bracketed(host)).toBeGreaterThan(15);
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
     });

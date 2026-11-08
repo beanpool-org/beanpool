@@ -2121,7 +2121,6 @@
   "Resync Error": "Ошибка ресинхронизации",
   "Failed to rebuild and re-sync.": "Не удалось перестроить и синхронизировать заново.",
   "Invalid URL": "Неверный URL",
-  "Please enter a valid BeanPool Node IP address.": "Пожалуйста, введите действительный IP-адрес узла BeanPool.",
   "Node Added": "Узел добавлен",
   "You have successfully connected to the new community.": "Вы успешно подключились к новому сообществу.",
   "Update Failed": "Обновление не удалось",

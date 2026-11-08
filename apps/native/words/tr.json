@@ -1940,7 +1940,6 @@
   "Resync Error": "Yeniden Senkronizasyon Hatası",
   "Failed to rebuild and re-sync.": "Yeniden oluşturma ve senkronizasyon başarısız oldu.",
   "Invalid URL": "Geçersiz URL",
-  "Please enter a valid BeanPool Node IP address.": "Lütfen geçerli bir BeanPool Düğümü IP adresi girin.",
   "Node Added": "Düğüm Eklendi",
   "You have successfully connected to the new community.": "Yeni topluluğa başarıyla bağlandınız.",
   "Update Failed": "Güncelleme Başarısız",

@@ -2303,7 +2303,6 @@
   "Resync Error": "خطأ في إعادة المزامنة",
   "Failed to rebuild and re-sync.": "فشلت إعادة البناء وإعادة المزامنة.",
   "Invalid URL": "رابط غير صالح",
-  "Please enter a valid BeanPool Node IP address.": "يُرجى إدخال عنوان IP صالح لخادم BeanPool.",
   "Node Added": "تمت إضافة الخادم",
   "You have successfully connected to the new community.": "لقد اتصلت بالمجتمع الجديد بنجاح.",
   "Update Failed": "فشل التحديث",

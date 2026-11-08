@@ -261,7 +261,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
                                         <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words select-text ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
-                                            <FoldedChatText text={decodeEventChatText(m.ciphertext, m.type, m.metadata)} enabled={!isRemoved} display="block" />
+                                            <FoldedChatText text={decodeEventChatText(m.ciphertext, m.type, m.metadata)} enabled={!isRemoved} display="block" links={copyWords !== null} />
                                         </p>
                                         {(copyWords !== null || (view.isHost && !isRemoved)) && (
                                             <div className="flex flex-wrap items-center -ml-2">

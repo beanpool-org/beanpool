@@ -1739,7 +1739,11 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
     });
 });
 
-describe('MessagesPage: links in a message stay plain text (G11-e: a new account is not handed clickable links)', () => {
+// G11-e (26 Sep) pinned "a new account is not handed clickable links" with a chat that was NOT a request: the web showed every
+// link as plain words. On 9 Nov Marty made the web link as the phone does (core's chat-links.ts; PR #2990), and the phone links in
+// an ordinary chat and leaves links out only while the chat is still a request (chat/[id].tsx: onPressUrl={requestMode === 'none' ? openUrl : undefined}).
+// So the stranger rule is kept where the phone keeps it, with the original assertions unchanged; the ordinary chat links.
+describe('MessagesPage: links in a message (plain text from someone who is only asking; links in a chat, as on the phone)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockConversations = [{
@@ -1761,12 +1765,32 @@ describe('MessagesPage: links in a message stay plain text (G11-e: a new account
         }));
     });
 
-    it('a URL, a www. address and an <a> tag in a message are shown as text, never as a link', async () => {
+    it('in a request from someone the reader has not accepted: a URL, a www. address and an <a> tag are shown as text, never as a link', async () => {
+        mockConversations = [{ ...mockConversations[0], request: { state: 'pending', from: 'peer-pubkey', at: '2026-09-14T00:00:00Z' } } as Conversation];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
         const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
         expect(await screen.findByText(/Cheap deals at https:\/\/phish\.example\/win/)).toBeInTheDocument();
         expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
         expect(container.querySelectorAll('a[href*="phish.example"]')).toHaveLength(0);
         expect(Array.from(container.querySelectorAll('a')).filter(a => /phish/.test(a.textContent ?? ''))).toHaveLength(0);
+    });
+
+    it('in a chat that is not a request: the URL and the www. address are links, and an <a> tag typed into the words is still words, never an element', async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await screen.findAllByTestId('chat-link');
+        // The typed tag is shown character for character.
+        expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
+        const anchors = Array.from(container.querySelectorAll('a'));
+        // Every anchor is one this page drew from the words (ChatLinkedText), each one text only, none a tag the sender typed.
+        expect(anchors.length).toBeGreaterThan(0);
+        for (const a of anchors) {
+            expect(a).toHaveAttribute('data-testid', 'chat-link');
+            expect(a.childElementCount).toBe(0);
+            expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+        }
+        expect(anchors.map((a) => a.getAttribute('href'))).toContain('https://phish.example/win');
+        expect(anchors.map((a) => a.getAttribute('href'))).toContain('https://www.phish.example');
+        expect(anchors.filter((a) => a.textContent === 'click')).toHaveLength(0);
     });
 });
 

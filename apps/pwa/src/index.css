@@ -443,6 +443,15 @@ html, body, #root {
   opacity: 1;
 }
 
+/* A link in a chat message (components/ChatLinkedText.tsx). The page's focus ring is the accent colour, which is the member's own
+   bubble: on a link there it would not show, so it is white (4.9:1 on the bubble in light, 3.3:1 in dark; measured in Chromium).
+   It sits AFTER the dark ring above and starts at :root, so it wins on specificity ((0,4,0) against (0,3,0)) and on order:
+   written before it, at the same specificity, the dark ring won and the link had #c0ccc0 on #809380, 2.0:1 (Opus review of
+   #2990, finding 2). */
+:root .bp-bubble-mine .bp-chat-link:focus-visible {
+  outline-color: #fff;
+}
+
 /* Dark Aura Glow for Typography Isolation */
 .text-dark-aura {
   text-shadow: 

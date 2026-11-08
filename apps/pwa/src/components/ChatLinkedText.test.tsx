@@ -96,6 +96,39 @@ describe('FoldedChatText with links', () => {
         expect(screen.getByTestId('chat-text').dataset.fold).toBe('folded');
     });
 
+    // Opus review of #2990, finding 1: a link past the fold was a Tab stop. Focusing it scrolled the clamped box (a scroll container)
+    // and left it scrolled, so the bubble showed lines 25 to 30 under "…more" and the first 24 were gone.
+    const tabStops = (el: HTMLElement) => Array.from(el.querySelectorAll('a')).filter((a) => a.tabIndex >= 0);
+
+    it('while the words are folded no link is a Tab stop and …more is; open, every link is again, and folded again none', () => {
+        render(<FoldedChatText text={withLink} links />);
+        const words = () => screen.getByTestId('chat-text');
+        expect(words().dataset.fold).toBe('folded');
+        expect(words().querySelectorAll('a')).toHaveLength(40);
+        expect(tabStops(words())).toHaveLength(0);
+        // A person still reaches them: …more is the next stop (a button, in the tab order) and opens them.
+        expect(screen.getByRole('button', { name: '…more' }).tabIndex).toBeGreaterThanOrEqual(0);
+
+        fireEvent.click(screen.getByRole('button', { name: '…more' }));
+        expect(words().dataset.fold).toBe('open');
+        expect(tabStops(words())).toHaveLength(40);
+
+        fireEvent.click(screen.getByRole('button', { name: 'less' }));
+        expect(words().dataset.fold).toBe('folded');
+        expect(tabStops(words())).toHaveLength(0);
+    });
+
+    it('a message that could fold but fits, and a short one, keep every link a Tab stop', () => {
+        // 54 characters: past twelve lines at the fewest characters a line, so it is measured; two lines here, so it is whole.
+        const fits = 'See https://byron.beanpool.org/jobs and www.example.org';
+        const { container, rerender } = render(<FoldedChatText text={fits} links />);
+        expect(screen.getByTestId('chat-text').dataset.fold).toBe('whole');
+        expect(tabStops(container)).toHaveLength(2);
+        rerender(<FoldedChatText text="See https://a.org" links />);
+        expect(tabStops(container)).toHaveLength(1);
+        expect(container.querySelector('a')!.hasAttribute('tabindex')).toBe(false);
+    });
+
     it("takes the bubble's ink: inherit on the member's own bubble, a given ink on a failed line, else the link colour", () => {
         const { container, rerender } = render(<FoldedChatText text="https://a.org" links mine />);
         expect((container.querySelector('a') as HTMLElement).style.color).toBe('inherit');

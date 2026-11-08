@@ -22,6 +22,12 @@ interface Props {
      * bubble (the accent colour, white words: the phone's `linkMe`, the same ink bolder), where a blue would not read.
      */
     ink?: string;
+    /**
+     * False for words drawn clamped under "…more" (FoldedChatText): a link there is not a Tab stop. The clamped box is a scroll
+     * container, so focusing a link past the fold scrolls the box to show it and nothing scrolls it back; "…more" is the next
+     * stop instead, and opens every link. True (a Tab stop) everywhere else.
+     */
+    tabbable?: boolean;
 }
 
 /** True when `text` has a run that links: callers use it to leave a text without links exactly as it was drawn. */
@@ -29,7 +35,7 @@ export function hasChatLink(text: string | null | undefined): boolean {
     return splitTextWithLinks(text).some((run) => run.isUrl && normaliseTappedUrl(run.text) !== null);
 }
 
-export function ChatLinkedText({ text, ink = 'var(--link)' }: Props) {
+export function ChatLinkedText({ text, ink = 'var(--link)', tabbable = true }: Props) {
     return (
         <>
             {splitTextWithLinks(text).map((run, i) => {
@@ -41,6 +47,7 @@ export function ChatLinkedText({ text, ink = 'var(--link)' }: Props) {
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
+                        tabIndex={tabbable ? undefined : -1}
                         data-testid="chat-link"
                         className="bp-chat-link"
                         style={{

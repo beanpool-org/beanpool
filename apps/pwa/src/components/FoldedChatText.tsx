@@ -80,16 +80,19 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
         return () => watch.disconnect();
     }, [candidate]);
 
-    // The words as drawn: with their links when asked and there are any, else exactly the text. (A link inside the clamped
-    // box below counts its lines with the words: measured in Chromium 153 and WebKit 26.6, 12 lines either way.)
-    const words = links && hasChatLink(text) ? <ChatLinkedText text={text} ink={mine ? 'inherit' : ink} /> : text;
-
-    if (!candidate) return <>{words}</>;
-
     const long = known?.long === true;
     const folded = long && !open;
     // Until it is known, the words are drawn clamped so the box can say whether it had more.
-    const clamped = !known || folded;
+    const clamped = candidate && (!known || folded);
+
+    // The words as drawn: with their links when asked and there are any, else exactly the text. (A link inside the clamped
+    // box below counts its lines with the words: measured in Chromium 153 and WebKit 26.6, 12 lines either way.) While the
+    // words are clamped their links are not Tab stops: focus on one past the fold would scroll the box and leave it scrolled
+    // (Opus review of #2990); "…more" is the next stop and opens them.
+    const words = links && hasChatLink(text) ? <ChatLinkedText text={text} ink={mine ? 'inherit' : ink} tabbable={!clamped} /> : text;
+
+    if (!candidate) return <>{words}</>;
+
     const style: CSSProperties = clamped ? CLAMP : { display: long ? 'block' : display };
 
     return (

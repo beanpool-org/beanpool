@@ -17,7 +17,7 @@ import {
     askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -403,7 +403,8 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     const s = homeStyles(colors);
     const type = p.type === 'need' ? colors.market.need : colors.market.offer;
     const word = p.type === 'need' ? t('NEED') : t('OFFER');
-    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? beansAmount(p.credits) : null;
+    // A listing priced at 0 reads Free, as on the Market's card (core listing-price.ts); a price never sent draws nothing.
+    const price = showsBeans && typeof p.credits === 'number' ? (freePriceWords(p.credits, p.type) ?? beansAmount(p.credits)) : null;
     const far = formatDistance(p.distanceKm);
     const copy = eventCopyOf(p);
     const facts = [copy ? copyPriceLine(copy) : price, far].filter(Boolean).join(' · ');

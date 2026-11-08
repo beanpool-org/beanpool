@@ -307,7 +307,8 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
     it('the Market: every Beans figure, the "Beans only" chip and the first-offer quest are gated', () => {
         const src = read('../../app/(tabs)/market.tsx');
         const lines = src.split('\n');
-        const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
+        // The three cards' price is core's one rule, drawn by ListingPrice (a figure and its Beans sign, or "Free" at 0).
+        const currency = lines.flatMap((l, i) => (l.includes('<ListingPrice') ? [i] : []));
         expect(currency.length).toBe(3);
         for (const i of currency) {
             // The condition that draws it sits on one of the few lines above the tag.
@@ -351,7 +352,7 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(mapSrc).not.toContain('<CurrencyDisplay');
         expect(mapSrc).toContain('showsBeans={showsBeans}');
         const card = read('../../components/MapPreviewCard.tsx').split('\n');
-        const currency = card.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
+        const currency = card.flatMap((l, i) => (l.includes('<ListingPrice') ? [i] : []));
         expect(currency.length).toBe(1);
         for (const i of currency) expect(card.slice(Math.max(0, i - 3), i).join('\n')).toMatch(/\{showsBeans && (!copy && )?\(/);
         const src = read('../../app/new-listing.tsx');

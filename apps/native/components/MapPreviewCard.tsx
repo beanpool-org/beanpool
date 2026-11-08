@@ -21,7 +21,7 @@ import { MarketCardPicture } from './MarketCardPicture';
 import { CardChip, useCardShell } from './market-card-shell';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { ListingCopyLine } from './ListingCopyLine';
-import { CurrencyDisplay } from './CurrencyDisplay';
+import { ListingPrice } from './ListingPrice';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { marketCardPicture } from '../utils/market-card-picture';
 import { isPostPinned } from '../utils/pins';
@@ -79,7 +79,6 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
     const own = !!(me && post.author_pubkey === me);
     const groupOnly = post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId;
     const groupName = post.target_group_name || post.targetGroupName || t('Group');
-    const credits = post.credits !== undefined && post.credits !== null ? post.credits : '?';
 
     return (
         <Pressable
@@ -111,7 +110,7 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
                         {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} wrap />}
                     </View>
                     {showsBeans && !copy && (
-                        <CurrencyDisplay amount={`${credits}${priceUnit(post.price_type)}`} style={shell.price} asView={true} />
+                        <ListingPrice credits={post.credits} type={post.type} unit={priceUnit(post.price_type)} style={shell.price} />
                     )}
                 </View>
                 <Text style={[shell.loud, styles.title]} numberOfLines={1}>{post.title}</Text>

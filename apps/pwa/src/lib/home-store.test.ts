@@ -68,9 +68,13 @@ describe('home-store', () => {
     });
 
     it('expires after HOME_FRESH_FOR_HEADER_MS', () => {
+        // Pin the clock: recordHomeAnswer stamps its own Date.now(), and a millisecond tick before a second read
+        // made the "- 1" check land on the expiry (red on a loaded CI runner, merge queue run 42461334848).
+        const recordedAt = 1_800_000_000_000;
+        const now = vi.spyOn(Date, 'now').mockReturnValue(recordedAt);
         const ans = makeAnswer([]);
         recordHomeAnswer(ans, 'pk_alice');
-        const recordedAt = Date.now();
+        now.mockRestore();
 
         expect(freshHomeForHeader('pk_alice', recordedAt)).toBe(ans);
         expect(freshHomeForHeader('pk_alice', recordedAt + HOME_FRESH_FOR_HEADER_MS - 1)).toBe(ans);

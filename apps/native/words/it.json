@@ -1943,7 +1943,6 @@
   "Resync Error": "Errore di risincronizzazione",
   "Failed to rebuild and re-sync.": "Impossibile ricostruire e risincronizzare.",
   "Invalid URL": "URL non valido",
-  "Please enter a valid BeanPool Node IP address.": "Inserisci un indirizzo IP valido per il nodo BeanPool.",
   "Node Added": "Nodo aggiunto",
   "You have successfully connected to the new community.": "Ti sei connesso con successo alla nuova comunità.",
   "Update Failed": "Aggiornamento non riuscito",

@@ -1852,7 +1852,6 @@
   "Resync Error": "Lỗi đồng bộ lại",
   "Failed to rebuild and re-sync.": "Không thể xây dựng lại và đồng bộ lại.",
   "Invalid URL": "URL không hợp lệ",
-  "Please enter a valid BeanPool Node IP address.": "Vui lòng nhập địa chỉ IP nút BeanPool hợp lệ.",
   "Node Added": "Đã thêm nút",
   "You have successfully connected to the new community.": "Bạn đã kết nối thành công với cộng đồng mới.",
   "Update Failed": "Cập nhật thất bại",

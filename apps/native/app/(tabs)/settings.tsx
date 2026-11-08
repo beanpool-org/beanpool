@@ -31,6 +31,8 @@ import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blockl
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import { withNodeScheme } from '../../utils/node-address-scheme';
+import { claimNodeOrigin } from '../../utils/claim-link';
+import { NoOwnerCard, type OwnerlessServer } from '../../components/NoOwnerCard';
 import { fetchMembership } from '../../utils/membership-probe';
 import { remoteOwnTransactionCount } from '../../utils/diagnostics-own-count';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -992,6 +994,8 @@ export default function SettingsScreen() {
     
     // Advanced subsystem state
     const [newAnchorInput, setNewAnchorInput] = useState('');
+    // "Add a community by address" on a server with no owner yet: its card, instead of the server saved as a community.
+    const [ownerless, setOwnerless] = useState<OwnerlessServer | null>(null);
     const [changeConfirm, setChangeConfirm] = useState('');
     const [wipeConfirm, setWipeConfirm] = useState('');
     const [wipeType, setWipeType] = useState<'options' | 'local' | 'purge'>('options');
@@ -1594,16 +1598,30 @@ export default function SettingsScreen() {
 
     async function handleUpdateAnchor() {
         if (!newAnchorInput.trim()) {
-            Alert.alert(t("Invalid URL"), t("Please enter a valid BeanPool Node IP address."));
+            Alert.alert(t("Invalid URL"), t("Type the community's address, like yourtown.beanpool.org."));
             return;
         }
 
         setAdvancedLoading(true);
+        setOwnerless(null);
         try {
             // A bare public IP gets https://; http:// only for localhost and a LAN address (utils/node-address-scheme.ts).
             const finalAnchorUrl = withNodeScheme(newAnchorInput);
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
+            // A server with no owner yet and its one-time code waiting is one its installer claims, not a community to
+            // visit: asked BEFORE anything is saved (DESIGN-new-operator-path-fable.md, decision 1, Marty 9 Nov). On that
+            // answer nothing is saved, nothing switches and no guest mark is written; its card offers Claim. Any other
+            // answer (an owner, no code waiting, busy, no answer) adds the community as before.
+            const claimOrigin = claimNodeOrigin(finalAnchorUrl);
+            if (claimOrigin) {
+                const { readClaimStatus } = await import('../../utils/node-claim');
+                const status = await readClaimStatus(claimOrigin);
+                if (status.kind === 'unclaimed') {
+                    setOwnerless({ origin: claimOrigin, name: status.communityName, codeId: status.codeId });
+                    return;
+                }
+            }
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             // A switch too: the update screen asks the community now in use at once, whatever fails below
             // (utils/community-switch.ts).
@@ -2944,17 +2962,22 @@ export default function SettingsScreen() {
                     <TextInput
                         style={styles.input}
                         value={newAnchorInput}
-                        onChangeText={setNewAnchorInput}
-                        placeholder={t('e.g. {address}', { address: 'http://192.168.1.55' })}
+                        onChangeText={(v) => { setNewAnchorInput(v); setOwnerless(null); }}
+                        placeholder="yourtown.beanpool.org"
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="none"
                         autoCorrect={false}
+                        keyboardType="url"
                         accessibilityLabel={t("Community address")}
+                        testID="settings-add-address"
                     />
-                    
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
+
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button" testID="settings-add-connect">
                         {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
+
+                    {/* The typed server has no owner yet: claim it (app/claim-community.tsx), nothing saved. */}
+                    {ownerless && <NoOwnerCard server={ownerless} style={{ marginTop: 12, marginBottom: 0 }} testID="settings-no-owner" />}
 
                     {/* Lights-out H2: the typed hall door (app/hall.tsx). Your own community, on the hall laptop's number,
                         checked first and with your copy carried: not a new community in this list. */}

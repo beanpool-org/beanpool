@@ -1852,7 +1852,6 @@
   "Resync Error": "重新同步出錯",
   "Failed to rebuild and re-sync.": "重建並重新同步失敗。",
   "Invalid URL": "URL 無效",
-  "Please enter a valid BeanPool Node IP address.": "請輸入有效的 BeanPool 節點 IP 位址。",
   "Node Added": "節點已新增",
   "You have successfully connected to the new community.": "你已成功連線到新社群。",
   "Update Failed": "更新失敗",

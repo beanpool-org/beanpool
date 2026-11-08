@@ -1852,7 +1852,6 @@
   "Resync Error": "再同期エラー",
   "Failed to rebuild and re-sync.": "再構築および再同期に失敗しました。",
   "Invalid URL": "無効なURL",
-  "Please enter a valid BeanPool Node IP address.": "有効なBeanPoolノードのIPアドレスを入力してください。",
   "Node Added": "ノードを追加しました",
   "You have successfully connected to the new community.": "新しいコミュニティへの接続に成功しました。",
   "Update Failed": "更新に失敗しました",

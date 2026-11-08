@@ -1944,7 +1944,6 @@
   "Resync Error": "خطای همگام‌سازی مجدد",
   "Failed to rebuild and re-sync.": "بازسازی و همگام‌سازی مجدد انجام نشد.",
   "Invalid URL": "نشانی وب نامعتبر است",
-  "Please enter a valid BeanPool Node IP address.": "لطفاً یک نشانی IP معتبر برای سرور BeanPool وارد کنید.",
   "Node Added": "سرور اضافه شد",
   "You have successfully connected to the new community.": "با موفقیت به جامعه جدید متصل شدید.",
   "Update Failed": "به‌روزرسانی ناموفق بود",

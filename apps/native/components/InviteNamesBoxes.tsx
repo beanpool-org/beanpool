@@ -4,19 +4,21 @@
  * The rules are utils/invite-names.ts; the list's own flows (open, seal, add, bind) are core's, as the names list uses them.
  *
  * Ticking the names box opens the list on this phone (each read is logged on the node, as the list's screen does), so the
- * duplicate-name warning can look at every name: the node never sees one. The vouch presets stay as they are (Marty's Q1:
+ * duplicate-name warning can look at every name: the node never sees one. What that open says (names the server no longer
+ * has, a sync's warnings) is said here, in the amber box with "Open the names list": the list says each once (#2974 round 3).
+ * The vouch presets stay as they are (Marty's Q1:
  * allow both). The voucher box is greyed for an admin not on the credit committee, with no connection, or until the names
  * box is ticked, each with its sentence. Every row is at least 48 dp tall and wraps at 320 dp with 1.3× text.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { formatNumber, t, INVITE_ADDS_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    DEVICE_NAMES_STORE as STORE, NAMES_COPY, openNamesList, openEntries, saveNamesEntry, inviteForNamesEntry, newEntryId, type NamesOpened,
+    DEVICE_NAMES_STORE as STORE, NAMES_COPY, openNamesList, openEntries, saveNamesEntry, inviteForNamesEntry, newEntryId, planWords, type NamesOpened,
 } from '../utils/names-list';
 import { makeOfflineTicket } from '../utils/member-statements';
 import { nearestBudgetLevel, budgetLevelUp, budgetLevelDown } from '../utils/voucher-rules';
@@ -71,6 +73,11 @@ export interface InviteNames {
     voucherWhy: ReturnType<typeof voucherBoxWhy>;
     /** The list on this phone: opening, open, or why not. */
     list: { kind: 'idle' } | { kind: 'opening' } | { kind: 'open' } | { kind: 'refused'; message: string };
+    /** What the list's opens here said, for this community, in core's English (shown with `say`): kept until dismissed or the list is opened. */
+    notices: string[];
+    dismissNotices: () => void;
+    /** "Open the names list": the list's screen, and the notices are done with. */
+    openList: () => void;
     same: ReturnType<typeof sameNameOnList>;
     /** Generate with the names box ticked: the entry, then the invite bound to it (or to `existingEntryId`). */
     make: (vouchAmount: number | null, existingEntryId?: string) => Promise<NamesInviteResult>;
@@ -128,6 +135,28 @@ export function useInviteNames(o: {
     const anchorNow = useRef(anchorUrl);
     anchorNow.current = anchorUrl;
     const [retry, setRetry] = useState(0);
+
+    // What an open said. The list says each notice once: on that open core forgets the words it kept and rewrites the names
+    // this phone saw (names-list-flows.ts openNamesList, readTheList), so the list's screen won't say them again, and they
+    // can't be put back for later. They are said here, kept until dismissed or the list is opened, merged with what a later
+    // open says (each once). Kept by community and key: an open for a community left while it ran keeps its words for it.
+    const [heard, setHeard] = useState<Record<string, string[]>>({});
+    const where = `${identity?.publicKey ?? ''}|${anchorUrl}`;
+    const hear = useCallback((at: string, words: readonly string[]) => {
+        if (words.length) setHeard((h) => ({ ...h, [at]: [...new Set([...(h[at] ?? []), ...words])] }));
+    }, []);
+    const notices = useMemo(() => heard[where] ?? [], [heard, where]);
+    const dismissNotices = useCallback(() => {
+        setHeard((h) => {
+            if (!(where in h)) return h;
+            const { [where]: _done, ...rest } = h;
+            return rest;
+        });
+    }, [where]);
+    const openList = useCallback(() => {
+        dismissNotices();
+        router.push('/names-list');
+    }, [dismissNotices]);
     useEffect(() => {
         setOpened(null);
         setList({ kind: 'idle' });
@@ -140,12 +169,17 @@ export function useInviteNames(o: {
         if (!offered || !namesTicked || !identity || !anchorUrl || opened || opening.current) return;
         opening.current = true;
         const forAnchor = anchorUrl;
+        const forWhere = `${identity.publicKey}|${anchorUrl}`;
         setList({ kind: 'opening' });
         openNamesList(anchorUrl, identity, STORE).then((r) => {
             opening.current = false;
+            // Said whatever comes next: core has already forgotten them (an open refused says them too).
+            if (r.ok) hear(forWhere, r.value.notices);
             if (anchorNow.current !== forAnchor) { setRetry((n) => n + 1); return; }
-            if (!r.ok) { setList({ kind: 'refused', message: say(r.message) }); return; }
-            if (!r.value.list) { setList({ kind: 'refused', message: say(NAMES_COPY.notReady) }); return; }
+            // A refusal in its own words, as the list's screen says it: the server's, or the plan's card (a wait, a put-back
+            // server, a key this phone doesn't trust). "Can't write right now" only where the plan has no words of its own.
+            if (!r.ok) { setList({ kind: 'refused', message: r.status === 404 ? t('This community keeps no names list.') : say(r.message) }); return; }
+            if (!r.value.list) { setList({ kind: 'refused', message: say(planWords(r.value) ?? NAMES_COPY.notReady) }); return; }
             setOpened(r.value);
             setList({ kind: 'open' });
         }).catch(() => {
@@ -153,7 +187,7 @@ export function useInviteNames(o: {
             if (anchorNow.current !== forAnchor) setRetry((n) => n + 1);
             else setList({ kind: 'refused', message: say(NAMES_COPY.notReady) });
         });
-    }, [offered, namesTicked, identity, anchorUrl, opened, retry]);
+    }, [offered, namesTicked, identity, anchorUrl, opened, retry, hear]);
 
     const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
     const same = useMemo(() => (namesTicked ? sameNameOnList(name, entries, opened) : null), [namesTicked, name, entries, opened]);
@@ -179,7 +213,8 @@ export function useInviteNames(o: {
             offlineTicket: (entryId) => makeOfflineTicket(anchorUrl, identity.publicKey, identity.privateKey, { namesEntryId: entryId }),
         }, { vouchAmount, voucherLevel }, existingEntryId);
         // An invite made uses the id up. An entry added but no invite made: the list is opened again (the box is still ticked),
-        // so the warning sees that entry if the name is changed now.
+        // so the warning sees that entry if the name is changed now. That open is the same as a tick's: what it says joins the
+        // notices above, never dropped.
         if (r.kind === 'made' && kept.current?.id === addId) kept.current = null;
         if (r.kind === 'invite_not_made' && r.entryIsNew && anchorNow.current === anchorUrl) {
             setOpened(null);
@@ -199,7 +234,8 @@ export function useInviteNames(o: {
     }, []);
 
     return {
-        offered, namesTicked, setNamesTicked, name, setName, voucherTicked, setVoucherTicked, level, setLevel, voucherWhy, list, same, make, reset,
+        offered, namesTicked, setNamesTicked, name, setName, voucherTicked, setVoucherTicked, level, setLevel, voucherWhy, list, notices, dismissNotices,
+        openList, same, make, reset,
     };
 }
 
@@ -238,6 +274,22 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
     return (
         <View style={styles.block} testID="invite-names">
             <Box checked={names.namesTicked} label={t(INVITE_ADDS_WORDS.addToNames)} onPress={() => names.setNamesTicked(!names.namesTicked)} testID="invite-names-box" />
+            {names.notices.length ? (
+                // The list's own warnings from opening it here, said once by the list: they stay, ticked or not, until dismissed.
+                <View style={[styles.warn, styles.inner]} accessibilityLiveRegion="polite" testID="invite-names-notices">
+                    {names.notices.map((w) => (
+                        <Text key={w} style={styles.warnText} maxFontSizeMultiplier={1.3} testID="invite-names-notice">{say(w)}</Text>
+                    ))}
+                    <View style={styles.buttons}>
+                        <Pressable onPress={names.openList} accessibilityRole="button" style={[styles.smallBtn, styles.shrink]} testID="invite-names-open-list">
+                            <Text style={styles.smallBtnText} maxFontSizeMultiplier={1.3}>{t('Open the names list')}</Text>
+                        </Pressable>
+                        <Pressable onPress={names.dismissNotices} accessibilityRole="button" style={[styles.smallBtn, styles.shrink]} testID="invite-names-notices-dismiss">
+                            <Text style={styles.smallBtnText} maxFontSizeMultiplier={1.3}>{t('Dismiss')}</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            ) : null}
             {names.namesTicked ? (
                 <View style={styles.inner}>
                     <TextInput
@@ -348,6 +400,8 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start',
     },
     smallBtnText: { fontSize: 15, fontWeight: '700', color: colors.text.body },
+    buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    shrink: { flexShrink: 1, maxWidth: '100%' },
     stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' },
     amount: { fontSize: 17, fontWeight: '700', color: colors.text.heading },
 });

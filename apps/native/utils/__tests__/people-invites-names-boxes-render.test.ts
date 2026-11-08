@@ -62,10 +62,11 @@ const nav = vi.hoisted(() => {
     const nav = { on: true, listeners, blur: () => say(false), focus: () => say(true) };
     return nav;
 });
+const pushed = vi.hoisted(() => [] as string[]);
 vi.mock('expo-router', async () => {
     const { useEffect, useState } = await import('react');
     return {
-        router: { push() {}, navigate() {}, setParams() {}, replace() {} },
+        router: { push: (to: string) => { pushed.push(to); }, navigate() {}, setParams() {}, replace() {} },
         useFocusEffect: (cb: () => void | (() => void)) => {
             const [on, setOn] = useState(nav.on);
             useEffect(() => { nav.listeners.add(setOn); return () => { nav.listeners.delete(setOn); }; }, []);
@@ -144,6 +145,11 @@ const list = vi.hoisted(() => ({
     onNode: [] as Array<{ id: string; name: string }>,
     opens: 0,
     refuse: null as string | null,
+    refuseStatus: 0,
+    /** What each open says, in turn (core's `notices`, said once); an open past the end says nothing. */
+    said: [] as string[][],
+    /** A plan that isn't ready (the open answered, the list not read): `list: null`, as core gives it. */
+    plan: null as Record<string, unknown> | null,
 }));
 vi.mock('../names-list', async (importOriginal) => {
     const real = await importOriginal<typeof import('../names-list')>();
@@ -153,13 +159,16 @@ vi.mock('../names-list', async (importOriginal) => {
         ...real,
         openNamesList: async () => {
             list.opens++;
-            if (list.refuse) return { ok: false, status: 0, code: null, message: list.refuse };
+            if (list.refuse) return { ok: false, status: list.refuseStatus, code: null, message: list.refuse };
+            const notices = list.said.shift() ?? [];
+            const state = { admins: [{ pubkey: 'damo-key', callsign: 'damo' }], callsigns: {} };
+            if (list.plan) return { ok: true, value: { state, plan: list.plan, pin: {}, ring: {}, generations: new Map(), list: null, notices, made: null, sentTo: [] } };
             return {
                 ok: true,
                 value: {
-                    state: { admins: [{ pubkey: 'damo-key', callsign: 'damo' }], callsigns: {} }, plan: { kind: 'ready' }, pin: {}, ring: {}, generations: new Map(),
+                    state, plan: { kind: 'ready' }, pin: {}, ring: {}, generations: new Map(),
                     list: { entries: [row('entry-jane', 'damo-key'), ...list.onNode.map((e) => row(e.id, 'a-member-key'))], confirmations: [] },
-                    notices: [], made: null, sentTo: [],
+                    notices, made: null, sentTo: [],
                 },
             };
         },
@@ -202,6 +211,8 @@ vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDA
 
 import PeopleScreen from '../../app/(tabs)/people';
 import { t } from '@beanpool/core';
+import { NAMES_COPY } from '../names-list';
+import { keyLineWords } from '../../components/key-lines';
 
 const NODE = 'https://node.example';
 const LOCAL = { beans: true, invites: true, showcase: false };
@@ -226,6 +237,10 @@ beforeEach(() => {
     list.onNode.length = 0;
     list.opens = 0;
     list.refuse = null;
+    list.refuseStatus = 0;
+    list.said = [];
+    list.plan = null;
+    pushed.length = 0;
     nav.on = true;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
@@ -583,6 +598,94 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
             await generate();
             expect(list.saved).toHaveLength(2);
             expect(list.saved[1].addId).not.toBe(tegans);
+        });
+    });
+
+    // #2974 round 3 (deciding review, InviteNamesBoxes.tsx:149): the list says its warnings once, on the open that read them
+    // (core forgets them and rewrites `seen`), so the box's open says them on Invites, never drops them.
+    describe('what the box’s open says: shown on Invites, once, until dismissed or the list is opened', () => {
+        const say = (text: string) => text.split('\n\n').map(keyLineWords).join('\n\n');
+        const shown = () => Array.from(host.querySelectorAll('[data-testid="invite-names-notice"]')).map((n) => n.textContent ?? '');
+        const DROPPED_ME = NAMES_COPY.droppedMe('damo');
+        const LOST = NAMES_COPY.lostEntries(2);
+
+        it('a sync’s warning (another admin’s key dropped this phone): shown in the amber box with "Open the names list", which opens the list and ends it', async () => {
+            node.role = 'admin';
+            list.said = [[DROPPED_ME]];
+            await open();
+            expect(q('invite-names-notices'), 'nothing said before the tick').toBeNull();
+            await press('invite-names-box');
+            expect(shown()).toEqual([say(DROPPED_ME)]);
+            expect(q('invite-names-open-list')?.textContent).toBe(t('Open the names list'));
+            expect(q('invite-names-notices-dismiss')?.textContent).toBe(t('Dismiss'));
+            // The tick's own work goes on: the name field, no refusal.
+            expect(q('invite-names-name')).toBeTruthy();
+            expect(q('invite-names-refused')).toBeNull();
+            // Unticked, it stays: nothing else will say it.
+            await press('invite-names-box');
+            expect(shown()).toEqual([say(DROPPED_ME)]);
+            await press('invite-names-open-list');
+            expect(pushed).toEqual(['/names-list']);
+            expect(q('invite-names-notices')).toBeNull();
+        });
+
+        it('Dismiss ends it, and a later open with nothing to say brings nothing back', async () => {
+            node.role = 'owner';
+            list.said = [[LOST]];
+            await open();
+            await press('invite-names-box');
+            expect(shown()).toEqual([say(LOST)]);
+            await press('invite-names-notices-dismiss');
+            expect(q('invite-names-notices')).toBeNull();
+            expect(pushed).toEqual([]);
+            // An invite made, then the box ticked for the next person: the list opens afresh and has nothing new to say.
+            await type('invite-names-name', 'Tegan Rule');
+            await generate();
+            expect(node.bound).toHaveLength(1);
+            await press('invite-names-box');
+            expect(list.opens).toBe(2);
+            expect(q('invite-names-notices')).toBeNull();
+        });
+
+        it('the open again after an entry is added: what it says joins what the tick said, each once, nothing dropped', async () => {
+            node.role = 'owner';
+            node.committee = true;
+            node.inviteRefusal = 'You have only 20 left in your vouching budget.';
+            list.said = [[LOST], [LOST, DROPPED_ME]];
+            await open();
+            await press('invite-names-box');
+            expect(shown()).toEqual([say(LOST)]);
+            await type('invite-names-name', 'Tegan Rule');
+            await press('invite-vouch-50');
+            await generate();
+            expect(alerts.said[0]?.[0]).toBe(t('Invite not made'));
+            expect(list.opens, 'the tick, and the open after the entry was added').toBe(2);
+            expect(shown()).toEqual([say(LOST), say(DROPPED_ME)]);
+        });
+
+        it('a plan that isn’t ready: the refusal in its own words (the put-back card), not "can’t write right now", and what the open said with it', async () => {
+            node.role = 'admin';
+            list.plan = { kind: 'refused', reason: 'rolled_back', offered: { n: 2 }, newest: { n: 5 } };
+            list.said = [[NAMES_COPY.lostSinceCopy(3)]];
+            await open();
+            await press('invite-names-box');
+            expect(q('invite-names-refused')?.textContent).toBe(say(NAMES_COPY.refusedRolledBack(2, 5)));
+            expect(q('invite-names-refused')?.textContent).not.toBe(say(NAMES_COPY.notReady));
+            expect(shown()).toEqual([say(NAMES_COPY.lostSinceCopy(3))]);
+            // Generate adds nothing, and says the same refusal.
+            await type('invite-names-name', 'Ned Varcoe');
+            await generate();
+            expect(list.saved).toEqual([]);
+            expect(alerts.said[0]).toEqual([t('Not added to the names list'), say(NAMES_COPY.refusedRolledBack(2, 5)), []]);
+        });
+
+        it('a server that keeps no names list (404): says so, as the list’s screen does', async () => {
+            node.role = 'admin';
+            list.refuse = 'Not found';
+            list.refuseStatus = 404;
+            await open();
+            await press('invite-names-box');
+            expect(q('invite-names-refused')?.textContent).toBe(t('This community keeps no names list.'));
         });
     });
 });

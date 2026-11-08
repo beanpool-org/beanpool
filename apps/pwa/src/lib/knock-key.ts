@@ -75,11 +75,14 @@ export async function draftKnockKey(): Promise<BeanPoolIdentity> {
 export async function commitKnockKey(draft: BeanPoolIdentity, callsign: string): Promise<BeanPoolIdentity> {
     const identity: BeanPoolIdentity = { ...draft, callsign: callsign.replace(/\s+/g, ' ').trim() };
     if (await loadInviteSent()) throw new KnockKeyHeldError();
+    // The mark before this one goes back on a refusal: a browser already waiting on another key keeps waiting on it,
+    // and is never read as that key's member.
+    const before = readMark();
     writeMark(identity.publicKey);
     try {
         await importIdentity(identity, { refuseWhileSentJoinWaits: { except: null } });
     } catch (e) {
-        if (readMark() === identity.publicKey) writeMark(null);
+        if (readMark() === identity.publicKey) writeMark(before);
         throw e;
     }
     // `/` at this address opens the web app, where the waiting page is, rather than the card again.

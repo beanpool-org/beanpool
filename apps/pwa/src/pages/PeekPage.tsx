@@ -67,7 +67,7 @@ export function PeekPage({ postId, ticket, onWelcome, onAsked }: {
                 </>
             )}
             {card ? (
-                <CommunityCardPanel card={card} onSignIn={() => onWelcome('signin')} onInvite={() => onWelcome('invite')}
+                <CommunityCardPanel card={card} onSignIn={() => onWelcome('signin')} onInvite={() => onWelcome('invite')} inviteTestId="peek-invite"
                     ask={{ onAsked, named: !phone, appAbove: !!phone }} lookFirst={!phone} />
             ) : (
                 <button type="button" data-testid="peek-invite" onClick={() => onWelcome('invite')}

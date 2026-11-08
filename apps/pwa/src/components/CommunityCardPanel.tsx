@@ -25,10 +25,11 @@ export interface PanelAsk {
  * screen, and "or ask here in your browser" opens the form.
  * `compact`: the name and the facts only, for a visitor who came from the card's own "I have an invite".
  */
-export function CommunityCardPanel({ card, onSignIn, onInvite, ask, lookFirst = false, compact = false }: {
+export function CommunityCardPanel({ card, onSignIn, onInvite, inviteTestId = 'community-card-invite', ask, lookFirst = false, compact = false }: {
     card: CommunityCard;
     onSignIn: () => void;
     onInvite?: () => void;
+    inviteTestId?: string;
     ask?: PanelAsk;
     lookFirst?: boolean;
     compact?: boolean;
@@ -70,7 +71,7 @@ export function CommunityCardPanel({ card, onSignIn, onInvite, ask, lookFirst = 
                         </>
                     ))}
                     {onInvite && (
-                        <button type="button" data-testid="community-card-invite" onClick={onInvite} className={secondary}>{t(W.haveInvite)}</button>
+                        <button type="button" data-testid={inviteTestId} onClick={onInvite} className={secondary}>{t(W.haveInvite)}</button>
                     )}
                     <button type="button" onClick={onSignIn} data-testid="community-card-signin" className={secondary}>
                         {t(W.member)}

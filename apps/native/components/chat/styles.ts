@@ -83,6 +83,12 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         borderRadius: 22, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, maxWidth: '85%',
     },
     reportLineText: { fontSize: 14, fontWeight: '600', color: colors.text.body, flexShrink: 1 },
+    // "Copy message" under a line, the same shape as Report's: a 44dp target of its own, so it never crowds the bubble at 320dp.
+    copyLineButton: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, marginTop: 4, paddingHorizontal: 14,
+        borderRadius: 22, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, maxWidth: '85%',
+    },
+    copyLineText: { fontSize: 14, fontWeight: '600', color: colors.text.body, flexShrink: 1 },
     editClosedText: {
         fontSize: 11,
         lineHeight: 14,

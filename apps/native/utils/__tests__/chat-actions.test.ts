@@ -157,14 +157,17 @@ describe('who may react and reply', () => {
 });
 
 describe('the whole action bar', () => {
-    it('gives a group convenor Reply, React and Remove on a member\'s message, and nothing else', () => {
+    it('gives a group convenor Reply, React, Copy and Remove on a member\'s message, and nothing else', () => {
         const a = messageActions(msg({ senderId: THEM }), viewer({ kind: 'group', isModerator: true }));
-        expect(a).toEqual({ reply: true, react: true, edit: false, delete: false, remove: true });
+        expect(a).toEqual({ reply: true, react: true, edit: false, delete: false, remove: true, copy: true });
     });
 
-    it('gives an enterprise thread nothing at all', () => {
+    // Was "nothing at all" until Copy (9 Nov): an enterprise thread still has no Reply, React, Edit, Delete or Remove, but its
+    // words can be copied like any chat's.
+    it('gives an enterprise thread nothing but Copy', () => {
         const a = messageActions(msg(), viewer({ kind: 'enterprise' }));
-        expect(hasAnyAction(a)).toBe(false);
+        expect(a).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, copy: true });
+        expect(hasAnyAction(a)).toBe(true);
     });
 
     it('gives a tombstone nothing at all, for anyone', () => {
@@ -217,9 +220,9 @@ describe('Report message (group chat photos S6)', () => {
     it('is offered on someone else\'s line in a locked group chat, an observer\'s view too, and opens the bar on its own', () => {
         expect(canReportMessage(msg({ senderId: THEM }), locked())).toBe(true);
         const observer = messageActions(msg({ senderId: THEM }), locked({ canPost: false }));
-        expect(observer).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, report: true });
+        expect(observer).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, report: true, copy: true });
         expect(hasAnyAction(observer)).toBe(true);
-        expect(messageActions(msg({ senderId: THEM }), locked({ isModerator: true }))).toEqual({ reply: true, react: true, edit: false, delete: false, remove: true, report: true });
+        expect(messageActions(msg({ senderId: THEM }), locked({ isModerator: true }))).toEqual({ reply: true, react: true, edit: false, delete: false, remove: true, report: true, copy: true });
     });
 
     it('is never offered on my own line, a system line, a tombstone, a line in flight or one shown as nobody\'s', () => {

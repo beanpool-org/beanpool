@@ -60,6 +60,8 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { notifyConversationRead } from '../lib/conversation-read';
 import { FoldedChatText } from '../components/FoldedChatText';
+import { CopyMessageButton } from '../components/CopyMessageButton';
+import { copyableChatText } from '../lib/copy-chat-text';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { ListPhoto } from '../components/ListPhoto';
@@ -2651,6 +2653,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const isTopMessage = index < 2;
                         // A long message folds with "…more" (FoldedChatText); never a removed line, nor one being edited.
                         const foldable = !isTombstone && editingMessage?.id !== msg.id;
+                        // What Copy puts on the clipboard: the words as the bubble shows them. Nothing for a deleted or removed
+                        // line, a line that did not open, or a photo with no caption.
+                        const copyWords = copyableChatText(isTombstone ? null : decryptMessage(msg), { removed: isTombstone, unreadable: UNREADABLE_BODIES });
 
                         return (
                             <div
@@ -2721,7 +2726,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         ))}
                                     </div>
                                 )}
-                                <div style={{
+                                {/* The words are selectable with the mouse and copyable by hand; only the time and the chips are not
+                                    (userSelect below). A member's own bubble is the accent colour, so its selection is drawn in a darker
+                                    shade of it (index.css .bp-bubble-mine): the global accent one vanished on it. */}
+                                <div className={isMe ? 'bp-bubble-mine' : undefined} data-testid="chat-bubble" style={{
                                     background: isMe ? 'var(--accent)' : 'var(--bg-card)',
                                     color: isMe ? '#fff' : 'var(--text-primary)',
                                     borderRadius: isMe
@@ -2732,6 +2740,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     border: isMe ? 'none' : '1px solid var(--border-primary)',
                                     wordBreak: 'break-word',
+                                    userSelect: 'text',
+                                    WebkitUserSelect: 'text',
                                 }}>
                                     {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
@@ -2919,6 +2929,28 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </button>
                                         )}
                                         </>}
+                                        {/* Open to a chat that is still a request too: copying sends nothing to anyone. */}
+                                        {copyWords !== null && (
+                                            <CopyMessageButton
+                                                text={copyWords}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    font: 'inherit',
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1,
+                                                    padding: '4px 6px',
+                                                    minHeight: '24px',
+                                                    cursor: 'pointer',
+                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    fontWeight: 600,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    textDecoration: 'underline',
+                                                    textUnderlineOffset: '2px',
+                                                }}
+                                            />
+                                        )}
                                         {canDelete && (
                                             <button
                                                 type="button"

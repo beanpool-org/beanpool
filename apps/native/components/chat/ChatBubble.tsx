@@ -38,6 +38,10 @@ interface Props {
     authorLabel?: string | null;
     quote?: ChatQuote | null;
     onPress?: (event: any) => void;
+    /** Press and hold: opens what a tap opens (WhatsApp's way in), so Copy is one hold away. */
+    onLongPress?: (event: any) => void;
+    /** Copies the words. Given, a screen reader gets a "Copy message" action on the bubble itself. */
+    onCopy?: () => void;
     /** Left out, a link reads as its words and nothing opens: a chat that is still a message request (R1). */
     onPressUrl?: (url: string) => void;
     /** A DM photo, drawn above the words. */
@@ -50,16 +54,20 @@ interface Props {
     editing?: boolean;
 }
 
-function renderTextWithLinks(text: string, linkStyle: any, onPressUrl?: (url: string) => void) {
+// `onLongPress`: a link is its own touch target, so a hold that lands on one must reach the bubble's hold as well, or a
+// link someone sent could not be copied.
+function renderTextWithLinks(text: string, linkStyle: any, onPressUrl?: (url: string) => void, onLongPress?: (event: any) => void) {
     if (!text || !onPressUrl) return text;
     return splitTextWithLinks(text).map((run, i) =>
         run.isUrl
-            ? <Text key={i} style={linkStyle} onPress={() => onPressUrl(run.text)}>{run.text}</Text>
+            ? <Text key={i} style={linkStyle} onPress={() => onPressUrl(run.text)} onLongPress={onLongPress}>{run.text}</Text>
             : run.text,
     );
 }
 
-export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onPressUrl, attachment, status, footer, editing }: Props) {
+const COPY_ACTION = 'copyMessage';
+
+export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onLongPress, onCopy, onPressUrl, attachment, status, footer, editing }: Props) {
     const removed = isTombstone(item);
     const fold = useChatFold(item.id, item.text ?? '', !removed && !editing);
     const { emojis, total } = removed ? { emojis: [] as string[], total: 0 } : reactionSummary(item.metadata);
@@ -70,6 +78,10 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
         <Pressable
             accessibilityRole={removed ? 'text' : 'button'}
             onPress={removed ? undefined : onPress}
+            onLongPress={removed ? undefined : onLongPress}
+            // A screen reader's own menu for the bubble: Copy without opening the bar first.
+            accessibilityActions={!removed && onCopy ? [{ name: COPY_ACTION, label: t('Copy message') }] : undefined}
+            onAccessibilityAction={!removed && onCopy ? (e: any) => { if (e?.nativeEvent?.actionName === COPY_ACTION) onCopy(); } : undefined}
             disabled={removed}
             style={[
                 styles.messageBubble,
@@ -113,7 +125,7 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                 fold.long ? (
                     <>
                         <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]} numberOfLines={fold.open ? undefined : CHAT_FOLD_LINES}>
-                            {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
+                            {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl, onLongPress)}
                         </Text>
                         <View style={styles.foldRow}>
                             <Pressable
@@ -135,7 +147,7 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                     </>
                 ) : (
                     <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]} {...fold.measure}>
-                        {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
+                        {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl, onLongPress)}
                         {'  '}
                         <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>
                             {item.edited ? t('edited · {time}', { time: messageTime(item) }) : messageTime(item)}

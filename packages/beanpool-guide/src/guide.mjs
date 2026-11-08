@@ -295,7 +295,7 @@ export function guideUrl(folder, name) {
 }
 
 /** The link-preview image every page of beanpool.org shares (scripts/website-og-image.mjs in the repo draws it). */
-export const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;
+export const OG_IMAGE_URL = `${SITE_URL}/og-image.jpg`;
 const OG_IMAGE_ALT = 'The BeanPool bean logo beside the words BeanPool and Exchange for Communities, Not Commercial Banks';
 
 /** Facebook's own locale codes (ll_CC) for og:locale; scripts/website-build.mjs keeps the same table for the site's other pages. */

@@ -1131,7 +1131,7 @@ test('every guide page carries its own extensionless address as canonical and og
         const url = `https://beanpool.org/guide/${folder ? `${folder}/` : ''}${name === 'index.html' ? '' : name.replace(/\.html$/, '')}`;
         assert.equal(guideCanonical(html), url, file);
         assert.equal(guideMeta(html, 'og:url'), url, file);
-        assert.equal(guideMeta(html, 'og:image'), 'https://beanpool.org/og-image.png');
+        assert.equal(guideMeta(html, 'og:image'), 'https://beanpool.org/og-image.jpg');
         assert.equal(guideMeta(html, 'og:image:width'), '1200');
         assert.equal(guideMeta(html, 'og:image:height'), '630');
         assert.equal(guideMeta(html, 'og:type'), 'website');

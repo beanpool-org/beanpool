@@ -5,7 +5,7 @@
 //   - building twice changes a page, or the tags change an English page's content hash (every translation would turn stale);
 //   - the home page (English or translated) has no JSON-LD, it does not parse, lacks Organization, WebSite or SoftwareApplication,
 //     or its store links are not the ones the page's own badges carry;
-//   - apps/website/og-image.png is not a 1200 x 630 PNG under 200 KB.
+//   - apps/website/og-image.jpg is not a 1200 x 630 JPEG under 200 KB.
 // No browser, no network.
 //
 //   node --test scripts/website-seo.test.mjs
@@ -145,8 +145,8 @@ test('only the home page carries structured data, and a page without store links
     assert.throws(() => buildJsonLd('<html></html>', 'en'), /Google Play and App Store links/);
 });
 
-test('the share image is a 1200 x 630 PNG under 200 KB', () => {
+test('the share image is a 1200 x 630 JPEG under 200 KB', () => {
     assert.deepEqual(checkOgImage(), []);
-    assert.deepEqual(checkOgImage(path.join(WEBSITE_DIR, 'missing.png')).length, 1);
-    assert.equal(checkOgImage(path.join(WEBSITE_DIR, 'bean.png')).length > 0, true, 'a 512 x 512 file is refused');
+    assert.deepEqual(checkOgImage(path.join(WEBSITE_DIR, 'missing.jpg')).length, 1);
+    assert.equal(checkOgImage(path.join(WEBSITE_DIR, 'bean.png')).length > 0, true, 'a PNG is refused');
 });

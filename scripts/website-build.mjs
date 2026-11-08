@@ -354,7 +354,7 @@ export function buildCanonicalTag(page, lang) {
 }
 
 /** The link-preview image every page shares (scripts/website-og-image.mjs draws it). */
-export const OG_IMAGE_URL = 'https://beanpool.org/og-image.png';
+export const OG_IMAGE_URL = 'https://beanpool.org/og-image.jpg';
 export const OG_IMAGE_ALT = 'The BeanPool bean logo beside the words BeanPool and Exchange for Communities, Not Commercial Banks';
 
 /** Facebook's own locale codes (ll_CC): og:locale takes these, not the BCP 47 tags the pages use. */
@@ -504,19 +504,37 @@ export function buildSitemap(websiteDir = WEBSITE_DIR) {
     return lines.join('\n');
 }
 
-export const OG_IMAGE_FILE = path.join(WEBSITE_DIR, 'og-image.png');
+export const OG_IMAGE_FILE = path.join(WEBSITE_DIR, 'og-image.jpg');
 
-/** What `--check` says about the share image every page's og:image points at: present, a 1200 x 630 PNG, light enough for a chat preview. */
+/** A JPEG's width and height, from its first start-of-frame marker; null if it is not a JPEG. */
+function jpegSize(buf) {
+    if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+    let i = 2;
+    while (i + 9 < buf.length) {
+        if (buf[i] !== 0xff) return null;
+        const marker = buf[i + 1];
+        const len = buf.readUInt16BE(i + 2);
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+            return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+        }
+        i += 2 + len;
+    }
+    return null;
+}
+
+/**
+ * What `--check` says about the share image every page's og:image points at: present, a 1200 x 630 JPEG (the doodle and the
+ * rainbow band as a palette PNG), light enough for a chat preview.
+ */
 export function checkOgImage(file = OG_IMAGE_FILE) {
-    if (!fs.existsSync(file)) return [`apps/website/og-image.png is missing; run 'node scripts/website-og-image.mjs'`];
-    const png = fs.readFileSync(file);
-    const isPng = png.length > 24 && png.subarray(1, 4).toString('latin1') === 'PNG';
-    if (!isPng) return ['apps/website/og-image.png is not a PNG'];
-    const width = png.readUInt32BE(16);
-    const height = png.readUInt32BE(20);
+    const name = `apps/website/${path.basename(file)}`;
+    if (!fs.existsSync(file)) return [`${name} is missing; run 'node scripts/website-og-image.mjs'`];
+    const buf = fs.readFileSync(file);
+    const size = jpegSize(buf);
+    if (!size) return [`${name} is not a JPEG`];
     const errors = [];
-    if (width !== 1200 || height !== 630) errors.push(`apps/website/og-image.png is ${width}x${height}; the og:image tags say 1200x630`);
-    if (png.length > 200 * 1024) errors.push(`apps/website/og-image.png is ${Math.round(png.length / 1024)} KB; keep it under 200 KB`);
+    if (size.width !== 1200 || size.height !== 630) errors.push(`${name} is ${size.width}x${size.height}; the og:image tags say 1200x630`);
+    if (buf.length > 200 * 1024) errors.push(`${name} is ${Math.round(buf.length / 1024)} KB; keep it under 200 KB`);
     return errors;
 }
 

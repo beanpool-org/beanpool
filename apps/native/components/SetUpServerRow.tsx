@@ -11,8 +11,8 @@ import { CLAIM_NEW_SERVER_ROUTE } from '../utils/claim-link';
  * for one (Find a community, Start a community) and on the BeanPool sheet under Add a community, on every phone
  * (DESIGN-new-operator-path-fable.md, decision 2: a member on a local community had no way to it but the camera). It
  * opens the claim screen with no server yet (app/claim-community.tsx), whose Scan the code reads the QR `beanpool claim`
- * shows. Before it, only the phone's camera (the QR's beanpool://claim
- * link) or Settings → Link a device reached that scanner (Marty's claim, 17 Oct).
+ * shows. Before it, only the phone's camera (the QR's beanpool://claim link) or Settings → Link a device reached that
+ * scanner (Marty's claim, 17 Oct).
  *
  * A row as Find a community's others: icon, title, a line under it, chevron; the words wrap at 320 dp and 1.3×. `style`
  * is for a list whose rows carry their own side padding (the BeanPool sheet's).

@@ -88,10 +88,11 @@ vi.mock('react-native', () => {
     };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, setParams() {} },
+        router: { push(to: unknown) { nav.pushed.push(to); }, navigate() {}, setParams() {} },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => params.now,
@@ -124,7 +125,9 @@ vi.mock('expo-crypto', async () => {
 });
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
 vi.mock('expo-local-authentication', () => ({ SecurityLevel: { NONE: 0 }, hasHardwareAsync: async () => false, isEnrolledAsync: async () => false, authenticateAsync: async () => ({ success: false }) }));
-vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => false, PILLAR_SYNC_ENDED: 'pillar_sync_ended' }));
+// `landed`: the boot sync already wrote this copy, so the Market's first sync is done (an empty community then shows its empty feed).
+const sync = vi.hoisted(() => ({ landed: false }));
+vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => sync.landed, PILLAR_SYNC_ENDED: 'pillar_sync_ended' }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {
@@ -235,6 +238,8 @@ beforeEach(() => {
     net.calls.length = 0;
     net.answer = community();
     params.now = {};
+    nav.pushed.length = 0;
+    sync.landed = false;
     interests.now = [];
     alerts.said.length = 0;
     store.map.clear();
@@ -285,6 +290,64 @@ function bypassing(): string[] {
 }
 /** How many drawn texts came through t() (bracketed), so a check on an empty screen can't pass by itself. */
 const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => /^\[.*\]$/su.test(s.textContent ?? '')).length;
+
+/**
+ * The Market's post buttons (Rob, iOS, 9 Nov: the Market stopped taking taps and scrolls). "Post your first Offer", the empty
+ * feed's "+ Create First Post" and the filtered feed's "+ Post a Deal" used to push the listing screen with `newPost=true`,
+ * a full-window transparentModal that drew nothing until its own chooser opened; on iOS that chooser was refused and the empty
+ * screen stayed on top. They open the Market's own chooser now (the one the + and ADD POST open); no screen is pushed until a
+ * pick is made, and each pick opens the same form as before.
+ */
+describe('the Market\'s post buttons open its own chooser: no listing screen is pushed until a pick', () => {
+    const chooser = () => Array.from(host.querySelectorAll('[data-modal]')).find((m) => m.textContent?.includes('Create New Post')) ?? null;
+    const buttonHolding = (shown: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(shown)) ?? null;
+    const searchFor = async (text: string) => {
+        const search = host.querySelector('input[placeholder]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, text);
+            search.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await settle();
+    };
+
+    async function opensTheChooser(what: string, button: () => Element | null) {
+        expect(chooser(), `${what}: closed to begin with`).toBeNull();
+        await click(button(), what);
+        expect(chooser(), `${what} opens the chooser`).not.toBeNull();
+        expect(nav.pushed, `${what} pushes no listing screen`).toEqual([]);
+    }
+
+    it('"➕ Post your first Offer" (a member who has listed nothing yet)', async () => {
+        await renderIn('en');
+        await opensTheChooser('Post your first Offer', () => buttonHolding('Post your first Offer'));
+        // A pick hands its own type to the listing screen, as the + does: Need is a Need, not an Offer.
+        await click(host.querySelector('[data-modal] [aria-label^="Need:"]'), 'Need in the chooser');
+        expect(nav.pushed).toEqual([{ pathname: '/new-listing', params: { newPost: 'need' } }]);
+    });
+
+    it('"+ Post a Deal" (a search with no matches)', async () => {
+        await renderIn('en');
+        await searchFor('zzzz');
+        await opensTheChooser('+ Post a Deal', () => buttonHolding('+ Post a Deal'));
+        await click(host.querySelector('[data-modal] [aria-label^="Offer:"]'), 'Offer in the chooser');
+        expect(nav.pushed).toEqual([{ pathname: '/new-listing', params: { newPost: 'offer' } }]);
+    });
+
+    it('"+ Create First Post" (the empty community\'s activity list)', async () => {
+        net.answer = community({ getPosts: [], getMarketplaceTransactions: [], signedGet: { status: 200, ok: true, json: async () => ({ feed: [] }) } });
+        sync.landed = true;
+        await renderIn('en');
+        await opensTheChooser('Create First Post', () => byLabel('Create First Post'));
+    });
+
+    it('Poll and Event in that chooser open the Market\'s own forms, as the + does: no listing screen at all', async () => {
+        await renderIn('en');
+        await click(buttonHolding('Post your first Offer'), 'Post your first Offer');
+        await click(host.querySelector('[data-modal] [aria-label^="Community Poll:"]'), 'Poll in the chooser');
+        expect(nav.pushed).toEqual([]);
+        expect(chooser()).toBeNull();
+    });
+});
 
 describe('the Market in the pseudo-locale: every word on it came through t() (words S3b)', () => {
     it('the feed in list view: the search, Your deals, the type and filter rows, the group pills, every card and heading, the poll and event cards, the welcome quest and the fresh banner', async () => {

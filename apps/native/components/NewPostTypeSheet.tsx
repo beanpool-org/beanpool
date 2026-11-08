@@ -22,9 +22,11 @@ interface NewPostTypeSheetProps {
     onClose: () => void;
     /** The chooser closes itself before this runs, so the chosen form opens over a clear screen. */
     onSelect: (type: ComposePostType) => void;
+    /** The Modal has actually been shown. On iOS a Modal asked for mid-presentation is refused and this never fires (utils/screen-presented.ts). */
+    onShow?: () => void;
 }
 
-export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeSheetProps) {
+export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPostTypeSheetProps) {
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
 
@@ -34,6 +36,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
             transparent
             animationType="fade"
             onRequestClose={onClose}
+            onShow={onShow}
         >
             <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel={t('Close create post sheet')} onPress={onClose}>
                 <Pressable style={styles.actionSheetContainer} onPress={(e) => e.stopPropagation()}>

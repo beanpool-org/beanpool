@@ -110,9 +110,11 @@ interface NewEventModalProps {
     editOf?: { id: string; values: EventEditValues; audienceLabel: string } | null;
     /** After a save, with the event as the node now has it. */
     onSaved?: (post: any) => void;
+    /** The Modal has actually been shown (utils/screen-presented.ts: a refused one never fires it). */
+    onShow?: () => void;
 }
 
-export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin, editOf, onSaved }: NewEventModalProps) {
+export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin, editOf, onSaved, onShow }: NewEventModalProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -664,7 +666,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const submitDisabled = submitting || photoMissing;
 
     return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onShow={onShow}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <View style={styles.container}>
                     <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>

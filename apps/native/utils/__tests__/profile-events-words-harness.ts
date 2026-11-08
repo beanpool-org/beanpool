@@ -12,6 +12,9 @@
 import { createElement, Fragment, useEffect, type ReactNode } from 'react';
 
 /** What the screen said in alerts: titles, bodies and buttons in order; `buttons` the last alert's, to press one. */
+/** A test makes the platform refuse every Modal asked for: `modalControl.refuse = true` (reset it after). */
+export const modalControl = { refuse: false };
+
 export interface Said { said: string[]; buttons: Array<{ text?: string; onPress?: () => unknown }> }
 
 const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', checkbox: 'checkbox', alert: 'alert', switch: 'switch', radio: 'radio', imagebutton: 'button', list: 'list' };
@@ -63,7 +66,13 @@ export function nativeMock(said: Said) {
         ActivityIndicator: (props: { accessibilityLabel?: string }) => createElement('span', { 'data-spinner': 'true', ...(props.accessibilityLabel ? { 'aria-label': props.accessibilityLabel } : {}) }),
         RefreshControl: () => null,
         FlatList, SectionList: FlatList,
-        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
+        // A Modal that is up reports `onShow`, as React Native's does. `modalControl.refuse` is iOS refusing one asked for while
+        // the screen under it was still being presented: nothing is drawn and `onShow` never fires (utils/screen-presented.ts).
+        Modal: ({ visible, children, onShow }: { visible: boolean; children?: unknown; onShow?: () => void }) => {
+            const up = visible && !modalControl.refuse;
+            useEffect(() => { if (up) onShow?.(); }, [up]);
+            return up ? createElement('div', { 'data-modal': 'true' }, children as any) : null;
+        },
         Animated: { View: el('div'), Text: el('span'), FlatList, Value, add: () => new Value(0), multiply: () => new Value(0), timing: anim, spring: anim, loop: anim, sequence: anim, parallel: anim, event: () => () => {}, createAnimatedComponent: (c: unknown) => c },
         Easing: { inOut: () => () => 0, ease: () => 0, linear: () => 0, out: () => () => 0 },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },

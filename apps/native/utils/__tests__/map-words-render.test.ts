@@ -42,9 +42,9 @@ const nav = vi.hoisted(() => ({ pushed: [] as unknown[], stack: null as null | R
 const SOLO_ROUTE = vi.hoisted(() => ({ key: 'solo-route', name: 'new-listing' }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect, useContext } = await import('react');
-    const { RouteCtx } = await import('./stack-sim');
+    const { RouteCtx, addTransitionListener } = await import('./stack-sim');
     const solo = {
-        addListener: () => () => {}, isFocused: () => true, goBack: () => { nav.pushed.push('goBack'); },
+        addListener: addTransitionListener, isFocused: () => true, goBack: () => { nav.pushed.push('goBack'); },
         dispatch: () => { nav.pushed.push('goBack'); },
         getState: () => ({ key: 'solo', index: 0, routes: [SOLO_ROUTE] }),
     };
@@ -168,7 +168,9 @@ import { categoryEmoji } from '../../constants/categories';
 import MapScreen from '../../app/(tabs)/map';
 import NewListingScreen from '../../app/new-listing';
 import { router } from 'expo-router';
-import { createStack } from './stack-sim';
+import { createStack, presentation } from './stack-sim';
+import { modalControl } from './profile-events-words-harness';
+import { MODAL_SHOW_GUARD_MS, PRESENTED_FALLBACK_MS } from '../screen-presented';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -241,7 +243,7 @@ beforeEach(() => {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
-afterEach(() => { vi.useRealTimers(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); presentation.reset(); modalControl.refuse = false; act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: unknown = createElement(MapScreen)) {
@@ -608,6 +610,116 @@ describe('the listing screen (app/new-listing.tsx): the form out of the map, ope
         await renderIn('en', listing());
         expect(said()[0]).toBe('Unfinished post');
         await pressAlert('Cancel');
+        expect(nav.pushed).toEqual(['back']);
+    });
+});
+
+/**
+ * The Market that froze on iOS (Rob, 9 Nov: "the market is not scrollable or clickable"). The listing screen is a full-window
+ * transparentModal that draws nothing until its chooser or form opens. Opened with `newPost=true` it made the chooser (an RN
+ * Modal) visible on its first render, while the screen was still being presented; iOS refuses that and React Native never
+ * asks again, so no chooser appeared and the empty screen took every tap and scroll. Two rules, both asserted here: nothing
+ * is asked for until the stack says the screen is up, and a Modal that never reports it is up sends the member back.
+ * `presentation.held` is the fade not finished (stack-sim.ts); `modalControl.refuse` is iOS refusing the Modal.
+ */
+describe('the listing screen is never left empty on top (iOS Market freeze, 9 Nov)', () => {
+    const choosers = () => Array.from(host.querySelectorAll('[data-modal]')).filter((m) => m.textContent?.includes('Create New Post'));
+    const wait = async (ms: number) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); };
+    const finishPresenting = async () => { await act(async () => { presentation.finish(); }); await settle(); };
+
+    it('the chooser is not made visible before the screen is presented, and opens when it is', async () => {
+        presentation.held = true;
+        params.now = { newPost: 'true' };
+        await renderIn('en', listing());
+        expect(choosers(), 'no Modal while the screen is still being presented').toHaveLength(0);
+        expect(host.querySelector('[data-modal]')).toBeNull();
+        await finishPresenting();
+        expect(choosers()).toHaveLength(1);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('a link with no newPost value is the same chooser, and waits the same way', async () => {
+        presentation.held = true;
+        params.now = {};
+        await renderIn('en', listing());
+        expect(choosers()).toHaveLength(0);
+        await finishPresenting();
+        expect(choosers()).toHaveLength(1);
+    });
+
+    it('the event and poll links wait too: their Modals are asked for only once the screen is presented', async () => {
+        presentation.held = true;
+        params.now = { newPost: 'event' };
+        await renderIn('en', listing());
+        expect(host.querySelector('[data-testid="event-form"]'), 'the event form').toBeNull();
+        await finishPresenting();
+        expect(host.querySelector('[data-testid="event-form"]')).not.toBeNull();
+    });
+
+    it('the form link waits as well: no question is asked, and no form drawn, before the screen is up', async () => {
+        net.answer = community({ getMemberProfile: {} });
+        presentation.held = true;
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said(), 'an alert is a window of its own: it waits too').toEqual([]);
+        await finishPresenting();
+        expect(said()[0]).toBe('Finish your profile first');
+    });
+
+    it('a second tap\'s copy still goes at once, before its screen is presented', async () => {
+        const Other = () => createElement('div', { 'data-testid': 'other' });
+        nav.stack = createStack();
+        await renderIn('en', nav.stack.host({ index: MapScreen, 'new-listing': NewListingScreen, other: Other }));
+        presentation.held = true;
+        await act(async () => { for (let i = 0; i < 2; i++) router.push({ pathname: '/new-listing', params: { newPost: 'true' } }); });
+        await settle(10);
+        expect(nav.stack.names()).toEqual(['index', 'new-listing']);
+        await finishPresenting();
+        expect(choosers()).toHaveLength(1);
+    });
+
+    it('a stack that never says the screen is up does not hold the chooser shut for ever', async () => {
+        presentation.held = true;
+        params.now = { newPost: 'true' };
+        await renderIn('en', listing());
+        expect(choosers()).toHaveLength(0);
+        await wait(PRESENTED_FALLBACK_MS + 150);
+        expect(choosers()).toHaveLength(1);
+    });
+
+    it('a Modal the platform refuses (no onShow) sends the member back within the guard: the screen never stays empty', async () => {
+        modalControl.refuse = true;
+        params.now = { newPost: 'true' };
+        await renderIn('en', listing());
+        expect(host.querySelector('[data-modal]'), 'iOS drew nothing').toBeNull();
+        await wait(MODAL_SHOW_GUARD_MS / 2);
+        expect(nav.pushed, 'not yet').toEqual([]);
+        await wait(MODAL_SHOW_GUARD_MS / 2 + 200);
+        expect(nav.pushed).toEqual(['back']);
+    });
+
+    it('a refused event Modal does the same', async () => {
+        modalControl.refuse = true;
+        params.now = { newPost: 'event' };
+        await renderIn('en', listing());
+        await wait(MODAL_SHOW_GUARD_MS + 200);
+        expect(nav.pushed).toEqual(['back']);
+    });
+
+    it('a Modal that does show is left alone past the guard (Android and web are not sent back)', async () => {
+        params.now = { newPost: 'true' };
+        await renderIn('en', listing());
+        expect(choosers()).toHaveLength(1);
+        await wait(MODAL_SHOW_GUARD_MS + 300);
+        expect(choosers()).toHaveLength(1);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('closing the chooser before the guard runs out leaves once, not twice', async () => {
+        params.now = { newPost: 'true' };
+        await renderIn('en', listing());
+        await click(host.querySelector('[data-modal] [aria-label="Cancel"]'), 'Cancel');
+        await wait(MODAL_SHOW_GUARD_MS + 300);
         expect(nav.pushed).toEqual(['back']);
     });
 });

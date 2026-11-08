@@ -118,7 +118,7 @@ else
   for NODE in "${TARGETS[@]}"; do
     NODE_NAME=$(echo "$NODE" | cut -d: -f2)
     case "$NODE_NAME" in
-      test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi|yarravalley) ;;
+      test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi) ;;
       *) NEEDS_REGISTRY_IMAGE=1 ;;
     esac
   done
@@ -192,7 +192,7 @@ tar -tzf "$PKG_PATH" | sed 's#/.*#/#' | sort | uniq -c \
 # A pull-mode node takes the GHCR image; a build-mode node builds from the tarball on its host.
 is_build_node() {
   case "$1" in
-    test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi|yarravalley) return 0 ;;
+    test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -484,7 +484,8 @@ for NODE in "${TARGETS[@]}"; do
       sed -i 's/"443:8443"/"8451:8443"/g' docker-compose.yml
       sed -i '/"8080:8080"/d' docker-compose.yml
       sed -i '/"8443:8443"/d' docker-compose.yml
-    elif [ "$DIR" = "BeanPool-YarraValley" ]; then
+    elif [ "$DIR" = "BeanPool-ApolloBay" ]; then
+      # Apollo Bay node (VIC host tunnel), in the ports Yarra Valley had (removed 9 Nov 2026): HTTP 8087, HTTPS 8452. Pull mode: never built on the 1.3 GB VIC box.
       sed -i 's/"80:8080"/"8087:8080"/g' docker-compose.yml
       sed -i 's/"443:8443"/"8452:8443"/g' docker-compose.yml
       sed -i '/"8080:8080"/d' docker-compose.yml
@@ -536,7 +537,7 @@ for NODE in "${TARGETS[@]}"; do
         exit 1
       }
       sudo -E docker compose -p $PROJ_NAME up -d
-    elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
+    elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose -p $PROJ_NAME up -d --build
     else

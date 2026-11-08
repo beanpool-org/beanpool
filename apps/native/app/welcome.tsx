@@ -102,6 +102,7 @@ import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } f
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -999,15 +1000,55 @@ export default function WelcomeScreen() {
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
 
+    // The invite a link brought, held on the phone until it is redeemed (utils/held-invite.ts): applied when this copy of
+    // welcome opens with no other invite, and whenever a newer link is held while it is open. A warm start's link lands on a
+    // new welcome with no params; before, it opened on the first screen with no code (Damo, 9 Nov). Only on the first screen
+    // or the invite step: a recovery or the steps after the join are never switched to it.
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const inviteCodeRef = useRef(inviteCode);
+    inviteCodeRef.current = inviteCode;
+    const accountRef = useRef(accountOnPhone);
+    accountRef.current = accountOnPhone;
+    const applyHeldInvite = useCallback((held: HeldInvite) => {
+        const key = heldInviteKey(held);
+        if (appliedInvites.current.has(key)) return;
+        if (modeRef.current !== 'home' && modeRef.current !== 'create') return;
+        appliedInvites.current.add(key);
+        setInviteCode(held.invite);
+        noteLandingPost(held.invite, held.post);
+        if (held.server) setCreateAnchorUrl(held.server);
+        setMode('create');
+    }, []);
+    useEffect(() => {
+        let live = true;
+        const off = onHeldInvite((held) => { if (live) applyHeldInvite(held); });
+        void readHeldInvite(AsyncStorage).then((held) => {
+            // A link or params this screen opened with are that same tap, or newer: they have filled the step already. A phone
+            // with an account passes through welcome on every switch of community: never sent to the invite step by it.
+            if (!live || !held || appliedInvites.current.size > 0 || accountRef.current) return;
+            applyHeldInvite(held);
+        });
+        return () => { live = false; off(); };
+    }, [applyHeldInvite]);
+    /** "Join with an invite": the step opens filled from a held invite, never asking to scan a code the phone has. */
+    const openInviteStep = useCallback(() => {
+        void readHeldInvite(AsyncStorage).then((held) => {
+            if (held && !inviteCodeRef.current) {
+                setInviteCode(held.invite);
+                noteLandingPost(held.invite, held.post);
+                if (held.server) setCreateAnchorUrl(held.server);
+            }
+        }).catch(() => {});
+        setMode('create');
+    }, []);
+
     // --- The global community's link (utils/global-link.ts): `/welcome?door=global&at=…` from app/+native-intent.ts, once
     // per arrival, and the install referrer's `global=1` above. Read through refs: the answer about a half-done wizard
     // comes back after the screen may have moved on, and what it is doing then is what counts. ---
     const screenMountedRef = useRef(true);
     useEffect(() => () => { screenMountedRef.current = false; }, []);
-    const modeRef = useRef(mode);
-    modeRef.current = mode;
-    const inviteCodeRef = useRef(inviteCode);
-    inviteCodeRef.current = inviteCode;
+    // modeRef and inviteCodeRef: declared above, with the held invite.
     const appliedDoorLinks = useRef(new Set<string>());
 
     /** The door, held for the member's first tap, unless the screen is doing something a link mustn't interrupt. */
@@ -1351,6 +1392,8 @@ export default function WelcomeScreen() {
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
                 undoCommunity = false;
+                // Used: a link's held invite is never offered again (utils/held-invite.ts).
+                void forgetHeldInvite(AsyncStorage, parsedCode);
 
                 // Sent from a listing (invite-and-share): it opens when this member lands on Home, and this is the join. Only an id,
                 // and only for this invite; the pasted link itself may carry it too.
@@ -4113,7 +4156,7 @@ export default function WelcomeScreen() {
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
-                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
+                    <WelcomeDoors door={globalDoor} joinWithInvite={openInviteStep} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}

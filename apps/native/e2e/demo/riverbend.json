@@ -1,0 +1,661 @@
+{
+  "_about": "Riverbend: an invented community for marketing pictures, run only on a throwaway local node (demo-node.ts). Every person, place and listing is made up; the place has no BeanPool community. Beans only.",
+  "community": {
+    "name": "Riverbend",
+    "centre": {
+      "lat": -30.45,
+      "lng": 152.9
+    },
+    "tz": "Australia/Sydney",
+    "hall": "Riverbend Hall"
+  },
+  "sam": {
+    "callsign": "Sam",
+    "avatar": "sprout",
+    "joinedDaysAgo": 24,
+    "area": {
+      "dLat": 0.004,
+      "dLng": 0.006
+    },
+    "words": [
+      "struggle",
+      "banana",
+      "blur",
+      "logic",
+      "corn",
+      "gauge",
+      "regret",
+      "swing",
+      "antenna",
+      "road",
+      "cluster",
+      "doll"
+    ],
+    "_words": "An invented account: the words come from a fixed phrase, belong to no real person, and are used nowhere but this demo node.",
+    "grantedCredit": 100
+  },
+  "people": [
+    {
+      "key": "amara",
+      "callsign": "Amara",
+      "avatar": "sunflower",
+      "joinedDaysAgo": 96,
+      "area": {
+        "dLat": -0.012,
+        "dLng": 0.009
+      },
+      "grantedCredit": 200
+    },
+    {
+      "key": "kofi",
+      "callsign": "Kofi",
+      "avatar": "honeybee",
+      "joinedDaysAgo": 120,
+      "area": {
+        "dLat": 0.021,
+        "dLng": -0.015
+      },
+      "grantedCredit": 200
+    },
+    {
+      "key": "mere",
+      "callsign": "Mere",
+      "avatar": "leaf",
+      "joinedDaysAgo": 88,
+      "area": {
+        "dLat": -0.027,
+        "dLng": -0.02
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "priya",
+      "callsign": "Priya",
+      "avatar": "butterfly",
+      "joinedDaysAgo": 61,
+      "area": {
+        "dLat": 0.015,
+        "dLng": 0.026
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "lucia",
+      "callsign": "Lucía",
+      "avatar": "sun",
+      "joinedDaysAgo": 47,
+      "area": {
+        "dLat": -0.006,
+        "dLng": -0.031
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "tomasz",
+      "callsign": "Tomasz",
+      "avatar": "mountain",
+      "joinedDaysAgo": 75,
+      "area": {
+        "dLat": 0.033,
+        "dLng": 0.011
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "hana",
+      "callsign": "Hana",
+      "avatar": "wave",
+      "joinedDaysAgo": 52,
+      "area": {
+        "dLat": -0.019,
+        "dLng": 0.03
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "yusuf",
+      "callsign": "Yusuf",
+      "avatar": "mushroom",
+      "joinedDaysAgo": 104,
+      "area": {
+        "dLat": 0.008,
+        "dLng": -0.007
+      },
+      "grantedCredit": 200
+    },
+    {
+      "key": "sione",
+      "callsign": "Sione",
+      "avatar": "fire",
+      "joinedDaysAgo": 70,
+      "area": {
+        "dLat": -0.036,
+        "dLng": 0.014
+      },
+      "grantedCredit": 100
+    },
+    {
+      "key": "ingrid",
+      "callsign": "Ingrid",
+      "avatar": "moon",
+      "joinedDaysAgo": 140,
+      "area": {
+        "dLat": 0.002,
+        "dLng": 0.018
+      },
+      "genesis": true,
+      "grantedCredit": 200
+    }
+  ],
+  "otherMembers": [
+    "Beatriz",
+    "Callum",
+    "Dalia",
+    "Emeka",
+    "Freya",
+    "Gabriel",
+    "Harriet",
+    "Idris",
+    "Jun",
+    "Keiko",
+    "Leilani",
+    "Mateo",
+    "Noor",
+    "Oskar",
+    "Petra",
+    "Quentin",
+    "Rangi",
+    "Saoirse",
+    "Tariq",
+    "Uma",
+    "Viktor",
+    "Wren",
+    "Xavi",
+    "Yara",
+    "Zane",
+    "Odette"
+  ],
+  "otherMembersJoinedDaysAgo": [
+    20,
+    138
+  ],
+  "listings": [
+    {
+      "id": "sourdough",
+      "author": "amara",
+      "type": "offer",
+      "category": "food",
+      "title": "Sourdough loaves",
+      "description": "Baked Friday and Saturday mornings with a starter that is eight years old. Wholemeal or white, pick up at the hall or I will drop one by.",
+      "credits": 12,
+      "priceType": "fixed",
+      "photo": "sourdough-loaves",
+      "ageHours": 3,
+      "repeatable": true,
+      "at": {
+        "dLat": -0.012,
+        "dLng": 0.009
+      }
+    },
+    {
+      "id": "duck-eggs",
+      "author": "kofi",
+      "type": "offer",
+      "category": "food",
+      "title": "Duck eggs",
+      "description": "A dozen from the creek ducks, laid this week. Bring your own carton and I will swap it for a full one.",
+      "credits": 6,
+      "priceType": "fixed",
+      "photo": "duck-eggs",
+      "ageHours": 5,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.021,
+        "dLng": -0.015
+      }
+    },
+    {
+      "id": "bike-fix",
+      "author": "yusuf",
+      "type": "offer",
+      "category": "services",
+      "title": "Bike fix",
+      "description": "Flat tyres, brakes, gears, a squeaky chain. I work from my shed on Wednesday evenings and Saturday mornings.",
+      "credits": 30,
+      "priceType": "fixed",
+      "photo": "bike-fix",
+      "ageHours": 7,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.008,
+        "dLng": -0.007
+      }
+    },
+    {
+      "id": "mending",
+      "author": "ingrid",
+      "type": "offer",
+      "category": "services",
+      "title": "Mending",
+      "description": "Hems, zips, patched knees and loose buttons. Leave it with me for a few days; most jobs take under an hour.",
+      "credits": 10,
+      "priceType": "hourly",
+      "photo": "mending",
+      "ageHours": 26,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.002,
+        "dLng": 0.018
+      }
+    },
+    {
+      "id": "need-couch",
+      "author": "priya",
+      "type": "need",
+      "category": "labour",
+      "title": "Hand moving a couch",
+      "description": "A three-seater, ground floor to a ute, about ten minutes with two people. Saturday afternoon, tea after.",
+      "credits": 20,
+      "priceType": "fixed",
+      "photo": "couch-move",
+      "ageHours": 30,
+      "at": {
+        "dLat": 0.015,
+        "dLng": 0.026
+      }
+    },
+    {
+      "id": "post-hole-digger",
+      "author": "tomasz",
+      "type": "offer",
+      "category": "tools",
+      "title": "Borrow a post-hole digger",
+      "description": "Heavy-duty, with a long handle. Yours for up to three days, wash it before it comes home.",
+      "credits": 5,
+      "priceType": "daily",
+      "photo": "post-hole-digger",
+      "ageHours": 52,
+      "lendable": true,
+      "lendMaxDays": 3,
+      "lendTerms": "Back clean, please.",
+      "replacementValue": "like for like",
+      "at": {
+        "dLat": 0.033,
+        "dLng": 0.011
+      }
+    },
+    {
+      "id": "seedlings",
+      "author": "mere",
+      "type": "offer",
+      "category": "garden",
+      "title": "Seedlings",
+      "description": "Tomato, basil and lettuce, potted up and hardened off. Take what you will plant this month.",
+      "credits": 0,
+      "priceType": "fixed",
+      "photo": "seedlings",
+      "ageHours": 56,
+      "repeatable": true,
+      "at": {
+        "dLat": -0.027,
+        "dLng": -0.02
+      }
+    },
+    {
+      "id": "need-lift",
+      "author": "hana",
+      "type": "need",
+      "category": "transport",
+      "title": "Lift to the station",
+      "description": "The 7:10 train on Tuesday mornings, about fifteen minutes from the hall. I can share petrol.",
+      "credits": 8,
+      "priceType": "fixed",
+      "photo": "lift-to-station",
+      "ageHours": 75,
+      "at": {
+        "dLat": -0.019,
+        "dLng": 0.03
+      }
+    },
+    {
+      "id": "firewood",
+      "author": "sione",
+      "type": "offer",
+      "category": "goods",
+      "title": "Firewood trailer",
+      "description": "A trailer of split, seasoned ironbark, delivered within Riverbend. Stacking is up to you.",
+      "credits": 60,
+      "priceType": "fixed",
+      "photo": "firewood-trailer",
+      "ageHours": 100,
+      "repeatable": true,
+      "at": {
+        "dLat": -0.036,
+        "dLng": 0.014
+      }
+    },
+    {
+      "id": "need-dog",
+      "author": "lucia",
+      "type": "need",
+      "category": "animals",
+      "title": "Dog minding",
+      "description": "Our small dog needs a home for the first weekend of December. Quiet, house trained, loves a walk.",
+      "credits": 25,
+      "priceType": "fixed",
+      "photo": "dog-minding",
+      "ageHours": 123,
+      "at": {
+        "dLat": -0.006,
+        "dLng": -0.031
+      }
+    },
+    {
+      "id": "beeswax",
+      "author": "hana",
+      "type": "offer",
+      "category": "goods",
+      "title": "Beeswax wraps",
+      "description": "Cotton wraps made with local beeswax, in three sizes. A fresh one for your sandwich, bowl or cheese.",
+      "credits": 4,
+      "priceType": "fixed",
+      "photo": "beeswax-wraps",
+      "ageHours": 150,
+      "repeatable": true,
+      "at": {
+        "dLat": -0.019,
+        "dLng": 0.03
+      }
+    },
+    {
+      "id": "guitar",
+      "author": "kofi",
+      "type": "offer",
+      "category": "education",
+      "title": "Guitar lessons",
+      "description": "Acoustic basics for beginners and returners. I have a spare guitar if yours is still at the back of the cupboard.",
+      "credits": 15,
+      "priceType": "hourly",
+      "photo": "guitar-lessons",
+      "ageHours": 190,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.021,
+        "dLng": -0.015
+      }
+    },
+    {
+      "id": "lawn",
+      "author": "sam",
+      "type": "offer",
+      "category": "garden",
+      "title": "Lawn mowing",
+      "description": "Front and back lawns up to a quarter acre, with my own mower. Clippings stay with you or go on the compost.",
+      "credits": 20,
+      "priceType": "hourly",
+      "photo": "lawn-mowing",
+      "ageHours": 220,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.004,
+        "dLng": 0.006
+      }
+    },
+    {
+      "id": "tomatoes",
+      "author": "sam",
+      "type": "offer",
+      "category": "food",
+      "title": "Spare tomatoes",
+      "description": "More than I can eat, ripe this week. Take a bagful from the box by the gate.",
+      "credits": 0,
+      "priceType": "fixed",
+      "photo": "spare-tomatoes",
+      "ageHours": 30,
+      "repeatable": true,
+      "at": {
+        "dLat": 0.004,
+        "dLng": 0.006
+      }
+    }
+  ],
+  "pastOffers": [
+    {
+      "id": "plum-jam",
+      "author": "priya",
+      "category": "food",
+      "title": "Plum jam",
+      "description": "Three jars left from the summer batch.",
+      "credits": 6,
+      "photo": "spare-tomatoes",
+      "daysAgo": 40,
+      "_note": "A finished Offer: the node lets a member post a Need only after a first Offer. Not on the board."
+    },
+    {
+      "id": "typing-help",
+      "author": "lucia",
+      "category": "services",
+      "title": "Help with forms",
+      "description": "An hour of paperwork help, with tea.",
+      "credits": 10,
+      "photo": "mending",
+      "daysAgo": 30,
+      "_note": "A finished Offer, as above. Not on the board."
+    }
+  ],
+  "events": [
+    {
+      "id": "seed-swap",
+      "host": "mere",
+      "title": "Seed swap at the hall",
+      "description": "Bring seeds, cuttings or a story about what grew. We will have tea and a table for labels.",
+      "category": "general",
+      "weekday": "SA",
+      "startHour": 10,
+      "durationHours": 2,
+      "place": "Riverbend Hall",
+      "hostNote": "Bring seeds in paper bags. The kettle is on from 9:30.",
+      "photo": "event-seed-swap",
+      "ageHours": 20,
+      "going": 12,
+      "interested": 4,
+      "samGoing": true,
+      "at": {
+        "dLat": -0.004,
+        "dLng": 0.004
+      }
+    },
+    {
+      "id": "repair-cafe",
+      "host": "yusuf",
+      "title": "Repair café",
+      "description": "Bring a lamp, a toaster or a torn jacket. We fix it together and nobody leaves with the same problem.",
+      "category": "general",
+      "weekday": "SU",
+      "startHour": 13,
+      "durationHours": 3,
+      "place": "Riverbend Hall",
+      "hostNote": "Bring the charger or cord too.",
+      "photo": "event-repair-cafe",
+      "ageHours": 40,
+      "going": 7,
+      "interested": 2,
+      "at": {
+        "dLat": -0.004,
+        "dLng": 0.004
+      }
+    },
+    {
+      "id": "working-bee",
+      "host": "amara",
+      "title": "Working bee at the community garden",
+      "description": "Weeding, mulching and building a new compost bay. Gloves and a hat; morning tea is on us.",
+      "category": "general",
+      "weekday": "SA",
+      "startHour": 8,
+      "durationHours": 3,
+      "weeksAhead": 1,
+      "place": "Riverbend community garden",
+      "hostNote": "Wheelbarrows welcome.",
+      "photo": "event-working-bee",
+      "ageHours": 60,
+      "going": 5,
+      "interested": 3,
+      "at": {
+        "dLat": 0.009,
+        "dLng": -0.011
+      }
+    }
+  ],
+  "poll": {
+    "id": "monthly-market",
+    "author": "mere",
+    "title": "Which day for the monthly market?",
+    "description": "The hall is free on both. Whichever gets more votes by tomorrow becomes the day for the next six months.",
+    "options": [
+      {
+        "id": "sat",
+        "text": "Saturday morning",
+        "votes": 5
+      },
+      {
+        "id": "sun",
+        "text": "Sunday morning",
+        "votes": 4
+      }
+    ],
+    "durationDays": 3,
+    "closesInHours": 24,
+    "ageHours": 12,
+    "at": {
+      "dLat": -0.004,
+      "dLng": 0.004
+    }
+  },
+  "trades": [
+    {
+      "listing": "lawn",
+      "buyer": "mere",
+      "hours": 1,
+      "daysAgo": 21
+    },
+    {
+      "listing": "duck-eggs",
+      "buyer": "yusuf",
+      "daysAgo": 20
+    },
+    {
+      "listing": "sourdough",
+      "buyer": "sam",
+      "daysAgo": 19
+    },
+    {
+      "listing": "lawn",
+      "buyer": "ingrid",
+      "hours": 1.5,
+      "daysAgo": 17
+    },
+    {
+      "listing": "guitar",
+      "buyer": "hana",
+      "hours": 4,
+      "daysAgo": 15
+    },
+    {
+      "listing": "bike-fix",
+      "buyer": "kofi",
+      "daysAgo": 14
+    },
+    {
+      "listing": "firewood",
+      "buyer": "tomasz",
+      "daysAgo": 13
+    },
+    {
+      "listing": "guitar",
+      "buyer": "sam",
+      "hours": 1.5,
+      "daysAgo": 12
+    },
+    {
+      "listing": "sourdough",
+      "buyer": "mere",
+      "daysAgo": 11
+    },
+    {
+      "listing": "lawn",
+      "buyer": "sione",
+      "hours": 1.5,
+      "daysAgo": 9
+    },
+    {
+      "listing": "mending",
+      "buyer": "kofi",
+      "hours": 2,
+      "daysAgo": 8
+    },
+    {
+      "listing": "mending",
+      "buyer": "sam",
+      "hours": 1,
+      "daysAgo": 6
+    },
+    {
+      "listing": "beeswax",
+      "buyer": "sione",
+      "daysAgo": 5
+    },
+    {
+      "listing": "firewood",
+      "buyer": "yusuf",
+      "daysAgo": 4
+    },
+    {
+      "listing": "lawn",
+      "buyer": "yusuf",
+      "hours": 1,
+      "daysAgo": 3
+    },
+    {
+      "listing": "bike-fix",
+      "buyer": "amara",
+      "daysAgo": 2
+    }
+  ],
+  "openDeal": {
+    "listing": "sourdough",
+    "buyer": "sam",
+    "daysAgo": 0.1
+  },
+  "dm": {
+    "with": "amara",
+    "lines": [
+      {
+        "by": "sam",
+        "text": "Two loaves for Saturday?",
+        "minutesAgo": 95
+      },
+      {
+        "by": "amara",
+        "text": "Yes, after 10 at the hall",
+        "minutesAgo": 70
+      },
+      {
+        "by": "sam",
+        "text": "Perfect, see you there",
+        "minutesAgo": 42
+      }
+    ]
+  },
+  "home": {
+    "cards": [
+      "beans",
+      "events",
+      "market",
+      "chat"
+    ],
+    "_note": "Between the fixed Needs you (first) and Your community (last)."
+  },
+  "_credit": "grantedCredit is members.earned_credit: a credit-limit input that moves no Beans (200 is the Resident badge, 100 a small line). All Beans move through trades.",
+  "_trades": "Sam: four sales of lawn mowing (5 hours, 100 Beans, 1.5 in the Commons fee) and three purchases (44.5 Beans), so 54 Beans, then 12 held in trust for the open deal: +42 exactly."
+}

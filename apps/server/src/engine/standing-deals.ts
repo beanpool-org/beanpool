@@ -44,6 +44,7 @@ import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { assertFeatureOn, getProfileSwitches } from '../config/node-profile.js';
 import { keepNotice } from './kept-notices.js';
+import { marketplacePostOutOfSight } from './post-sight.js';
 import { audienceRefusal } from './member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from './own-addresses.js';
 import {
@@ -472,7 +473,8 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
     if (raw.type === 'offer') {
         // The buyer's own checks as acceptPost makes them (member, re-key, holiday), then the post as getPosts reads it by id.
         const post = getPosts(db, { id: sd.post_id, includeAllScopes: true } as any)[0];
-        if (!post) throw new Error('its listing is not readable');
+        // As acceptPost: a group or direct listing out of the payer's sight (they left the group) is not theirs to take.
+        if (!post || marketplacePostOutOfSight(post, sd.payer_pubkey)) throw new Error('its listing is not in the payer\'s sight');
         const p = offerHoldChecksScheduled(hooks, post, sd, scheduled);
         return { ...p, oneAtATime: !raw.repeatable };
     }

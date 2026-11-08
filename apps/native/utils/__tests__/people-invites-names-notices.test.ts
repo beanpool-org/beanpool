@@ -163,7 +163,7 @@ describe('People → Invites: what ticking the names box opened is said there, o
         expect((await readNamesPinFrom(STORE, bea.publicKey, COMMUNITY))!.seen.length).toBe(2);
         putBack(copy);
 
-        await act(async () => { root.render(createElement(Invites, { me: bea })); });
+        await act(async () => { root.render(createElement(Invites, { me: bea }) as any); });
         await settle();
         expect(q('invite-names-notices'), 'nothing said before the box is ticked').toBeNull();
         await tick();
@@ -199,7 +199,7 @@ describe('People → Invites: what ticking the names box opened is said there, o
         await open(cy);
         putBack(copy);
 
-        await act(async () => { root.render(createElement(Invites, { me: bea })); });
+        await act(async () => { root.render(createElement(Invites, { me: bea }) as any); });
         await settle();
         await tick();
         const refused = q('invite-names-refused')?.textContent ?? '';

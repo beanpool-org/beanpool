@@ -609,7 +609,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         const DROPPED_ME = NAMES_COPY.droppedMe('damo');
         const LOST = NAMES_COPY.lostEntries(2);
 
-        it('a sync’s warning (another admin’s key dropped this phone): shown in the amber box with "Open the names list", which opens the list and ends it', async () => {
+        it('a sync’s warning (an admin made a key without this phone): shown in the amber box with "Open the names list", which opens the list and ends it', async () => {
             node.role = 'admin';
             list.said = [[DROPPED_ME]];
             await open();

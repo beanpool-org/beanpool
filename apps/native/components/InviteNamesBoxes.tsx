@@ -6,9 +6,9 @@
  * Ticking the names box opens the list on this phone (each read is logged on the node, as the list's screen does), so the
  * duplicate-name warning can look at every name: the node never sees one. What that open says (names the server no longer
  * has, a sync's warnings) is said here, in the amber box with "Open the names list": the list says each once (#2974 round 3).
- * The vouch presets stay as they are (Marty's Q1:
- * allow both). The voucher box is greyed for an admin not on the credit committee, with no connection, or until the names
- * box is ticked, each with its sentence. Every row is at least 48 dp tall and wraps at 320 dp with 1.3× text.
+ * The vouch presets stay as they are (Marty's Q1: allow both). The voucher box is greyed for an admin not on the credit
+ * committee, with no connection, or until the names box is ticked, each with its sentence. Every row is at least 48 dp tall
+ * and wraps at 320 dp with 1.3× text.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
@@ -149,7 +149,8 @@ export function useInviteNames(o: {
     const dismissNotices = useCallback(() => {
         setHeard((h) => {
             if (!(where in h)) return h;
-            const { [where]: _done, ...rest } = h;
+            const rest = { ...h };
+            delete rest[where];
             return rest;
         });
     }, [where]);
@@ -281,10 +282,10 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
                         <Text key={w} style={styles.warnText} maxFontSizeMultiplier={1.3} testID="invite-names-notice">{say(w)}</Text>
                     ))}
                     <View style={styles.buttons}>
-                        <Pressable onPress={names.openList} accessibilityRole="button" style={[styles.smallBtn, styles.shrink]} testID="invite-names-open-list">
+                        <Pressable onPress={names.openList} accessibilityRole="button" style={[styles.smallBtn, styles.noticeBtn]} testID="invite-names-open-list">
                             <Text style={styles.smallBtnText} maxFontSizeMultiplier={1.3}>{t('Open the names list')}</Text>
                         </Pressable>
-                        <Pressable onPress={names.dismissNotices} accessibilityRole="button" style={[styles.smallBtn, styles.shrink]} testID="invite-names-notices-dismiss">
+                        <Pressable onPress={names.dismissNotices} accessibilityRole="button" style={[styles.smallBtn, styles.noticeBtn]} testID="invite-names-notices-dismiss">
                             <Text style={styles.smallBtnText} maxFontSizeMultiplier={1.3}>{t('Dismiss')}</Text>
                         </Pressable>
                     </View>
@@ -401,7 +402,8 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     },
     smallBtnText: { fontSize: 15, fontWeight: '700', color: colors.text.body },
     buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    shrink: { flexShrink: 1, maxWidth: '100%' },
+    // A label that wraps at 320 dp and 1.3× text keeps clear of the border.
+    noticeBtn: { flexShrink: 1, maxWidth: '100%', paddingVertical: 8 },
     stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' },
     amount: { fontSize: 17, fontWeight: '700', color: colors.text.heading },
 });

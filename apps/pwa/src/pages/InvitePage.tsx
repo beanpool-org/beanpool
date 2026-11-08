@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, getMyVouching, getVouchersBlock,
-    request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
+    myNodeRoleOnce, request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -23,9 +23,10 @@ import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type Loc
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
+import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -123,6 +124,19 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             });
         return () => { cancelled = true; };
     }, [doorAdmins]);
+    // The signer's role, asked once a page load (lib/api.ts myNodeRoleOnce), for the two names-list boxes an owner or admin sees
+    // under the vouch presets (components/InviteAddsBoxes.tsx). It decides nothing on the node: undefined (not heard) and null
+    // (no role) both show nothing, and the node checks every request itself.
+    const [nodeRole, setNodeRole] = useState<string | null | undefined>(undefined);
+    useEffect(() => {
+        if (isPreview) return;
+        let cancelled = false;
+        void myNodeRoleOnce().then((r) => { if (!cancelled) setNodeRole(r); });
+        return () => { cancelled = true; };
+    }, [isPreview]);
+    // Owners and admins on a node that offers the names list (core offersNamesList: not the global node). The node's profile
+    // must have been heard, so the boxes never flash on a node that makes no invites.
+    const showsNamesBoxes = !isPreview && nodeInfo !== null && offersNamesList(nodeRole, nodeInfo.profile);
     // The node's own words, when it refused a generate because only admins invite here.
     const [adminsRefused, setAdminsRefused] = useState<string | null>(null);
     const adminsOnly = !isPreview && (adminsRefused !== null || !mayInviteHere(nodeInfo, role));
@@ -572,6 +586,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         />
                     )}
 
+                    {showsNamesBoxes && <InviteAddsBoxes />}
 
                     {isPreview ? (
                         <LocalCommunityAction feature="invites" label={t('✨ Generate New Invite')} className="w-full p-4 mb-6 text-[15px] shadow-md" {...waysForward} />

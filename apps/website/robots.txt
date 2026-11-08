@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+# The sign-in return pages only pass a sign-in back to the app.
+Disallow: /auth/
+
+Sitemap: https://beanpool.org/sitemap.xml
+Sitemap: https://beanpool.org/guide/sitemap.xml

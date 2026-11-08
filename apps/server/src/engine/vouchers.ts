@@ -701,6 +701,111 @@ export function landInviteVouch(maker: string, code: string, joiner: string, amo
     return { landed: amount };
 }
 
+// ── A voucher made by an invite (DESIGN-invites-and-names-list-amend3-fable.md §2, slice A1) ──────────────────────
+// An owner or a credit-committee admin makes an invite bound to a names-list entry with a voucher budget (`voucher_level`).
+// At creation nothing is allocated (a budget is a member's, and there is no member yet): one `voucher_promised` line. At the
+// redeem, once the joiner is confirmed against the entry, in the redeem's own transaction, they are made a voucher with that
+// budget as makeVoucher would (`voucher_made`, `budget_grant`, a kept notice); with two admins to confirm, when the second
+// admin confirms. Where it can't land, nothing lands and one `voucher_not_made` line says why. Never a refusal: the joiner
+// joins either way (onboarding has no hard gates). Nothing here is a Bean: plain tables only.
+
+/** What became of an invite's voucher budget (invite_codes.voucher_outcome; core InviteVoucherOutcome). */
+export type InviteVoucherOutcome = 'made' | 'awaiting_second' | 'maker_not_committee' | 'beans_off' | 'not_confirmed' | 'not_made';
+
+/**
+ * Before a bound invite with a voucher budget is made (engine/invites.ts generateInvite): an owner or committee admin, Beans
+ * on, a main server, and a level of 100 to 2,000 in 100s. Throws VoucherError, or Beans off's own refusal.
+ */
+export function checkInviteVoucherLevel(maker: string, level: unknown): number {
+    assertCommittee(maker);
+    if (!isBudgetLevel(level)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
+    return level;
+}
+
+/** Inside generateInvite's transaction, with the code's row: the promise's line (who, which entry, what level). Never the code. */
+export function promiseInviteVoucher(maker: string, entryId: string, level: number): void {
+    logLine(maker, 'voucher_promised', null, entryId, level);
+}
+
+/** A `voucher_not_made` line (old: the entry, new: why), never throwing: a redeem goes on whatever happens here. */
+function logNotMade(actor: string, joiner: string, entryId: string, why: InviteVoucherOutcome): void {
+    try {
+        logLine(actor, 'voucher_not_made', joiner, entryId, why);
+    } catch (e) {
+        console.error('[Vouchers] ⚠️ Could not log a voucher not made:', (e as Error)?.message || e);
+    }
+}
+
+/**
+ * Makes `joiner`, confirmed against `entryId` by `maker`'s invite, a voucher with `level`, in a savepoint inside the
+ * caller's transaction. The maker's standing is read now: still an owner or committee admin, with Beans on. Never throws.
+ */
+function landVoucher(maker: string, entryId: string, joiner: string, level: number): { outcome: InviteVoucherOutcome; notice?: VoucherNotice } {
+    let result: { outcome: InviteVoucherOutcome; notice?: VoucherNotice };
+    try {
+        result = db.transaction((): { outcome: InviteVoucherOutcome; notice?: VoucherNotice } => {
+            if (!getProfileSwitches().beans) return { outcome: 'beans_off' };
+            if (!isOnCreditCommittee(maker)) return { outcome: 'maker_not_committee' };
+            const m = getMember(db, joiner);
+            if (!isBudgetLevel(level) || joiner === maker || !m || m.status !== 'active' || isVisitorKey(db, joiner) || m.isTreasury || liveVoucher(joiner)) {
+                return { outcome: 'not_made' };
+            }
+            logLine(maker, 'voucher_made', joiner, null, 'entry');
+            startBudget(joiner, 'entry', entryId, level, maker);
+            return { outcome: 'made', notice: keepVoucherNotice(joiner, 'made', noticeMade(level), level) };
+        })();
+    } catch (e) {
+        console.error('[Vouchers] ⚠️ Could not make an invite\'s joiner a voucher:', (e as Error)?.message || e);
+        result = { outcome: 'not_made' };
+    }
+    if (result.outcome !== 'made') logNotMade(maker, joiner, entryId, result.outcome);
+    return result;
+}
+
+/**
+ * At the redeem of a bound invite with a voucher budget, inside the redeem's transaction, after the confirmation
+ * (engine/names-list.ts confirmByInvite, whose outcome is `bound`): confirmed, the joiner is made a voucher now; waiting
+ * for a second admin, the promise waits (secondConfirmation lands it); not confirmed, no voucher. Never throws.
+ */
+export function landInviteVoucher(maker: string, entryId: string, joiner: string, level: number, bound: string | null): { outcome: InviteVoucherOutcome; notice?: VoucherNotice } {
+    if (bound === 'awaiting_second') return { outcome: 'awaiting_second' };
+    if (bound !== 'confirmed') {
+        logNotMade(maker, joiner, entryId, 'not_confirmed');
+        return { outcome: 'not_confirmed' };
+    }
+    return landVoucher(maker, entryId, joiner, level);
+}
+
+/**
+ * Inside secondConfirmation's transaction: the voucher budget an invite promised this member, waiting for the second admin,
+ * lands now (the maker's committee standing read now), and the invite says what became of it. The notice, if one was kept,
+ * for the route to tell once it has committed. Never a refusal: where the voucher can't land, the confirmation stands and the
+ * invite says why. A write that fails (the outcome's, say) fails the whole confirmation, as any write in it would, so a voucher
+ * never lands with its invite still saying it waits.
+ */
+export function landAwaitingInviteVoucher(member: string, entryId: string): VoucherNotice | undefined {
+    const inv = db.prepare(`SELECT code, created_by, voucher_level FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
+        AND voucher_outcome = 'awaiting_second' AND voucher_level IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
+        { code: string; created_by: string; voucher_level: number } | undefined;
+    if (!inv) return undefined;
+    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level);
+    db.prepare('UPDATE invite_codes SET voucher_outcome = ? WHERE code = ?').run(r.outcome, inv.code);
+    return r.notice;
+}
+
+/**
+ * A confirmation revoked before the second admin confirmed it (engine/names-list.ts), in its transaction: the voucher budget
+ * an invite promised this member is not made, and the invite says so (one `voucher_not_made` line by whoever revoked it).
+ */
+export function endInviteVoucherPromise(member: string, actor: string): void {
+    const waiting = db.prepare(`SELECT code, names_entry_id FROM invite_codes WHERE used_by = ? AND voucher_outcome = 'awaiting_second'`).all(member) as
+        { code: string; names_entry_id: string }[];
+    for (const w of waiting) {
+        db.prepare("UPDATE invite_codes SET voucher_outcome = 'not_confirmed' WHERE code = ?").run(w.code);
+        logNotMade(actor, member, w.names_entry_id, 'not_confirmed');
+    }
+}
+
 // ── Ends ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**

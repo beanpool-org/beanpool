@@ -30,7 +30,7 @@ import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { assertMayBindInvite, confirmByInvite } from './names-list.js';
-import { checkInviteVouch, holdForInvite, landInviteVouch } from './vouchers.js';
+import { VoucherError, checkInviteVouch, checkInviteVoucherLevel, holdForInvite, landInviteVouch, landInviteVoucher, promiseInviteVoucher } from './vouchers.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -101,9 +101,15 @@ function assertInvitesOn(): void {
  * `vouchAmount`: a vouch the invite carries (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §4), one of
  * core's VOUCH_PRESETS from a voucher's budget, held when the code is made and landing on the joiner at the redeem.
  * Refused (VoucherError, before the limit and before any write) from a non-voucher, for any other amount or more than is
- * left, and where Beans are off. Never on an invite bound to a names-list entry (it gives the known floor instead).
+ * left, and where Beans are off. On an invite bound to a names-list entry too (Marty, 8 Nov, amend3 Q1): the joiner gets
+ * the vouch and, confirmed, the known floor, and the two add up on their floor (core creditAllowance).
+ *
+ * `voucherLevel`: on an invite bound to a names-list entry only (amend3 §2), a voucher budget of 100 to 2,000 in 100s that
+ * whoever joins with it, confirmed against the entry, is given at the redeem (engine/vouchers.ts landInviteVoucher).
+ * Refused (VoucherError, before the limit and before any write) unless the maker is an owner or a credit-committee admin,
+ * for any other level, and where Beans are off. Nothing is allocated now: one `voucher_promised` line, with the code.
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number }) | null {
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown, voucherLevel?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number }) | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
@@ -112,7 +118,11 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     // An invite bound to a names-list entry (community modes slice 3): only an admin who could confirm someone against
     // that entry now, and never one with a live confirmation (NamesListError, before the limit and before any write).
     const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId);
-    const vouch = vouchAmount === undefined || vouchAmount === null || boundEntry ? null : checkInviteVouch(inviterPubkey, vouchAmount);
+    const vouch = vouchAmount === undefined || vouchAmount === null ? null : checkInviteVouch(inviterPubkey, vouchAmount);
+    if (voucherLevel !== undefined && voucherLevel !== null && !boundEntry) {
+        throw new VoucherError(400, 'needs_entry', 'A voucher budget comes only with an invite bound to a names-list entry.');
+    }
+    const level = voucherLevel === undefined || voucherLevel === null ? null : checkInviteVoucherLevel(inviterPubkey, voucherLevel);
     beforeWrite?.();
 
     recordActivity(inviterPubkey);
@@ -120,16 +130,18 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    // The code and its vouch's hold together, or neither.
+    // The code, its vouch's hold and its voucher budget's promise together, or none of them.
     db.transaction(() => {
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch);
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount, voucher_level) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+            .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch, level);
         if (vouch) holdForInvite(inviterPubkey, code, vouch);
+        if (level && boundEntry) promiseInviteVoucher(inviterPubkey, boundEntry, level);
     })();
 
-    const invite: InviteCode & { namesEntryId?: string; vouchAmount?: number } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    const invite: InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     if (boundEntry) invite.namesEntryId = boundEntry;
     if (vouch) invite.vouchAmount = vouch;
+    if (level) invite.voucherLevel = level;
     // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
     console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
     return invite;
@@ -310,15 +322,21 @@ export function redeemInvite(
     }
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key). One transaction with the code's use,
-    // for an invite bound to a names-list entry the confirmation (confirmByInvite), and for one carrying a vouch the room
-    // it gives (engine/vouchers.ts landInviteVouch): never a member without them.
+    // for an invite bound to a names-list entry the confirmation (confirmByInvite), for one carrying a vouch the room
+    // it gives (engine/vouchers.ts landInviteVouch): never a member without them. A voucher budget the invite promises
+    // (landInviteVoucher) lands in it too, after the confirmation, and never refuses: where it can't land, the invite says
+    // why and the joiner joins all the same.
     let vouch: { landed: number } | { ended: string } | undefined;
     const member = db.transaction(() => {
         const m = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
         if (!m) return null;
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
-        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
-            .run(publicKey, new Date().toISOString(), outcome, code);
+        // The joiner's kept notice is their record of it: a member this new has no socket open and no push token yet.
+        const voucher = invite.names_entry_id && invite.voucher_level != null
+            ? landInviteVoucher(invite.created_by, invite.names_entry_id, publicKey, invite.voucher_level, outcome)
+            : null;
+        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ?, voucher_outcome = ? WHERE code COLLATE NOCASE = ?")
+            .run(publicKey, new Date().toISOString(), outcome, voucher?.outcome ?? null, code);
         const voucherMaker = invite.issued_by || invite.created_by;
         if (invite.vouch_amount) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount);
         return m;

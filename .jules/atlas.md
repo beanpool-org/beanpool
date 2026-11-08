@@ -309,3 +309,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `voucherActorWords`, `formatHistoryDate`, `historyLineWords`, and `voucherPanelHeader` in `apps/manager/src/lib/voucher-words.ts` lacked a direct unit test suite.
 **Learning:** Testing `voucher-words.ts` directly verifies actor description translations (`node:claim`, `claim:*`, `server:*`, `migration:*`, null/empty/64-hex key fallback to "someone who has left"), UTC date formatting, history line descriptions across all kinds (`grant`, `top_up`, `lower`, `hold`, `return` with reason codes, `stop`), and panel header line formatting.
 **Action:** Identify remaining untested helper utilities or UI components in `apps/manager/` for direct unit test coverage.
+
+## 2026-11-07 - [manager tests] AdviseTheOwners component unit tests
+**Gap:** `AdviseTheOwners` component in `apps/manager/src/components/modules/AdviseTheOwners.tsx` was untested.
+**Learning:** `nodeCredential(activeNode)` inspects `automationToken` and `adminPassword` on `NodeProfile`. Mocking `adviseOwners` and `getTfaSessionToken` allowed full assertion on collapsed state, expand/cancel transitions, input character count formatting, send button disabled state on empty/whitespace text, error alert rendering, and callback triggering on success.
+**Action:** Continue identifying remaining untested modal or panel components in `apps/manager/src/components/modules/`.

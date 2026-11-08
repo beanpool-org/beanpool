@@ -23,9 +23,38 @@ import {
     voucherBoxWhy, voucherBoxWords, sameNameOnList, sameNameWords, inviteWithNamesEntry, type NamesInviteResult,
 } from '../utils/invite-names';
 import { keyLineWords } from './key-lines';
+import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../utils/node-admin';
+import type { InviteRole } from '../utils/invite-entries';
 
 /** The list's own English (core names-list flows) in the member's language, paragraph by paragraph, as the list's screen says it. */
 const say = (text: string) => text.split('\n\n').map(keyLineWords).join('\n\n');
+
+/**
+ * The member's role for the boxes where the community's door is open to every member (where only admins invite, People asks it
+ * already): the node's answer to GET /api/node-admin/me, asked when Invites is open (`ask`), remembered as People remembers it;
+ * with no answer, the last role this node gave this key. Undefined until heard: no boxes until then.
+ */
+export function useRoleOnInvites(o: { anchorUrl: string; identity: BeanPoolIdentity | null; ask: boolean }): InviteRole | undefined {
+    const { anchorUrl, identity, ask } = o;
+    const [role, setRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        setRole(undefined);
+        if (!ask || !identity || !anchorUrl) return;
+        let alive = true;
+        askNodeRole(anchorUrl, identity).then(async (r) => {
+            if (r) {
+                rememberNodeRole(anchorUrl, identity.publicKey, r);
+                void persistNodeRole(anchorUrl, identity.publicKey, r.role);
+                if (alive) setRole(r.role);
+                return;
+            }
+            const last = await readPersistedNodeRole(anchorUrl, identity.publicKey);
+            if (alive && last !== undefined) setRole(last);
+        }).catch(() => {});
+        return () => { alive = false; };
+    }, [ask, anchorUrl, identity]);
+    return role;
+}
 
 export interface InviteNames {
     offered: boolean;

@@ -33,7 +33,7 @@ import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
-import { InviteNamesBoxes, useInviteNames } from '../../components/InviteNamesBoxes';
+import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
 import { offersNamesBoxes, inviteNotMadeWords } from '../../utils/invite-names';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -262,14 +262,13 @@ export default function PeopleScreen() {
     // Still waiting on the global community (no answer yet, or none at all), and not closed: a connection fault is a real cause.
     const guestAtGlobalWaiting = guestAtGlobal && (globalEntry === 'checking' || globalEntry === 'unreachable');
     // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
-    // none. Their role is the node's answer (GET /api/node-admin/me), asked there, and on Invites anywhere (an owner or admin
-    // gets the names-list boxes there, amend3 §1); not heard yet (or offline) counts as before, and the node refuses a
-    // member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
+    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
     const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
     const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
     useEffect(() => {
         setInviteRole(undefined);
-        if ((!doorAdminsOnly && view !== 'invites') || !identity || !anchorUrl || isGuest) return;
+        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
         let alive = true;
         askNodeRole(anchorUrl, identity).then(async r => {
             if (r) {
@@ -299,9 +298,11 @@ export default function PeopleScreen() {
     // Owners and admins of a local community: "Add them to the names list" and "Make them a voucher" under the presets
     // (DESIGN-invites-and-names-list-amend3-fable.md §1, phone first). The committee is whoever the node answers
     // GET /api/names/vouchers for (vouchersData, read on Invites); the stepper starts at the community's default budget.
+    // The role: the one above where only admins invite; elsewhere asked for this alone, on Invites only (useRoleOnInvites).
+    const openDoorRole = useRoleOnInvites({ anchorUrl, identity: identity ?? null, ask: !doorAdminsOnly && makesInvites && !invitesPreview && !isGuest && view === 'invites' });
     const inviteNames = useInviteNames({
         anchorUrl, identity: identity ?? null, online: isOnline,
-        offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(inviteRole, nodeProfile?.profile),
+        offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(doorAdminsOnly ? inviteRole : openDoorRole, nodeProfile?.profile),
         committee: vouchersData !== null, voucherBudget: vouchersData?.settings?.voucherBudget,
     });
     const [knockCount, setKnockCount] = useState(0);

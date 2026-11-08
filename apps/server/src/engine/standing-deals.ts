@@ -392,7 +392,7 @@ function endStranded(hooks: StandingHooks): number {
     let ended = 0;
     for (const sd of stranded) {
         try {
-            logOnce(sd.id, `standing deal ${sd.id}: period ${sd.periods_done + 1}'s row is ${sd.current_status ?? 'gone'}, so nothing is in trust for it and it ends`);
+            console.warn(`[Standing] Standing deal ${sd.id}: period ${sd.periods_done + 1}'s row is ${sd.current_status ?? 'gone'}, so nothing is in trust for it and it ends.`);
             const how = strandedEnd(sd.current_status === null ? null : { status: sd.current_status });
             if (endIfUnmoved(hooks, sd, how.reason, how.body, ['held', 'held_back'])) ended++;
         } catch (e: any) {
@@ -422,7 +422,7 @@ function settle(hooks: StandingHooks, sd: StandingRow, now: number): 'settled' |
     // Nothing in trust for the period any more (its row refunded or settled by a door that never told it, or gone): no person
     // could settle a hold back, so it would never end. It ends (strandedEnd), and nobody is told Beans are waiting.
     if (!row || row.status !== 'pending') {
-        logOnce(sd.id, `standing deal ${sd.id}: period ${n}'s row is ${row?.status ?? 'gone'}, so nothing is in trust for it and it ends`);
+        console.warn(`[Standing] Standing deal ${sd.id}: period ${n}'s row is ${row?.status ?? 'gone'}, so nothing is in trust for it and it ends.`);
         const how = strandedEnd(row);
         return endIfUnmoved(hooks, sd, how.reason, how.body, ['held']) ? 'ended' : 'moved';
     }
@@ -814,9 +814,9 @@ export function endStandingDealsOf(memberKey: string): number {
 /**
  * Its author removed the listing (engine/posts.ts removePost), in the caller's transaction: each standing deal on it stops
  * after its current period (§1.5), at once where nothing is held. Each side but the one who removed it is told: that it
- * stopped, the period under way still paid (held); that it ended (between its periods, or short). One held back waits for
- * its payer, who holds it, to settle the period: that ends it, and both are told then (standingPeriodSettled). Returns the
- * notices, for tellStanding after the commit.
+ * stopped, the period under way still paid (held); that it ended (between its periods, or short). One held back waits, as
+ * its notice said, for a person to release or cancel the period: that ends it, and both are told then (standingPeriodSettled).
+ * Returns the notices, for tellStanding after the commit.
  */
 export function stopStandingDealsOnListing(postId: string, by: string): StandingNotice[] {
     const live = db.prepare(`SELECT * FROM standing_deals WHERE post_id = ? AND phase != 'ended'`).all(postId) as StandingRow[];

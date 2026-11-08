@@ -996,7 +996,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 /** The two things tellStanding sends a standing deal's notices with, from a removal's own: no push where none was given. */
 function standingHooksOf(broadcast: BroadcastFn, push: PushFn | undefined): Parameters<typeof tellStanding>[0] {
     return {
-        broadcast: (event: any, recipients?: string[]) => broadcast(event, recipients),
+        broadcast: (event, recipients) => broadcast(event, recipients),
         dispatchPushNotification: (to, actor, title, body, data, category, kind) => push?.(to, actor, title, body, data, category, kind),
     };
 }

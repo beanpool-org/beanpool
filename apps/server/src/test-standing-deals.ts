@@ -36,6 +36,8 @@
  * 19. The author removes a listing: the payer between periods is told it ended, one whose period is held that it stopped.
  * 20. The keeper who signed an enterprise's standing deal on an Offer is removed: no further period is held.
  * 21. No unused helper is exported.
+ * 22. Each hold back by the node (server away, listing hidden, a row that no longer matches its text) is settled by a person
+ *     (Release or Cancel hold), and that ends it.
  *
  * Run: SERVER_SUITES_ONLY=test-standing-deals TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -668,6 +670,40 @@ async function main(): Promise<void> {
     // An enterprise keeps no notices of its own (engine/kept-notices.ts canHold): its payee is told.
     assert(keptKinds(rob.pk, e20.id).includes('standing_ended'), 'the payee is told it ended');
     assertConserved('after the keeper left');
+
+    // ── 22. Every hold back by the node reaches a person's step, and that step ends or resumes it ─────────────────────
+    console.log('── 22. Each hold back by the node, settled by a person ──');
+    // node_held (section 10: Tom's month, more than a period late), stopped since by the author's removal (13): Tom releases.
+    const tomRow = periodRows(a10b.id)[0];
+    const tomRel = await post(tom, '/api/marketplace/transactions/complete', { transactionId: tomRow.id, confirmerPublicKey: tom.pk });
+    assert(tomRel.status === 200 && standingRow(a10b.id).phase === 'ended' && standingRow(a10b.id).ended_reason === 'stopped',
+        `held back by the node (server away): the payer's Release settles it and it ends, as its listing was removed (${show(tomRel)}, ${standingRow(a10b.id).ended_reason})`);
+    // listing_hidden: hidden by reports at the period's end, released by the payer: paid, and it ends.
+    const ula = makeMember('Ula', 300);
+    const studio = createPost('offer', 'services', 'Studio Time', 'An hour a week', 12, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const a22 = authorise(ula, { postId: studio.id, payee: rob.pk, beans: 12, unit: 'week', max: null });
+    await post(ula, '/api/marketplace/posts/accept', { postId: studio.id, buyerPublicKey: ula.pk, standing: a22.standing });
+    db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), studio.id);
+    tick(Date.parse(periodEnd(a22.startsAt, 'week', 1)) + 1000);
+    assert(standingRow(a22.id).phase === 'held_back' && standingRow(a22.id).held_back_reason === 'listing_hidden' && keptKinds(ula.pk, a22.id).includes('standing_held_back'),
+        `hidden by reports at the week's end: held back for a person, both told (${standingRow(a22.id).phase}/${standingRow(a22.id).held_back_reason})`);
+    const robBefore22 = bal(rob.pk);
+    const ulaRel = await post(ula, '/api/marketplace/transactions/complete', { transactionId: periodRows(a22.id)[0].id, confirmerPublicKey: ula.pk });
+    assert(ulaRel.status === 200 && standingRow(a22.id).phase === 'ended' && standingRow(a22.id).ended_reason === 'listing_gone' && nearPaid(bal(rob.pk) - robBefore22, 12),
+        `the payer's Release pays the week and it ends (${show(ulaRel)}, ${standingRow(a22.id).ended_reason})`);
+    // cant_run: its row no longer matches the authorisation it holds, cancelled by the payer: refunded, and it ends.
+    const ned = makeMember('Ned', 300);
+    const a22b = authorise(ned, { postId: lessons.id, payee: rob.pk, beans: 20, unit: 'week', max: null });
+    await post(ned, '/api/marketplace/posts/accept', { postId: lessons.id, buyerPublicKey: ned.pk, standing: a22b.standing });
+    db.prepare('UPDATE standing_deals SET max_periods = 99 WHERE id = ?').run(a22b.id);
+    tick(Date.parse(periodEnd(a22b.startsAt, 'week', 1)) + 1000);
+    assert(standingRow(a22b.id).phase === 'held_back' && standingRow(a22b.id).held_back_reason === 'cant_run' && periodRows(a22b.id)[0].status === 'pending',
+        `a row that no longer matches its signed text: the node releases nothing, held back for a person (${standingRow(a22b.id).phase}/${standingRow(a22b.id).held_back_reason})`);
+    const nedBefore = bal(ned.pk);
+    const nedCan = await post(ned, '/api/marketplace/transactions/cancel', { transactionId: periodRows(a22b.id)[0].id, cancellerPublicKey: ned.pk });
+    assert(nedCan.status === 200 && standingRow(a22b.id).phase === 'ended' && standingRow(a22b.id).ended_reason === 'cancelled' && near(bal(ned.pk) - nedBefore, 20),
+        `the payer's Cancel hold refunds it and it ends (${show(nedCan)}, ${standingRow(a22b.id).ended_reason})`);
+    assertConserved('after each hold back was settled');
 
     // ── 21. No helper nothing calls ────────────────────────────────────────────────────────────────────────────────────
     const standingModule = await import('./engine/standing-deals.js') as Record<string, unknown>;

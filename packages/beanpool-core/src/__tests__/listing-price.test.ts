@@ -51,7 +51,7 @@ describe('freePriceWords: the table, 0 and above 0 x Offer and Need x each price
 
     it('the words never carry a Beans sign, a figure or a unit', () => {
         for (const type of TYPES) for (const form of ['short', 'box'] as const) {
-            expect(freePriceWords(0, type, form)).not.toMatch(/[0-9🫘Ʀ]|Beans|\/|hr|day|week|month/i);
+            expect(freePriceWords(0, type, form)).not.toMatch(/[0-9Ʀ]|🫘|Beans|\/|hr|day|week|month/i);
         }
     });
 });

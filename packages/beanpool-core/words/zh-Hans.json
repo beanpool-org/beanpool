@@ -2177,5 +2177,7 @@
   "Busy right now. Try again in a moment.": "现在比较忙，请稍后再试。",
   "Add them to the names list": "添加到实名名单",
   "Make them a voucher": "指定为担保人",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "目前仅限手机：实名名单的密钥保存在管理员的手机上。"
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "目前仅限手机：实名名单的密钥保存在管理员的手机上。",
+  "Ask a question with 2–4 options in the feed": "在动态中发布带有 2–4 个选项的提问",
+  "A gathering with a time and a place": "有固定时间和地点的聚会"
 }

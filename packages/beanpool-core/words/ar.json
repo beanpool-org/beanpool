@@ -2532,5 +2532,7 @@
   "Busy right now. Try again in a moment.": "مشغول الآن. حاول مجددًا بعد قليل.",
   "Add them to the names list": "إضافة الشخص إلى قائمة الأسماء",
   "Make them a voucher": "تعيين الشخص مزكّيًا",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "على الهاتف حاليًا: مفاتيح قائمة الأسماء موجودة على هواتف المشرفين."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "على الهاتف حاليًا: مفاتيح قائمة الأسماء موجودة على هواتف المشرفين.",
+  "Ask a question with 2–4 options in the feed": "اطرح سؤالًا مع 2 إلى 4 خيارات في الخلاصة",
+  "A gathering with a time and a place": "تجمع له زمان ومكان محددين"
 }

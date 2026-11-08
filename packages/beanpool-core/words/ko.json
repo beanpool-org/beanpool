@@ -2177,5 +2177,7 @@
   "Busy right now. Try again in a moment.": "지금은 이용자가 많아요. 잠시 후 다시 시도해 주세요.",
   "Add them to the names list": "실명 명단에 추가",
   "Make them a voucher": "보증인으로 지정",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "지금은 휴대폰에서만: 실명 명단의 키는 관리자의 휴대폰에 있어요."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "지금은 휴대폰에서만: 실명 명단의 키는 관리자의 휴대폰에 있어요.",
+  "Ask a question with 2–4 options in the feed": "피드에 2~4개 선택지로 질문 올리기",
+  "A gathering with a time and a place": "시간과 장소가 정해진 모임"
 }

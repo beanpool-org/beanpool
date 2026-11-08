@@ -2177,5 +2177,7 @@
   "Busy right now. Try again in a moment.": "ただいま混み合っています。しばらくしてからもう一度お試しください。",
   "Add them to the names list": "氏名リストに追加",
   "Make them a voucher": "保証人に指名",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "現在は電話アプリのみ：氏名リストの鍵は管理者の端末にあります。"
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "現在は電話アプリのみ：氏名リストの鍵は管理者の端末にあります。",
+  "Ask a question with 2–4 options in the feed": "フィードで2〜4つの選択肢を用意して質問する",
+  "A gathering with a time and a place": "日時と場所を決めて集まる催し"
 }

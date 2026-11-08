@@ -2390,5 +2390,7 @@
   "Busy right now. Try again in a moment.": "Сейчас занято. Попробуйте ещё раз чуть позже.",
   "Add them to the names list": "Добавить в список имён",
   "Make them a voucher": "Назначить поручителем",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "Пока только на телефоне: ключи списка имён хранятся на телефонах администраторов."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "Пока только на телефоне: ключи списка имён хранятся на телефонах администраторов.",
+  "Ask a question with 2–4 options in the feed": "Задайте вопрос с 2–4 вариантами ответа в ленте",
+  "A gathering with a time and a place": "Встреча с указанием времени и места"
 }

@@ -78,7 +78,7 @@ export function CommunityCardPanel({ card, onSignIn, onInvite, inviteTestId = 'c
                     </button>
                     {global && (
                         <a href={global} rel="noopener noreferrer" data-testid="community-card-global" className={`${base} text-bp-ink-brand underline font-semibold`}>
-                            {t(lookFirst ? W.lookAroundFirst : W.lookAround)}
+                            {lookFirst ? t(W.lookAroundFirst) : t(W.lookAround)}
                         </a>
                     )}
                 </div>

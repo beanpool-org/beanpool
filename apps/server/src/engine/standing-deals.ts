@@ -305,10 +305,26 @@ export function resetStandingLogs(): void {
     loggedBeansOff = false;
 }
 
+/**
+ * The key a member holds now: `key` itself, or the key a re-key moved it to, followed to the end (invalidated_keys.rekeyed_to;
+ * engine/key-move.ts moves the standing row, not the text its payer signed). At most a few links; a loop stops.
+ */
+export function currentKeyOf(key: string): string {
+    let k = key;
+    for (let i = 0; i < 8; i++) {
+        const next = (db.prepare('SELECT rekeyed_to FROM invalidated_keys WHERE public_key = ?').get(k) as { rekeyed_to: string | null } | undefined)?.rekeyed_to;
+        if (!next || next === k) break;
+        k = next;
+    }
+    return k;
+}
+/** Whether two keys are one member's: the same, or `signed` was re-keyed to `now` (the payee a signed text names, re-keyed since). */
+const sameMember = (signed: string, now: string): boolean => signed === now || currentKeyOf(signed) === now;
+
 /** The authorisation the row holds, read back, and whether it bounds the row as the row stands (§6). */
 function boundsRow(sd: StandingRow): boolean {
     const a = parseStandingAuthorisation(sd.auth_payload);
-    return !!a && a.standingId === sd.id && a.listingId === sd.post_id && a.payee === sd.payee_pubkey && a.unit === sd.period_unit
+    return !!a && a.standingId === sd.id && a.listingId === sd.post_id && sameMember(a.payee, sd.payee_pubkey) && a.unit === sd.period_unit
         && a.startsAt === sd.starts_at && a.maxPeriods === sd.max_periods && Math.abs(a.beansPerPeriod - sd.beans_per_period) < 1e-9
         && standingAuthorisationText(a) === sd.auth_payload;
 }
@@ -461,7 +477,7 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
         return { ...p, oneAtATime: !raw.repeatable };
     }
     const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, credits: sd.beans_per_period };
-    const p = requestHoldChecks(hooks, deal, raw, sd.payer_pubkey, { authSigner: sd.auth_signer, scheduled });
+    const p = requestHoldChecks(hooks, deal, raw, sd.payer_pubkey, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
     if (!p) throw new Error('its payer is no longer the listing\'s author');
     return p;
 }
@@ -469,7 +485,7 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
 function offerHoldChecksScheduled(hooks: StandingHooks, post: any, sd: StandingRow, scheduled: { standingId: string }): HoldParties {
     assertBuyerMayTrade(sd.payer_pubkey);
     if (post.authorPublicKey !== sd.payee_pubkey) throw new Error('its listing has another author');
-    return offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period, { authSigner: sd.auth_signer, scheduled });
+    return offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
 }
 
 /** The next period's Beans (step 2), or the short path, or the end. */
@@ -718,7 +734,7 @@ export function extendStandingDeal(hooks: EscrowCallbacks, id: string, actor: st
     if (!auth || typeof signature !== 'string') throw authRefused('the extension is not a standing authorisation text');
     if (!signsFor(hooks, actor, sd.payer_pubkey) || !signedBy(payload as string, signature, actor)) throw authRefused('the extension is not signed by the payer');
     if (!hostIsOurs(auth.host, actor, s.requestHost)) throw authRefused(`the extension was signed for ${auth.host}`);
-    const same = auth.standingId === sd.id && auth.listingId === sd.post_id && auth.payee === sd.payee_pubkey && auth.unit === sd.period_unit
+    const same = auth.standingId === sd.id && auth.listingId === sd.post_id && sameMember(auth.payee, sd.payee_pubkey) && auth.unit === sd.period_unit
         && auth.startsAt === sd.starts_at && Math.abs(auth.beansPerPeriod - sd.beans_per_period) < 1e-9;
     if (!same) throw authRefused('the extension changes more than the count');
     const longer = auth.maxPeriods === null ? sd.max_periods !== null : sd.max_periods !== null && auth.maxPeriods > sd.max_periods;

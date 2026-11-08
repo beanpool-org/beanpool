@@ -27,6 +27,8 @@
  * 12. A Need: the helper asks, the author approves with `standing`, the tick pays the helper.
  * 13. The author removes the listing: allowed while a period is held, which is still paid, then it ends.
  * 14. The transactions read carries the standing fields, and its ETag changes when the phase does.
+ * 15. A re-key of the payee, then of the payer: the standing deal carries on under each new key.
+ * 16. An enterprise payee: the tick's release counts toward its earned surplus with no signer.
  *
  * Run: SERVER_SUITES_ONLY=test-standing-deals TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -504,6 +506,44 @@ async function main(): Promise<void> {
     const read2 = await call(pia, 'GET', `/api/marketplace/transactions?publicKey=${pia.pk}`);
     assert(!!read1.etag && !!read2.etag && read1.etag !== read2.etag && (read2.body as any[]).some(t => t.standingId === a14.id && t.standingPhase === 'held_back'),
         `the ETag changes when the phase does (${read1.etag} → ${read2.etag})`);
+
+    // ── 15. A re-key of either side: the standing deal carries on under the new key ─────────────────────────────────
+    console.log('── 15. Re-key ──');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const quinn = makeMember('Quinn', 300);
+    const rae = makeMember('Rae', 0);
+    const baking = createPost('offer', 'food', 'Weekly Bread', 'A loaf a week', 15, 'weekly', rae.pk, undefined, undefined, undefined, true) as any;
+    const a15 = authorise(quinn, { postId: baking.id, payee: rae.pk, beans: 15, unit: 'week', max: null });
+    await post(quinn, '/api/marketplace/posts/accept', { postId: baking.id, buyerPublicKey: quinn.pk, standing: a15.standing });
+    const raeNew = crypto.generateKeyPairSync('ed25519');
+    const raeNewPk = (raeNew.publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    completeRekey(rae.pk, raeNewPk, issueRekeyCode(rae.pk, 'owner:password').code, 'owner:password');
+    assert(standingRow(a15.id).payee_pubkey === raeNewPk && periodRows(a15.id)[0].seller_pubkey === raeNewPk, 'the payee re-keys: the standing row and its period move to the new key');
+    tick(Date.parse(periodEnd(a15.startsAt, 'week', 1)) + 1000);
+    assert(nearPaid(bal(raeNewPk), 15) && standingRow(a15.id).phase === 'held' && periodRows(a15.id).length === 2 && periodRows(a15.id)[1].seller_pubkey === raeNewPk,
+        `the week is paid to the new key and the next held for it: the signed text's payee is read through the re-key (${bal(raeNewPk)})`);
+    const quinnNew = crypto.generateKeyPairSync('ed25519');
+    const quinnNewPk = (quinnNew.publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    completeRekey(quinn.pk, quinnNewPk, issueRekeyCode(quinn.pk, 'owner:password').code, 'owner:password');
+    const quinnBefore = bal(quinnNewPk);
+    tick(Date.parse(periodEnd(a15.startsAt, 'week', 2)) + 1000);
+    assert(standingRow(a15.id).payer_pubkey === quinnNewPk && periodRows(a15.id).length === 3 && periodRows(a15.id)[2].buyer_pubkey === quinnNewPk && near(quinnBefore - bal(quinnNewPk), 15),
+        'the payer re-keys: the next week is held from the new key');
+    assertConserved('after the re-keys');
+
+    // ── 16. An enterprise paid by the tick: its earned surplus counts the sale, with no signer ──────────────────────
+    console.log('── 16. An enterprise payee ──');
+    const uma = makeMember('Uma', 300);
+    const eggs = createPost('offer', 'food', 'Egg Box', 'A dozen a month', 20, 'monthly', ent.pk, undefined, undefined, undefined, true) as any;
+    const a16 = authorise(uma, { postId: eggs.id, payee: ent.pk, beans: 20, unit: 'month', max: null });
+    const acc16 = await post(uma, '/api/marketplace/posts/accept', { postId: eggs.id, buyerPublicKey: uma.pk, standing: a16.standing });
+    assert(acc16.status === 200, `a member takes up an enterprise's Offer as a standing deal (${show(acc16)})`);
+    const surplusOf = () => Number((db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(ent.pk) as any)?.earned_surplus) || 0;
+    const surplusBefore = surplusOf();
+    const t16 = tick(Date.parse(periodEnd(a16.startsAt, 'month', 1)) + 1000);
+    assert(t16.settled >= 1 && near(surplusOf() - surplusBefore, 20) && standingRow(a16.id).phase === 'held',
+        `the tick's release counts toward the enterprise's earned surplus, as a Release does (${surplusOf() - surplusBefore})`);
+    assertConserved('after the enterprise payee');
 
     assertConserved('at the end');
     console.log(`\n${passed}/${run} assertions passed`);

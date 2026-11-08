@@ -406,6 +406,15 @@ html, body, #root {
   color: #fff;
 }
 
+/* A member's own chat bubble is the accent colour, so the selection above vanishes on it (accent on accent): their words
+   looked as if they could not be selected (Marty, 9 Nov). There the highlight is a darker shade of the bubble, under the same
+   white words (white on the accent is the bubble's own pair, and a darker ground only raises its contrast, in light and dark). */
+.bp-bubble-mine ::selection,
+.bp-bubble-mine::selection {
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
 /* Focus visible for accessibility */
 :focus-visible {
   outline: 2px solid var(--accent);

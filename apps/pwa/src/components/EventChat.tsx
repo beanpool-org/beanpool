@@ -20,6 +20,8 @@ import {
 } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
 import { FoldedChatText } from './FoldedChatText';
+import { CopyMessageButton } from './CopyMessageButton';
+import { copyableChatText } from '../lib/copy-chat-text';
 import { imageFromTransfer, dragCarriesFile, NODE_READABLE_NO_PHOTOS_TEXT } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
@@ -248,6 +250,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                             }
                             const isRemoved = m.type === 'removed';
                             const author = m.authorCallsign || m.authorPubkey?.slice(0, 8) || t('Member');
+                            // The words as drawn; nothing to copy on a removed line.
+                            const copyWords = copyableChatText(decodeEventChatText(m.ciphertext, m.type, m.metadata), { removed: isRemoved });
                             return (
                                 <li key={m.id} className="py-3 flex items-start gap-2 min-w-0">
                                     <MemberAvatar avatarUrl={m.authorAvatar} pubkey={m.authorPubkey} callsign={author} size={32} alt="" className="flex-shrink-0 bg-nature-100 dark:bg-nature-800" />
@@ -256,19 +260,29 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-1 min-w-[5rem] truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
-                                        <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
+                                        <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words select-text ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                             <FoldedChatText text={decodeEventChatText(m.ciphertext, m.type, m.metadata)} enabled={!isRemoved} display="block" />
                                         </p>
-                                        {view.isHost && !isRemoved && (
-                                            <button
-                                                type="button"
-                                                onClick={() => remove(m)}
-                                                disabled={removingId === m.id}
-                                                aria-label={t('Remove message from {name}', { name: author })}
-                                                className="mt-1 min-h-[48px] px-2 -ml-2 bg-transparent border-0 text-xs font-bold text-rose-600 dark:text-rose-400 cursor-pointer disabled:opacity-50"
-                                            >
-                                                {removingId === m.id ? t('Removing…') : t('Remove')}
-                                            </button>
+                                        {(copyWords !== null || (view.isHost && !isRemoved)) && (
+                                            <div className="flex flex-wrap items-center -ml-2">
+                                                {copyWords !== null && (
+                                                    <CopyMessageButton
+                                                        text={copyWords}
+                                                        className="mt-1 min-h-[48px] px-2 bg-transparent border-0 text-xs font-bold text-nature-700 dark:text-nature-300 cursor-pointer"
+                                                    />
+                                                )}
+                                                {view.isHost && !isRemoved && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => remove(m)}
+                                                        disabled={removingId === m.id}
+                                                        aria-label={t('Remove message from {name}', { name: author })}
+                                                        className="mt-1 min-h-[48px] px-2 bg-transparent border-0 text-xs font-bold text-rose-600 dark:text-rose-400 cursor-pointer disabled:opacity-50"
+                                                    >
+                                                        {removingId === m.id ? t('Removing…') : t('Remove')}
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </li>

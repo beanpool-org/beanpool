@@ -156,6 +156,8 @@ export interface MessageActions {
     editClosed?: boolean;
     /** "Report message": someone else's line in a locked group chat or a DM (set only when on offer). */
     report?: boolean;
+    /** "Copy message": the line's words, as the bubble shows them, onto the clipboard. In every kind of chat, for anyone who can read it. */
+    copy?: boolean;
 }
 
 const NO_ACTIONS: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false };
@@ -307,6 +309,17 @@ export function canReportMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return !inFlight(m);
 }
 
+/**
+ * Copy (Marty, 9 Nov: "I can't select and copy text from previous messages"): the words of any line the member can read,
+ * in a DM, a group chat, an enterprise thread or an event chat, a chat that is still a request, or a read-only one: copying
+ * sends nothing to anyone. Never a system line, a deleted or removed line, a line that did not open (those are drawn as
+ * nobody's, without a bubble, and never reach here: `unattributed`), or a line with no words (a photo with no caption).
+ */
+export function canCopyMessage(m: ChatMessage): boolean {
+    if (isSystemLine(m) || isTombstone(m) || m.unattributed) return false;
+    return typeof m.text === 'string' && m.text.trim() !== '';
+}
+
 /** Everything tapping this bubble offers. One call so a screen can decide whether to open the bar at all. */
 export function messageActions(m: ChatMessage | null | undefined, viewer: ChatViewer): MessageActions {
     if (!m) return NO_ACTIONS;
@@ -319,11 +332,12 @@ export function messageActions(m: ChatMessage | null | undefined, viewer: ChatVi
         remove: canRemoveMessage(m, viewer),
         ...(closed ? { editClosed: true } : {}),
         ...(canReportMessage(m, viewer) ? { report: true } : {}),
+        ...(canCopyMessage(m) ? { copy: true } : {}),
     };
 }
 
 export function hasAnyAction(a: MessageActions): boolean {
-    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.report;
+    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.report || !!a.copy;
 }
 
 /** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1017,5 +1017,7 @@
   "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "Wala ka nang natitirang credit line na maibibigay: tanging credit line na ibinigay sa iyo ng iba ang maipapasa. Ang iyong kilalang floor at ang credit na nakuha mo ay mananatiling sa iyo.",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Ang bahagi ng credit line na ibinigay sa iyo ng isang tao ay nagsimula bilang patunay ni @{name} at hindi maaaring mapunta sa kanila, kaya hanggang {most} munggo lamang ang maibibigay mo sa kanila.",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Ang credit line na ibinigay sa iyo ng isang tao ay nagsimula bilang patunay ni @{name}, kaya walang bahagi nito ang maaaring mapunta sa kanila.",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Binago ng mga may-ari ng iyong komunidad kung paano ito gumagana: ang badyet ng bawat tagapagpatunay ay {budget} munggo na ngayon."
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Binago ng mga may-ari ng iyong komunidad kung paano ito gumagana: ang badyet ng bawat tagapagpatunay ay {budget} munggo na ngayon.",
+  "Busy finding another account. Wait a minute, then sign in again.": "Abala sa paghahanap ng ibang account. Maghintay ng isang minuto, tapos mag-sign in ulit.",
+  "Sign in with your account's sign-in first.": "Mag-sign in muna gamit ang sign-in ng account mo."
 }

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1008,5 +1008,7 @@
   "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "譲渡できるクレジット枠が残っていません：他の人から譲り受けたクレジット枠のみ譲渡できます。あなたの基本枠と取引で獲得したクレジットはあなたのものです。",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "誰かからあなたに譲渡されたクレジット枠の一部は @{name}の保証から始まったもので、その人には譲渡できません。そのため、その人に譲渡できるのは最大 {most} 豆分のクレジット枠までです。",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "誰かからあなたに譲渡されたクレジット枠は @{name}の保証から始まったものなので、その一部もその人には譲渡できません。",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "コミュニティのオーナーが運営のしかたを変更しました：各保証人の予算が {budget} 豆になりました。"
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "コミュニティのオーナーが運営のしかたを変更しました：各保証人の予算が {budget} 豆になりました。",
+  "Busy finding another account. Wait a minute, then sign in again.": "別のアカウントを探している最中です。1分ほど待ってから、もう一度サインインしてください。",
+  "Sign in with your account's sign-in first.": "まず、アカウントに連携したサインイン方法でサインインしてください。"
 }

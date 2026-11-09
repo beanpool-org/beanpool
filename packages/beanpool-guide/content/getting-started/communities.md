@@ -35,7 +35,7 @@ A community's own address (such as castlemaine.beanpool.org) shows its card to a
 - **Already a member**: the ways back into your account.
 - **Look around the global community**: where the community links to one.
 
-In the app, a community's address opens its card too. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and send a few words about yourself: the request goes to that community, as from **Find a community**. With an invite, tap **I have an invite**, then paste it under **Join Another Community**.
+In the app, a community's address opens its card too, and so does **Ask to join** on a post someone shared with you. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and its name, and send your name and a few words about yourself: the request goes to that community, as from **Find a community**. With no account on the phone yet, the card says so under the button: sending makes your account on this phone, with nothing from the BeanPool project, and the app's first screen then shows your request until the community answers. When a member says yes, tap **Join** and the community's name: you choose a photo and see your 12 words for the first time. With an invite, tap **I have an invite**: with an account, paste it under **Join Another Community**; with none, the app's invite step asks for it.
 
 ## Joining the global community from your account
 

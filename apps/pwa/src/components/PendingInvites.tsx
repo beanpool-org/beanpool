@@ -71,7 +71,8 @@ function InviteDialog({ inv, now, link, share, onClose }: { inv: InviteRowSource
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex"><InviteLines inv={inv} now={now} /></div>
-                <div className="self-center bg-white rounded-xl p-4 shadow-sm">
+                {/* The QR code keeps its white quiet zone in dark mode too: a phone camera cannot read it on a dark ground. */}
+                <div className="self-center bg-white dark:bg-white rounded-xl p-4 shadow-sm">
                     <QRCodeSVGComponent value={link} size={180} />
                 </div>
                 <p className="m-0 text-center font-mono text-[13px] font-semibold text-nature-950 dark:text-white break-all" title={inv.code}>{inv.code}</p>
@@ -175,7 +176,8 @@ export function InviteMadeCard({ who, invite, now, link, actions, testId }: { wh
             <p className="m-0 mt-2 font-mono text-xl font-bold tracking-widest text-nature-950 dark:text-white break-all" title={invite.code}>
                 {invite.code.length > 20 ? `${invite.code.substring(0, 16)}...` : invite.code.toUpperCase()}
             </p>
-            <div className="bg-white rounded-xl p-4 inline-block my-3 shadow-sm max-w-full">
+            {/* White in dark mode too, for the same reason: the QR code needs its quiet zone to scan. */}
+            <div className="bg-white dark:bg-white rounded-xl p-4 inline-block my-3 shadow-sm max-w-full">
                 <QRCodeSVGComponent value={link} size={200} className="block max-w-full h-auto" />
             </div>
             <div className="flex gap-3 justify-center flex-wrap">{actions}</div>

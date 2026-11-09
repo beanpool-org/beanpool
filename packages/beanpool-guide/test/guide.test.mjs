@@ -597,6 +597,13 @@ test('invites I3: the two old inviter sentences are absent from every page; priv
     assert.ok(privacy.includes('**Invited by marty · owner**'), 'privacy names the role word');
     assert.ok(privacy.includes('**Invited with an owner’s invite card**'), 'privacy names the owner\'s invite card');
     assert.ok(privacy.includes('**Show who invited me to other members**'), 'privacy names the hide switch');
+    // Who you brought in (I3 round 2): any member reads the invite tree (GET /api/invite/tree; the web's Invites, Tree),
+    // so the page must not say only you, the owners and the admins see the people you invited.
+    const broughtIn = privacy.split('\n').find(l => l.startsWith('- **Who you brought in:**')) ?? '';
+    assert.ok(broughtIn, 'privacy has the Who you brought in bullet');
+    assert.doesNotMatch(broughtIn, /Only you, the owners and the admins see it/);
+    assert.match(broughtIn, /any member can open the invite tree/);
+    assert.match(broughtIn, /\*\*Invites\*\*, then \*\*Tree\*\*/);
 });
 
 test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {

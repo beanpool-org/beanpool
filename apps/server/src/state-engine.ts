@@ -2724,9 +2724,10 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     if (inviterKey === 'genesis') {
         return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
     }
+    // invite_code is the code as the joiner typed it (redeemInvite matches it without case); the codes are made in capitals.
     const code = member?.inviteCode;
     if (code) {
-        const issued = (db.prepare('SELECT issued_by FROM invite_codes WHERE code = ?').get(code) as { issued_by: string | null } | undefined)?.issued_by;
+        const issued = (db.prepare('SELECT issued_by FROM invite_codes WHERE code IN (?, UPPER(?))').get(code, code) as { issued_by: string | null } | undefined)?.issued_by;
         if (issued === 'owner:password') {
             return { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
         }
@@ -2765,6 +2766,16 @@ export function viewerSeesInviterOf(viewer: string | null | undefined, target: s
     if (viewer && inviterKey && viewer === inviterKey) return true;
     if (seesWhoInvitedWhom(viewer)) return true;
     return inviterShownOf(target);
+}
+
+/**
+ * viewerSeesInviterOf for many targets at once (the invite tree): the viewer's role and the switched-off members read
+ * once, not once per member.
+ */
+export function inviterVisibilityFor(viewer: string | null | undefined): (target: string, inviterKey: string | null | undefined) => boolean {
+    if (seesWhoInvitedWhom(viewer)) return () => true;
+    const hidden = new Set((db.prepare('SELECT public_key AS pk FROM members WHERE inviter_shown = 0').all() as { pk: string }[]).map(r => r.pk));
+    return (target, inviterKey) => !hidden.has(target) || (!!viewer && (viewer === target || (!!inviterKey && viewer === inviterKey)));
 }
 
 /** How many people `publicKey` brought in: the first level of their branch of the invite tree (getInviteTree). */

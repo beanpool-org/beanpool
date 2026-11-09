@@ -34,7 +34,7 @@ import {
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
-    inviterShownOf, setInviterShown, viewerSeesInviterOf, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember,
+    inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
@@ -1519,12 +1519,13 @@ router.get('/api/invite/tree', async (ctx) => {
  */
 type TreeNode = ReturnType<typeof getInviteTree>[number];
 function treeForViewer(nodes: TreeNode[], viewer: string | undefined, wholeTree: boolean): TreeNode[] {
+    const sees = inviterVisibilityFor(viewer);
     const detached: TreeNode[] = [];
     const walk = (node: TreeNode): TreeNode => ({
         ...node,
-        invitedBy: node.invitedBy && !viewerSeesInviterOf(viewer, node.publicKey, node.invitedBy) ? '' : node.invitedBy,
+        invitedBy: node.invitedBy && !sees(node.publicKey, node.invitedBy) ? '' : node.invitedBy,
         children: node.children.filter((child) => {
-            if (viewerSeesInviterOf(viewer, child.publicKey, node.publicKey)) return true;
+            if (sees(child.publicKey, node.publicKey)) return true;
             if (wholeTree) detached.push(child);
             return false;
         }).map(walk),

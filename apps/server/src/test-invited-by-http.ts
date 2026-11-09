@@ -138,7 +138,8 @@ async function main(): Promise<void> {
     const card = await call('POST', null, '/api/admin/seed-invite', { type: 'standard' }, tfa.headers());
     assert(card.status === 200 && typeof card.body?.code === 'string', `3. the password makes a seed invite (${show(card)})`);
     const cara = keypair('Cara');
-    const caraRedeem = await call('POST', cara, '/api/invite/redeem', { code: card.body.code, publicKey: cara.pk, callsign: 'Cara' });
+    // Typed in small letters, as a joiner may: the redeem matches it without case, and the card's words must too.
+    const caraRedeem = await call('POST', cara, '/api/invite/redeem', { code: String(card.body.code).toLowerCase(), publicKey: cara.pk, callsign: 'Cara' });
     assert(caraRedeem.status === 200 && caraRedeem.body?.success === true, `3a. Cara joins with it (${show(caraRedeem)})`);
     const caraSeen = await profile(vic, cara);
     const caraBy = caraSeen.body?.vouchedInBy;

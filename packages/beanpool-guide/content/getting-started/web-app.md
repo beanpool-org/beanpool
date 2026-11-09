@@ -63,9 +63,9 @@ Your own local community has none of these limits.
 
 ## Getting your account back with your sign-in
 
-On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
+The sign-in you joined with, or linked in Settings, brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
 
-- Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)
+- On the global community, tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.) On your own local community's web address, tap **Restore Existing Identity**, then **Recover with Social Sign-In**.
 - A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.
 - The page shows the community it looks in: the one whose web address you opened. There is nothing to type.
 - Choose the sign-in you joined with: **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.

@@ -31,7 +31,7 @@ function stubNode(handlers: Record<string, Handler> = {}) {
         const path = String(input);
         const body = init.body ? JSON.parse(String(init.body)) : undefined;
         calls.push({ path, body, headers: (init.headers ?? {}) as Record<string, string> });
-        if (path === '/api/community/info') return json(200, GLOBAL_OPEN);
+        if (path === '/api/community/info' && !handlers['/api/community/info']) return json(200, GLOBAL_OPEN);
         const key = Object.keys(handlers).find((k) => path === k || path.startsWith(k));
         if (key) return handlers[key](body, path);
         return json(200, {});
@@ -191,6 +191,22 @@ describe('where it starts on the open door', () => {
         // And back: the lobby again.
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));
         await screen.findByTestId('join-screen-lobby');
+    });
+
+    it('a local community with an invite door: "Restore Existing Identity" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
+        restoreNode({
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } }),
+            '/api/community/card': () => json(200, { name: 'Mullumbimby', host: 'mullum.beanpool.org', members: 77, area: null, joining: 'invite', doors: [] }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByTestId('member-restore-signin'));
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.getByTestId('restore-community').textContent?.trim()).not.toBe('');
+        expect(screen.queryByTestId('restore-callsign')).toBeNull();
+        // And back: the ways to restore again.
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        await screen.findByTestId('member-restore-signin');
     });
 
     it('"Have you used BeanPool before?" offers it too, so nobody makes a second account', async () => {

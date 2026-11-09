@@ -6838,8 +6838,6 @@
   "Community name or address": "커뮤니티 이름 또는 주소",
   "Copy message": "메시지 복사",
   "Could not copy": "복사하지 못했어요",
-  "Invite message copied. Paste it with the picture.": "초대 메시지를 복사했어요. 사진과 함께 붙여넣으세요.",
-  "Join me on BeanPool": "BeanPool에서 저와 함께해요",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address}에는 BeanPool 커뮤니티가 없어요. 초대 메시지에 있는 커뮤니티 주소를 입력하거나 초대 링크를 여세요.",
   "Type the community's address, like yourtown.beanpool.org.": "커뮤니티 주소를 입력하세요. 예: yourtown.beanpool.org",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} 커뮤니티는 초대를 쓰지 않아서 이 코드는 그곳용이 아니에요. 초대 메시지에 있는 커뮤니티 주소를 입력하거나 초대 링크를 여세요.",

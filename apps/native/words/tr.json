@@ -7097,8 +7097,6 @@
   "Community name or address": "Topluluk adı veya adresi",
   "Copy message": "Mesajı kopyala",
   "Could not copy": "Kopyalanamadı",
-  "Invite message copied. Paste it with the picture.": "Davet mesajı kopyalandı. Resimle birlikte yapıştır.",
-  "Join me on BeanPool": "BeanPool'da bana katıl",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address} adresinde bir BeanPool topluluğu yok. Davet mesajındaki topluluk adresini yaz ya da davet bağlantısını aç.",
   "Type the community's address, like yourtown.beanpool.org.": "Topluluğun adresini yaz, örneğin yourtown.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} davet kullanmıyor, bu yüzden bu kod ona uygun değil. Davet mesajındaki topluluk adresini yaz ya da davet bağlantısını aç.",

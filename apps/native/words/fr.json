@@ -7097,8 +7097,6 @@
   "Community name or address": "Nom ou adresse de la communauté",
   "Copy message": "Copier le message",
   "Could not copy": "Impossible de copier",
-  "Invite message copied. Paste it with the picture.": "Message d'invitation copié. Collez-le avec l'image.",
-  "Join me on BeanPool": "Rejoignez-moi sur BeanPool",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "Il n'y a aucune communauté BeanPool à l'adresse {address}. Saisissez l'adresse de la communauté figurant dans votre message d'invitation, ou ouvrez le lien d'invitation.",
   "Type the community's address, like yourtown.beanpool.org.": "Saisissez l'adresse de la communauté, par exemple votreville.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} n'utilise pas d'invitations, ce code ne lui est donc pas destiné. Saisissez l'adresse de la communauté figurant dans votre message d'invitation, ou ouvrez le lien d'invitation.",

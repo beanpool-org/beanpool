@@ -8138,8 +8138,6 @@
   "Community name or address": "اسم المجتمع أو عنوانه",
   "Copy message": "نسخ الرسالة",
   "Could not copy": "تعذّر النسخ",
-  "Invite message copied. Paste it with the picture.": "تم نسخ رسالة الدعوة. الصقها مع الصورة.",
-  "Join me on BeanPool": "انضم إليّ في BeanPool",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "لا يوجد مجتمع BeanPool على {address}. اكتب عنوان المجتمع من رسالة الدعوة، أو افتح رابط الدعوة.",
   "Type the community's address, like yourtown.beanpool.org.": "اكتب عنوان المجتمع، مثل yourtown.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} لا يستخدم الدعوات، لذا هذا الرمز ليس له. اكتب عنوان المجتمع من رسالة الدعوة، أو افتح رابط الدعوة.",

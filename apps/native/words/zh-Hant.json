@@ -6838,8 +6838,6 @@
   "Community name or address": "社群名稱或地址",
   "Copy message": "複製訊息",
   "Could not copy": "無法複製",
-  "Invite message copied. Paste it with the picture.": "邀請訊息已複製。請連同圖片一起貼上。",
-  "Join me on BeanPool": "和我一起加入 BeanPool",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address} 沒有 BeanPool 社群。請輸入邀請訊息中的社群地址，或開啟邀請連結。",
   "Type the community's address, like yourtown.beanpool.org.": "輸入社群的地址，例如 yourtown.beanpool.org。",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} 不使用邀請，所以這組邀請碼不適用於它。請輸入邀請訊息中的社群地址，或開啟邀請連結。",

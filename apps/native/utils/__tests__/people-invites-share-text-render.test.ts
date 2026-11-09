@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 /**
- * People → Invites: Share sends the QR picture with the invite message (Damo, 9 Nov). The whole of app/(tabs)/people.tsx is
- * rendered for real (the mount of people-invites-no-vouch-render.test.ts) on a local community; the off-screen card that is
- * captured and every phone module are stand-ins that record what they were given. What each share dialog shows is looked at
- * on the emulator (the PR); the logic under it is invite-picture-share.test.ts.
+ * People → Invites: Share sends the invite as TEXT ONLY (Marty, 10 Nov: a shared QR picture lost the link, the code and the
+ * community's address, and "most people dont know how to scan their own QR code"). The whole of app/(tabs)/people.tsx is
+ * rendered for real (the mount of people-invites-no-vouch-render.test.ts) on a local community; every phone module is a
+ * stand-in that records what it was given. Share must hand the share sheet one `message` and nothing else: no `url`, no file,
+ * no clipboard write, no toast, on either phone. The QR stays on the screen for someone standing beside you.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
-import { act, createElement, Fragment, useEffect } from 'react';
+import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
@@ -16,14 +17,11 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const phone = vi.hoisted(() => ({
     os: 'ios' as 'ios' | 'android',
-    shares: [] as Array<{ message: string; url?: string }>,
+    // Everything the share dialog was handed, whole, so a stray `url` or `title` shows up in the comparison.
+    shares: [] as Array<Record<string, unknown>>,
     toasts: [] as string[],
     copied: [] as string[],
     sharedFiles: [] as Array<{ uri: string; options: unknown }>,
-    moves: [] as Array<{ from: string; to: string }>,
-    shots: [] as Array<{ code: string; value: string }>,
-    // What the off-screen card hands back: a file address, null (it could not be made), or held until the test lets it go.
-    capture: { mode: 'file' as 'file' | 'null' | 'held', release: null as null | ((uri: string | null) => void) },
 }));
 
 vi.mock('react-native', () => {
@@ -53,7 +51,7 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
         Alert: { alert: () => {} },
-        Share: { share: async (content: { message: string; url?: string }) => { phone.shares.push(content); return {}; } },
+        Share: { share: async (content: Record<string, unknown>) => { phone.shares.push(content); return {}; } },
         ToastAndroid: { LONG: 1, show: (text: string) => { phone.toasts.push(text); } },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         Keyboard: { addListener: listener, dismiss() {} },
@@ -79,27 +77,11 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
-vi.mock('react-native-qrcode-svg', () => ({ default: () => null }));
+vi.mock('react-native-qrcode-svg', () => ({ default: ({ value }: { value: string }) => createElement('span', { 'data-testid': 'qr', 'data-value': value }) }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: async (text: string) => { phone.copied.push(text); } }));
 vi.mock('expo-sharing', () => ({
     isAvailableAsync: async () => true,
     shareAsync: async (uri: string, options: unknown) => { phone.sharedFiles.push({ uri, options }); },
-}));
-vi.mock('expo-file-system/legacy', () => ({
-    cacheDirectory: 'file:///cache/',
-    deleteAsync: async () => {},
-    moveAsync: async (o: { from: string; to: string }) => { phone.moves.push(o); },
-}));
-// The off-screen card: it is drawn and captured on a phone (components/InvitePictureShot.tsx); here it answers as set.
-vi.mock('../../components/InvitePictureShot', () => ({
-    InvitePictureShot: ({ code, value, onCaptured }: { code: string; value: string; onCaptured: (uri: string | null) => void }) => {
-        useEffect(() => {
-            phone.shots.push({ code, value });
-            if (phone.capture.mode === 'held') { phone.capture.release = onCaptured; return; }
-            onCaptured(phone.capture.mode === 'null' ? null : `file:///tmp/capture-${code}.png`);
-        }, []);
-        return createElement('span', { 'data-testid': 'picture-shot' });
-    },
 }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
@@ -168,10 +150,6 @@ beforeEach(() => {
     phone.toasts.length = 0;
     phone.copied.length = 0;
     phone.sharedFiles.length = 0;
-    phone.moves.length = 0;
-    phone.shots.length = 0;
-    phone.capture.mode = 'file';
-    phone.capture.release = null;
     let made = 0;
     globalThis.fetch = vi.fn(async (url: unknown) => {
         const u = String(url);
@@ -204,77 +182,50 @@ const generateAndShare = async () => {
 };
 
 const LINK = `${NODE}/?invite=INV-TEST-0001`;
-const NAMED = 'file:///cache/beanpool-invite-INV-TEST-0001.png';
+/** The message the web's Share sends: the link, the code to paste if the link does not open, and the community's address. */
+const MESSAGE = (code: string) => [
+    'Join my BeanPool community, Mullum:',
+    `${NODE}/?invite=${code}`,
+    '',
+    "If the link doesn't open, install BeanPool from beanpool.org and paste this code:",
+    code,
+    '',
+    'Community address: node.example',
+].join('\n');
 
-describe('People → Invites: Share sends the QR picture with the message', () => {
-    it('on iOS: one share sheet with the message and the picture, named for the code', async () => {
+/** Nothing but the words went to the share sheet, and nothing else was put on the clipboard, shown as a toast or shared as a file. */
+const sentTheTextOnly = (code: string) => {
+    expect(phone.shares).toEqual([{ message: MESSAGE(code) }]);
+    expect(Object.keys(phone.shares[0])).toEqual(['message']);
+    expect(phone.sharedFiles).toEqual([]);
+    expect(phone.copied).toEqual([]);
+    expect(phone.toasts).toEqual([]);
+};
+
+describe('People → Invites: Share sends the whole message as text, never a picture', () => {
+    it('the invite just made (📤 Share Invite) shares the link, the code and the address on iOS', async () => {
         await generateAndShare();
-
-        expect(phone.shots).toEqual([{ code: 'INV-TEST-0001', value: LINK }]);
-        expect(phone.moves).toEqual([{ from: 'file:///tmp/capture-INV-TEST-0001.png', to: NAMED }]);
-        expect(phone.shares).toHaveLength(1);
-        expect(phone.shares[0].url).toBe(NAMED);
-        expect(phone.shares[0].message).toContain('Mullum');
         expect(phone.shares[0].message).toContain(LINK);
-        expect(phone.shares[0].message).toContain('INV-TEST-0001');
-        expect(phone.sharedFiles).toEqual([]);
-        expect(phone.copied).toEqual([]);
+        sentTheTextOnly('INV-TEST-0001');
     });
 
-    it('on Android: the picture in the dialog, the message on the clipboard and said so, and no message-only share', async () => {
+    it('and the same on Android: no picture dialog, no clipboard note', async () => {
         phone.os = 'android';
         await generateAndShare();
-
-        expect(phone.sharedFiles).toEqual([{ uri: NAMED, options: { mimeType: 'image/png', dialogTitle: 'Join me on BeanPool' } }]);
-        expect(phone.copied).toHaveLength(1);
-        expect(phone.copied[0]).toContain(LINK);
-        expect(phone.toasts).toEqual(['Invite message copied. Paste it with the picture.']);
-        expect(phone.shares).toEqual([]);
+        sentTheTextOnly('INV-TEST-0001');
     });
 
-    it('shares the message alone, as before, where the picture could not be made', async () => {
-        phone.capture.mode = 'null';
-        await generateAndShare();
-
-        expect(phone.shares).toHaveLength(1);
-        expect(phone.shares[0].url).toBeUndefined();
-        expect(phone.shares[0].message).toContain(LINK);
-        expect(phone.moves).toEqual([]);
+    it('an invite in the pending list (Share on its row) sends its own message', async () => {
+        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([{ code: 'INV-ROW-0001', createdAt: '2026-11-01T00:00:00Z', intendedFor: 'Sam' }]));
+        await open();
+        await tap(t('Share'));
+        sentTheTextOnly('INV-ROW-0001');
     });
 
-    it('shares the message alone when the picture is never made, after waiting a few seconds, not for ever', async () => {
-        phone.capture.mode = 'held';
+    it('still shows the invite\'s QR on the screen, for someone beside you to scan', async () => {
         await generate();
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-        try {
-            await act(async () => { buttonWith(t('📤 Share Invite'))!.click(); });
-            expect(phone.shares).toEqual([]);
-            await act(async () => { await vi.advanceTimersByTimeAsync(3900); });
-            expect(phone.shares).toEqual([]);
-            await act(async () => { await vi.advanceTimersByTimeAsync(300); });
-        } finally {
-            vi.useRealTimers();
-        }
-        await settle();
-        expect(phone.shares).toHaveLength(1);
-        expect(phone.shares[0].url).toBeUndefined();
-        expect(phone.shares[0].message).toContain(LINK);
-    });
-
-    it('a second tap while the first is still making its picture starts nothing', async () => {
-        phone.capture.mode = 'held';
-        await generateAndShare();
-        await tap(t('📤 Share Invite'));
-        expect(phone.shots).toHaveLength(1);
-
-        await act(async () => { phone.capture.release!('file:///tmp/held.png'); });
-        await settle();
-        expect(phone.shares).toHaveLength(1);
-        expect(phone.shares[0].url).toBe(NAMED);
-    });
-
-    it('takes the picture away once the share is on its way', async () => {
-        await generateAndShare();
-        expect(host.querySelector('[data-testid="picture-shot"]')).toBeNull();
+        const qr = host.querySelector('[data-testid="qr"]');
+        expect(qr).toBeTruthy();
+        expect(qr!.getAttribute('data-value')).toBe(LINK);
     });
 });

@@ -7102,8 +7102,6 @@
   "Community name or address": "Jina au anwani ya jumuiya",
   "Copy message": "Nakili ujumbe",
   "Could not copy": "Imeshindwa kunakili",
-  "Invite message copied. Paste it with the picture.": "Ujumbe wa mwaliko umenakiliwa. Ubandike pamoja na picha.",
-  "Join me on BeanPool": "Jiunge nami kwenye BeanPool",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "Hakuna jumuiya ya BeanPool kwenye {address}. Andika anwani ya jumuiya kutoka kwenye ujumbe wako wa mwaliko, au fungua kiungo cha mwaliko.",
   "Type the community's address, like yourtown.beanpool.org.": "Andika anwani ya jumuiya, kama yourtown.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} haitumii mialiko, kwa hiyo msimbo huu si wake. Andika anwani ya jumuiya kutoka kwenye ujumbe wako wa mwaliko, au fungua kiungo cha mwaliko.",

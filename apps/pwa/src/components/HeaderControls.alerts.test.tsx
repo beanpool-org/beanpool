@@ -185,6 +185,21 @@ describe('The bell takes the needs-you row: what needs you sits at the top of it
         }
     });
 
+    it('"N people asked to join" in the sheet opens Invites as a notice\'s visit; "N asked for an invite" as an ordinary one (#3003)', async () => {
+        const onNavigate = vi.fn();
+        const KNOCK: NeedsItem = { kind: 'knock', count: 2, accent: true, label: '2 people asked to join', target: { to: 'people' } };
+        const ASK: NeedsItem = { kind: 'ask', count: 1, accent: true, label: '1 person asked for an invite', target: { to: 'people' } };
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-people"', answer: makeHomeAnswer([KNOCK, ASK]) as any });
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+
+        const line = (kind: string) => within(openSheet()).getAllByRole('button').find(b => b.dataset.kind === kind)!;
+        fireEvent.click(line('knock'));
+        expect(onNavigate).toHaveBeenLastCalledWith('people-invites', 'asked');
+        fireEvent.click(line('ask'));
+        expect(onNavigate).toHaveBeenLastCalledWith('people-invites');
+    });
+
     it('one home fetch shared with Home', async () => {
         const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-shared"', answer: makeHomeAnswer([INVITE]) as any });
         render(
@@ -437,7 +452,9 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
             ['community.removal-vote', { screen: 'decide' }, ['projects']],
             ['account.recovery-started', { screen: 'settings' }, ['settings']],
             ['chat.message', { screen: 'requests' }, ['messages']],
-            ['community.knock', {}, ['people-invites']],
+            // A request to join: Invites as a notice's visit (the phone's from=notice, #3003); an answered invite-ask: Invites.
+            ['community.knock', {}, ['people-invites', 'asked']],
+            ['community.invite-ask', {}, ['people-invites']],
             ['market.request', {}, ['marketplace']],
             ['not.a.kind', {}, ['home']],
             ['chat.message', { screen: 'chat', conversationId: 42 }, ['messages']],

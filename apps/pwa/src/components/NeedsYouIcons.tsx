@@ -79,6 +79,9 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
         default: break;
     }
     const tab = isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
+    // A request to join lands on Invites as a notice's visit, as the phone's `from=notice` and the "N people asked to join"
+    // line: if every request is answered by now, Invites says so instead of showing nothing (WantsToJoin, #3003).
+    if (kind === 'community.knock') return onNavigate('people-invites', 'asked');
     const web: Record<string, string> = { home: 'home', market: 'marketplace', chats: 'messages', settings: 'settings', people: 'people-invites' };
     return onNavigate(web[tab] ?? 'home');
 }

@@ -708,9 +708,10 @@ export const PENDING_RESTORE_TTL_MS = NODE_NONCE_LIFE_MS;
 
 /**
  * A restore with a sign-in (lib/web-restore.ts) that has left the page for the provider: what the page needs when the
- * browser comes back. The node's recovery session for the account (`collectionId`) is bound to a throwaway key made for
- * this restore (`ephemeral`), which signs every call in it and was given the sign-in's `nonce`. `account` is the member
- * the node's lookup named: the account that comes back must have that key, or nothing is saved.
+ * browser comes back. A throwaway key made for this restore (`ephemeral`) was given the sign-in's `nonce`; back from the
+ * provider it signs the find, which names the accounts this sign-in protects, and then the collect for the one picked.
+ * No account is known before the sign-in: the account that comes back must have the key the find named, or nothing is
+ * saved.
  *
  * Why its own key in the store, and not the pending join's slot with `kind: 'restore'` as design §4.4 has it: that slot
  * is the only copy of a sent join's key, which nothing may replace ("A sent key's fate" above), so a restore sharing it
@@ -719,15 +720,12 @@ export const PENDING_RESTORE_TTL_MS = NODE_NONCE_LIFE_MS;
  *
  * It never holds an account's key. `ephemeral` is not one and is never saved as one; nothing here writes the identity
  * slot, and loadIdentity never reads this one. The account that comes back is saved only through importIdentity's
- * guarded write (one browser, one account), after its key has been compared with `account.publicKey`.
+ * guarded write (one browser, one account), after its key has been compared with the key the find named.
  */
 export interface PendingRestore {
     kind: 'restore';
-    /** The throwaway key the node's recovery session is bound to. Not an account. */
+    /** The throwaway key the find, its hold and the node's recovery session are bound to. Not an account. */
     ephemeral: { publicKey: string; privateKey: string };
-    /** The account being brought back, as the node's lookup named it. */
-    account: { publicKey: string; callsign: string };
-    collectionId: string;
     provider: JoinProvider;
     /** The node's sign-in nonce for `ephemeral`. It is the provider's `state` as well. */
     nonce: string;
@@ -740,8 +738,7 @@ function asPendingRestore(value: unknown): PendingRestore | null {
     const r = value as Partial<PendingRestore> | null | undefined;
     if (!r || typeof r !== 'object' || r.kind !== 'restore') return null;
     if (typeof r.ephemeral?.privateKey !== 'string' || !r.ephemeral.privateKey || typeof r.ephemeral.publicKey !== 'string') return null;
-    if (typeof r.account?.publicKey !== 'string' || !r.account.publicKey || typeof r.account.callsign !== 'string') return null;
-    if (typeof r.collectionId !== 'string' || !r.collectionId || typeof r.nonce !== 'string' || !r.nonce || !isJoinProvider(r.provider)) return null;
+    if (typeof r.nonce !== 'string' || !r.nonce || !isJoinProvider(r.provider)) return null;
     if (typeof r.expiresAt !== 'number' || typeof r.startedAt !== 'number') return null;
     return r as PendingRestore;
 }

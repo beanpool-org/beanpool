@@ -33,7 +33,7 @@ import {
 } from '../lib/api';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
-import { inviteHeading } from '../lib/join-names';
+import { inviteHeading, ownCommunityAddress } from '../lib/join-names';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchKnownRule } from '../lib/known-rule';
@@ -2681,6 +2681,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     ) : signInRestore || restoreReturn === 'restore' ? (
                         /* ===== AN ACCOUNT BACK WITH ITS SIGN-IN (G11-d) ===== */
                         <WebRestore
+                            // Where the find looks: this page's own community (the app's global, else its card's name or address).
+                            community={appsGlobal ? t('Global community')
+                                : communityCard && communityCard !== 'loading' ? communityCardName(communityCard, { t }) : ownCommunityAddress()}
                             provider={signInRestore?.provider ?? null}
                             // Only a return this page matched to a restore; any other went to WebJoin.
                             authReturn={restoreReturn === 'restore' ? authReturn : null}

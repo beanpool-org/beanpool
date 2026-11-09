@@ -3,36 +3,36 @@
  * 2026-09-25): a browser that was cleared, or a new one, gets the member's own key back, never a second identity.
  * Everything the restore screens (components/WebRestore.tsx) do that is not drawing.
  *
- * ## The shape of it: the phone's restore, in a browser
+ * ## The shape of it: the community finds the account from the sign-in (recovery S1)
  *
- * The phone's template is apps/native/utils/sso-recovery.ts, against the node's recovery routes
- * (apps/server/src/routes/recovery-collect.ts), which this does not change:
+ * Nothing is typed (scratch design DESIGN-recovery-no-callsign-fable.md §3, §5; Marty, 9 Nov). The community is the one
+ * this page belongs to. Against the node's recovery routes (apps/server/src/routes/recovery-collect.ts):
  *
- *   1. The member names their account: the node's public lookup (`GET /api/recovery/lookup/:name`) lists the member
- *      whose whole name it is, case forgiven, if they have a sign-in copy, with their public key and no photo (every
- *      community since 2026-10-01; the global one since G9a-2). The member picks theirs.
- *   2. A throwaway key is made for this restore (`makeEphemeralKey`). It is not an account and is never saved as one.
- *      It signs every call below, and the node binds the recovery session to it: the session id alone opens nothing.
- *   3. `POST /api/recovery/collect { callsign, candidatePublicKey }` opens the session for the account picked (by its key, so
- *      a name another account holds in another case still opens the one picked) (the account's owner sees it in their app, and is told
- *      when the copy is released), and `POST /api/recovery/collect/sso-nonce` gives the sign-in nonce for the throwaway
- *      key, with the ids a browser puts in its request to each provider (`clientIds`).
- *   4. The sign-in: Google, Apple and Facebook leave the page exactly as the join does (lib/web-join.ts builds the same
- *      requests, and they come back to the same `/app/auth/<provider>` page); the throwaway key and the session wait as
- *      a pending restore (identity.ts).
- *   5. `POST /api/recovery/collect/sso` with the token releases the account's sign-in copy, and
+ *   1. A throwaway key is made for this restore (`makeEphemeralKey`). It is not an account and is never saved as one.
+ *      It signs every call below, and the node binds the find, its hold and the recovery session to it.
+ *   2. `POST /api/recovery/find-nonce` gives the sign-in nonce for the throwaway key, with the ids a browser puts in its
+ *      request to each provider (`clientIds`). A server from before the find answers 404: it can't find an account from a
+ *      sign-in yet, and the member is told so (design §4).
+ *   3. The sign-in: Google, Apple and Facebook leave the page exactly as the join does (lib/web-join.ts builds the same
+ *      requests, and they come back to the same `/app/auth/<provider>` page); the throwaway key waits as a pending
+ *      restore (identity.ts).
+ *   4. `POST /api/recovery/find` with the token: the accounts this sign-in protects here, by name and key (none, one, or
+ *      several when one sign-in protects several). The node holds the verified sign-in for 5 minutes, for this key.
+ *   5. `POST /api/recovery/collect { candidatePublicKey }` for the account picked, by that hold: the node opens the session
+ *      and releases the account's sign-in copy in the same request (the account's owner is told), and
  *      `POST /api/recovery/collect/fragments` hands it over, sealed to the throwaway key, while the session is live.
  *   6. core's `openSeedFromSso` opens it with the sign-in's `sub`: the account's seed, and its 12 words when the copy
  *      carried them. The format is core's alone: nothing here reads the blob but that function.
  *
- * ## Nothing is saved unless it is the account the lookup named
+ * ## Nothing is saved unless it is the account the find named
  *
  * `openRestoredAccount` builds the key from the seed, and keeps the words only when this app's own derivation of them
  * (lib/mnemonic.ts, as a 12-words restore would run it) makes that same key. Then the key must equal the public key the
- * lookup named for the account the member picked. Anything else (another account's copy, a node answering for someone
+ * find named for the account the member picked. Anything else (another account's copy, a node answering for someone
  * else) is refused and nothing is written. The phone's restore at a community makes the same check (apps/native/utils/
- * sso-recovery.ts `recoverAccountWithSso`, #1951). What is saved goes through the identity store's guarded write (identity.ts importIdentity: one browser, one
- * account), from WelcomePage, which also settles a join this browser sent first.
+ * sso-recovery.ts `recoverAccountWithSso`, #1951). What is saved goes through the identity store's guarded write
+ * (identity.ts importIdentity: one browser, one account), from WelcomePage, which also settles a join this browser sent
+ * first.
  *
  * ## What is not done here
  *
@@ -48,48 +48,14 @@ import {
     KEEPER_ALG_RELEASE,
     openListedFragment,
     openSeedFromSso,
+    t,
     toEd25519Pkcs8,
     type CopyCommunity,
     type ListedFragment,
     type SealedShare,
 } from '@beanpool/core';
-import { getNodeApiUrl } from './api';
 import { identityFromMnemonic, JOIN_PROVIDERS, type BeanPoolIdentity, type JoinProvider } from './identity';
 import { door, isWrongClock, providerLabel, WRONG_CLOCK, type DoorAnswer } from './web-join';
-
-// ===================== THE ACCOUNT (the node's lookup) =====================
-
-/** One account the lookup named: the name it has here, and its key. */
-export interface RestoreCandidate {
-    publicKey: string;
-    callsign: string;
-}
-
-const HEX_KEY = /^[0-9a-f]{64}$/;
-
-/**
- * The accounts here whose name is `name`, case forgiven (a community matches the whole name only), and that a
- * sign-in can bring back, as the node's public lookup lists them (`GET /api/recovery/lookup/:callsign`, rate limited,
- * unsigned: this browser has no key yet). Null when the node could not be asked or did not answer with a list. Never
- * throws.
- */
-export async function lookupRestorable(name: string): Promise<RestoreCandidate[] | null> {
-    const typed = name.trim();
-    if (!typed) return [];
-    try {
-        const res = await fetch(`${getNodeApiUrl()}/api/recovery/lookup/${encodeURIComponent(typed)}`, { cache: 'no-store' });
-        if (!res.ok) return null;
-        const all: unknown = await res.json();
-        if (!Array.isArray(all)) return null;
-        return all.flatMap((c): RestoreCandidate[] => {
-            const publicKey = typeof c?.publicKey === 'string' ? c.publicKey.trim().toLowerCase() : '';
-            const callsign = typeof c?.callsign === 'string' ? c.callsign : '';
-            return c?.canRecoverBySso === true && HEX_KEY.test(publicKey) && callsign.trim() ? [{ publicKey, callsign }] : [];
-        });
-    } catch {
-        return null;
-    }
-}
 
 // ===================== THE THROWAWAY KEY =====================
 
@@ -114,27 +80,21 @@ function signer(eph: EphemeralKey): BeanPoolIdentity {
     return { publicKey: eph.publicKey, privateKey: eph.privateKey, callsign: 'ephemeral-recovery', createdAt: new Date(0).toISOString() };
 }
 
-// ===================== THE NODE'S RECOVERY SESSION (routes/recovery-collect.ts) =====================
+// ===================== THE NODE'S FIND AND COLLECT (routes/recovery-collect.ts) =====================
 
-/**
- * Open the node's recovery session for `callsign` (the name as the lookup gave it), bound to `eph`: for the account the
- * lookup listed with `publicKey`, when given, which the node opens only if that name holds it (routes/recovery-collect.ts).
- */
-export async function openRestoreSession(eph: EphemeralKey, callsign: string, publicKey?: string): Promise<{ collectionId: string } | { answer: DoorAnswer }> {
-    const answer = await door('POST', '/api/recovery/collect', publicKey ? { callsign, candidatePublicKey: publicKey } : { callsign }, signer(eph));
-    const id = answer.body.collectionId;
-    if (answer.status !== 200 || typeof id !== 'string' || !id) return { answer };
-    return { collectionId: id };
-}
-
-/** The node's answer to a recovery nonce request: which sign-ins a browser can use for it, and the nonce. */
+/** The node's answer to a find nonce request: which sign-ins a browser can use for it, and the nonce. */
 export interface RestoreNonce {
     nonce: string;
     clientIds: Partial<Record<JoinProvider, string | null>>;
 }
 
-export async function requestRestoreNonce(eph: EphemeralKey, collectionId: string): Promise<{ nonce: RestoreNonce } | { answer: DoorAnswer }> {
-    const answer = await door('POST', '/api/recovery/collect/sso-nonce', { collectionId }, signer(eph));
+/**
+ * A sign-in nonce for finding the account, bound to `eph` (`POST /api/recovery/find-nonce`). `tooOld`: the community's
+ * server answers 404, so it has no find yet and can't find an account from a sign-in (design §4).
+ */
+export async function requestFindNonce(eph: EphemeralKey): Promise<{ nonce: RestoreNonce } | { tooOld: true } | { answer: DoorAnswer }> {
+    const answer = await door('POST', '/api/recovery/find-nonce', {}, signer(eph));
+    if (answer.status === 404) return { tooOld: true };
     const b = answer.body;
     if (answer.status !== 200 || typeof b.nonce !== 'string' || !b.nonce) return { answer };
     return {
@@ -154,7 +114,7 @@ export function restoreProviders(n: RestoreNonce): JoinProvider[] {
     return JOIN_PROVIDERS.filter((p) => typeof n.clientIds[p] === 'string' && !!n.clientIds[p]);
 }
 
-/** The sign-in a restore releases the copy with: the provider's token and its nonce. */
+/** The sign-in a find goes with: the provider's token and its nonce, and the `sub` the copy opens with. */
 export interface RestoreProof {
     provider: JoinProvider;
     idToken: string;
@@ -162,9 +122,42 @@ export interface RestoreProof {
     sub: string;
 }
 
-/** Ask the node to release the account's sign-in copy to this session, with a fresh sign-in. */
-export function releaseSignInCopy(eph: EphemeralKey, collectionId: string, proof: RestoreProof): Promise<DoorAnswer> {
-    return door('POST', '/api/recovery/collect/sso', { collectionId, provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce }, signer(eph));
+/** One account the find named: the name it has here, and its key. */
+export interface RestoreCandidate {
+    publicKey: string;
+    callsign: string;
+}
+
+const HEX_KEY = /^[0-9a-f]{64}$/;
+
+/**
+ * The accounts this sign-in protects here (`POST /api/recovery/find`), each with a key and a name, in the node's order;
+ * one named twice is listed once. Empty: no account here uses this sign-in. The node holds the verified sign-in for
+ * `collectAccount`, for this throwaway key, for 5 minutes.
+ */
+export async function findAccounts(eph: EphemeralKey, proof: RestoreProof): Promise<{ accounts: RestoreCandidate[] } | { answer: DoorAnswer }> {
+    const answer = await door('POST', '/api/recovery/find', { provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce }, signer(eph));
+    if (answer.status !== 200 || !Array.isArray(answer.body.accounts)) return { answer };
+    const seen = new Set<string>();
+    const accounts = (answer.body.accounts as Array<Record<string, unknown> | null>).flatMap((c): RestoreCandidate[] => {
+        const publicKey = typeof c?.publicKey === 'string' ? c.publicKey.trim().toLowerCase() : '';
+        const callsign = typeof c?.callsign === 'string' ? c.callsign : '';
+        if (!HEX_KEY.test(publicKey) || !callsign.trim() || seen.has(publicKey)) return [];
+        seen.add(publicKey);
+        return [{ publicKey, callsign }];
+    });
+    return { accounts };
+}
+
+/**
+ * Open the node's recovery session for the account picked, by the find's hold (`POST /api/recovery/collect
+ * { candidatePublicKey }`): the node releases the account's sign-in copy to it in the same request, and tells its owner.
+ */
+export async function collectAccount(eph: EphemeralKey, account: RestoreCandidate): Promise<{ collectionId: string } | { answer: DoorAnswer }> {
+    const answer = await door('POST', '/api/recovery/collect', { candidatePublicKey: account.publicKey }, signer(eph));
+    const id = answer.body.collectionId;
+    if (answer.status !== 200 || typeof id !== 'string' || !id) return { answer };
+    return { collectionId: id };
 }
 
 /**
@@ -198,11 +191,11 @@ export async function fetchSignInCopy(eph: EphemeralKey, collectionId: string): 
 
 export type OpenedAccount =
     /**
-     * The account the lookup named: its key, and its 12 words when they came back and make it. `communities`: the
+     * The account the find named: its key, and its 12 words when they came back and make it. `communities`: the
      * member's list, when the copy carried one (vault rethink VR5, core copy-communities.ts), else empty.
      */
     | { kind: 'ok'; identity: BeanPoolIdentity; communities: CopyCommunity[] }
-    /** It opened to another key than the one the lookup named. Nothing of it is returned. */
+    /** It opened to another key than the one the find named. Nothing of it is returned. */
     | { kind: 'wrong_account' }
     /** The old two-part kind of copy, which the web does not open. */
     | { kind: 'old_format' }
@@ -261,24 +254,36 @@ export async function openRestoredAccount(
 
 // ===================== WHAT THE MEMBER READS =====================
 
-/** The node's answer to a release that did not let the copy go, in plain words. */
-export function releaseRefusalMessage(answer: DoorAnswer, provider: JoinProvider, callsign: string): string {
-    const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
-    const label = providerLabel(provider);
-    if (isWrongClock(answer)) return WRONG_CLOCK;
-    if (answer.status === 400) return `That ${label} account isn't a way back into ${callsign}. Try the sign-in you joined with, or your 12 words.`;
-    if (answer.status === 401) return `${label} sign-in couldn't be checked or took too long. Try again.`;
-    if (answer.status === 429 || answer.status === 503) return said ?? `${label} sign-in could not be checked right now. Please try again in a minute.`;
-    if (answer.status === 404) return 'That restore timed out on the community. Start again.';
-    return said ?? `The community could not bring the account back (${answer.status}). Please try again.`;
+/** No account at this community uses this sign-in (design §5). */
+export function noAccountMessage(community: string, provider: JoinProvider): string {
+    return t('No account at {community} uses this {provider} account. Try another community, or your 12 words.', { community, provider: providerLabel(provider) });
 }
 
-/** A refused request to open the session or get a nonce, in plain words. */
-export function sessionRefusalMessage(answer: DoorAnswer, callsign: string): string {
+/** The community's server has no find yet (design §4): it answered the find nonce with 404. */
+export function serverTooOldMessage(community: string): string {
+    return t("{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.", { community });
+}
+
+/**
+ * The node's refusal of a find (`provider`: the sign-in it went with), or of a find nonce (null: no sign-in yet), in
+ * plain words. The node's own sentence where it gave one: a busy scan, a standby, a server without its seal key.
+ */
+export function findRefusalMessage(answer: DoorAnswer, provider: JoinProvider | null): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     if (isWrongClock(answer)) return WRONG_CLOCK;
-    if (answer.status === 400) return `${callsign} has no sign-in to come back with here. Use your 12 words, or the phone app.`;
-    if (answer.status === 409) return `More than one account here is called ${callsign}. Use your 12 words, or the phone app.`;
-    if (answer.status === 429) return said ?? 'Too many tries from this network. Please try again later.';
-    return said ?? `The community could not start a restore (${answer.status}). Please try again in a minute.`;
+    if (answer.status === 429) return said ?? t('Too many tries from this network. Please try again later.');
+    if (provider) {
+        const label = providerLabel(provider);
+        if (answer.status === 401) return t("{provider} sign-in couldn't be checked or took too long. Try again.", { provider: label });
+        if (answer.status === 503) return said ?? t('{provider} sign-in could not be checked right now. Please try again in a minute.', { provider: label });
+    }
+    return said ?? t('The community could not bring the account back ({status}). Please try again.', { status: answer.status });
+}
+
+/** The node's answer to a collect, or to a fetch of the copy, that let nothing go, in plain words. */
+export function collectRefusalMessage(answer: DoorAnswer): string {
+    const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (isWrongClock(answer)) return WRONG_CLOCK;
+    if (answer.status === 429) return said ?? t('Too many tries from this network. Please try again later.');
+    return said ?? t('The community could not bring the account back ({status}). Please try again.', { status: answer.status });
 }

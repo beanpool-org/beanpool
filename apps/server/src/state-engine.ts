@@ -8646,18 +8646,6 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
 }
 
 /**
- * Admin: promote a member to (or demote from) the Elder tier. Pulls the SAME lever as a genesis
- * "Elder invite" — it sets the member's pre-seeded earned_credit, which lowers their credit floor
- * into the Elder band; tier follows from floor as usual (one source of truth, no separate role).
- * Grants Elder borrowing/gifting standing, but NOT password-admin powers (prune, delete,
- * announcements), which stay behind the admin password.
- *
- * Balance-safe: earned_credit is a borrowing *limit*, not a ledger balance. This makes no
- * transaction and mints/moves no beans — the member keeps their exact balance (positive
- * OR negative) and the double-entry books stay balanced. Granting only widens their credit
- * limit; revoking (back to 0) narrows it, leaving any balance untouched. Idempotent.
- */
-/**
  * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
  * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
  * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
@@ -8671,11 +8659,6 @@ export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
-}
-
-// Back-compat wrapper: Elder is simply the top tier badge.
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
-    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
 }
 
 /**
@@ -9593,8 +9576,6 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
             'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
-
-export function migrateAdminConversations() {} // Deprecated, state is clean now.
 
 // ===================== ACTIVITY =====================
 

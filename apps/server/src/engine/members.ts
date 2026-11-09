@@ -2,7 +2,7 @@
 //
 // Bridges the database storage layer with server singletons and broadcasts.
 
-import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
 import { foldName, getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
@@ -87,7 +87,6 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     if (existing) {
         db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
         if (adminPublicKey !== 'SYSTEM') {
-            seedNodeRolesFromGenesis();
             db.prepare(
                 `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
                  VALUES (?, 'owner', 'genesis')`
@@ -109,7 +108,6 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
 
     ledger.initializeGenesisAccount(adminPublicKey);
     if (adminPublicKey !== 'SYSTEM') {
-        seedNodeRolesFromGenesis();
         db.prepare(
             `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
              VALUES (?, 'owner', 'genesis')`

@@ -12,7 +12,7 @@ import {
     getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetCreditFrozen, adminSetElder, adminSetTier,
+    adminSetCreditFrozen, adminSetTier,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
@@ -2069,7 +2069,7 @@ router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const grant = body.grant !== false; // default: grant
     try {
-        adminSetElder(ctx.params.pubkey, grant);
+        adminSetTier(ctx.params.pubkey, grant ? 'Elder' : 'Newcomer');
         logger.info('ADMIN', `${grant ? 'Granted' : 'Revoked'} Elder for ${ctx.params.pubkey.substring(0, 12)}`);
         ctx.body = { success: true, granted: grant };
     } catch (e: any) {

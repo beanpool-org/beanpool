@@ -69,7 +69,7 @@ import {
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
     getFriends, addFriend, removeFriend,
-    adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
+    adminSetUserStatus, adminSetCreditFrozen, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     recordActivity,
     markConversationRead, getUnreadCounts,

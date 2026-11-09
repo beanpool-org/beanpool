@@ -434,8 +434,7 @@ async function main() {
     assert(detailRead.body?.allowance === 30, 'Detail reports allowance=30');
     assert(detailRead.body?.derivedAllowance === 30, 'Detail reports derivedAllowance=30');
     assert(detailRead.body?.legacyFloor !== undefined, 'Detail reports legacyFloor');
-    assert(detailRead.body?.legacyCreditFloor !== undefined, 'Detail reports legacyCreditFloor alias');
-    assert(detailRead.body?.legacyCreditFloor === detailRead.body?.legacyFloor, 'Detail legacyCreditFloor matches legacyFloor');
+    assert(!('legacyCreditFloor' in (detailRead.body ?? {})), 'Detail carries no legacyCreditFloor alias (legacyFloor only)');
     assert(detailRead.body?.pledges.length === 1, 'Detail includes pledges array');
 
     // 6. GET /api/treasuries list read includes creditLine and pledges
@@ -446,8 +445,7 @@ async function main() {
     assert(farmItem.creditLine === 30, 'List read reports derived creditLine=30');
     assert(farmItem.allowance === 30, 'List read reports allowance=30');
     assert(farmItem.legacyFloor !== undefined, 'List read reports legacyFloor');
-    assert(farmItem.legacyCreditFloor !== undefined, 'List read reports legacyCreditFloor alias');
-    assert(farmItem.legacyFloor === farmItem.legacyCreditFloor, 'legacyFloor matches legacyCreditFloor on list route');
+    assert(!('legacyCreditFloor' in farmItem), 'List read carries no legacyCreditFloor alias (legacyFloor only)');
 
     // 7. Authorized keeper releases backing
     const validRelease = await invokeRoute(releaseRoute, { treasury: routeEnt }, routeKeeper, { amount: 15 });
@@ -664,14 +662,12 @@ async function main() {
     assert(floorAfterPrune.derivedAllowance === 0, `Pruned keeper backing immediately dropped from floor (derivedAllowance=${floorAfterPrune.derivedAllowance})`);
     assert(floorAfterPrune.floor === 0, 'Enterprise floor is 0 after keeper pruned');
 
-    // 10.8: Detail endpoint parity check with allowance and legacyCreditFloor
+    // 10.8: Detail endpoint parity check with allowance and legacyFloor
     const detailHeadroom = await invokeRoute(getDetailRoute, { treasury: headroomEnt }, undefined);
     assert(detailHeadroom.status === 200, 'GET /api/treasury/:treasury returns 200');
     assert(detailHeadroom.body?.allowance !== undefined, 'Detail reports allowance');
     assert(detailHeadroom.body?.derivedAllowance !== undefined, 'Detail reports derivedAllowance');
     assert(detailHeadroom.body?.legacyFloor !== undefined, 'Detail reports legacyFloor');
-    assert(detailHeadroom.body?.legacyCreditFloor !== undefined, 'Detail reports legacyCreditFloor');
-    assert(detailHeadroom.body?.legacyCreditFloor === detailHeadroom.body?.legacyFloor, 'Detail legacyCreditFloor equals legacyFloor');
 
 
 

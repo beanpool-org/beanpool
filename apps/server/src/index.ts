@@ -71,7 +71,7 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
+import { initStateEngine, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
 import { startRecoverNoticeWatch, RECOVER_ACTOR } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
@@ -160,7 +160,6 @@ async function main() {
     if (restored) {
         logger.security('SYS', `local-config.json was unreadable (${restored.why}): this server started from its last good copy, local-config.json.bak. Check the address and settings.` + (restored.brokenCopy ? ` The broken file is kept as ${restored.brokenCopy}.` : ''));
     }
-    migrateAdminConversations();
     // Step 2.505: which server a standby copies (services/standby-main.ts): a standby from before the pin takes its main
     // server's key from its own record, once, before connectors.json loses its `mirror` links (connector-manager.ts) and
     // before a take-over step reads it. Unpaired otherwise, and loud (standby.unpaired). And `beanpool pair`'s pickup.

@@ -7,7 +7,6 @@ import {
     sectionTargetFor,
     endKeySession,
     signInWithPassword,
-    forgetStoredAdminSecrets,
     carriesHandoff,
     handoffRefusedMessage,
     handoffResumedMessage,
@@ -292,21 +291,6 @@ describe('signInWithPassword', () => {
         expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: true, error: '2FA code required' });
         vi.stubGlobal('fetch', vi.fn(async () => reply(403, { error: 'Break-glass mode active', breakGlassMode: true })));
         expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: false, error: 'Break-glass mode active' });
-    });
-});
-
-describe('forgetStoredAdminSecrets', () => {
-    it('removes what older builds stored (the password, its 2FA sessions) and nothing else', () => {
-        sessionStorage.clear();
-        sessionStorage.setItem('bp-admin-token', 'old-password');
-        sessionStorage.setItem('bp-2fa-session', 'old-2fa');
-        sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa');
-        sessionStorage.setItem('bp_tfa_session_node-7', 'old-2fa-7');
-        sessionStorage.setItem('bp-csrf-token', 'old-csrf');
-        sessionStorage.setItem('bp-settings-tab', 'identity');
-        forgetStoredAdminSecrets();
-        expect(Object.keys({ ...sessionStorage })).toEqual(['bp-settings-tab']);
-        expect(sessionStorage.getItem('bp-settings-tab')).toBe('identity');
     });
 });
 

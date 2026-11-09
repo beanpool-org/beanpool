@@ -1015,7 +1015,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
         };
     }
 
-    // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder).
+    // GRANTED-credit lane: genesis pre-seed + admin tier-badge grants (adminSetTier).
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).

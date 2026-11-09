@@ -119,6 +119,18 @@ async function child(): Promise<void> {
             setReplicationToken(a.replicationToken);
             return true;
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -1180,7 +1192,8 @@ async function main(): Promise<void> {
         const payEngine = await format1.send('engine-move', { kind: 'commons-pay', publicKey: gwen0.pk, amount: 50 });
         // Step 7c: S0's admin calls go under an owner's key session S0 makes, so each refusal is S0's 409 standby, not a
         // refused credential.
-        const fOwner: Record<string, string> = await format1.send('owner-session');
+        await format1.send('standby-owner', { owner: gwen0.pk });
+        const fOwner: Record<string, string> = await format1.send('owner-session', { owner: gwen0.pk });
         const pruneHttp = await api(f, 'POST', `/api/local/admin/users/${zed.pk}/prune`, { admin: fOwner, body: {} });
         assert(engineRefusal(payEngine) && standbyRefusal(pruneHttp),
             `a payment from the Commons on S0 is refused, and so is an admin's prune, which pays a debt from it (${JSON.stringify(payEngine)}; ${brief(pruneHttp)})`);

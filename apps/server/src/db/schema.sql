@@ -1789,7 +1789,7 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- getAdminPubkey() mechanism with explicit role assignments.
 --
 -- role CHECK IN ('owner', 'admin').
--- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
+-- granted_by holds the granting owner's public key (or 'claim:<id>' for a claimed owner, 'genesis' for a seeded one).
 CREATE TABLE IF NOT EXISTS node_roles (
     member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
     role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),

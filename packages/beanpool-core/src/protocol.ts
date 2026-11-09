@@ -34,12 +34,6 @@ export const PROTOCOL_CONSTANTS = {
     TRUST_CURVE_K: 5000,
     PER_COUNTERPARTY_VOLUME_CAP: 500,  // Single source of truth: cap on volume to a single partner counting toward earned credit
 
-    // Growth Weights — LEGACY (count-based; superseded by the value curve above in Trust Model v2).
-    // Retained only for the deprecated calculateDynamicFloor() mirror; not used at runtime.
-    CREDIT_WEIGHT_TRADES: 8,           // Each organic trade adds 8 Beans of credit
-    CREDIT_WEIGHT_PARTNERS: 40,        // Each unique partner adds 40 Beans (1 hour of credit)
-    CREDIT_WEIGHT_AGE_DAYS: 2,         // Each day of account age adds 2 Beans
-
 
     // === Community Circulation (formerly Demurrage) ===
     CIRCULATION_RATE: 0.000,           // 0.0% per month (base rate - Green Zone)
@@ -108,21 +102,6 @@ export function earnedCreditFromValue(value: number): number {
     if (!(value > 0)) return 0;                       // guards NaN / negatives / 0
     const v = Math.floor(value);                      // integer domain for determinism
     return Math.floor((c.CREDIT_MAX_EARNED * v) / (v + c.TRUST_CURVE_K));
-}
-
-/**
- * LEGACY (Trust Model v1) — count-based dynamic floor. Superseded by the value curve
- * (earnedCreditFromValue). No live callers; retained for reference/back-compat only.
- *
- * Formula: floor = BASE_FLOOR − min(MAX_EARNED, earnedCredit)
- * where:   earnedCredit = (tradeCount × 8) + (uniquePartners × 40) + (ageDays × 2)
- */
-export function calculateDynamicFloor(stats: TrustStats): number {
-    const c = PROTOCOL_CONSTANTS;
-    const earned = (stats.tradeCount * c.CREDIT_WEIGHT_TRADES)
-                 + (stats.uniquePartners * c.CREDIT_WEIGHT_PARTNERS)
-                 + (stats.ageDays * c.CREDIT_WEIGHT_AGE_DAYS);
-    return c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_MAX_EARNED, earned);
 }
 
 /**

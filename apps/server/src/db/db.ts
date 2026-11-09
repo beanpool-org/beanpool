@@ -2628,7 +2628,6 @@ export function initSchema() {
     } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
-    seedNodeRolesFromGenesis();
     upgradeBreakGlassHashesAtBoot();
     seedPricingGuideOnMainServer();
 
@@ -2837,56 +2836,6 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
         return written;
     } catch (e) {
         console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
-        return 0;
-    }
-}
-
-/**
- * #node-roles — seed the node_roles table from legacy genesis members.
- * (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2)
- *
- * On boot, if `node_roles` is empty, seed it from today's de-facto admin: the genesis member(s),
- * EXCLUDING the 'SYSTEM' row. If there are several genesis members, seed them all as 'owner' and
- * log loudly which ones. If there are NONE, log a loud warning and leave the table empty rather
- * than inventing an owner.
- *
- * Make it idempotent — it runs on every boot. Guarded on the table being EMPTY rather than on
- * individual rows: once an owner has been removed or appointed, re-running must not resurrect
- * what was removed.
- *
- * @returns how many rows were written (0 when it was a no-op)
- */
-export function seedNodeRolesFromGenesis(): number {
-    try {
-        const genesisMembers = db.prepare(
-            `SELECT public_key, callsign FROM members
-             WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND status = 'active'
-               AND public_key NOT IN (SELECT member_pubkey FROM node_roles)
-             ORDER BY rowid ASC`
-        ).all() as { public_key: string; callsign: string }[];
-
-        if (!genesisMembers.length) {
-            const currentRoles = (db.prepare(`SELECT COUNT(*) as c FROM node_roles`).get() as any)?.c || 0;
-            if (currentRoles === 0) {
-                console.warn('[DB] ⚠️  No genesis member found to seed node_roles! node_roles left empty. Node has no owner until one is enrolled.');
-            }
-            return 0;
-        }
-
-        const ins = db.prepare(
-            `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
-             VALUES (?, 'owner', 'migration:genesis')`
-        );
-        db.transaction(() => {
-            for (const g of genesisMembers) {
-                ins.run(g.public_key);
-            }
-        })();
-
-        console.log(`👑 Node roles seeded: ${genesisMembers.length} genesis member(s) granted 'owner': ${genesisMembers.map(g => `${g.callsign} (${g.public_key})`).join(', ')}`);
-        return genesisMembers.length;
-    } catch (e) {
-        console.error('[DB] ⚠️  Could not seed node_roles from genesis members:', e);
         return 0;
     }
 }

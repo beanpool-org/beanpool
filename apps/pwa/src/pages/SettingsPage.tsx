@@ -755,9 +755,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
-                localStorage.removeItem('bp_geo_settings');
-                localStorage.removeItem('bp_peer_prefs');
-                localStorage.removeItem('beanpool-privacy-tier');
 
                 setSuccess(t('Cache cleared. Resynced & reloading application...'));
                 setTimeout(() => {

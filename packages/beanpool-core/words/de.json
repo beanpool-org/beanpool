@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Von deinem Budget: Kein Limit",
   "No limit": "Kein Limit",
   "Your budget: No limit": "Dein Budget: Kein Limit",
-  "No limit · {vouched} vouched · {below} below zero": "Kein Limit · {vouched} verbürgt · {below} im Minus"
+  "No limit · {vouched} vouched · {below} below zero": "Kein Limit · {vouched} verbürgt · {below} im Minus",
+  "Clear all": "Alle löschen",
+  "Clear this notice": "Diese Benachrichtigung löschen"
 }

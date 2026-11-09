@@ -2544,5 +2544,7 @@
   "From your budget: No limit": "З вашого бюджету: Без обмежень",
   "No limit": "Без обмежень",
   "Your budget: No limit": "Ваш бюджет: Без обмежень",
-  "No limit · {vouched} vouched · {below} below zero": "Без обмежень · під порукою {vouched} · нижче нуля {below}"
+  "No limit · {vouched} vouched · {below} below zero": "Без обмежень · під порукою {vouched} · нижче нуля {below}",
+  "Clear all": "Очистити все",
+  "Clear this notice": "Прибрати це сповіщення"
 }

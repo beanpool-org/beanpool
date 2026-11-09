@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "നിങ്ങളുടെ ബജറ്റിൽ നിന്ന്: പരിധിയില്ല",
   "No limit": "പരിധിയില്ല",
   "Your budget: No limit": "നിങ്ങളുടെ ബജറ്റ്: പരിധിയില്ല",
-  "No limit · {vouched} vouched · {below} below zero": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {below} പൂജ്യത്തിന് താഴെ"
+  "No limit · {vouched} vouched · {below} below zero": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {below} പൂജ്യത്തിന് താഴെ",
+  "Clear all": "എല്ലാം മായ്ക്കുക",
+  "Clear this notice": "ഈ അറിയിപ്പ് മായ്ക്കുക"
 }

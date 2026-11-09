@@ -2310,5 +2310,7 @@
   "From your budget: No limit": "Từ ngân sách của bạn: Không giới hạn",
   "No limit": "Không giới hạn",
   "Your budget: No limit": "Ngân sách của bạn: Không giới hạn",
-  "No limit · {vouched} vouched · {below} below zero": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {below}"
+  "No limit · {vouched} vouched · {below} below zero": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {below}",
+  "Clear all": "Xóa tất cả",
+  "Clear this notice": "Xóa thông báo này"
 }

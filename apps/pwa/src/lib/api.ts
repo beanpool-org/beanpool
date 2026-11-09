@@ -555,9 +555,15 @@ export async function getBellNotices(): Promise<BellNotice[]> {
     return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
 }
 
-/** Takes these of the signer's own notices off the bell (a tap on the row); the node ignores an id that is not theirs. */
+/** Takes these of the signer's own notices off the bell (a tap on the row, or its ✕); the node ignores an id that is not theirs. */
 export async function markBellNoticesSeen(ids: string[]): Promise<number> {
     const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
+}
+
+/** "Clear all": every one of the signer's own notices off the bell, in one request (the node marks only the signer's). */
+export async function clearAllBellNotices(): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { all: true });
     return typeof answer?.marked === 'number' ? answer.marked : 0;
 }
 

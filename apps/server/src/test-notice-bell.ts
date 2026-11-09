@@ -1,7 +1,8 @@
 /**
  * The bell on both apps (scratch/fable-design/DESIGN-web-notifications-fable.md §2.1, slice W0; Marty, 9 Nov 2026: the bell
- * takes the needs-you row, and a row leaves only when tapped or when its thing is opened, no "Clear all"). The server keeps
- * the list of what happened for every member, a phone or not, and each app reads and marks its member's own.
+ * takes the needs-you row; 10 Nov: a row also leaves with its ✕ and all of them with "Clear all", on the old rows still red
+ * days later). The server keeps the list of what happened for every member, a phone or not, and each app reads and marks
+ * its member's own.
  *
  * Over REAL HTTPS through the real signature middleware; every push is caught where it leaves for Expo:
  *   1. kept for all: a push to a member with no phone keeps them a notice as it does a member with one (the phone still the
@@ -24,6 +25,8 @@
  *      alert's kept copy, so acknowledging the alert takes the row off the bell, and a tap on the row marks the alert
  *  11. a tap on a phone notification (its details read, GET /api/notices/push/:id: only that tap reads them) takes its row
  *      off the bell, and a moderation notice's alert with it; another member's read marks nothing; a standby marks nothing
+ * 12. "Clear all" (POST .../push/seen { all: true }): every notice of the signer's own and no one else's, a moderation
+ *      notice's alert with its row, the member's sockets told once, a bad body 400, unsigned 401, no member 403, a standby 503
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-notice-bell)
  */
@@ -417,6 +420,70 @@ async function main() {
         const keptAnnRow = attempt(() => db.prepare('SELECT seen_at FROM moderation_notices WHERE id = ?').get(keptAnn) as any);
         assert(!!modRow && typeof seenOf(modRow.id) === 'number' && typeof keptAnnRow?.seen_at === 'string',
             `a moderation notice tapped on the phone: its row off the bell and its alert marked (${show(keptAnnRow)})`);
+
+        // ── 12. "Clear all" (Marty, 10 Nov 2026) ───────────────────────────────────────────────────────────────────────
+        console.log('\n--- 12. POST /api/notices/push/seen { all: true }: every notice of the signer\'s own, and no one else\'s ---');
+        const dot = member('Dot');
+        const eve = member('Eve');
+        const dotSock = await socket(dot);
+        await sleep(50);
+        se.dispatchPushNotification([dot.pk], owner.pk, '💬 New Message', 'Olive sent you a message', { screen: 'chat', conversationId: other.id }, 'chat', 'chat.message');
+        se.dispatchPushNotification([dot.pk], owner.pk, '🤝 Request', 'Olive asked for your jam', { postId: 'p-jam' }, 'marketplace', 'market.request');
+        mod.tell(cb as any, [dot.pk], '🛡️ Your post was hidden', 'Your post "Tea" is hidden while the moderators look at it.', { kind: 'post_hidden', postId: 'p-4' });
+        se.dispatchPushNotification([eve.pk], owner.pk, '🤝 Request', 'Olive asked for your honey', { postId: 'p-honey' }, 'marketplace', 'market.request');
+        se.dispatchPushNotification([eve.pk], owner.pk, '💬 New Message', 'Olive sent you a message', { screen: 'chat', conversationId: other.id }, 'chat', 'chat.message');
+        await sleep(50);
+        const unseenOf = (id: Id) => rowsOf(id).filter(r => r.seen_at === null).length;
+        const dotKept = attempt(() => db.prepare("SELECT id, seen_at FROM moderation_notices WHERE recipient = ? AND data LIKE '%p-4%'").get(dot.pk) as any);
+        assert(unseenOf(dot) === 3 && unseenOf(eve) === 2 && !!dotKept && dotKept.seen_at === null, `set up: Dot has 3 unseen (one a moderation notice), Eve 2 (${unseenOf(dot)}, ${unseenOf(eve)})`);
+        const annUnseenBefore = unseenOf(ann);
+        const webUnseenBefore = unseenOf(web);
+
+        assert((await call('POST', null, '/api/notices/push/seen', { all: true })).status === 401, 'unsigned: 401');
+        assert((await call('POST', nemo, '/api/notices/push/seen', { all: true })).status === 403, 'a key that is no member here: 403');
+        for (const [body, why] of [[{ all: false }, 'all: false'], [{ all: 'yes' }, 'all as a string'], [{ all: 1 }, 'all as a number'], [{ all: true, ids: [rowsOf(dot)[0]?.id] }, 'all with ids beside it'], [{ all: null }, 'all: null']] as const) {
+            assert((await call('POST', dot, '/api/notices/push/seen', body)).status === 400, `${why}: 400`);
+        }
+        assert(unseenOf(dot) === 3, 'and none of those marked anything');
+        se.setNodeRole('backup');
+        try {
+            const m = await call('POST', dot, '/api/notices/push/seen', { all: true });
+            assert(m.status === 503 && m.body?.code === 'standby', `a standby refuses it: 503 standby (${m.status} ${show(m.body)})`);
+        } finally {
+            se.setNodeRole('primary');
+        }
+        assert(unseenOf(dot) === 3, 'and writes nothing');
+
+        // Only the signer's own: a body that names another member's key is refused by the middleware (403, identity mismatch)
+        // and marks nothing; Eve clearing all leaves Dot's, Ann's and Wes's rows unseen.
+        const named = await call('POST', eve, '/api/notices/push/seen', { all: true, publicKey: dot.pk });
+        assert(named.status === 403 && unseenOf(dot) === 3 && unseenOf(eve) === 2, `a body naming another member's key is refused and marks nothing (${named.status})`);
+        const eveClear = await call('POST', eve, '/api/notices/push/seen', { all: true });
+        assert(eveClear.status === 200 && eveClear.body?.marked === 2 && /no-store/.test(eveClear.headers.get('cache-control') ?? ''),
+            `Eve clears all of hers: 2 marked, private, no-store (${eveClear.status} ${show(eveClear.body)})`);
+        assert(unseenOf(eve) === 0 && unseenOf(dot) === 3 && unseenOf(ann) === annUnseenBefore && unseenOf(web) === webUnseenBefore,
+            `and no one else's changes (Dot ${unseenOf(dot)}, Ann ${unseenOf(ann)}/${annUnseenBefore}, Wes ${unseenOf(web)}/${webUnseenBefore})`);
+
+        dotSock.events.length = 0;
+        const dotClear = await call('POST', dot, '/api/notices/push/seen', { all: true });
+        assert(dotClear.status === 200 && dotClear.body?.success === true && dotClear.body?.marked === 3, `Dot clears all: 3 marked (${dotClear.status} ${show(dotClear.body)})`);
+        assert((await list(dot, '?unseen=1')).notices.length === 0, 'their unseen list is empty, so the red count is 0');
+        const dotFull = await list(dot);
+        assert(dotFull.notices.length === 3 && dotFull.notices.every(n => n.seenAt > 0), 'the full list still has the three, each with seenAt (cleared, not deleted)');
+        const dotKeptAfter = attempt(() => db.prepare('SELECT seen_at FROM moderation_notices WHERE id = ?').get(dotKept?.id) as any);
+        assert(typeof dotKeptAfter?.seen_at === 'string', `the moderation notice\'s alert is marked with its row, as a tap does (${show(dotKeptAfter)})`);
+        await sleep(50);
+        const dotHeard = dotSock.events.filter(e => e.type === 'push_notices_seen');
+        assert(dotHeard.length === 1 && dotHeard[0].ids.length === 3 && dotHeard[0].ids.every((id: string) => dotFull.notices.some(n => n.id === id)),
+            `their sockets hear one push_notices_seen with the three ids, so every device's count follows (${show(dotHeard)})`);
+        assert((await call('POST', dot, '/api/notices/push/seen', { all: true })).body?.marked === 0, 'clearing again marks nothing');
+        await sleep(50);
+        assert(dotSock.events.filter(e => e.type === 'push_notices_seen').length === 1, 'and tells no one');
+        se.dispatchPushNotification([dot.pk], owner.pk, '🤝 Request', 'Olive asked for your milk', { postId: 'p-milk' }, 'marketplace', 'market.request');
+        await sleep(30);
+        const afterClear = (await list(dot, '?unseen=1')).notices;
+        assert(afterClear.length === 1 && afterClear[0].data?.postId === 'p-milk', 'a notice kept after the clear is on the bell');
+        dotSock.ws.close();
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

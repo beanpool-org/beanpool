@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Mula sa iyong badyet: Walang limitasyon",
   "No limit": "Walang limitasyon",
   "Your budget: No limit": "Iyong badyet: Walang limitasyon",
-  "No limit · {vouched} vouched · {below} below zero": "Walang limitasyon · {vouched} napatunayan · {below} mababa sa zero"
+  "No limit · {vouched} vouched · {below} below zero": "Walang limitasyon · {vouched} napatunayan · {below} mababa sa zero",
+  "Clear all": "I-clear lahat",
+  "Clear this notice": "I-clear ang abisong ito"
 }

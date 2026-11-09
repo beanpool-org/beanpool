@@ -18,6 +18,10 @@
  *   6. An invite link on a waiting phone, which the root layout hands here (app/_layout.tsx, waiting-to-join.ts
  *      inviteLinkToWelcome): the invite step with the link's invite, its community and the account's name; Next joins with
  *      this key and the wizard goes on at Your Photo with the words new; a refused redeem leaves no community.
+ *   7. A yes shows itself while the screen is open: the screen asks again on the watcher's schedule (core knock-status-watch.ts).
+ *   8. A request sent again from Find a community (the same address, a newer `sentAt`) is read when the screen is back in front,
+ *      and the old answer ("no longer open", with its Got it) is not taken for it. The focus switch above stands in for
+ *      expo-router's: another screen covers this one, then it is back.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -98,8 +102,10 @@ vi.mock('react-native', () => {
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
 const nav = vi.hoisted(() => ({ replaced: [] as unknown[], pushed: [] as unknown[] }));
+/** Whether the screen is the one in front: a test turns it off (another screen covers it) and on (back), and every focus effect follows. */
+const focus = vi.hoisted(() => ({ on: true, listeners: new Set<() => void>() }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, useState: state } = await import('react');
     return {
         router: {
             push(to: unknown) { nav.pushed.push(to); }, navigate() {}, replace(to: unknown) { nav.replaced.push(to); }, back() {},
@@ -107,7 +113,16 @@ vi.mock('expo-router', async () => {
         },
         useGlobalSearchParams: () => params.now,
         useLocalSearchParams: () => params.now,
-        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
+        // As expo-router's: run while the screen is in front, its cleanup when another covers it, run again when it is back.
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const [turn, setTurn] = state(0);
+            effect(() => {
+                const l = () => setTurn((n: number) => n + 1);
+                focus.listeners.add(l);
+                return () => { focus.listeners.delete(l); };
+            }, []);
+            effect(() => (focus.on ? cb() : undefined), [cb, turn]);
+        },
         useIsFocused: () => true,
         ErrorBoundary: () => null,
     };
@@ -411,7 +426,8 @@ beforeEach(() => {
     knocking.forgotten = [];
     knocking.reads = [];
     appState.now = 'active'; appState.listeners.clear();
-    door.check = { ok: true, profile: { profile: 'global', features: { openJoin: true, wordsDoor: true } } };
+    focus.on = true;
+    door.check ={ ok: true, profile: { profile: 'global', features: { openJoin: true, wordsDoor: true } } };
     door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedProfile = null;
     noVault();
     setLanguage('en');
@@ -672,5 +688,88 @@ describe('7. a yes shows itself while the screen is open (Damo, 9 Nov 2026: it o
         await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
         await act(async () => { for (const cb of [...appState.listeners]) cb('active'); });
         expect(knocking.reads.length).toBe(before);
+    });
+});
+
+describe('8. a request sent again from Find a community is a new request (round 2 of #3009: the old answer was taken for it)', () => {
+    const NONE = { ok: true, value: { status: 'none' } };
+    const YES = { ok: true, value: { status: 'approved', invite: 'INV-ABCD-EFGH', expiresAt: null } };
+    const NO_LONGER_OPEN = 'This request is no longer open.';
+    const goTo = async (state: 'active' | 'background') => {
+        appState.now = state;
+        await act(async () => { for (const cb of [...appState.listeners]) cb(state); });
+        await settle();
+    };
+    /** Another screen covers this one (true), or is gone and this one is back in front (false). */
+    const covered = async (yes: boolean) => {
+        await act(async () => { focus.on = !yes; for (const l of [...focus.listeners]) l(); });
+        await settle();
+    };
+    const gotIt = () => all('button, [role="button"]').filter((b) => b.textContent === 'Got it');
+    /** The phone holds a newer request to Riverside (Ask another community → Ask to join it again), and the community has it open. */
+    const askedAgain = () => {
+        knocking.asked = [{ ...knockAt(RIVERSIDE, 'Riverside'), sentAt: '2026-11-09T01:00:00.000Z' }];
+        knocking.statuses = { [RIVERSIDE]: { ok: true, value: { status: 'pending' } } };
+    };
+
+    it('back on the waiting screen, the new request is read: the old "no longer open" line and its Got it go, and the yes then shows by itself (fails before: nothing read, the old line stays)', async () => {
+        knocking.statuses = { [RIVERSIDE]: NONE };
+        await mount();
+        expect(host!.textContent).toContain(NO_LONGER_OPEN);
+        expect(gotIt().length).toBe(1);
+
+        await covered(true);
+        askedAgain();
+        knocking.reads = [];
+        await covered(false);
+        expect(knocking.reads).toEqual([RIVERSIDE]);
+        expect(host!.textContent).not.toContain(NO_LONGER_OPEN);
+        expect(host!.textContent).toContain('Waiting for Riverside: usually a few days.');
+        // Got it would have forgotten the request just sent.
+        expect(gotIt()).toEqual([]);
+        expect(knocking.forgotten).toEqual([]);
+
+        // And the yes to the new request comes in on its own, as for a first request.
+        knocking.statuses = { [RIVERSIDE]: YES };
+        await goTo('background');
+        await goTo('active');
+        expect(host!.textContent).toContain('Riverside said yes. Join now.');
+        expect(byId('welcome-waiting-join')).not.toBeNull();
+        expect(knocking.forgotten).toEqual([]);
+    });
+
+    it('a request forgotten with Got it and then asked again is read too (the forgotten one’s answer is not kept)', async () => {
+        knocking.statuses = { [RIVERSIDE]: NONE };
+        await mount();
+        await press('Got it');
+        expect(knocking.forgotten).toEqual([RIVERSIDE]);
+        expect(host!.textContent).not.toContain('Riverside');
+
+        await covered(true);
+        askedAgain();
+        knocking.reads = [];
+        await covered(false);
+        expect(knocking.reads).toEqual([RIVERSIDE]);
+        expect(host!.textContent).toContain('Waiting for Riverside: usually a few days.');
+        expect(host!.textContent).not.toContain(NO_LONGER_OPEN);
+    });
+
+    it('control: the same request when the screen is back is not read again, and its answer stays', async () => {
+        knocking.statuses = { [RIVERSIDE]: NONE };
+        await mount();
+        await covered(true);
+        knocking.reads = [];
+        await covered(false);
+        expect(knocking.reads).toEqual([]);
+        expect(host!.textContent).toContain(NO_LONGER_OPEN);
+        expect(gotIt().length).toBe(1);
+    });
+
+    it('control: a request still waiting is read again when the screen is back', async () => {
+        await mount();
+        await covered(true);
+        knocking.reads = [];
+        await covered(false);
+        expect(knocking.reads).toEqual([RIVERSIDE]);
     });
 });

@@ -100,6 +100,7 @@ vi.mock('../typed-place', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => null) }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
+vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
 
 import { getPublicKey } from '@noble/ed25519';
 import { bytesToHex } from '../crypto';
@@ -128,6 +129,8 @@ beforeEach(async () => {
         sent.push({ url, method: init?.method ?? 'GET' });
         const json = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body });
         if (url === `${COMMUNITY}/api/join/knock/status`) return json(200, invite ? { status: 'approved', invite, expiresAt: null } : { status: open ? 'pending' : 'none' });
+        // A new request: the community has it open now (a yes comes later, when a test sets `invite`).
+        if (url === `${COMMUNITY}/api/join/knock`) { open = true; return json(201, { knock: { status: 'pending' } }); }
         if (url === `${COMMUNITY}/api/join/knock/cancel`) {
             if (!open) return json(404, { error: 'There’s no open request to join to cancel.', code: 'not_found' });
             open = false;
@@ -236,5 +239,45 @@ describe('a yes shows itself on Find a community (Damo, 9 Nov 2026: it only show
         await goTo('background');
         await goTo('active');
         expect(statusReads()).toBe(2);
+    });
+
+    it('Ask to join again to a community whose earlier request has nothing open: the new request is watched, and its yes shows by itself (round 2 of #3009; fails before: read once, then never)', async () => {
+        open = false; // the earlier request has nothing open: the card offers Ask to join
+        const host = await draw(createElement(FindCommunityScreen as any));
+        expect(statusReads()).toBe(1);
+        const press = async (name: string) => {
+            const b = Array.from(host.querySelectorAll('button')).find(x => (x.getAttribute('aria-label') ?? x.textContent) === name);
+            expect(b, `a button "${name}"`).toBeTruthy();
+            await act(async () => { b!.click(); });
+            for (let i = 0; i < 4; i++) await act(async () => {});
+        };
+        await press('Ask to join Mullumbimby');
+        const words = host.querySelector('input[aria-label="A few words about yourself"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(words, 'I grow beans by the river.');
+            words.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // The new request is stamped after the earlier one (the clock has moved on).
+        await act(async () => { await new Promise(r => setTimeout(r, 5)); });
+        await press('Send');
+        expect(sent.filter(s => s.method === 'POST')).toEqual([{ url: `${COMMUNITY}/api/join/knock`, method: 'POST' }]);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.waiting);
+        const afterSend = statusReads();
+
+        invite = 'BP-MULL-0001';
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBeGreaterThan(afterSend);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.invited);
+        expect(Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('aria-label') ?? b.textContent)).toContain('Join Mullumbimby');
+    });
+
+    it('control: a request with its answer, nothing sent again, is not asked again', async () => {
+        open = false;
+        await draw(createElement(FindCommunityScreen as any));
+        expect(statusReads()).toBe(1);
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBe(1);
     });
 });

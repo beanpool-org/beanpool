@@ -619,9 +619,25 @@ export default function WelcomeScreen() {
     const waitWatch = useKnockStatusWatch(
         () => (waitAccountRef.current ? readWaitStatuses(waitKnocksRef.current, waitAccountRef.current, true) : Promise.resolve({ kind: 'settled' } as KnockWatchTick)),
         mode === 'home' && waitingToJoin && !!accountOnPhone && waitKnocks.length > 0,
-        `${accountOnPhone?.publicKey ?? ''}|${waitKnocks.map((k) => k.url).join(' ')}`,
+        // Keyed on each request (its address and when it was sent): a request sent again to the same community is a new one.
+        `${accountOnPhone?.publicKey ?? ''}|${waitKnocks.map((k) => `${k.url} ${k.sentAt}`).join(' ')}`,
         waitShown,
     );
+
+    /**
+     * The requests this phone holds now. An answer belongs to the request it was read for: one whose request was sent again
+     * (a newer `sentAt`) or is gone (Got it) is dropped, and so is any round still reading it, so an old "no longer open" is
+     * never taken for the new request's answer; the watcher, begun again for the new request, reads it as its first round.
+     */
+    const holdWaitKnocks = (knocks: RememberedKnock[]) => {
+        const stale = new Set(waitKnocksRef.current.filter((was) => !knocks.some((k) => k.url === was.url && k.sentAt === was.sentAt)).map((was) => was.url));
+        if (stale.size) {
+            waitTurn.current += 1;
+            setWaitChecking(false);
+            setWaitStatuses((held) => Object.fromEntries(Object.entries(held).filter(([url]) => !stale.has(url))));
+        }
+        setWaitKnocks(knocks);
+    };
 
     useFocusEffect(useCallback(() => {
         if (mode !== 'home' || !accountOnPhone) {
@@ -644,7 +660,7 @@ export default function WelcomeScreen() {
             const knocks = await rememberedKnocks(me.publicKey);
             if (!alive) return;
             // The watcher reads them as soon as they are here (above), once.
-            setWaitKnocks(knocks);
+            holdWaitKnocks(knocks);
         }).catch(() => {});
         return () => { alive = false; };
     }, [mode, accountOnPhone?.publicKey]));
@@ -681,7 +697,7 @@ export default function WelcomeScreen() {
     const forgetWaitLine = async (line: WaitingLine) => {
         if (!accountOnPhone) return;
         await forgetKnock(accountOnPhone.publicKey, line.url);
-        setWaitKnocks(await rememberedKnocks(accountOnPhone.publicKey));
+        holdWaitKnocks(await rememberedKnocks(accountOnPhone.publicKey));
     };
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone

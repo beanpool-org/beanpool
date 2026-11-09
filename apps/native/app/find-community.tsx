@@ -265,7 +265,9 @@ export default function FindCommunityScreen() {
         }));
         return combineKnockTicks(ticks);
     };
-    useKnockStatusWatch(readRound, !!pubkey && asked.length > 0, `${pubkey ?? ''}|${asked.map(a => a.url).join(' ')}`, shown);
+    // Keyed on each request (its address and when it was sent), not on the addresses: Ask to join again to a community whose
+    // earlier request has its answer is a new request there, and the watcher begins again for it (round 2 of #3009).
+    useKnockStatusWatch(readRound, !!pubkey && asked.length > 0, `${pubkey ?? ''}|${asked.map(a => `${a.url} ${a.sentAt}`).join(' ')}`, shown);
 
     // ── Watches ─────────────────────────────────────────────────────────────────────────────────────────
     const [watches, setWatches] = useState<PlaceWatch[] | null>(null);

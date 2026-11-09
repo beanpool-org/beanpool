@@ -56,8 +56,8 @@ async function backFromGoogle(nonce = 'rn-1') {
 }
 
 /**
- * The node's find and recovery routes and its membership probe: the find names Alice (a numbered name, as the global
- * community gives: Damo, 9 Nov), she is a member, and her Google copy is released by the hold.
+ * The node's find and recovery routes and its membership probe, on the global profile's open door (GLOBAL_OPEN: global is
+ * case 1, Marty 9 Nov): the find names Alice, she is a member, and her Google copy is released by the hold.
  */
 function restoreNode(extra: Record<string, Handler> = {}) {
     return stubNode({
@@ -193,6 +193,18 @@ describe('where it starts on the open door', () => {
         await screen.findByTestId('join-screen-lobby');
     });
 
+    it('at the app\'s global community (global.beanpool.org): the community it finds in is "Global community", nothing typed', async () => {
+        restoreNode({ '/api/community/info': () => json(200, { ...GLOBAL_OPEN, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Already have BeanPool?' }));
+        const signin = await screen.findByTestId('join-restore-signin');
+        await waitFor(() => expect(signin).not.toBeDisabled());
+        fireEvent.click(signin);
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.getByTestId('restore-community').textContent?.trim()).toBe('Global community');
+        expect(screen.queryByTestId('restore-callsign')).toBeNull();
+    });
+
     it('a local community with an invite door: "Restore Existing Identity" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
         restoreNode({
             '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } }),
@@ -202,7 +214,8 @@ describe('where it starts on the open door', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
         fireEvent.click(await screen.findByTestId('member-restore-signin'));
         await screen.findByTestId('restore-provider-google');
-        expect(screen.getByTestId('restore-community').textContent?.trim()).not.toBe('');
+        // By the name on its card, once the card has come (the page's address until then).
+        await waitFor(() => expect(screen.getByTestId('restore-community').textContent?.trim()).toBe('Mullumbimby'));
         expect(screen.queryByTestId('restore-callsign')).toBeNull();
         // And back: the ways to restore again.
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));

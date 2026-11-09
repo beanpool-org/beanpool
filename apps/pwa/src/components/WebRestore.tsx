@@ -52,6 +52,8 @@ import {
     type RestoreProof,
 } from '../lib/web-restore';
 import { heading, lede, NoticeLine, primaryButton, quietButton, saidWords, secondaryButton, JOIN_WORDS, type Notice, type Said } from './WebJoin';
+// lib/web-restore.ts is on the 12 words' key path and writes its sentences in English; they are shown through this.
+import { keyLineWords } from './key-lines';
 
 interface Props {
     /**
@@ -545,7 +547,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'none':
             body = (
                 <>
-                    <p role="alert" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>{noAccountMessage(community, screen.provider)}</p>
+                    <p role="alert" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(noAccountMessage(community, screen.provider))}</p>
                     <button type="button" style={primaryButton} onClick={() => void startAgain()}>{t('Start again')}</button>
                     {otherWays}
                     {back}
@@ -556,7 +558,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         case 'too_old':
             body = (
                 <>
-                    <p role="alert" data-testid="restore-too-old-server" style={{ ...lede, color: 'var(--text-primary)' }}>{serverTooOldMessage(community)}</p>
+                    <p role="alert" data-testid="restore-too-old-server" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(serverTooOldMessage(community))}</p>
                     {otherWays}
                     {back}
                 </>

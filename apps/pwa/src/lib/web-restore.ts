@@ -48,7 +48,6 @@ import {
     KEEPER_ALG_RELEASE,
     openListedFragment,
     openSeedFromSso,
-    t,
     toEd25519Pkcs8,
     type CopyCommunity,
     type ListedFragment,
@@ -253,15 +252,20 @@ export async function openRestoredAccount(
 }
 
 // ===================== WHAT THE MEMBER READS =====================
+//
+// In English, never through the words layer: this file opens the account's copy and checks its 12 words against the
+// key, so it is on the 12 words' key path, and nothing on it may reach t() or word() (core recovery-path-files.test.ts).
+// The restore screen shows these sentences in the member's language through components/key-lines.ts, which reads each
+// one back by its English (key-lines.test.ts holds every sentence here to its pattern there).
 
 /** No account at this community uses this sign-in (design §5). */
 export function noAccountMessage(community: string, provider: JoinProvider): string {
-    return t('No account at {community} uses this {provider} account. Try another community, or your 12 words.', { community, provider: providerLabel(provider) });
+    return `No account at ${community} uses this ${providerLabel(provider)} account. Try another community, or your 12 words.`;
 }
 
 /** The community's server has no find yet (design §4): it answered the find nonce with 404. */
 export function serverTooOldMessage(community: string): string {
-    return t("{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.", { community });
+    return `${community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.`;
 }
 
 /**
@@ -271,19 +275,19 @@ export function serverTooOldMessage(community: string): string {
 export function findRefusalMessage(answer: DoorAnswer, provider: JoinProvider | null): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     if (isWrongClock(answer)) return WRONG_CLOCK;
-    if (answer.status === 429) return said ?? t('Too many tries from this network. Please try again later.');
+    if (answer.status === 429) return said ?? 'Too many tries from this network. Please try again later.';
     if (provider) {
         const label = providerLabel(provider);
-        if (answer.status === 401) return t("{provider} sign-in couldn't be checked or took too long. Try again.", { provider: label });
-        if (answer.status === 503) return said ?? t('{provider} sign-in could not be checked right now. Please try again in a minute.', { provider: label });
+        if (answer.status === 401) return `${label} sign-in couldn't be checked or took too long. Try again.`;
+        if (answer.status === 503) return said ?? `${label} sign-in could not be checked right now. Please try again in a minute.`;
     }
-    return said ?? t('The community could not bring the account back ({status}). Please try again.', { status: answer.status });
+    return said ?? `The community could not bring the account back (${answer.status}). Please try again.`;
 }
 
 /** The node's answer to a collect, or to a fetch of the copy, that let nothing go, in plain words. */
 export function collectRefusalMessage(answer: DoorAnswer): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     if (isWrongClock(answer)) return WRONG_CLOCK;
-    if (answer.status === 429) return said ?? t('Too many tries from this network. Please try again later.');
-    return said ?? t('The community could not bring the account back ({status}). Please try again.', { status: answer.status });
+    if (answer.status === 429) return said ?? 'Too many tries from this network. Please try again later.';
+    return said ?? `The community could not bring the account back (${answer.status}). Please try again.`;
 }

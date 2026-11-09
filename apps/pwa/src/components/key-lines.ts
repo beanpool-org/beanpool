@@ -172,7 +172,25 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: /^Lots of people are joining right now, so joining will take (.+) more in this browser\.$/,
         words: (m) => t('Lots of people are joining right now, so joining will take {time} more in this browser.', { time: aboutWords(m[1]) }),
     },
-    // lib/web-restore.ts writes its own sentences through t() (recovery S1), so none of them is read back here.
+    // lib/web-restore.ts findRefusalMessage and collectRefusalMessage: a find or a collect the community refused, with a
+    // sign-in's name or a status (its 503 is doorOutcome's sentence above).
+    {
+        pattern: new RegExp(`^${PROVIDER} sign-in couldn't be checked or took too long\\. Try again\\.$`),
+        words: (m) => t("{provider} sign-in couldn't be checked or took too long. Try again.", { provider: m[1] }),
+    },
+    {
+        pattern: /^The community could not bring the account back \((\d+)\)\. Please try again\.$/,
+        words: (m) => t('The community could not bring the account back ({status}). Please try again.', { status: m[1] }),
+    },
+    // lib/web-restore.ts noAccountMessage and serverTooOldMessage (recovery S1): the community by its name, as the page shows it.
+    {
+        pattern: new RegExp(`^No account at (.+) uses this ${PROVIDER} account\\. Try another community, or your 12 words\\.$`, 's'),
+        words: (m) => t('No account at {community} uses this {provider} account. Try another community, or your 12 words.', { community: m[1], provider: m[2] }),
+    },
+    {
+        pattern: /^(.+)'s server is older than this app and can't find your account from a sign-in yet\. Ask its admin to update, or use your 12 words\.$/s,
+        words: (m) => t("{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.", { community: m[1] }),
+    },
     // lib/takeover-unlock.ts: a server by its address (the phone's takeover-unlock.ts says the last three the same).
     {
         pattern: /^These keys are not locked to you, so this browser can't open them\. Another owner of your community can, or the printed recovery code on (\S+)\.$/,

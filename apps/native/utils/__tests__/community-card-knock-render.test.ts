@@ -153,6 +153,8 @@ const scene = {
     signers: [] as Array<string | null>, knockAnswer: null as null | { status: number; body: Record<string, unknown> },
     // The community's rule (GET /api/community/known-rule): null is an older node's 404.
     rule: { known: false } as Record<string, unknown> | null,
+    /** When set, a status read waits for it: a slow phone's read still out. */
+    gate: null as Promise<void> | null,
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -188,6 +190,7 @@ beforeEach(() => {
     scene.rule = { known: false };
     scene.signers = [];
     scene.knockAnswer = null;
+    scene.gate = null;
     ids.set.length = 0;
     phoneKey.reads = []; phoneKey.stored = null; phoneKey.written = []; phoneKey.drafts = 0;
     setLanguage('en');
@@ -197,6 +200,7 @@ beforeEach(() => {
         if (u === `${ORIGIN}/api/community/known-rule`) return scene.rule ? json(scene.rule) : json({ error: 'Not found' }, 404);
         if (u === `${ORIGIN}/api/join/knock/status`) {
             scene.statusReads++;
+            if (scene.gate) await scene.gate;
             if (scene.answer === 'offline') throw new TypeError('Network request failed');
             return json(scene.answer);
         }
@@ -257,6 +261,31 @@ describe("a member's request to join, on the community's card", () => {
         await open();
         expect(asked()).toBe('This request is no longer open. You can ask again.');
         expect(byTestId('community-card-ask')).not.toBeNull();
+    });
+
+    it('asked again after a closed request: while the new answer is read, never the old "no longer open" nor a second Ask', async () => {
+        remember();
+        scene.answer = { status: 'none' };
+        await open();
+        expect(asked()).toBe('This request is no longer open. You can ask again.');
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'Asking again.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        let release!: () => void;
+        scene.gate = new Promise<void>((r) => { release = r; });
+        scene.answer = { status: 'pending' };
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(scene.knocks).toBe(1);
+        // The read is out (review of 22327049): the card must not show the earlier request's line or offer Ask again.
+        expect(asked()).not.toBe('This request is no longer open. You can ask again.');
+        expect(byTestId('community-card-ask')).toBeNull();
+        await act(async () => { release(); });
+        await settle();
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
     });
 
     it('cancelled within the day: said so, no Ask to join, and nothing read from the community (fails before: Ask offered)', async () => {

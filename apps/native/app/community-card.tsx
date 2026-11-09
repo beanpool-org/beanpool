@@ -245,8 +245,10 @@ export default function CommunityCardScreen() {
                 router.replace('/welcome');
                 return;
             }
-            // Read what it says now: waiting, or a yes with its invite.
+            // Read what it says now: waiting, or a yes with its invite. The old answer goes first (as Check again does), so the
+            // card shows "checking", never the earlier request's "no longer open" and a second Ask, while the read is out.
             setAsked(true);
+            setStatus(null);
             watch.restart();
         } else if (r.kind === 'member') {
             setFormOpen(false);

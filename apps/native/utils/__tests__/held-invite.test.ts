@@ -98,6 +98,12 @@ describe('the screens use it (Damo\'s route: a warm start\'s link lands on a new
         expect(redeemed.slice(0, 300)).toMatch(/forgetHeldInvite\(AsyncStorage, parsedCode\)/);
     });
 
+    it('welcome forgets a held invite the community refuses, so the next launch opens the first screen', () => {
+        // Review on 1980395f: a spent or expired invite stayed held and reopened the invite step on every launch for 30 days.
+        const refused = welcome.slice(welcome.indexOf("if (spent !== 'carryOn') {"), welcome.indexOf("if (spent !== 'carryOn') {") + 700);
+        expect(refused).toMatch(/forgetHeldInvite\(AsyncStorage, parsedCode\);\s*setError\(inviteProblemMessage\(check\.reason, nodeUrl\)\)/);
+    });
+
     it('"Join with an invite" on the first screen fills the step from a held invite before any scan', () => {
         expect(welcome).toMatch(/<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{openInviteStep\}/);
         const open = welcome.slice(welcome.indexOf('const openInviteStep'), welcome.indexOf('const openInviteStep') + 600);

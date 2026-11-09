@@ -1326,6 +1326,9 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
+                        // Refused here (used by someone else, expired, not recognised): a link's held invite is never offered
+                        // again, or every launch would reopen this step on a dead code. A newer one held meanwhile stays.
+                        void forgetHeldInvite(AsyncStorage, parsedCode);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }

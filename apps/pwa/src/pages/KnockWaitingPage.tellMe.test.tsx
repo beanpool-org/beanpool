@@ -14,10 +14,16 @@ vi.mock('../lib/knock', () => ({
     rememberedKnocks: vi.fn(async () => []),
 }));
 vi.mock('../lib/knock-key', () => ({ forgetKnockKey: vi.fn(async () => true) }));
-vi.mock('../components/AskHere', () => ({ AskHere: () => null, thisCommunityOrigin: () => window.location.origin }));
+vi.mock('../components/AskHere', () => ({
+    // Ask again's form, sent at once with the key the page holds.
+    AskHere: ({ held, onAsked }: any) => <button type="button" data-testid="ask-here-send" onClick={() => onAsked(held)}>send</button>,
+    thisCommunityOrigin: () => window.location.origin,
+}));
 vi.mock('../components/LanguageSwitch', () => ({ LanguageSwitch: () => null }));
 
 import { KnockWaitingPage } from './KnockWaitingPage';
+import { cancelKnock, readKnockStatus } from '../lib/knock';
+import { readWebPushPin } from '../lib/web-push';
 
 const identity = { publicKey: 'ab'.repeat(32), privateKey: '00'.repeat(48) } as any;
 const page = () => render(<KnockWaitingPage identity={identity} onJoin={vi.fn()} onInvite={vi.fn()} onSignIn={vi.fn()} onForgotten={vi.fn()} />);
@@ -50,6 +56,42 @@ describe('KnockWaitingPage: Tell me when they answer', () => {
         expect(screen.getByText(/^Notifications can't reach this browser\. Come back to this page/)).toBeTruthy();
         expect(requestPermission).not.toHaveBeenCalled();
         expect(register).not.toHaveBeenCalled();
+    });
+
+    /** This browser was told it would hear (an earlier Tell me): its pin, and the permission still granted. */
+    const pinned = () => {
+        localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin: window.location.origin, publicKey: identity.publicKey, subId: 'sub-1', pushKey: 'cd'.repeat(32), vapidKey: 'BAAA' }]));
+        (globalThis as any).Notification.permission = 'granted';
+    };
+
+    it('the request lapsed: the community deleted the subscription, so Ask again with this key shows Tell me, not the old ✓', async () => {
+        pinned();
+        vi.mocked(readKnockStatus).mockResolvedValueOnce({ ok: true, value: { status: 'none' } } as any);
+        page();
+        fireEvent.click(await screen.findByTestId('knock-waiting-ask-again-button'));
+        fireEvent.click(await screen.findByTestId('ask-here-send'));
+        // The new request waits (the default status read): the card offers Tell me again, and nothing is kept from before.
+        expect(await screen.findByTestId('tell-me')).toBeTruthy();
+        expect(screen.queryByTestId('tell-me-on')).toBeNull();
+        expect(readWebPushPin(window.location.origin, identity.publicKey)).toBeNull();
+    });
+
+    it('cancelled: the pin goes with the request, so a later Ask again with this key shows Tell me', async () => {
+        pinned();
+        vi.mocked(cancelKnock).mockResolvedValueOnce({ ok: true });
+        page();
+        expect(await screen.findByTestId('tell-me-on')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('knock-waiting-cancel'));
+        fireEvent.click(await screen.findByTestId('knock-waiting-cancel-yes'));
+        await waitFor(() => expect(screen.queryByTestId('tell-me-card')).toBeNull());
+        expect(readWebPushPin(window.location.origin, identity.publicKey)).toBeNull();
+    });
+
+    it('still waiting (a no still blocked reads so too): the ✓ stays, and the pin is kept', async () => {
+        pinned();
+        page();
+        expect(await screen.findByTestId('tell-me-on')).toBeTruthy();
+        expect(readWebPushPin(window.location.origin, identity.publicKey)?.subId).toBe('sub-1');
     });
 
     it('a click that brought a notice nobody signed for this key: the warning once, and the fragment goes', async () => {

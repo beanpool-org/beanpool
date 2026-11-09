@@ -26,7 +26,7 @@ import { lookAroundUrl } from '../lib/community-card';
 import { AskHere, thisCommunityOrigin } from '../components/AskHere';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import {
-    TELL_ME_WORDS as TW, cannotLines, grantedLine, noticeInLocation, pushPlace, readWebPushPin, stopTellingMe,
+    TELL_ME_WORDS as TW, cannotLines, forgetWebPushPin, grantedLine, noticeInLocation, pushPlace, readWebPushPin, stopTellingMe,
     tellMeWhenTheyAnswer, type PushPlace,
 } from '../lib/web-push';
 import { PEEK_WORDS, currentLanguage } from '@beanpool/core';
@@ -80,6 +80,10 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
     const check = useCallback(async () => {
         setChecking(true);
         const s = await readKnockStatus(origin, identity);
+        // Nothing open here (lapsed, cancelled, or a no whose 24 hours are up): the community let go of this browser with
+        // the request, so this browser lets go of its pin too, and an Ask again with this key shows Tell me afresh. A no
+        // still blocked reads as waiting, so this tells nothing about one.
+        if (origin && s.ok && s.value.status === 'none') forgetWebPushPin(origin, identity.publicKey);
         setStatus(s);
         setChecking(false);
     }, [origin, identity]);
@@ -113,7 +117,13 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
         const r = await cancelKnock(origin, identity);
         setBusy(false);
         setConfirm(null);
-        if (r.ok) { setCancelled(true); setStatus({ ok: true, value: { status: 'none' } }); return; }
+        if (r.ok) {
+            // The community deleted this browser's subscription with the request (cancelKnock): the pin goes with it.
+            if (origin) forgetWebPushPin(origin, identity.publicKey);
+            setCancelled(true);
+            setStatus({ ok: true, value: { status: 'none' } });
+            return;
+        }
         setNote(r.message);
     };
 

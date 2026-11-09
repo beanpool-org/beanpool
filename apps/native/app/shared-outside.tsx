@@ -101,7 +101,7 @@ export default function SharedOutsideScreen() {
                         <Text style={styles.itemSub}>{t(W.worksUntil, { date: formatDate(new Date(s.expiresAt), 'day-month') })}</Text>
                         {s.asked > 0 && <Text style={styles.asked} testID="shared-outside-asked">{tn(s.asked, W.askedFromLink.one, W.askedFromLink.other)}</Text>}
                         <Pressable style={[styles.stop, stopping === s.id && { opacity: 0.6 }]} onPress={() => stop(s)} disabled={stopping === s.id}
-                            accessibilityRole="button" testID="shared-outside-stop">
+                            accessibilityRole="button" accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }} testID="shared-outside-stop">
                             <Text style={styles.stopText}>{t(W.stopSharing)}</Text>
                         </Pressable>
                     </View>

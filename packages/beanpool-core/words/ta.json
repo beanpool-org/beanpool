@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "உங்கள் பட்ஜெட்டிலிருந்து: வரம்பு இல்லை",
   "No limit": "வரம்பு இல்லை",
   "Your budget: No limit": "உங்கள் பட்ஜெட்: வரம்பு இல்லை",
-  "No limit · {vouched} vouched · {below} below zero": "வரம்பு இல்லை · {vouched} உறுதியளிக்கப்பட்டது · {below} பூஜ்ஜியத்திற்குக் கீழே"
+  "No limit · {vouched} vouched · {below} below zero": "வரம்பு இல்லை · {vouched} உறுதியளிக்கப்பட்டது · {below} பூஜ்ஜியத்திற்குக் கீழே",
+  "Clear all": "அனைத்தையும் அழி",
+  "Clear this notice": "இந்த அறிவிப்பை அழி"
 }

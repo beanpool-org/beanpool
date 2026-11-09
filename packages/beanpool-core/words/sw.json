@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Kutoka kwenye bajeti yako: Hakuna kikomo",
   "No limit": "Hakuna kikomo",
   "Your budget: No limit": "Bajeti yako: Hakuna kikomo",
-  "No limit · {vouched} vouched · {below} below zero": "Hakuna kikomo · {vouched} wamedhaminiwa · {below} chini ya sifuri"
+  "No limit · {vouched} vouched · {below} below zero": "Hakuna kikomo · {vouched} wamedhaminiwa · {below} chini ya sifuri",
+  "Clear all": "Futa zote",
+  "Clear this notice": "Futa arifa hii"
 }

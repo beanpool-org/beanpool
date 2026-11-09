@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Από τον προϋπολογισμό σας: Χωρίς όριο",
   "No limit": "Χωρίς όριο",
   "Your budget: No limit": "Ο προϋπολογισμός σας: Χωρίς όριο",
-  "No limit · {vouched} vouched · {below} below zero": "Χωρίς όριο · {vouched} με εγγύηση · {below} κάτω από το μηδέν"
+  "No limit · {vouched} vouched · {below} below zero": "Χωρίς όριο · {vouched} με εγγύηση · {below} κάτω από το μηδέν",
+  "Clear all": "Διαγραφή όλων",
+  "Clear this notice": "Διαγραφή αυτής της ειδοποίησης"
 }

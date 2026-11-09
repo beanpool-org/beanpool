@@ -89,6 +89,8 @@ export const SUITES = [
     'test-keeper-routes',
     'test-keeper-release',
     'test-recovery-collect',
+    // Getting an account back with a sign-in and nothing typed (S0): as a local community here, as the global one in VARIANTS.
+    'test-recovery-find',
     'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     withTimeout('test-recovery-seal', 600),
@@ -717,6 +719,9 @@ export const VARIANTS = [
     { name: 'test-federation-commission', tag: 'on', label: 'settlement ON', env: { FEDERATION_SETTLEMENT: 'true' } },
     // FED-06: with peer connectors switched off, a configured peer's lookups, relays, listing pulls and purchases are refused.
     { name: 'test-federation-hardening', tag: 'peers-off', label: 'ENABLE_PEER_CONNECTORS unset', env: { ENABLE_PEER_CONNECTORS: null } },
+    // The find from a sign-in on the global community (case 1: Damo, a numbered name, joined through the open door with
+    // Google). The plain run is a local community.
+    { name: 'test-recovery-find', tag: 'global', label: 'the global community', env: { NODE_PROFILE: 'global' } },
     // How this community works S3: federation's HTTP routes answer only with peer connectors on; the plain run has them on.
     { name: 'test-shape-upgrade', tag: 'peers-off', label: 'ENABLE_PEER_CONNECTORS unset', env: { ENABLE_PEER_CONNECTORS: null } },
 

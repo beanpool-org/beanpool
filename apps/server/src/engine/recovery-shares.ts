@@ -34,7 +34,7 @@ import {
     RecoverySealKeyMissing,
     RecoverySealUnopenable,
     isNodeWrapped,
-    openRecoveryFields,
+    openRecoveryFieldsNotingRetired,
     sealRecoveryFields,
     shareRowAad,
 } from '../services/recovery-seal-key.js';
@@ -70,6 +70,11 @@ export interface KeeperShareInput {
     /** SHA-256(sub || salt) — 'sso' holders only. The raw provider id is never stored. */
     ssoLookupHash?: string | null;
     ssoLookupSalt?: string | null;
+    /**
+     * HMAC-SHA-256 of `provider|sub` under the seal file's find key — 'sso' holders only, derived by the node from a sub it
+     * verified (engine/recovery-find.ts), never by the client. What a restore finds the copy by; never what releases it.
+     */
+    ssoFindHash?: string | null;
     kdfParams?: string | null;
 }
 
@@ -347,8 +352,8 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         INSERT INTO recovery_shares (
             owner_pubkey, holder_type, holder_ref, share_index,
             encrypted_share, share_iv, share_tag,
-            ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt, kdf_params, generation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt, kdf_params, generation, sso_find_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
 
@@ -387,7 +392,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
                 ownerPubkey, s.holderType, s.holderRef, s.shareIndex,
                 sealed[i].encryptedShare, sealed[i].shareIv, sealed[i].shareTag,
                 s.ephemeralPubkey ?? null, s.ssoLookupHash ?? null,
-                s.ssoLookupSalt ?? null, sealed[i].kdfParams, nextGeneration,
+                s.ssoLookupSalt ?? null, sealed[i].kdfParams, nextGeneration, s.ssoFindHash ?? null,
             );
         });
         return nextGeneration;
@@ -400,9 +405,15 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
  * A stored row as the client deposited it: unwrapped with the node's key. Throws RecoverySealKeyMissing on a server
  * without its key and RecoverySealUnopenable for a row that key does not open. A row stored before the wrap reads as
  * it is until the boot migration wraps it.
+ *
+ * A copy only a key a take-over replaced opens reads with no find hash: that hash was made under the replaced key, which
+ * no take-over carries, and a deposit or a disconnect that carries the copy forward locks it again with the live key,
+ * where the start's relock, which clears such a hash, no longer reaches it (services/recovery-seal-key.ts
+ * rewrapRowsFromRetiredKeys). The scan finds the copy at its member's next restore (engine/recovery-find.ts). (A find
+ * may have written that hash again under the live key since; dropping it then costs its member one scan.)
  */
 function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
-    const copy = openRecoveryFields(
+    const { fields: copy, retired } = openRecoveryFieldsNotingRetired(
         {
             encryptedShare: r.encrypted_share as string,
             shareIv: r.share_iv as string,
@@ -423,6 +434,7 @@ function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
         ephemeralPubkey: (r.ephemeral_pubkey as string | null) ?? null,
         ssoLookupHash: (r.sso_lookup_hash as string | null) ?? null,
         ssoLookupSalt: (r.sso_lookup_salt as string | null) ?? null,
+        ssoFindHash: retired ? null : (r.sso_find_hash as string | null) ?? null,
         kdfParams: copy.kdfParams ?? null,
         generation: r.generation as number,
         createdAt: r.created_at as string,
@@ -618,18 +630,19 @@ export function removeSignInCopiesAsStored(ownerPubkey: string, provider: string
             return { removed, signInLeft };
         }
         const nextGeneration = Math.max(generation, deletedGeneration(ownerPubkey)) + 1;
-        // Older rows first: a carried copy keeps its lookup hash, which is unique.
+        // Older rows first: a carried copy keeps its lookup hash, which is unique, and its find hash.
         db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?').run(ownerPubkey, nextGeneration);
         const insert = db.prepare(`
             INSERT INTO recovery_shares (
                 owner_pubkey, holder_type, holder_ref, share_index,
                 encrypted_share, share_iv, share_tag,
-                ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt, kdf_params, generation
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt, kdf_params, generation, sso_find_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const r of rest) {
             insert.run(ownerPubkey, r.holder_type, r.holder_ref, r.share_index, r.encrypted_share, r.share_iv, r.share_tag,
-                r.ephemeral_pubkey ?? null, r.sso_lookup_hash ?? null, r.sso_lookup_salt ?? null, r.kdf_params ?? null, nextGeneration);
+                r.ephemeral_pubkey ?? null, r.sso_lookup_hash ?? null, r.sso_lookup_salt ?? null, r.kdf_params ?? null, nextGeneration,
+                r.sso_find_hash ?? null);
         }
         return { removed, signInLeft };
     })();

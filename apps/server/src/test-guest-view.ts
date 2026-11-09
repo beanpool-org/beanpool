@@ -1190,6 +1190,8 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A find with a provider it verifies: past the provider check to the sign-in, which names the accounts it protects.
+            'POST /api/recovery/find': { provider: 'google', idToken: 'sentinel', nonce: 'sentinel' },
             // An assistant's call for the reports, which name members, and the owner switch turned off.
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
@@ -1482,6 +1484,8 @@ async function main(): Promise<void> {
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
             'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
+            // A restore that finds the account from the sign-in alone (routes/recovery-collect.ts, design S0).
+            'POST /api/recovery/find-nonce', 'POST /api/recovery/find',
             'POST /api/reports',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',

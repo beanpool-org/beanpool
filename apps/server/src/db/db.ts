@@ -1702,6 +1702,9 @@ export function initSchema() {
 
     // Step 7: recovery share replication audit column
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    // The find hash a restore by sign-in finds a copy by (engine/recovery-find.ts). Before schema.sql, which indexes it.
+    // NULL on every existing copy until its member's first restore heals it.
+    try { db.prepare(`ALTER TABLE recovery_shares ADD COLUMN sso_find_hash TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by)`).run(); } catch { }

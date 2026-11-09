@@ -91,6 +91,7 @@ import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot, settleTakeoverBeforeDatabaseBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { noteUnfindableSignInCopiesAtBoot } from './engine/recovery-find.js';
 import { installPushTokenSealAtBoot } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
@@ -209,6 +210,9 @@ async function main() {
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And the count of sign-in copies not yet findable by sign-in, for a server that became the main one at this boot
+    // (engine/recovery-find.ts). Does nothing when the role did not change.
+    noteUnfindableSignInCopiesAtBoot({ standby: getNodeRole() === 'backup' });
     // And members' push tokens, locked with a key from the same file (services/push-token-seal.ts): the server that took
     // over opens the rows it copied with the key the take-over brought, and removes, with one line, any it can't open.
     // Does nothing when the role did not change.

@@ -18,6 +18,7 @@ import {
     type StoredKeeperShare,
 } from './recovery-shares.js';
 import { RecoverySealKeyMissing, requireRecoverySealKey } from '../services/recovery-seal-key.js';
+import { ssoFindHash } from './recovery-find.js';
 
 /**
  * Depositing a keeper generation that includes a sign-in (K3) fragment — Google or Apple.
@@ -171,8 +172,9 @@ export function checkSsoKeeperShares(
         );
     }
 
-    // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR).
-    if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt)) {
+    // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR). The find hash too: it is
+    // what a restore finds the account by (engine/recovery-find.ts), so a client's would name whose account a sign-in finds.
+    if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt || s.ssoFindHash)) {
         throw new KeeperDepositError(
             'The lookup hash for a sign-in keeper is derived by the node, not supplied by the client.',
         );
@@ -267,6 +269,8 @@ export async function storeVerifiedSsoKeeperGeneration(
 
     const salt = newSsoLookupSalt();
     const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
+    // And the node-wide index a restore finds the account by, from the same verified sub (engine/recovery-find.ts).
+    const findHash = ssoFindHash(identity.provider, identity.sub);
 
     // Planned again, not reused from the check above: this is what is stored now, after the await,
     // and it is the generation the new one is built from. A copy the node's key does not open is not
@@ -295,6 +299,7 @@ export async function storeVerifiedSsoKeeperGeneration(
         shareIndex: nextIndex++,
         ssoLookupHash: lookupHash,
         ssoLookupSalt: salt,
+        ssoFindHash: findHash,
     });
 
     // 3. Existing other SSO shares
@@ -308,6 +313,8 @@ export async function storeVerifiedSsoKeeperGeneration(
             shareTag: existing.shareTag,
             ssoLookupHash: existing.ssoLookupHash,
             ssoLookupSalt: existing.ssoLookupSalt,
+            // As it was: a copy made before the find hash stays unfindable until its own restore heals it.
+            ssoFindHash: existing.ssoFindHash ?? null,
             kdfParams: existing.kdfParams,
         });
     }

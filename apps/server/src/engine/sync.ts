@@ -2795,11 +2795,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // the live-replication gap: without it, a promoted backup node has an empty recovery_shares table.
             if (remote.recoveryShares) {
                 const dropOlder = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?`);
+                // The find hash as the main server holds it (engine/recovery-find.ts); NULL from a main server before it, which
+                // holds none. A standby never works one out: it has no key, and refuses finds (routes/standby-ledger-gate.ts).
                 const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
                     (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
                      share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
-                     kdf_params, generation, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                     kdf_params, generation, created_at, updated_at, sso_find_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const rs of remote.recoveryShares) {
                     dropOlder.run(rs.ownerPubkey, rs.generation);
                     const res = insertShare.run(
@@ -2807,7 +2809,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rs.encryptedShare, rs.shareIv, rs.shareTag,
                         rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
                         rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
-                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
+                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt, rs.ssoFindHash ?? null,
                     );
                     if (res.changes > 0) recoverySharesImported++;
                 }

@@ -32,7 +32,6 @@ import {
 } from '../lib/api';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
-import { forgetKnockMark, knockWaitingKey } from '../lib/knock-key';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchKnownRule } from '../lib/known-rule';
@@ -54,6 +53,7 @@ import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
+import { forgetKnockMark, knockWaitingKey } from '../lib/knock-key';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 

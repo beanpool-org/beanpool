@@ -122,7 +122,7 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                     {approved ? (
                         <>
                             <h1 dir="auto" data-testid="knock-waiting-yes" className="m-0 mb-4 text-2xl font-bold leading-tight break-words">{t('🎉 {name} said yes.', { name })}</h1>
-                            <button type="button" data-testid="knock-waiting-join" className={PRIMARY} onClick={() => onJoin({ invite: approved.invite, name })}>
+                            <button type="button" data-testid="knock-waiting-join" className={`${PRIMARY} mb-3`} onClick={() => onJoin({ invite: approved.invite, name })}>
                                 {t('Join {name}', { name })}
                             </button>
                         </>

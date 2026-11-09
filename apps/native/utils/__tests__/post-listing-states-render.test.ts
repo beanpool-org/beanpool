@@ -422,6 +422,33 @@ for (const theme of ['light', 'dark'] as const) {
             expect(net.calls).not.toContain('db.treasuryReject');
         });
 
+        // Standing deals S2 (DESIGN-standing-deals-fable §2.2): a period running by itself is released by the node at its end, so
+        // its payer sees the standing panel (Hold back, Stop), never the plain Release the node would refuse (409).
+        const standing = (over: Record<string, unknown> = {}) => deal({
+            id: 'tx-s', credits: 50, standingId: 'sd-1', periodNo: 1, standingPhase: 'held', standingBeans: 50, standingUnit: 'month',
+            standingMaxPeriods: null, standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-11-09T08:00:00.000Z',
+            standingShortSince: null, standingStopped: false, ...over,
+        });
+        const storage = { title: 'Vehicle Storage', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 50, price_type: 'monthly' };
+        it('one who took up a monthly Offer, running by itself: its panel with Hold back and Stop, never Release; Hold back reaches the node', async () => {
+            node.mine = [standing()];
+            await open(listing(storage));
+            const panel = host.querySelector('[data-testid="standing-panel-tx-s"]') as HTMLElement;
+            expect(panel?.textContent).toContain("This month's 50 Beans are held · they go to Damo 9 Dec");
+            expect(buttons()).toEqual(expect.arrayContaining(['Hold back this month', 'Stop…', 'Message Damo']));
+            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
+            await press(panel, 'Hold back this month');
+            expect(net.calls).toContain('db.holdBackStandingDeal');
+        });
+        it("the same payer short of the next month: the banner with the week's end, Stop, and no held panel", async () => {
+            node.mine = [standing({ status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' })];
+            await open(listing(storage));
+            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
+            expect(buttons()).not.toContain('Hold back this month');
+            expect(host.textContent).not.toContain('✅ Release Credits');
+        });
+
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {
             node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
             await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20 }));

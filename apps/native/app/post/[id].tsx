@@ -1118,6 +1118,13 @@ export default function PostDetailModal() {
             if (approveTxId) setRequests(prev => prev.filter(r => r.id !== approveTxId));
             requestSync().catch(console.error);
             afterDealStep();
+            // Then the chat with the one paid, as the phone's accept and approval of a one-off deal open it.
+            try {
+                const conv = await createConversationApi('dm', [payee, identity.publicKey], identity.publicKey, undefined, post.id);
+                if (conv) router.replace(`/chat/${conv.id}`);
+            } catch (chatError) {
+                console.error('Failed to start chat after a standing deal began', chatError);
+            }
         } catch (e: any) {
             hapticWarning();
             if (changedElsewhere(e, 'deal_open')) {

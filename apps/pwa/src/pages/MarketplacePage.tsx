@@ -2600,11 +2600,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* A Need with no usable quantity yet has no sentence: no empty box either (as the phone). An ambiguous
                                     quantity still shows its refusal words in the box. */}
-                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)
+                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)
                                     && (acceptHoursRead.ok || !isAmbiguousAmount(acceptHoursRead.refusal))) && (
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
-                                        if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
+                                        if (selectedPost.priceType !== 'fixed' && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = standingNeed ? 1 : (acceptHoursValue || 0);
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
                                         // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
@@ -2614,7 +2614,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         // total and the name the Need shows. No usable quantity yet: no sentence, and never an amount that isn't one.
                                         // The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
                                         if (selectedPost.type === 'need') {
-                                            if (selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)) return null;
+                                            if (selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)) return null;
                                             return needAnswerLine(tot, selectedPost.authorCallsign);
                                         }
                                         if (!isLoan && tot === 0) return t('This is a free listing (0 B). No credits transferred.');
@@ -2722,7 +2722,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || !(acceptHoursValue > 0)))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && !standingNeed && (!acceptHours || !(acceptHoursValue > 0)))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                             accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-bp-commit-fill cursor-not-allowed opacity-60'

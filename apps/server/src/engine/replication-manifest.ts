@@ -756,7 +756,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
     openJoinSalt: {
         kind: 'per-server',
-        reason: "the door's key as an older version kept it: written only by the rollback command (services/open-join-key.ts --write-key-row) for an older image to read; this version moves it to data/open-join.key at boot, and no copy carries it",
+        reason: "the door's key as an older version kept it: this version moves it to data/open-join.key at boot (services/open-join-key.ts), writes it never, and no copy carries it",
     },
     migration_mark_visitors_v1: {
         kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)",

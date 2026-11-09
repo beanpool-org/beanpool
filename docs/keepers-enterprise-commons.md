@@ -141,7 +141,7 @@ Database schema constraint: `apps/server/src/db/db.ts:162-177`:
 | `hub` (K2) | `plaintext-v1` | Plain text on node | None (plaintext in DB; relies on D7 cooldown / human approval) | `POST /api/recovery/shares` or `/sso` | Rule D7: 24h delay or instant if human/SSO approved |
 | `member` (K4/K5) | `x25519-xc20p-v1` | Encrypted row on node | X25519 ECDH + XChaCha20-Poly1305 (wrapped to friend's pubkey) | `POST /api/recovery/shares` | Rule D6: Instant when friend signs approval and re-wraps |
 | `sso` (K3) | `scrypt-xc20p-v1` | Encrypted row on node | scrypt(provider:sub) + XChaCha20-Poly1305 | `POST /api/recovery/shares/sso` | Instant on verified OAuth ID token matching `sso_lookup_hash` |
-| `device` (K1) | Retired | None | Removed from schema and engine | N/A | **Permanently retired** in `001-retire-device-keeper-type.sql` |
+| `device` (K1) | Retired | None | Removed from schema and engine | N/A | **Permanently retired** (no `device` holder type in the schema) |
 
 ### 2.3 Server Storage Tables
 

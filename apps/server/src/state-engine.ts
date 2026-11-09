@@ -8673,11 +8673,6 @@ export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     return { ok: true };
 }
 
-// Back-compat wrapper: Elder is simply the top tier badge.
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
-    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
-}
-
 /**
  * Grant or revoke the treasury operator capability. Admin-only.
  * Toggling can_operate mints no beans and changes no floors. Idempotent.
@@ -9593,8 +9588,6 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
             'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
-
-export function migrateAdminConversations() {} // Deprecated, state is clean now.
 
 // ===================== ACTIVITY =====================
 

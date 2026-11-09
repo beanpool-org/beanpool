@@ -978,6 +978,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                 setLoading(false);
                 return;
             }
+            // Named now: the form goes, so a refusal below shows Back to my request, never a Join refused the same way.
+            if (knockInvite !== undefined) setKnockNeedsName(false);
 
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result

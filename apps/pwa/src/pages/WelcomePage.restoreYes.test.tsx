@@ -66,7 +66,7 @@ afterEach(() => {
 });
 
 /** Already a member → Recover with 12 Words → the account's words → Recover Identity. */
-async function restoreWithWords(onComplete: (id: BeanPoolIdentity) => void) {
+async function restoreWithWords(onComplete: ReturnType<typeof vi.fn>) {
     render(<WelcomePage onComplete={onComplete} start="restore" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recover with 12 Words/ }));
     account.mnemonic!.forEach((w, i) => {
@@ -182,5 +182,28 @@ describe('the yes, joined with a restored account (slice Y0)', () => {
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));
         expect(await screen.findByTitle('Green Bean')).toBeTruthy();
         expect(screen.queryByTestId('backup-words')).toBeNull();
+    });
+
+    it('a yes the community refuses after the name is typed: our words and Back to my request, never the form again', async () => {
+        await restoreWithWords(vi.fn());
+        cleanup();
+        vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+            const path = String(input).replace(NODE, '');
+            if (path === '/api/community/info') return json(200, LOCAL);
+            if (path.startsWith('/api/invite/check')) return json(200, { valid: true });
+            if (path === '/api/invite/redeem') return json(400, { error: 'This invite was made for another key.' });
+            if (path.startsWith('/api/community/membership/')) return json(200, { isMember: false, callsign: null });
+            return json(200, {});
+        });
+        render(<WelcomePage onComplete={vi.fn()} knockYes={{ invite: 'KN0C-K1NV', name: 'Byron Shire BeanPool' }} onBackToRequest={vi.fn()} />);
+        fireEvent.change(await screen.findByLabelText('Your name here'), { target: { value: 'CJ' } });
+        fireEvent.click(screen.getByTestId('knock-join-name-go'));
+        expect((await screen.findByTestId('knock-join-error')).textContent)
+            .toBe("This yes from Byron Shire BeanPool couldn't be used. Go back to your request to see where it stands.");
+        expect(screen.queryByTestId('knock-join-name')).toBeNull();
+        expect(screen.queryByTestId('knock-join-retry')).toBeNull();
+        expect(screen.getByTestId('knock-join-back')).toBeTruthy();
+        // Still waiting on this key, its mark kept.
+        expect(isKnockKey(account)).toBe(true);
     });
 });

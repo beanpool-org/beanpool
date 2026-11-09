@@ -63,7 +63,7 @@ export interface DealRow {
 }
 
 /** A row that is the current period of a standing deal still running (any phase but ended). */
-export function isLiveStanding(tx: DealRow): boolean {
+export function isLiveStanding(tx: Pick<DealRow, 'standingId' | 'standingPhase'>): boolean {
     return !!tx.standingId && !!tx.standingPhase && tx.standingPhase !== 'ended';
 }
 
@@ -382,9 +382,13 @@ export const listingDealLines = {
     review: () => t('⭐ Review'),
     /**
      * A deal a door named that is over (an alert for a request declined, a deal cancelled, released or settled): what
-     * became of it, from its status, above the listing as it stands for the reader now. Null while it is open.
+     * became of it, from its status, above the listing as it stands for the reader now. Null while it is open, and for the
+     * current period of a standing deal still running: a short one's row is the period last settled (`completed`), but the
+     * deal runs on (round 2 of #3000).
      */
-    finished: (status: string): string | null => {
+    finished: (row: string | Pick<DealRow, 'status' | 'standingId' | 'standingPhase'>): string | null => {
+        if (typeof row !== 'string' && isLiveStanding(row)) return null;
+        const status = typeof row === 'string' ? row : row.status;
         if (status === 'pending' || status === 'requested') return null;
         if (status === 'completed') return t('That deal is done.');
         if (status === 'rejected' || status === 'declined') return t('That request was declined.');

@@ -35,7 +35,7 @@
 
 import crypto from 'node:crypto';
 import {
-    STANDING_GRACE_MS, STANDING_REMINDER_AFTER_MS, STANDING_RETRY_MS, STANDING_START_AHEAD_MS, parseStandingAuthorisation, periodEnd,
+    STANDING_GRACE_MS, STANDING_REMINDER_AFTER_MS, STANDING_RETRY_MS, STANDING_START_AHEAD_MS, parseStandingAuthorisation, periodEnd, signedRequestBytes,
     standingAuthorisationText, standingHoldPayload, standingLines, standingUnitOf, standingWarnAheadMs, type PushNoticeKind,
     type StandingAuthorisation, type StandingEndReason, type StandingHeldBackReason, type StandingPeriodUnit,
 } from '@beanpool/core';
@@ -84,13 +84,18 @@ function authRefused(why: string): Error {
     return Object.assign(new Error(standingLines.authMismatch()), { status: 400, statusCode: 400, code: STANDING_AUTH_CODE });
 }
 
-/** An ed25519 signature (base64 or hex) by a member's key (64 hex) over the text's UTF-8 bytes. */
+/**
+ * An ed25519 signature (base64 or hex) by a member's key (64 hex) over the text as every member statement is signed
+ * (@beanpool/core request-signing.ts, signStandingAuthorisation): 0xFF, then the text in UTF-8. Never the bare text: an
+ * older app's "Manage" button signs whatever text a node sends it as plain UTF-8, so a bare-text signature could have been
+ * made by a hostile node.
+ */
 function signedBy(text: string, signature: string, pubKeyHex: string): boolean {
     try {
         if (!/^[0-9a-f]{64}$/.test(pubKeyHex) || typeof signature !== 'string' || !signature) return false;
         const key = crypto.createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(pubKeyHex, 'hex')]), format: 'der', type: 'spki' });
         const sig = Buffer.from(signature.trim(), /^[0-9a-fA-F]{128}$/.test(signature.trim()) ? 'hex' : 'base64');
-        return sig.length === 64 && crypto.verify(null, Buffer.from(text, 'utf-8'), key, sig);
+        return sig.length === 64 && crypto.verify(null, Buffer.from(signedRequestBytes(text)), key, sig);
     } catch {
         return false;
     }

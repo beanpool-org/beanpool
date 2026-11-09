@@ -32,7 +32,8 @@ export interface MarketplaceTransaction {
     /**
      * A period of a standing deal (DESIGN-standing-deals-fable §2.3): which one and its number; on the standing deal's
      * CURRENT period's row only, its phase, the Beans per period, its unit, how many periods (null: until stopped), its
-     * start, when the node next acts on it (this period's end, or its next try) and whether either side has tapped Stop.
+     * start, when the node next acts on it (this period's end, or its next try), since when it is short and whether either side has
+     * tapped Stop.
      */
     standingId?: string;
     periodNo?: number;
@@ -43,6 +44,8 @@ export interface MarketplaceTransaction {
     standingNextDueAt?: string;
     standingStopped?: boolean;
     standingStartsAt?: string;
+    /** Since when the next period couldn't be held (phase short): the week of grace ends 7 days after it. */
+    standingShortSince?: string | null;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
 }
@@ -59,6 +62,7 @@ function standingFields(r: any): Partial<MarketplaceTransaction> {
         out.standingNextDueAt = r.sdNextDueAt;
         out.standingStopped = !!r.sdStoppedAt;
         out.standingStartsAt = r.sdStartsAt;
+        out.standingShortSince = r.sdShortSince ?? null;
     }
     return out;
 }
@@ -84,7 +88,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
-               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id
@@ -144,7 +148,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
-               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id

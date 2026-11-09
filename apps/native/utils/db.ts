@@ -37,6 +37,8 @@ import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
+import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -655,6 +657,11 @@ ${TOOL_DOCS_TABLE}
 
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
+        // A period of a standing deal (DESIGN-standing-deals-fable §2.1): which one and its number, and on its current period's
+        // row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing TEXT;`); } catch (e) {}
 
         // Add audience scoping columns to posts table
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
@@ -4541,7 +4548,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 }
 
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         tx.id ?? null,
                         tx.postId ?? tx.post_id ?? null,
@@ -4555,7 +4562,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                         tx.coverImage ?? tx.cover_image ?? null,
                         tx.ratedByBuyer ? 1 : 0,
                         tx.ratedBySeller ? 1 : 0,
-                        tx.postTitle ?? tx.post_title ?? null
+                        tx.postTitle ?? tx.post_title ?? null,
+                        // The node's read carries the standing deal on its current period's row (S2): a short one's row is
+                        // the period last settled, so its phase is kept on that row, not on a pending one.
+                        tx.standingId ?? null,
+                        tx.periodNo ?? null,
+                        standingJsonOf(tx),
                     ]
                 );
 
@@ -8127,8 +8139,12 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
     return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
-export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
-    const res = await _signedRequest('/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` is the payer's signed authorisation (utils/member-statements.ts signStandingStatement), and no hours go.
+ */
+export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
 
     // Await the local write: callers navigate into the chat as soon as this resolves,
     // and the chat screen reads the pending tx from local SQLite. The write itself is
@@ -8153,8 +8169,8 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
                 );
             }
 
@@ -8266,8 +8282,9 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
     return res;
 }
 
-export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string) {
-    const res = await _signedRequest('/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+/** Approve a request. On a Need priced per week or per month its author pays: `standing` is their signed authorisation (§4). */
+export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
     try {
         const database = await getDb();
         // The transaction becomes pending, and the post becomes pending unless repeatable.
@@ -8276,8 +8293,36 @@ export async function approveMarketplaceRequest(transactionId: string, authorPub
             await database.runAsync("UPDATE posts SET status = 'pending', pending_transaction_id = ? WHERE id = (SELECT post_id FROM marketplace_transactions WHERE id = ?)", [transactionId, transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'pending' WHERE id = ?", [transactionId]);
+        const tx = res?.transaction;
+        if (tx?.standingId) {
+            await database.runAsync('UPDATE marketplace_transactions SET credits = ?, standing_id = ?, period_no = ?, standing = ? WHERE id = ?',
+                [tx.credits ?? 0, tx.standingId, tx.periodNo ?? null, standingJsonOf(tx), transactionId]);
+        }
     } catch(e) {}
     return res;
+}
+
+/**
+ * The payer's standing authorisation for the community this phone is on (§6), as the web makes it: core's builder, through
+ * utils/member-statements.ts signStandingStatement, for the address every request here goes to.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    const { signStandingStatement } = await import('./member-statements');
+    return signStandingStatement(anchorUrl, fields, identity.privateKey);
+}
+
+/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+export async function stopStandingDeal(standingId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
+export async function holdBackStandingDeal(standingId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {
@@ -8660,6 +8705,17 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /** A period of a standing deal, and on its current period's row the standing deal itself (standingOfRow; core StandingDealRow). */
+    standingId?: string | null;
+    periodNo?: number | null;
+    standingPhase?: StandingPhase | null;
+    standingBeans?: number | null;
+    standingUnit?: StandingPeriodUnit | null;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string | null;
+    standingStartsAt?: string | null;
+    standingShortSince?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {
@@ -8720,6 +8776,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             postAuthorPublicKey: r.postAuthorPublicKey || undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+            ...standingOfRow(r),
         };
     });
 }

@@ -183,8 +183,14 @@ const node = {
     unread: {} as Record<string, number>, chats: [] as unknown[][],
 };
 function answers(post: Record<string, unknown>) {
+    // The phone's copy of a row (utils/db.ts applyDelta): a standing deal's current period keeps its phase in the `standing` column.
     const snake = (d: Record<string, any>) => ({ id: d.id, post_id: d.postId, status: d.status, buyer_pubkey: d.buyerPublicKey, buyer_callsign: d.buyerCallsign,
-        seller_pubkey: d.sellerPublicKey, seller_callsign: d.sellerCallsign, credits: d.credits, hours: d.hours, created_at: d.createdAt });
+        seller_pubkey: d.sellerPublicKey, seller_callsign: d.sellerCallsign, credits: d.credits, hours: d.hours, created_at: d.createdAt,
+        standing_id: d.standingId ?? null, period_no: d.periodNo ?? null,
+        standing: d.standingId && d.standingPhase ? JSON.stringify({
+            phase: d.standingPhase, beans: d.standingBeans ?? null, unit: d.standingUnit ?? null, max: d.standingMaxPeriods ?? null,
+            nextDueAt: d.standingNextDueAt ?? null, startsAt: d.standingStartsAt ?? null, shortSince: d.standingShortSince ?? null, stopped: !!d.standingStopped,
+        }) : null });
     const database = {
         getFirstAsync: async (sql: string, args: unknown[] = []) => {
             if (!sql.includes('FROM marketplace_transactions')) return null;
@@ -420,6 +426,81 @@ for (const theme of ['light', 'dark'] as const) {
             await press(host, 'Withdraw Request');
             expect(net.calls).toContain('db.cancelMarketplaceRequest');
             expect(net.calls).not.toContain('db.treasuryReject');
+        });
+
+        // Standing deals S2 (DESIGN-standing-deals-fable §2.2): a period running by itself is released by the node at its end, so
+        // its payer sees the standing panel (Hold back, Stop), never the plain Release the node would refuse (409).
+        const standing = (over: Record<string, unknown> = {}) => deal({
+            id: 'tx-s', credits: 50, standingId: 'sd-1', periodNo: 1, standingPhase: 'held', standingBeans: 50, standingUnit: 'month',
+            standingMaxPeriods: null, standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-11-09T08:00:00.000Z',
+            standingShortSince: null, standingStopped: false, ...over,
+        });
+        const storage = { title: 'Vehicle Storage', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 50, price_type: 'monthly' };
+        it('one who took up a monthly Offer, running by itself: its panel with Hold back and Stop, never Release; Hold back reaches the node', async () => {
+            node.mine = [standing()];
+            await open(listing(storage));
+            const panel = host.querySelector('[data-testid="standing-panel-tx-s"]') as HTMLElement;
+            expect(panel?.textContent).toContain("This month's 50 Beans are held · they go to Damo 9 Dec");
+            expect(buttons()).toEqual(expect.arrayContaining(['Hold back this month', 'Stop…', 'Message Damo']));
+            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
+            await press(panel, 'Hold back this month');
+            expect(net.calls).toContain('db.holdBackStandingDeal');
+        });
+        it("the same payer short of the next month: the banner with the week's end, Stop, and no held panel", async () => {
+            node.mine = [standing({ status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' })];
+            await open(listing(storage));
+            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
+            expect(buttons()).not.toContain('Hold back this month');
+            expect(host.textContent).not.toContain('✅ Release Credits');
+        });
+
+        // Round 2 of #3000 (deciding review on e07a97d3).
+        const SHORT = { status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' };
+        const repeatable = { ...storage, repeatable: 1, status: 'active', accepted_by: null };
+        it('finding 5: the payer short on a repeatable monthly Offer (still on the board): the banner, and no Accept under it', async () => {
+            node.mine = [standing(SHORT)];
+            await open(listing(repeatable));
+            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
+            expect(buttons()).not.toContain('🤝 Accept Offer');
+            expect(host.querySelector('[data-testid="post-take-up-area"]')).toBeNull();
+        });
+        it('finding 3: its payee, opened at the short row from Your deals: the panel and Stop now, never "That deal is done."', async () => {
+            node.mine = [standing({ ...SHORT, buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
+            await open(listing({ ...repeatable, author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-s' });
+            expect(host.querySelector('[data-testid="standing-panel-tx-s"]')?.textContent).toContain("Next month isn't covered yet · we'll keep trying until 16 Dec");
+            expect(buttons()).toContain('Stop now');
+            expect(host.textContent).not.toContain('That deal is done.');
+        });
+        it('the same link once it has ended says what became of it, as for any deal', async () => {
+            node.mine = [standing({ ...SHORT, standingPhase: 'ended', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
+            await open(listing({ ...repeatable, author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-s' });
+            expect(host.textContent).toContain('That deal is done.');
+        });
+        it('finding 1: a FREE monthly Offer: Accept opens the one-off box, never the take-up, and the accept carries no standing deal', async () => {
+            await open(listing({ title: 'Vehicle Storage', price_type: 'monthly', credits: 0 }));
+            const asked: unknown[][] = [];
+            const base = net.answer!;
+            net.answer = (name, args) => {
+                if (name === 'acceptMarketplacePost') { asked.push(args); return Promise.resolve({ transaction: { id: 'tx-new', credits: 0, status: 'pending' } }); }
+                return base(name, args);
+            };
+            await press(host, '🤝 Accept Offer');
+            expect(host.querySelector('[data-testid="standing-take-up"]')).toBeNull();
+            expect(host.textContent).not.toContain('Agree and hold 0 Beans');
+            expect(host.textContent).toContain('Accept this Offer?');
+            await typeInto(host.querySelector('input[aria-label="Trust commitment in hours"]') as HTMLInputElement, '2');
+            await press(host, 'Confirm');
+            expect(asked).toEqual([['p-1', ME.publicKey, 2]]);
+        });
+        it("finding 1: a FREE weekly Need: its author's Approve is the one-off approval, with no take-up to sign", async () => {
+            node.mine = [deal({ id: 'tx-req', status: 'requested', buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'kofi-key', sellerCallsign: 'Kofi', credits: 0 })];
+            await open(listing({ type: 'need', title: 'Dog minding', price_type: 'weekly', credits: 0, author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            const base = net.answer!;
+            net.answer = (name, args) => (name === 'approveMarketplaceRequest' ? Promise.resolve({ success: true }) : base(name, args));
+            await press(host, 'Approve & Commit');
+            expect(host.querySelector('[data-testid="standing-take-up"]')).toBeNull();
+            expect(net.calls).toContain('db.approveMarketplaceRequest');
         });
 
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {

@@ -6,11 +6,17 @@
  * The drawing tests need the Chromium Playwright carries (CI installs it only in the browser shards); where it is not there
  * they are skipped, and the layout, shot-list and page tests still run.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
-import { DARK_GROUND, STORE_SIZES, frameHtml, frameLayout, frameShots, readBrand } from '../frame.mjs';
+import { DARK_GROUND, STORE_SIZES, checkRaw, frameHtml, frameLayout, frameShots, pngSize, readBrand, storeFor } from '../frame.mjs';
 import { SHOTS, rawName, storeName, webName } from '../shots.mjs';
 
 // Whether Chromium starts here (not whether a path exists: Playwright runs a headless shell build by default).
@@ -153,4 +159,80 @@ describe('frameShots (drawn by Chromium)', () => {
         for (let i = 0; i < band.length; i += 3) if (hexOf([band[i], band[i + 1], band[i + 2]]) !== ground) inked++;
         expect(inked).toBeGreaterThan(2000);
     }, 60_000);
+});
+
+describe('which store a go is for (PR #2998 round 2: App Review Guideline 2.3.10)', () => {
+    it('is the Play set unless --store says otherwise: one folder of raws is one phone, so there is no "both"', () => {
+        expect(storeFor(undefined)).toBe('play');
+        expect(storeFor('play')).toBe('play');
+        expect(storeFor('appstore')).toBe('appstore');
+        expect(() => storeFor('both')).toThrow(/--store both is gone/);
+        expect(() => storeFor('huawei')).toThrow(/no store "huawei"/);
+    });
+
+    it('frames the App Store set only from raws of its own size, and names the rule when one is not', () => {
+        expect(() => checkRaw('appstore', { width: 1320, height: 2868 }, '1-home-light.png')).not.toThrow();
+        expect(() => checkRaw('appstore', { width: 1080, height: 1920 }, '1-home-light.png')).toThrow(/1-home-light\.png is 1080x1920, not 1320x2868.*iPhone captures.*Guideline 2\.3\.10/);
+        expect(() => checkRaw('appstore', { width: 1320, height: 2400 }, '2-market-light.png')).toThrow(/2-market-light\.png is 1320x2400/);
+        // the Play set still takes a raw of another shape (fitted by width)
+        expect(() => checkRaw('play', { width: 1080, height: 1920 }, 'x.png')).not.toThrow();
+        expect(() => checkRaw('play', { width: 1320, height: 2868 }, 'x.png')).not.toThrow();
+    });
+
+    it("reads a picture's size from its header", async () => {
+        const png = await sharp({ create: { width: 7, height: 11, channels: 3, background: '#000000' } }).png().toBuffer();
+        expect(pngSize(png)).toEqual({ width: 7, height: 11 });
+    });
+});
+
+describe('frame.mjs on the command line', () => {
+    const run = promisify(execFile);
+    const script = path.join(path.dirname(fileURLToPath(import.meta.url)), '../frame.mjs');
+    let work = '';
+    const folders = () => ({ raws: path.join(work, 'raw'), out: path.join(work, 'out') });
+
+    /** The Android raws the first capture go made: all seven store files at 1080 x 1920 (flat colour: the sizes are what is read). */
+    async function writeRaws(width: number, height: number) {
+        const { raws } = folders();
+        fs.mkdirSync(raws, { recursive: true });
+        const png = await sharp({ create: { width, height, channels: 3, background: '#2040c0' } }).png().toBuffer();
+        for (const s of SHOTS as { n: number; id: string; store: string }[]) fs.writeFileSync(path.join(raws, rawName(s, s.store)), png);
+    }
+    const frame = (...args: string[]) => run(process.execPath, [script, ...args], { timeout: 120_000 }).then(
+        (r) => ({ code: 0, out: r.stdout, err: r.stderr }),
+        (e) => ({ code: e.code as number, out: String(e.stdout ?? ''), err: String(e.stderr ?? '') }),
+    );
+
+    beforeEach(() => { work = fs.mkdtempSync(path.join(os.tmpdir(), 'frame-cli-test-')); });
+    afterEach(() => fs.rmSync(work, { recursive: true, force: true }));
+
+    it('refuses to frame the App Store set from Android raws, before it draws or writes anything', async () => {
+        await writeRaws(1080, 1920);
+        const { raws, out } = folders();
+        const r = await frame('--in', raws, '--out', out, '--store', 'appstore');
+        expect(r.code).toBe(1);
+        expect(r.err).toMatch(/is 1080x1920, not 1320x2868/);
+        expect(r.err).toMatch(/Guideline 2\.3\.10/);
+        expect(fs.existsSync(out)).toBe(false);
+    }, 60_000);
+
+    it('refuses the old default of both stores', async () => {
+        await writeRaws(1080, 1920);
+        const { raws, out } = folders();
+        const r = await frame('--in', raws, '--out', out, '--store', 'both');
+        expect(r.code).toBe(1);
+        expect(r.err).toMatch(/--store both is gone/);
+        expect(fs.existsSync(out)).toBe(false);
+    }, 60_000);
+
+    drawing('with no --store frames the Play set only, and never an App Store folder', async () => {
+        await writeRaws(1080, 1920);
+        const { raws, out } = folders();
+        const r = await frame('--in', raws, '--out', out);
+        expect(r.err).toBe('');
+        expect(r.code).toBe(0);
+        expect(fs.readdirSync(out)).toEqual(['play']);
+        expect(fs.readdirSync(path.join(out, 'play')).sort()).toEqual((SHOTS as { n: number; id: string }[]).map((s) => storeName(s)).sort());
+        expect(await sharp(path.join(out, 'play', storeName(SHOTS[0]))).metadata()).toMatchObject({ width: 1080, height: 1920 });
+    }, 180_000);
 });

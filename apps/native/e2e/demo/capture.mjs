@@ -42,6 +42,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { SHOTS, SCHEMES, rawName } from './shots.mjs';
 import { startDnsFilter } from './dns-filter.mjs';
+import { BudgetStop, createRunGuard } from './run-guard.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../../../..');
@@ -60,7 +61,11 @@ const IOS_DEVICE = 'iPhone 17 Pro Max';
 const IOS_SIZE = { width: 1320, height: 2868 };
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** A wait nothing can cut short: the cleanup's own (it must run to its end after the budget is spent). */
+const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+/** The run's time box (run-guard.mjs), made first thing in main(): from then on every `sleep` is a checkpoint that stops the run once the budget is spent. */
+let runGuard = null;
+const sleep = (ms) => (runGuard ? runGuard.sleep(ms) : settle(ms));
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
 const flag = (name) => process.argv.includes(name);
 
@@ -404,9 +409,9 @@ function androidDevice() {
                 sh('cmd overlay disable com.android.internal.systemui.navbar.gestural');
             } catch { /* gone */ }
             // The memory rule: sync, then let the emulator exit on its own before any kill.
-            try { sh('sync'); await sleep(2000); sh('sync'); await sleep(3000); } catch { /* gone */ }
+            try { sh('sync'); await settle(2000); sh('sync'); await settle(3000); } catch { /* gone */ }
             try { adb('emu', 'kill'); } catch { /* gone */ }
-            for (let i = 0; i < 30 && dev.emu && alive(dev.emu); i++) await sleep(1000);
+            for (let i = 0; i < 30 && dev.emu && alive(dev.emu); i++) await settle(1000);
         },
     };
     return dev;
@@ -479,10 +484,9 @@ async function main() {
     const dev = IOS ? iosDevice() : androidDevice();
     let node;
     let dns = null;
-    let cleaned = false;
+    // ONE cleanup for the whole run: the budget's stop and main's `finally` both ask for it, and both wait for the same promise
+    // (run-guard.mjs). A flag here once let the second caller return at once, and process.exit then cut the first one off.
     const cleanup = async () => {
-        if (cleaned) return;
-        cleaned = true;
         try { await dev.teardown?.(); } catch (e) { log('teardown:', e.message); }
         if (dns) {
             const names = new Map();
@@ -491,10 +495,10 @@ async function main() {
             await dns.close();
         }
         for (const { name, child } of started.slice().reverse()) {
-            if (name === 'emulator' && alive(child)) { killGroup(child, 'SIGTERM'); await sleep(3000); }
+            if (name === 'emulator' && alive(child)) { killGroup(child, 'SIGTERM'); await settle(3000); }
             if (name !== 'emulator') killGroup(child, 'SIGTERM');
         }
-        await sleep(2500);
+        await settle(2500);
         for (const { child } of started) if (alive(child)) killGroup(child, 'SIGKILL');
         for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
         report.finishedAt = new Date().toISOString();
@@ -503,12 +507,20 @@ async function main() {
         log(`report: ${reportFile}`);
     };
     // A run must end inside the time it was given: a tool call that is cut off leaves an emulator, Metro and a node behind.
-    const watchdog = setTimeout(async () => {
-        log(`the ${BUDGET_MIN}-minute budget is spent: stopping (take fewer shots with --only, or give a longer --budget-min)`);
-        report.error = `stopped at the ${BUDGET_MIN}-minute budget`;
-        await cleanup();
-        process.exit(2);
-    }, BUDGET_MIN * 60_000);
+    runGuard = createRunGuard({
+        budgetMs: BUDGET_MIN * 60_000,
+        cleanup,
+        onBudget: () => {
+            log(`the ${BUDGET_MIN}-minute budget is spent: stopping (take fewer shots with --only, or give a longer --budget-min)`);
+            report.error = `stopped at the ${BUDGET_MIN}-minute budget`;
+            process.exitCode = 2;
+        },
+    });
+    // The node's rate limiter counts the app's polling: start each look afresh (as the web proof does). A checkpoint too.
+    const resetLimits = async () => {
+        await node.ask({ op: 'resetLimits' }).catch(() => {});
+        runGuard.halt();
+    };
     try {
         log('starting the Riverbend demo node (fresh data dir)');
         node = await startNode();
@@ -549,7 +561,7 @@ async function main() {
                 const words = wordsOf(xml);
                 // The first screen is up: let the phone finish its first sync (RSVPs, deals, photos) before anything is taken.
                 if (/Needs you|Your Beans|Market|Ledger/i.test(words) && !/Loading from|Bundling|Downloading/i.test(words)) {
-                    await node.ask({ op: 'resetLimits' }).catch(() => {});
+                    await resetLimits();
                     await sleep(12_000);
                     return;
                 }
@@ -587,6 +599,7 @@ async function main() {
                 await sleep(1800);
             }
             log(`explored ${shot.id}: ${OUT}/explore-${shot.id}-0..4.png`);
+            return; // a look, not a capture: the raw pictures already in --out are left as they are, and the budget is not spent on them
         }
 
         for (const scheme of SCHEMES) {
@@ -598,8 +611,7 @@ async function main() {
                 for (let attempt = 1; attempt <= 3; attempt++) {
                     entry.tries = attempt;
                     entry.issues = [];
-                    // The node's rate limiter counts the app's polling: start each look afresh (as the web proof does).
-                    await node.ask({ op: 'resetLimits' }).catch(() => {});
+                    await resetLimits();
                     // Another go starts from Home, so a screen that was scrolled last time is opened at its top again.
                     if (attempt > 1) { dev.open('beanpool://'); await sleep(3500); }
                     dev.open(routeOf(shot, world));
@@ -610,7 +622,7 @@ async function main() {
                         // town). A second visit, with the map made, moves it. The app is not changed: only how it is visited.
                         dev.open('beanpool://');
                         await sleep(3500);
-                        await node.ask({ op: 'resetLimits' }).catch(() => {});
+                        await resetLimits();
                         dev.open(routeOf(shot, world));
                         await sleep(14_000);
                         // One pin tapped, for the preview card the design asks for. Where it sits is measured from the pictures of
@@ -637,6 +649,7 @@ async function main() {
                     const words = wordsOf(xml);
                     if (NEVER.test(words)) entry.issues.push(`the screen says: ${words.match(NEVER)[0]}`);
                     for (const re of EXPECT[shot.id]) if (xml && !re.test(words)) entry.issues.push(`not on screen: ${re}`);
+                    runGuard.halt(); // nothing is written over a good raw picture once the phone is being put back
                     entry.size = dev.shot(target);
                     const want = IOS ? IOS_SIZE : SIZE;
                     if (entry.size.width !== want.width || entry.size.height !== want.height) entry.issues.push(`picture is ${entry.size.width}x${entry.size.height}, wanted ${want.width}x${want.height}`);
@@ -652,15 +665,20 @@ async function main() {
         report.demoNodeGuardRefused = blocked;
         if (blocked.length) log(`the demo node's guard refused (and logged) ${blocked.length} attempt(s) to leave the machine: ${blocked.join(' | ')}`);
     } catch (e) {
-        report.error = e.message;
-        log('FAILED:', e.message);
-        const why = dev.diagnose?.();
-        if (why) { report.crashLines = why; log(`crash buffer: ${why.replace(/\n/g, ' | ')}`); }
-        try { dev.shot(path.join(OUT, 'failed.png')); } catch { /* no device */ }
-        process.exitCode = 1;
+        if (runGuard.stopped) {
+            // The budget's stop is putting the phone back: the report already says so, and the phone is not looked at now (a picture
+            // taken here would be of a phone half way back, and a call to an emulator that is going away fails anyway).
+            if (!(e instanceof BudgetStop)) log(`after the budget's stop: ${e.message}`);
+        } else {
+            report.error = e.message;
+            log('FAILED:', e.message);
+            const why = dev.diagnose?.();
+            if (why) { report.crashLines = why; log(`crash buffer: ${why.replace(/\n/g, ' | ')}`); }
+            try { dev.shot(path.join(OUT, 'failed.png')); } catch { /* no device */ }
+            process.exitCode = 1;
+        }
     } finally {
-        clearTimeout(watchdog);
-        await cleanup();
+        await runGuard.done(); // the one cleanup: if the budget's stop started it, this waits for that very run
     }
 }
 

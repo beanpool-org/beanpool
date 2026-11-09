@@ -17,10 +17,14 @@
  * are the website's own files). The page is drawn by the Chromium Playwright already carries, then squeezed by sharp, as
  * scripts/website-og-image.mjs does.
  *
- *   node apps/native/e2e/demo/frame.mjs --in <raw folder> --out <folder> [--store play|appstore|both]
+ *   node apps/native/e2e/demo/frame.mjs --in <raw folder> --out <folder> [--store play|appstore]
  *
  * It frames the store set (shots.mjs: six light, the Ledger dark) from `<n>-<id>-<scheme>.png` files in --in into
  * `<out>/<store>/<NN>-<id>.png`.
+ *
+ * One --in folder holds ONE phone's captures, so one go makes one store's set: `--store` is `play` unless it says otherwise, and
+ * the App Store set is framed only from raws of its own size (the iPhone's, `capture.mjs --ios`): Apple rejects pictures that show
+ * another platform's interface (App Review Guideline 2.3.10), and an Android capture under an App Store caption band is that.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -115,7 +119,23 @@ html, body { margin: 0; width: ${L.size.width}px; height: ${L.size.height}px; ov
 </body></html>`;
 }
 
-const pngSize = (buf) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
+export const pngSize = (buf) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
+
+/** The store a go is for: `play` when `--store` is not given. One folder of raws serves one store, so there is no "both". */
+export function storeFor(which = 'play') {
+    if (which === 'both') throw new Error('--store both is gone: one --in folder holds one phone\'s pictures (Android for play, the iPhone\'s for appstore), so frame each store from its own folder');
+    if (!STORE_SIZES[which]) throw new Error(`no store "${which}" (play, appstore)`);
+    return which;
+}
+
+/** The App Store set is framed only from raws of its own size (the iPhone captures); a Play set from any shape (fitted by width). */
+export function checkRaw(store, size, name) {
+    if (store !== 'appstore') return;
+    const want = STORE_SIZES.appstore;
+    if (size.width !== want.width || size.height !== want.height) {
+        throw new Error(`${name} is ${size.width}x${size.height}, not ${want.width}x${want.height}: the App Store set is framed from the iPhone captures (capture.mjs --ios), never from Android ones (App Review Guideline 2.3.10)`);
+    }
+}
 
 /**
  * Frame raw pictures. `jobs`: [{ shot: Buffer (PNG), caption, scheme, store }]. Answers one Buffer each (24-bit PNG, no alpha),
@@ -163,20 +183,23 @@ async function main() {
     const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
     const inDir = arg('--in');
     const outDir = arg('--out');
-    const which = arg('--store') ?? 'both';
-    if (!inDir || !outDir) throw new Error('usage: node frame.mjs --in <raw folder> --out <folder> [--store play|appstore|both]');
-    const stores = which === 'both' ? ['play', 'appstore'] : [which];
-    for (const store of stores) {
-        const jobs = SHOTS.map((s) => ({ shot: fs.readFileSync(path.join(inDir, rawName(s, s.store))), caption: s.caption, scheme: s.store, store, id: s }));
-        const done = await frameShots(jobs);
-        fs.mkdirSync(path.join(outDir, store), { recursive: true });
-        done.forEach((d, i) => {
-            const file = path.join(outDir, store, storeName(jobs[i].id));
-            fs.writeFileSync(file, d.png);
-            const note = d.fitted < d.captionPx ? ` (caption shrunk ${d.captionPx} -> ${d.fitted} px to stay on one line)` : '';
-            console.log(`${store}/${path.basename(file)}  ${d.layout.size.width}x${d.layout.size.height}  ${Math.round(d.png.length / 1024)} KB${note}`);
-        });
-    }
+    if (!inDir || !outDir) throw new Error('usage: node frame.mjs --in <raw folder> --out <folder> [--store play|appstore]  (play unless it says otherwise)');
+    const store = storeFor(arg('--store'));
+    // Every raw is read and checked before any is framed, so a wrong folder leaves nothing half written.
+    const jobs = SHOTS.map((s) => {
+        const name = rawName(s, s.store);
+        const shot = fs.readFileSync(path.join(inDir, name));
+        checkRaw(store, pngSize(shot), name);
+        return { shot, caption: s.caption, scheme: s.store, store, id: s };
+    });
+    const done = await frameShots(jobs);
+    fs.mkdirSync(path.join(outDir, store), { recursive: true });
+    done.forEach((d, i) => {
+        const file = path.join(outDir, store, storeName(jobs[i].id));
+        fs.writeFileSync(file, d.png);
+        const note = d.fitted < d.captionPx ? ` (caption shrunk ${d.captionPx} -> ${d.fitted} px to stay on one line)` : '';
+        console.log(`${store}/${path.basename(file)}  ${d.layout.size.width}x${d.layout.size.height}  ${Math.round(d.png.length / 1024)} KB${note}`);
+    });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

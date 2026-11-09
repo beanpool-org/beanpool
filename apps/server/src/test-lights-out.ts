@@ -31,7 +31,8 @@
  *      Settings; every write route the node serves counts but the ones NOT_HALL_WRITES names;
  *   6. the switch is in no copy: a sealed backup's node_config.json and its take-over bundle, a snapshot, the redacted
  *      config; the manifest says per-server; the stager leaves it out;
- *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line; a request
+ *   7. `beanpool lights-out`: the node looks every 2 s or less (the one constant the boot uses), takes the request and answers
+ *      with nothing else waiting (timed on a 250 ms look, so a loaded runner cannot fail it); the log keeps a SECURITY line; a request
  *      file 60 s old, with no time, or dated ahead is dropped and the switch is unchanged;
  *   8. the no-mothership pattern: a second node (the real index.ts, its own process and data folder) restores section 6's
  *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
@@ -609,13 +610,29 @@ console.log('\n7. beanpool lights-out');
     const lines: string[] = [];
     const realSecurity = logger.security.bind(logger);
     (logger as any).security = (area: any, message: string) => { lines.push(`${area} ${message}`); return realSecurity(area, message); };
-    lo.startLightsOutRequestWatch(dataDir, 2000);
+    // The node's real cadence is one constant (services/lights-out.ts LIGHTS_OUT_WATCH_MS = 2 s) and the boot (index.ts) calls
+    // the watch without overriding it; that is checked exactly, below. The timed run below uses a short look instead, because
+    // this process starts the watch and writes the request in the same turn of the loop: the request always waits one whole
+    // look, the worst case, so at 2 s the run is ~2.04 s on an idle Mac (the same with a heavy suite beside it), only 0.56 s
+    // under the old 2.6 s bound; a shared CI runner went over it twice (2,778 ms on main 18c5a8bf, 9 Nov; 8 Nov before).
+    // With a short look the bound below leaves a loaded runner seconds, and still goes red for a fixed wait added to the path.
+    const WATCH_MS = 250;
+    // Expected: one look (<= 250 ms) + the command's 200 ms poll + ~30 ms of the node's work = ~0.41 s measured on an idle Mac.
+    // The bound is 2 s: 1.6 s over for a late timer or a slow disk (CI's red was 0.74 s over an idle Mac), while a 2 s wait
+    // added anywhere in the path (the command's poll at 2 s, say: 2,013 ms) goes red.
+    const TAKEN_WITHIN_MS = 2000;
+    lo.startLightsOutRequestWatch(dataDir, WATCH_MS);
     const out: string[] = [];
     const io = { out: (l: string) => out.push(l), err: (l: string) => out.push(`ERR ${l}`) };
+    const bootSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.ts'), 'utf8');
+    check('the node looks for a lights-out request every 2 s or less, and the boot does not override it',
+        lo.LIGHTS_OUT_WATCH_MS > 0 && lo.LIGHTS_OUT_WATCH_MS <= 2000 && /\bstartLightsOutRequestWatch\(\);/.test(bootSrc),
+        `${lo.LIGHTS_OUT_WATCH_MS} ms`);
     const t0 = Date.now();
     const offCode = await runLightsOut(['off'], io);
     const took = Date.now() - t0;
-    check('`beanpool lights-out off` → 0, taken within ~2 s', offCode === 0 && took <= 2600 && !isOn(), `${offCode} in ${took} ms: ${out.join(' | ')}`);
+    check(`\`beanpool lights-out off\` → 0, off, and nothing else waits: within ${TAKEN_WITHIN_MS} ms (a ${WATCH_MS} ms look, the command's 200 ms poll)`,
+        offCode === 0 && took <= TAKEN_WITHIN_MS && !isOn(), `${offCode} in ${took} ms: ${out.join(' | ')}`);
     check('the log keeps a SECURITY line naming the shell', lines.some((l) => /\[LightsOut\] Lights-out OFF by the server's shell/.test(l)), lines.join(' | '));
     out.length = 0;
     const onCode = await runLightsOut(['on', '--address', ADDRESS], io);

@@ -38,6 +38,7 @@ import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -2502,6 +2503,26 @@ export async function fetchEventDetail(postId: string): Promise<any | null> {
     const identity = await loadIdentity();
     if (identity?.publicKey) await persistEventView(post, identity.publicKey);
     return post;
+}
+
+/**
+ * The listing a chat message is about, as THIS member may read it (core chat-about.ts): the post once found; null when the
+ * node holds none for them (gone, or hidden from them: the same answer, so a chat learns nothing about a listing it can't
+ * see); undefined when the node could not be asked, so the card keeps what the sender wrote rather than saying "gone".
+ * Signed, as the node decides what a member may see from who asks. Nothing is written to the local cache.
+ */
+export async function lookupAboutListing(postId: string): Promise<AboutPostLike | null | undefined> {
+    try {
+        const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`);
+        if (!res.ok) return undefined;
+        const data = await res.json();
+        if (!Array.isArray(data)) return undefined;
+        const post = data.find((p: any) => p && p.id === postId);
+        if (!post) return null;
+        return { id: post.id, type: post.type, title: post.title, credits: post.credits, priceType: post.priceType ?? post.price_type, status: post.status };
+    } catch {
+        return undefined;
+    }
 }
 
 /** What a node older than a route answers. Carried on the error so a screen can hide a feature quietly. */
@@ -6922,6 +6943,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             type: row.type || 'text',
             systemType: row.system_type,
             metadata: parsedMeta,
+            // The listing this line is about, opened from its own sealed part (core chat-about.ts); null for every other line.
+            about: view && view.format != null && dmCtx
+                ? chatAboutOfLine({ myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex }, { conversationId, senderPubHex: row.author_pubkey, messageId: row.id, metadata: row.metadata })
+                : null,
             // 'sending' | 'failed' | undefined — optimistic-send delivery state
             sendState,
             outgoing,
@@ -6951,7 +6976,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
 // prefixed rows from before client-generated ids) fall back to a fresh id.
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
+export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null) {
     const database = await getDb();
 
     // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
@@ -6973,6 +6998,13 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
         metadata = JSON.stringify({ ...m, ...locked.metadata });
+    }
+    // The listing this line is about (Message on a listing; core chat-about.ts): its own sealed part of the line, to the same
+    // key and the same message id, carried in the metadata as sealed bytes. The node reads nothing new. A resend keeps the
+    // one its failed row already holds (same id, same sender, same conversation, so it still opens).
+    if (about) {
+        const ctx = await requireDmKeyContext(conversationId);
+        metadata = metadataWithAbout(metadata, sealChatAbout(about, ctx, { senderPubHex: authorPubkey, messageId: tempId, replyToId: replyToIdOf(metadata) }));
     }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');

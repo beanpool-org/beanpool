@@ -159,7 +159,7 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import PostDetailScreen from '../../app/post/[id]';
 import { SHOWN_ON_GLOBAL_STORE_KEY } from '../storage-keys';
 import { layOut } from './yoga-dom-layout';
-import { MARKET_CARD_SHELL } from '@beanpool/core';
+import { MARKET_CARD_SHELL, chatAboutDrafts } from '@beanpool/core';
 import { lightColors, darkColors } from '../../constants/colors';
 
 const NODE = 'https://mullum.example';
@@ -227,6 +227,7 @@ beforeEach(() => {
     alerts.said.length = 0;
     alerts.buttons = [];
     node.mine = []; node.kept = []; node.keeperOf = []; node.unread = {}; node.chats = [];
+    chatAboutDrafts.clear();
     events.listeners.clear();
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -322,6 +323,16 @@ for (const theme of ['light', 'dark'] as const) {
             await press(row('tx-a')!, '💬 Message Marty');
             expect(node.chats).toEqual([['dm', ['marty-key', ME.publicKey], ME.publicKey, undefined, 'p-1']]);
             expect(nav.to).toContain('/chat/conv-1');
+            // The chat opens with this listing above its composer (core chat-about.ts).
+            expect(chatAboutDrafts.get('conv-1')).toMatchObject({ postId: 'p-1', title: 'Pottery course', kind: 'offer', price: '45 Beans' });
+        });
+
+        it('Message on a listing (the quiet row) opens the chat with the listing as the chip: a Need says Need, and Free', async () => {
+            await open(listing({ id: 'p-apples', type: 'need', title: 'Apples needed', credits: 0, author_pubkey: 'marty-key', author_callsign: 'Marty' }));
+            await press(host.querySelector('[data-testid="post-quiet-row"]') as HTMLElement, 'Message Marty');
+            expect(node.chats).toEqual([['dm', ['marty-key', ME.publicKey], ME.publicKey, undefined, 'p-apples']]);
+            expect(nav.to).toContain('/chat/conv-1');
+            expect(chatAboutDrafts.get('conv-1')).toMatchObject({ postId: 'p-apples', title: 'Apples needed', kind: 'need', price: 'Free' });
         });
 
         it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {

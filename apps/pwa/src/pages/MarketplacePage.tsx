@@ -63,7 +63,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { TRANSACTION_FEE_RATE, eventCopyOf } from '@beanpool/core';
+import { TRANSACTION_FEE_RATE, eventCopyOf, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -1370,6 +1370,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     undefined,
                     selectedPost.id
                 );
+                // The chat opens with this listing above the composer; the next message carries it (core chat-about.ts).
+                chatAboutDrafts.set(result.conversation.id, aboutOfPost(selectedPost));
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
@@ -1824,6 +1826,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setMessaging(true);
             try {
                 const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey, undefined, selectedPost.id);
+                chatAboutDrafts.set(result.conversation.id, aboutOfPost(selectedPost));
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             } catch (e: any) {
                 setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));

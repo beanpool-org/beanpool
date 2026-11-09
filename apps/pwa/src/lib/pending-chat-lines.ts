@@ -14,7 +14,7 @@
  * whose node has stopped answering holds up no other chat. SEND_BOUND_MS is how long one line may go unanswered.
  */
 import { useSyncExternalStore } from 'react';
-import { t } from '@beanpool/core';
+import { t, type ChatAboutChip } from '@beanpool/core';
 
 /** How long a send may go unanswered before its line says it wasn't delivered. Its Retry is safe whenever the node did get it. */
 export const SEND_BOUND_MS = 30_000;
@@ -27,6 +27,8 @@ export interface PendingChatLine {
     readonly owner: string;
     readonly text: string;
     readonly replyToId: string | null;
+    /** The listing it is about (Message on a listing; core chat-about.ts), sealed beside its words when it goes. A Retry carries it too. */
+    readonly about?: ChatAboutChip | null;
     readonly state: 'sending' | 'failed';
     /** The node took it, and its row is yet to come: still drawn as sending, as only a row that passed the chat's checks reads as sent. */
     readonly taken: boolean;
@@ -37,7 +39,7 @@ export interface PendingChatLine {
     readonly refused: boolean;
 }
 
-export type NewChatLine = Pick<PendingChatLine, 'id' | 'conversationId' | 'owner' | 'text' | 'replyToId'>;
+export type NewChatLine = Pick<PendingChatLine, 'id' | 'conversationId' | 'owner' | 'text' | 'replyToId' | 'about'>;
 /** One attempt at one line. Anything it throws is a failure with no answer: the node may or may not have the line. */
 export type SendChatLine = () => Promise<'taken' | 'refused'>;
 

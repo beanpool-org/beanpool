@@ -72,8 +72,11 @@ export interface DmKeyContext {
 /** The two keys, without a conversation (a thread's lines may have been written under an older conversation id). */
 export type DmKeys = Pick<DmKeyContext, 'myEdPrivHex' | 'peerEdPubHex'>;
 
-/** The words of a message, or its photo. */
-export type DmPart = 'body' | 'attachment';
+/**
+ * The words of a message, its photo, or the listing it is about (chat-about.ts). Each part is sealed on its own, bound to
+ * its message id and to its part name, so one can never be shown in another's place.
+ */
+export type DmPart = 'body' | 'attachment' | 'about';
 
 /** What a format-3 line is bound to besides its conversation. */
 export interface DmLineBinding {

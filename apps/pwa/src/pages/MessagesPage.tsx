@@ -19,13 +19,15 @@ import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
+import { AboutCard, AboutChipBar } from '../components/ChatAbout';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
-import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -581,6 +583,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp,
         })), ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, ctx?.conversationId ?? activeConv.id);
     }, [shownMessages, activeConv, identity, isDmThread]);
+    // The listing each line is about, opened once per load (core chat-about.ts) and not on every redraw, which the member's
+    // every keystroke is: a key derivation and a decrypt a card. Only a line whose words opened (checkDmThread gives a
+    // deleted line, one that did not open and one not from this pair no format), and never a deleted one, as the phone's
+    // getMessages and ChatBubble do.
+    const aboutOfLines = useMemo(() => {
+        const found = new Map<string, ChatAbout>();
+        if (!activeConv || !isDmThread || !lineViews) return found;
+        const ctx = dmKeyContext(activeConv, identity);
+        if (!ctx) return found;
+        const keys = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex };
+        for (const m of shownMessages) {
+            if (m.type === 'removed' || lineViews.get(m.id)?.format == null || !hasChatAbout(m.metadata)) continue;
+            const about = chatAboutOfLine(keys, { conversationId: ctx.conversationId, senderPubHex: m.authorPubkey, messageId: m.id, metadata: m.metadata });
+            if (about) found.set(m.id, about);
+        }
+        return found;
+    }, [shownMessages, lineViews, activeConv, identity, isDmThread]);
     const userTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -1311,7 +1330,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // to the line it was written after.
             const seal: DmLineSeal = { messageId: line.id, after: lineAfter(conv.id).dm, replyToId: line.replyToId };
             const { ciphertext, nonce, lineSig } = await payloadFor(line.text, conv, seal);
-            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, lineMetadata(line.replyToId ?? undefined, lineSig), line.id);
+            let metadata = lineMetadata(line.replyToId ?? undefined, lineSig);
+            if (line.about) {
+                // The listing it is about is sealed as its own part of this line, to the same key and message id, and travels in
+                // the metadata as sealed bytes: the node reads nothing new (core chat-about.ts).
+                const ctx = dmKeyContext(conv, identity) ?? dmKeyContext(await freshConversation(conv), identity);
+                if (!ctx) throw new DmNotLockedError();
+                metadata = metadataWithAbout(metadata, sealChatAbout(line.about, ctx, { senderPubHex: identity.publicKey, messageId: line.id, replyToId: line.replyToId }));
+            }
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.id);
             ownLineTaken(conv.id);
             return 'taken';
         }
@@ -1347,9 +1374,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     function lineSender(line: NewChatLine, conv: Conversation): SendChatLine {
         const mentionCandidates = (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign }));
-        // A refused line back in the composer: its words and what they answer, or a Send from there would seal them without
-        // it, past repair. Both or neither, so words written since never become a reply, nor these words someone else's. What
-        // it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry sends it whole.
+        // A refused line back in the composer: its words and what they answer, and the listing it was about, or a Send from there
+        // would seal them without it, past repair. All or none, so words written since never become a reply, nor these words
+        // someone else's. What it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry
+        // sends it whole.
         const wordsBack = () => {
             if (activeConvIdRef.current !== conv.id || !isPendingChatLine(line.id)) return;
             if (draftRef.current?.value || replyToRef.current) return;
@@ -1357,6 +1385,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (answered === undefined) return;
             setDraft(prev => prev || line.text);
             if (answered) setReplyToMessage(prev => prev ?? answered);
+            // The listing it was about, with the words: or a Send from the composer would seal them without it, past repair.
+            if (line.about && !chatAboutDrafts.get(conv.id)) chatAboutDrafts.set(conv.id, line.about);
         };
         return async () => {
             try {
@@ -1393,6 +1423,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setDraft('');
             if (replyToMessage?.id === line.replyToId) setReplyToMessage(null);
         }
+        // The line carries its listing under its own id: the same listing waiting as a chip is spent with it, not sent twice.
+        if (line.about && chatAboutDrafts.get(activeConv.id)?.postId === line.about.postId) chatAboutDrafts.drop(activeConv.id);
         setChatRefusal(null);
         retryChatLine(line.id, lineSender(line, activeConv));
     }
@@ -1543,10 +1575,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
 
         // A new line shows at once, and the composer is the member's again; what becomes of the line is the line's to say.
-        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null };
+        // The listing the member came from (Message on a Need or an Offer) goes with this line, and the chip is spent: the line
+        // itself holds it from here, so a Retry carries it too.
+        const about = activeConv.type === 'dm' ? chatAboutDrafts.get(activeConv.id) : null;
+        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null, ...(about ? { about } : {}) };
         setDraft('');
         setReplyToMessage(null);
         setChatRefusal(null);
+        if (about) chatAboutDrafts.drop(activeConv.id);
         sendChatLine(line, lineSender(line, activeConv));
     }
 
@@ -2747,6 +2783,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     userSelect: 'text',
                                     WebkitUserSelect: 'text',
                                 }}>
+                                    {/* The listing this line is about, opened from its own sealed part (aboutOfLines): a card at the top of the bubble it
+                                        belongs to, never a header over the chat. Never on a deleted line. */}
+                                    {!isTombstone && aboutOfLines.get(msg.id) && (
+                                        <AboutCard about={aboutOfLines.get(msg.id)!} tone={isMe ? 'mine' : 'other'} onOpen={(postId) => onNavigate?.('marketplace', postId)} />
+                                    )}
                                     {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
@@ -3145,6 +3186,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     wordBreak: 'break-word',
                                 }}>
+                                    {line.about && <AboutCard about={line.about} tone={failed ? 'failed' : 'mine'} onOpen={(postId) => onNavigate?.('marketplace', postId)} />}
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
                                         <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} links={!inRequest} />
@@ -3216,6 +3258,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </button>
                     </div>
                 )}
+
+                {/* The listing this message is about (Message on a Need or an Offer): stays until sent or dropped. */}
+                {activeConv?.type === 'dm' && !editingMessage && <AboutChipBar conversationId={activeConv.id} />}
 
                 {/* Reply Preview */}
                 {replyToMessage && !editingMessage && (

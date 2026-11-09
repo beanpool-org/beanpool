@@ -8,7 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
-import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type RemovedLineKind, type WordKey } from '@beanpool/core';
+import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type ChatAbout, type RemovedLineKind, type WordKey } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 import { chatLineWords } from './chat-line-words';
 
@@ -79,6 +79,8 @@ export interface ChatMessage {
     type?: string;
     systemType?: string | null;
     metadata?: any;
+    /** The listing this message is about, opened from its own sealed part (core chat-about.ts); null or absent for every other line. */
+    about?: ChatAbout | null;
     /** Optimistic-send state; absent once the node has it. */
     sendState?: 'sending' | 'failed';
     outgoing?: boolean;

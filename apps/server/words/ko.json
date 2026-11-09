@@ -2,9 +2,9 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, store-badges: the two store-badge sentences, copied from the web app's catalog drafts of the same sentences)",
     "reviewed": false,
-    "updated": "2026-11-09",
+    "updated": "2026-11-10",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1013,5 +1013,7 @@
   "Only an owner can vouch 200 or 500 Beans.": "200 또는 500 콩을 보증할 수 있는 건 소유자뿐이에요.",
   "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "@{name} 님은 이미 {total} 콩의 보증을 받았고, 한 사람에 대한 보증은 최대 {max}까지예요.",
   "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "@{name} 님은 소유자 역할을 하는 동안 한도 없이 보증하므로 중단하거나 정할 예산이 없어요.",
-  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} 님은 소유자예요. 소유자는 한도 없이 보증하므로 정할 예산이 없어요."
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} 님은 소유자예요. 소유자는 한도 없이 보증하므로 정할 예산이 없어요.",
+  "Download on the App Store": "App Store에서 다운로드",
+  "Get it on Google Play": "Google Play에서 받기"
 }

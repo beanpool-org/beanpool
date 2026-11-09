@@ -7,7 +7,16 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import vm from 'node:vm';
-import { renderInviteTrampoline } from './routes/invite-trampoline.js';
+import crypto from 'node:crypto';
+import { LANGS } from '@beanpool/core';
+import { renderInviteTrampoline, BADGE_HEIGHT_PX, BADGE_CLEAR_SPACE_PX, BADGE_WORDS } from './routes/invite-trampoline.js';
+import { APP_STORE_BADGE_SVG, GOOGLE_PLAY_BADGE_SVG, STORE_BADGE_SHA256 } from './routes/store-badge-art.js';
+import { wordsIn, useCatalogsForTests } from './member-words.js';
+
+/** SHA-256 of the owners' files as downloaded on 2026-11-10 (store-badge-art.ts says where from). Written out here as well, so changing the art AND its recorded hash together still fails. */
+const OFFICIAL_APPLE_BADGE_SHA256 = 'a26fc5b38380272c92e9019a2eb8b45542a66814b3e2b203772db8904b9fb99f';
+const OFFICIAL_GOOGLE_BADGE_SHA256 = '4ffa4c7edd2f10b297ca4de2131eddaa00d03b2278d1e178fe512920d824ca34';
+const sha256 = (s: string) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -71,7 +80,7 @@ async function main() {
     {
         const withPost = runTrampoline(`?invite=INV-AB12-CD34&post=${POST}`, ANDROID);
         assert(referrerOf(fallbackOf(withPost.el('installBtn').href)) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the Play referrer carries the listing after the server');
-        assert(referrerOf(withPost.el('playBtn').href) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the plain Google Play link carries the listing');
+        assert(referrerOf(withPost.el('androidStore').href) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the plain Google Play link (its badge) carries the listing');
         assert(withPost.el('installBtn').href.startsWith(`intent://welcome?invite=INV-AB12-CD34&server=${MULLUM}&post=${POST}#Intent;`), 'trampoline: the app\'s link carries the listing');
         withPost.click('copyBtn');
         assert(withPost.copied[0] === `https://mullum.beanpool.org/?invite=INV-AB12-CD34&post=${POST}`, 'trampoline: Copy code copies the invite link with the listing');
@@ -80,7 +89,7 @@ async function main() {
 
         const ios = runTrampoline(`?invite=INV-AB12-CD34&post=${POST}`, IPHONE);
         assert(ios.el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${MULLUM}&post=${POST}`, 'trampoline: Open BeanPool carries the listing');
-        ios.click('installBtn');
+        ios.click('iosStore'); // the App Store badge: on iOS it is the one way to the store, and it copies the link
         assert(ios.copied[0] === `https://mullum.beanpool.org/?invite=INV-AB12-CD34&post=${POST}`, 'trampoline: on iOS the copied link carries the listing');
 
         const desktop = runTrampoline(`?invite=INV-AB12-CD34&post=${POST}`, 'Mozilla/5.0 (X11; Linux x86_64)');
@@ -99,7 +108,7 @@ async function main() {
             r.click('copyBtn');
             r.click('proceedWeb');
             const rIos = runTrampoline(`?invite=INV-AB12-CD34&post=${bad}`, IPHONE);
-            assert(!r.el('installBtn').href.includes('post') && !referrerOf(r.el('playBtn').href).includes('post=') && !rIos.el('openAppBtn').href.includes('post=') && !r.copied[0].includes('post=') && !r.loc.href.includes('post='),
+            assert(!r.el('installBtn').href.includes('post') && !referrerOf(r.el('androidStore').href).includes('post=') && !rIos.el('openAppBtn').href.includes('post=') && !r.copied[0].includes('post=') && !r.loc.href.includes('post='),
                 `trampoline: a post that is not an id (${bad.slice(0, 20)}) is left out everywhere`);
         }
     }
@@ -117,12 +126,103 @@ async function main() {
         assert(and.el('installBtn').textContent === 'Open your invite in BeanPool', 'trampoline (Android): the main button says it opens the invite in BeanPool');
         and.click('installBtn');
         assert(and.copied[0] === 'https://mullum.beanpool.org/?invite=INV-AB12-CD34', 'trampoline (Android): the main button copies the invite link too');
-        assert(and.el('playBtn').style.display === 'block', 'trampoline (Android): the plain Google Play link is still there');
-        and.click('playBtn');
+        assert(and.el('androidStore').style.display !== 'none' && and.el('androidStore').href.startsWith('https://play.google.com/store/apps/details?id=org.beanpool.pillar&referrer='), 'trampoline (Android): the plain Google Play link is still there (now the Google Play badge)');
+        and.click('androidStore');
         assert(and.copied[1] === 'https://mullum.beanpool.org/?invite=INV-AB12-CD34', 'trampoline (Android): the Google Play link copies the invite link, for the app\'s Paste after "Open"');
         assert(and.el('openAppBtn').style.display !== 'block', 'trampoline (Android): no second Open button, the main one opens the app');
         const desk = runTrampoline('?invite=INV-AB12-CD34', 'Mozilla/5.0 (X11; Linux x86_64)');
-        assert(!desk.el('installBtn').href.startsWith('intent:') && desk.el('playBtn').style.display !== 'block', 'trampoline (desktop): no app link and no extra store button');
+        assert(!desk.el('installBtn').href.startsWith('intent:') && desk.el('installBtn').style.display !== 'block', 'trampoline (desktop): no app link and no extra store button');
+    }
+
+    // 1d. The store badges (Marty, 10 Nov): Apple's and Google's own artwork, unmodified, as links in the page itself, so they
+    // work with no script, need nothing outside this node, and are the size, spacing and order the owners ask for. A phone's
+    // script then shows only that phone's store and points both at this invite.
+    {
+        const html = renderInviteTrampoline({ webJoin: true });
+        const noScript = html.replace(/<script>[\s\S]*?<\/script>/g, ''); // a browser with no JavaScript
+        const badgeIn = (page: string, id: string) => {
+            const m = new RegExp(`<a class="badge" id="${id}" href="([^"]*)" rel="noopener"><img src="([^"]*)" alt="([^"]*)"([^>]*)></a>`).exec(page);
+            return m ? { href: m[1], src: m[2], alt: m[3], rest: m[4] } : null;
+        };
+        const apple = badgeIn(noScript, 'iosStore');
+        const google = badgeIn(noScript, 'androidStore');
+        const decode = (src: string | undefined) => src?.startsWith('data:image/svg+xml;base64,') ? Buffer.from(src.slice('data:image/svg+xml;base64,'.length), 'base64').toString('utf8') : null;
+
+        // The links are real, and there with no script.
+        assert(apple?.href === 'https://apps.apple.com/app/id6761870086', 'badges: with no script, the App Store badge links to the App Store page');
+        assert(google?.href === 'https://play.google.com/store/apps/details?id=org.beanpool.pillar', 'badges: with no script, the Google Play badge links to the Google Play page');
+        assert(noScript.indexOf('id="iosStore"') > 0 && noScript.indexOf('id="iosStore"') < noScript.indexOf('id="androidStore"'), 'badges: Apple asks for its badge first when badges stand together, so the App Store badge comes first');
+        assert(!/id="(?:iosStore|androidStore|badges)"[^>]*(?:style=|hidden)/.test(noScript), 'badges: nothing hides a badge or their row until the script runs (they show with no script)');
+        assert(/<a class="cta" id="installBtn" href="#" rel="noopener" style="display:none;">/.test(noScript), 'badges: the dead "Get the app" link that goes nowhere without the script is hidden until the script gives it somewhere to go');
+        assert(/<\/style>[\s\S]*<div class="badges" id="badges">/.test(noScript) && !/\.badges\s*\{[^}]*display:\s*none/.test(noScript), 'badges: their row is shown by the style sheet');
+
+        // The artwork is the owners' files, byte for byte.
+        assert(sha256(APP_STORE_BADGE_SVG) === OFFICIAL_APPLE_BADGE_SHA256 && STORE_BADGE_SHA256.appStore === OFFICIAL_APPLE_BADGE_SHA256, 'badges: the App Store badge is Apple\'s file, unmodified (SHA-256 of the download)');
+        assert(sha256(GOOGLE_PLAY_BADGE_SVG) === OFFICIAL_GOOGLE_BADGE_SHA256 && STORE_BADGE_SHA256.googlePlay === OFFICIAL_GOOGLE_BADGE_SHA256, 'badges: the Google Play badge is Google\'s file, unmodified (SHA-256 of the download)');
+        assert(decode(apple?.src) === APP_STORE_BADGE_SVG, 'badges: the page draws exactly that App Store artwork');
+        assert(decode(google?.src) === GOOGLE_PLAY_BADGE_SVG, 'badges: the page draws exactly that Google Play artwork');
+        for (const [name, art] of [['App Store', APP_STORE_BADGE_SVG], ['Google Play', GOOGLE_PLAY_BADGE_SVG]] as const) {
+            assert(/^(?:<\?xml[^>]*\?>\s*)?<svg\b/.test(art) && !/<(?:text|script|image|foreignObject)\b/i.test(art) && !/\bhref=|\burl\(\s*['"]?https?:/i.test(art) && !/\son[a-z]+=/i.test(art),
+                `badges: the ${name} artwork is paths alone (no text, script, image, link or event handler)`);
+        }
+
+        // Nothing is fetched from anyone: every image is inline, and the page loads no script, style, frame or image from elsewhere.
+        const imgs = [...html.matchAll(/<img\b[^>]*\bsrc="([^"]*)"/g)].map((m) => m[1]);
+        assert(imgs.length === 2 && imgs.every((s) => s.startsWith('data:image/svg+xml;base64,')), 'badges: both images are inline data (a node needs nothing of ours, Apple\'s or Google\'s to show them)');
+        assert(!/<(?:script|link|iframe|img|source|embed|object)\b[^>]*\b(?:src|href|data)="(?:https?:)?\/\//i.test(html), 'badges: the page loads nothing from outside this node');
+
+        // The owners' rules for size and room: both at least their minimum, the same height (Google's no smaller than Apple's), a quarter of the height as clear space.
+        assert(BADGE_HEIGHT_PX >= 40 && BADGE_HEIGHT_PX >= 28, 'badges: at least Apple\'s 40 px and Google\'s 28 px tall');
+        assert(BADGE_CLEAR_SPACE_PX === BADGE_HEIGHT_PX / 4, 'badges: the clear space round a badge is a quarter of its height');
+        assert(html.includes(`.badge { display:block; padding:${BADGE_CLEAR_SPACE_PX}px;`) && html.includes(`.badge img { display:block; height:${BADGE_HEIGHT_PX}px; width:auto; }`), 'badges: the style sheet gives each badge that height, and that clear space as the link\'s padding');
+        assert(apple!.rest.includes(`height="${BADGE_HEIGHT_PX}"`) && google!.rest.includes(`height="${BADGE_HEIGHT_PX}"`), 'badges: both images state the same height');
+        const widthOf = (b: { rest: string }) => Number(/width="(\d+)"/.exec(b.rest)?.[1]);
+        assert(widthOf(apple!) === 144 && widthOf(google!) === 162 && widthOf(google!) >= widthOf(apple!), 'badges: each keeps its artwork\'s shape (Apple\'s 144 wide, Google\'s 162) and Google\'s is no smaller than Apple\'s');
+        // Two badges and their room must fit a 320 dp phone with its page padding (20 px a side), stacked or side by side; 130% text zoom does not touch an image's size.
+        assert(widthOf(google!) + 2 * BADGE_CLEAR_SPACE_PX <= 320 - 2 * 20, 'badges: the widest badge with its clear space fits a 320 dp phone');
+
+        // Alt text, in English by default and in the visitor's language through the words layer.
+        assert(apple?.alt === 'Download on the App Store' && google?.alt === 'Get it on Google Play', 'badges: the alt text is English with no language');
+        assert(!/<img\b[^>]*\blang=/.test(html), 'badges: no language, no language mark on the images');
+        assert(renderInviteTrampoline({ webJoin: true, lang: 'en' }) === html && renderInviteTrampoline({ webJoin: true, lang: null }) === html, 'badges: English asked for or no language is the page as it was');
+        const fr = renderInviteTrampoline({ webJoin: true, lang: 'fr' });
+        assert(badgeIn(fr, 'iosStore')?.alt === 'Télécharger dans l’App Store' && badgeIn(fr, 'androidStore')?.alt === 'Disponible sur Google Play', 'badges: the alt text in French is the catalog\'s');
+        assert(/<img [^>]*alt="Télécharger dans l’App Store" lang="fr" width=/.test(fr), 'badges: the French alt text is marked as French');
+        assert(fr.replace(/ alt="[^"]*"( lang="fr")?/g, '') === html.replace(/ alt="[^"]*"/g, ''), 'badges: a language changes the alt text and nothing else in the page');
+        let allTranslated = true;
+        for (const lang of LANGS.filter((l) => l !== 'en')) {
+            const page = renderInviteTrampoline({ webJoin: true, lang });
+            const a = badgeIn(page, 'iosStore'), g = badgeIn(page, 'androidStore');
+            const w = wordsIn(lang);
+            const rtl = ['ar', 'fa', 'ur'].includes(lang) ? ' dir="rtl"' : '';
+            const ok = !!a && !!g && a.alt !== '' && g.alt !== '' && a.alt !== 'Download on the App Store' && g.alt !== 'Get it on Google Play'
+                && a.rest.includes(`lang="${lang}"${rtl}`) && g.rest.includes(`lang="${lang}"${rtl}`)
+                && page.includes(`alt="${w.t(BADGE_WORDS.appStore).replace(/'/g, '&#39;')}"`) && page.includes(`alt="${w.t(BADGE_WORDS.googlePlay).replace(/'/g, '&#39;')}"`);
+            if (!ok) { allTranslated = false; console.error(`  ${lang}: alt text not translated or not marked (${a?.alt} | ${g?.alt})`); }
+        }
+        assert(allTranslated, `badges: the alt text is translated, and marked with its language, in all ${LANGS.length - 1} languages`);
+        // A language whose catalog has not got these sentences yet shows the English, and is not marked as that language.
+        useCatalogsForTests('tr', { server: {} });
+        const noTr = renderInviteTrampoline({ webJoin: true, lang: 'tr' });
+        useCatalogsForTests('tr', null);
+        assert(noTr === html, 'badges: a language whose catalog lacks the sentences shows the English, unmarked (onboarding-no-hard-gates)');
+        assert(renderInviteTrampoline({ webJoin: true, lang: 'tr' }).includes('alt="App Store&#39;dan indir"'), 'badges: and the catalog\'s words are back once the files are read again');
+
+        // The script: a phone is shown its own store only; the desktop both; each store link points at this invite.
+        const MULL = 'https://mullum.beanpool.org';
+        const iph = runTrampoline('?invite=INV-AB12-CD34', IPHONE);
+        assert(iph.el('iosStore').href === 'https://apps.apple.com/app/id6761870086' && iph.el('iosStore').style.display !== 'none', 'badges (iPhone): the App Store badge shows and links to the App Store');
+        assert(iph.el('androidStore').style.display === 'none', 'badges (iPhone): no Google Play badge');
+        assert(iph.el('installBtn').style.display !== 'block', 'badges (iPhone): the App Store badge is the way to the store, not a second button');
+        iph.click('iosStore');
+        assert(iph.copied[0] === `${MULL}/?invite=INV-AB12-CD34`, 'badges (iPhone): the App Store badge copies the invite link, for the app\'s Paste');
+        const andr = runTrampoline('?invite=INV-AB12-CD34', ANDROID);
+        assert(andr.el('iosStore').style.display === 'none', 'badges (Android): no App Store badge');
+        assert(andr.el('androidStore').style.display !== 'none' && referrerOf(andr.el('androidStore').href) === `invite=INV-AB12-CD34&server=${MULL}`, 'badges (Android): the Google Play badge shows and its link carries the invite across the install');
+        assert(andr.el('installBtn').style.display === 'block', 'badges (Android): the button that opens the invite in the app is still the main one');
+        const dsk = runTrampoline('?invite=INV-AB12-CD34', 'Mozilla/5.0 (X11; Linux x86_64)');
+        assert(dsk.el('iosStore').style.display !== 'none' && dsk.el('androidStore').style.display !== 'none', 'badges (desktop): both badges show');
+        assert(dsk.el('iosStore').href === 'https://apps.apple.com/app/id6761870086' && referrerOf(dsk.el('androidStore').href) === `invite=INV-AB12-CD34&server=${MULL}`, 'badges (desktop): the App Store link is the store page and the Google Play link carries the invite');
     }
 
     // 2. Integration HTTP tests with running HTTPS server
@@ -140,6 +240,20 @@ async function main() {
     assert(cacheControl.includes('no-cache'), 'GET /?invite=... sets no-cache header');
     const textInvite = await resInvite.text();
     assert(textInvite.includes('BeanPool'), 'GET /?invite=... contains BeanPool in HTML body');
+
+    // The store badges over HTTP: both in the page a browser with no script gets, drawn under a policy that lets an inline image
+    // show, in the visitor's language (?lang= before Accept-Language, as the community card) and never from a request value.
+    assert(textInvite.includes('id="iosStore" href="https://apps.apple.com/app/id6761870086"') && textInvite.includes('id="androidStore" href="https://play.google.com/store/apps/details?id=org.beanpool.pillar"'), 'GET /?invite=... carries both store badges as links');
+    assert(textInvite.includes('alt="Download on the App Store"') && textInvite.includes('alt="Get it on Google Play"'), 'GET /?invite=... with no language has the English alt text');
+    const csp = resInvite.headers.get('content-security-policy') || '';
+    assert(/img-src [^;]*\bdata:/.test(csp), 'GET /?invite=... allows inline (data:) images, which the badges are');
+    assert((resInvite.headers.get('vary') || '').toLowerCase().includes('accept-language'), 'GET /?invite=... varies on Accept-Language');
+    const frPage = await (await fetch(`${BASE}/?invite=BP-TEST-INVITE-123`, { headers: { 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.5' } })).text();
+    assert(frPage.includes('alt="Télécharger dans l’App Store"') && frPage.includes('alt="Disponible sur Google Play"'), 'GET /?invite=... in French (Accept-Language) has the French alt text');
+    const dePage = await (await fetch(`${BASE}/?invite=BP-TEST-INVITE-123&lang=de`, { headers: { 'Accept-Language': 'fr' } })).text();
+    assert(dePage.includes('alt="Laden im App Store"') && dePage.includes('alt="Jetzt bei Google Play"'), 'GET /?invite=...&lang=de asks for German before Accept-Language');
+    const evilPage = await (await fetch(`${BASE}/?invite=BP-TEST-INVITE-123&lang=${encodeURIComponent('"><script>alert(1)</script>')}`)).text();
+    assert(evilPage.includes('alt="Download on the App Store"') && !evilPage.includes('alert(1)'), 'GET /?invite=... with a language that is not one shows the English and echoes nothing');
 
     // GET / (without invite): a stranger at a local community's bare address gets the community's card (front doors S15,
     // test-community-card.ts); a browser that keeps an account here (the web app's hint cookie) goes to /app as before.

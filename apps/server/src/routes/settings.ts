@@ -43,7 +43,7 @@ import { PROTOCOL_CONSTANTS, word, VOUCH_PRESETS, VOUCH_MAX, VOUCHER_BUDGET_MAX 
 import { myVouching, readVoucherCard, VoucherError } from '../engine/vouchers.js';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
-import { serveCommunityCard } from './community-card.js';
+import { cardLanguage, serveCommunityCard } from './community-card.js';
 import { servePeekPage } from './peek.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -226,7 +226,9 @@ router.get('/', async (ctx) => {
         useDocumentPolicy(ctx); // its install steps are an inline script
         ctx.type = 'html';
         ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        ctx.body = renderInviteTrampoline({ webJoin });
+        // The store badges' alt text is in the visitor's language (?lang=, else Accept-Language), as the community card is.
+        ctx.vary('Accept-Language');
+        ctx.body = renderInviteTrampoline({ webJoin, lang: cardLanguage(ctx) });
         return;
     }
     // A post shared outside the community (`?post=<id>&peek=<ticket>`, front doors S6): its share page for a stranger, or

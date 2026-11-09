@@ -130,6 +130,8 @@ const node = vi.hoisted(() => ({
     vouchersDown: false,
     generated: [] as Array<Record<string, unknown>>,
     bound: [] as Array<{ entryId: string; body: Record<string, unknown> }>,
+    /** What GET /api/invite/mine/:publicKey answers: the member's own invites, as the node tells their maker. */
+    mine: [] as Array<Record<string, unknown>>,
 }));
 // The member's role, as the node answers GET /api/node-admin/me.
 vi.mock('../node-admin', () => ({
@@ -210,7 +212,7 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 
 import PeopleScreen from '../../app/(tabs)/people';
-import { t } from '@beanpool/core';
+import { inviteFolds, t } from '@beanpool/core';
 import { NAMES_COPY } from '../names-list';
 import { keyLineWords } from '../../components/key-lines';
 
@@ -244,8 +246,9 @@ beforeEach(() => {
     nav.on = true;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
-        vouchersDown: false, generated: [], bound: [],
+        vouchersDown: false, generated: [], bound: [], mine: [],
     });
+    inviteFolds.clear();
 
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
         const u = String(url);
@@ -279,7 +282,7 @@ beforeEach(() => {
             if (!node.online) throw new TypeError('Network request failed');
             return json({ ok: true });
         }
-        if (u.includes('/api/invite/mine/')) return json({ invites: [] });
+        if (u.includes('/api/invite/mine/')) return json({ invites: node.mine });
         return never();
     }) as typeof fetch;
 });
@@ -304,7 +307,7 @@ const generate = async () => {
     await act(async () => { button!.click(); });
     await settle();
 };
-const forInput = () => host.querySelector(`input[placeholder="${t('Who is this invite for? (For your records)')}"]`);
+const forInput = () => host.querySelector(`input[placeholder="${t("A note for you, kept on your community's server")}"]`);
 
 describe('People → Invites: the owners’ and admins’ names-list boxes (amend3 §1, slice A2)', () => {
     it('a member sees today’s form only: no boxes', async () => {
@@ -365,7 +368,9 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         expect(tickets.made).toBe(0);
         expect(alerts.said).toEqual([]);
         expect(JSON.stringify([...store.map.values()]), 'nor into the phone’s plain storage').not.toContain('Rowan');
-        // Made: the boxes start again.
+        // Made: the form folds behind "Make another invite" (a second code is a deliberate tap), and the boxes start again.
+        expect(q('invite-names-box'), 'the form is folded away').toBeNull();
+        await press('invite-make-another');
         expect(q('invite-names-box')?.getAttribute('aria-checked')).toBe('false');
     });
 
@@ -567,6 +572,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
             await press('invite-names-box');
             await generate();
             expect(node.generated, 'the plain invite').toHaveLength(1);
+            await press('invite-make-another');
             await press('invite-names-box');
             await type('invite-names-name', 'Bob Smith');
             await generate();
@@ -642,6 +648,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
             await type('invite-names-name', 'Tegan Rule');
             await generate();
             expect(node.bound).toHaveLength(1);
+            await press('invite-make-another');
             await press('invite-names-box');
             expect(list.opens).toBe(2);
             expect(q('invite-names-notices')).toBeNull();
@@ -687,5 +694,179 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
             await press('invite-names-box');
             expect(q('invite-names-refused')?.textContent).toBe(t('This community keeps no names list.'));
         });
+    });
+});
+
+// ── Pending and the made card (invites-vouching slice I1) ───────────────────────────────────────────────────────────────────────
+// Marty, 10 Nov: Dee Dee's bound invite showed as a bare code under "Share this cryptographic code", so a plain one was made as
+// well. Pending and Joined are folded and closed at first; an opened Pending row says who it is for (the name opened from the
+// names list on this phone), what it carries and how long it has left; the made card says the same.
+const DAY = 24 * 60 * 60 * 1000;
+const madeAgo = (days: number) => new Date(Date.now() - days * DAY).toISOString();
+const mineRow = (code: string, daysAgo: number, extra: Record<string, unknown> = {}) => ({
+    code, createdBy: 'a-member-key', createdAt: madeAgo(daysAgo), usedBy: null, usedAt: null,
+    namesEntryId: null, vouchAmount: null, voucherLevel: null, forKnock: false, expiresAt: new Date(Date.parse(madeAgo(daysAgo)) + 30 * DAY).toISOString(), ...extra,
+});
+const rowsText = () => Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]')).map((r) => r.textContent ?? '');
+
+describe('People → Invites: Pending and Joined are folded, and each row says what the invite is for', () => {
+    const DEE_DEE = mineRow('INV-DEE-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 });
+    const PLAIN = mineRow('INV-PLAIN-0002', 1, { intendedFor: 'Kim' });
+    const USED = mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' });
+
+    it('closed at first render with the counts in the rows, and the names list is not read while it is closed', async () => {
+        node.role = 'owner';
+        node.mine = [DEE_DEE, PLAIN, USED];
+        await open();
+        expect(q('invites-pending-fold')?.textContent).toContain('Pending (2)');
+        expect(q('invites-joined-fold')?.textContent).toContain('Joined (1)');
+        expect(q('invite-pending-row')).toBeNull();
+        expect(q('invite-joined-row')).toBeNull();
+        expect(host.textContent).not.toContain('INV-DEE-0001');
+        expect(list.opens, 'a closed fold reads no name: the list is a logged read').toBe(0);
+    });
+
+    it('an owner opens Pending: the name opened from the list, what it carries in words, the days left', async () => {
+        node.role = 'owner';
+        node.mine = [DEE_DEE, PLAIN, USED];
+        await open();
+        await press('invites-pending-fold');
+        expect(list.opens, 'the list is opened once, for the bound invite in it').toBe(1);
+        const deeDee = rowsText().find((r) => r.includes('Jane Albury'));
+        expect(deeDee).toBeTruthy();
+        expect(deeDee).toContain('200 vouch · voucher budget 1,000 · confirms them as known');
+        expect(deeDee).toContain('23 days left');
+        const kim = rowsText().find((r) => r.includes('For: Kim'))!;
+        expect(kim).toContain('Plain invite');
+        expect(kim).toContain('29 days left');
+        // The entry's id is never spoken.
+        expect(host.textContent).not.toContain('entry-jane');
+    });
+
+    it('a Pending of plain invites alone reads no name: the list is not opened', async () => {
+        node.role = 'owner';
+        node.mine = [PLAIN];
+        await open();
+        await press('invites-pending-fold');
+        expect(rowsText()).toHaveLength(1);
+        expect(list.opens).toBe(0);
+    });
+
+    it('a phone with no list to open still shows the invite, by its code', async () => {
+        node.role = 'owner';
+        list.refuse = 'This community keeps no names list.';
+        list.refuseStatus = 404;
+        node.mine = [DEE_DEE];
+        await open();
+        await press('invites-pending-fold');
+        const [row] = rowsText();
+        expect(row).toContain('INV-DEE-0001');
+        expect(row).toContain('200 vouch · voucher budget 1,000 · confirms them as known');
+    });
+
+    it('a member, who is offered no names list, never opens it', async () => {
+        node.role = null;
+        node.mine = [DEE_DEE];
+        await open();
+        await press('invites-pending-fold');
+        expect(list.opens).toBe(0);
+        expect(rowsText()[0]).toContain('INV-DEE-0001');
+    });
+
+    it('a code made for a request to join says so, and the applicant’s key is not shown as a name', async () => {
+        node.role = 'owner';
+        node.mine = [mineRow('INV-KNOCK-0004', 2, { intendedFor: 'f'.repeat(64), forKnock: true })];
+        await open();
+        await press('invites-pending-fold');
+        expect(rowsText()[0]).toContain('For someone who asked to join');
+        expect(host.textContent).not.toContain('f'.repeat(64));
+    });
+
+    it('a code past its 30 days is not pending', async () => {
+        node.role = 'owner';
+        node.mine = [mineRow('INV-LAPSED-0005', 31), PLAIN];
+        await open();
+        expect(q('invites-pending-fold')?.textContent).toContain('Pending (1)');
+    });
+
+    it('Joined, once opened: who joined, and when', async () => {
+        node.role = 'owner';
+        node.mine = [USED];
+        await open();
+        await press('invites-joined-fold');
+        const row = q('invite-joined-row')!;
+        expect(row.textContent).toContain('INV-USED-0003 · @joanne');
+        expect(row.textContent).toMatch(/Joined \d{1,2} \w{3} \d{4}/);
+    });
+
+    it('a fold opened stays open when the screen is shown again in the same session', async () => {
+        node.role = 'owner';
+        node.mine = [PLAIN];
+        await open();
+        await press('invites-pending-fold');
+        expect(rowsText()).toHaveLength(1);
+        await act(async () => { root.unmount(); });
+        root = createRoot(host);
+        await open();
+        expect(rowsText()).toHaveLength(1);
+    });
+
+    it('the whole row opens the invite: its code is shown and Share is on it', async () => {
+        node.role = null;
+        node.mine = [PLAIN];
+        await open();
+        await press('invites-pending-fold');
+        await press('invite-pending-row');
+        const sheet = q('invite-sheet')!;
+        expect(sheet).toBeTruthy();
+        expect(sheet.textContent).toContain('For: Kim');
+        expect(sheet.textContent).toContain('INV-PLAIN-0002');
+        expect(Array.from(sheet.querySelectorAll('button')).some((b) => b.textContent === t('📤 Share Invite'))).toBe(true);
+        await press('invite-sheet-close');
+        expect(q('invite-sheet')).toBeNull();
+    });
+});
+
+describe('People → Invites: the made card says who it is for, what it carries and how long, and the form folds', () => {
+    it('a bound invite with a vouch and a budget: "Invite for Rowan Penhallow · 50 vouch · voucher budget 1,100 · confirms them as known · 30 days left"', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        await open();
+        await press('invite-names-box');
+        await press('invite-voucher-box');
+        await press('invite-voucher-up');
+        await type('invite-names-name', 'Rowan Penhallow');
+        await press('invite-vouch-50');
+        await generate();
+        const card = q('invite-made-card')!;
+        expect(card).toBeTruthy();
+        expect(card.textContent).toContain('Invite for Rowan Penhallow');
+        expect(card.textContent).toContain('50 vouch · voucher budget 1,100 · confirms them as known');
+        expect(card.textContent).toContain('30 days left');
+        expect(card.textContent).not.toContain('cryptographic');
+        // A second code is a deliberate tap.
+        expect(Array.from(host.querySelectorAll('button')).some((b) => b.textContent?.includes('Generate'))).toBe(false);
+        expect(host.querySelector(`input[placeholder="${t("A note for you, kept on your community's server")}"]`)).toBeNull();
+        await press('invite-make-another');
+        expect(Array.from(host.querySelectorAll('button')).some((b) => b.textContent?.includes('Generate'))).toBe(true);
+        expect(q('invite-make-another')).toBeNull();
+    });
+
+    it('a plain invite with a note: "Invite for Kim · Plain invite"; with nothing: "Invite made"', async () => {
+        node.role = null;
+        await open();
+        const note = host.querySelector(`input[placeholder="${t("A note for you, kept on your community's server")}"]`) as HTMLInputElement;
+        expect(note).toBeTruthy();
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(note, 'Kim');
+            note.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await settle();
+        await generate();
+        expect(q('invite-made-card')?.textContent).toContain('Invite for Kim');
+        expect(q('invite-made-card')?.textContent).toContain('Plain invite');
+        await press('invite-make-another');
+        await generate();
+        expect(q('invite-made-card')?.textContent).toContain('Invite made');
     });
 });

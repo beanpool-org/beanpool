@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, inviteFolds } from '@beanpool/core';
 
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
@@ -156,6 +156,7 @@ function recordingFetch(holdProfile: boolean) {
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+    inviteFolds.clear();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -193,6 +194,12 @@ describe("the control: a local community's Invites, the same screen", () => {
         rememberProfile('local', { invites: true, showcase: false });
         await render(createElement(PeopleScreen));
         await act(async () => { land(INVITES, { invites: [OWN_CODE, USED_CODE] }); });
+        await settle();
+        // Pending and Joined are folded until opened, with their counts in the row.
+        expect(text()).toContain('Pending (1)');
+        expect(text()).toContain('Joined (1)');
+        expect(text()).not.toContain('OWN-CODE-7731');
+        await act(async () => { (host.querySelector('[data-testid="invites-pending-fold"]') as HTMLElement).click(); });
         await settle();
         const t = text();
         const buttons = Array.from(host.querySelectorAll('button')).map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());

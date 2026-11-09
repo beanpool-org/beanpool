@@ -141,6 +141,12 @@ export default function PeopleScreen() {
         btnGenerate: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
+        pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
+        pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
+        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginBottom: 4 },
+        pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
+        btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
+        btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
         btnCopyQR: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10 },
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },
 
@@ -1475,20 +1481,82 @@ export default function PeopleScreen() {
                                 </Pressable>
                             )}
 
-                            <PendingInvites
-                                invites={invites}
-                                now={Date.now()}
-                                names={inviteNames.entryNames}
-                                onNeedNames={setNeedList}
-                                qrValue={(code) => (invitesPreview ? code : `${anchorUrl}/?invite=${code}`)}
-                                shareSlot={(code) => (invitesPreview ? (
-                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
-                                ) : (
-                                    <Pressable accessibilityRole="button" style={[styles.btnCopyQR, { alignItems: 'center', minHeight: 48 }]} onPress={() => shareInvite(code)}>
-                                        <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
-                                    </Pressable>
-                                ))}
-                            />
+                            {invitesPreview ? (
+                                // The showcase's sample list (Example Valley), flat as it always was: every sample row, with its marker.
+                                <>
+                                    {invites.some((i: any) => !i.usedBy) && (
+                                        <View style={{ marginTop: 24 }}>
+                                            <Text style={styles.pendingHeader}>{tn(invites.filter((i: any) => !i.usedBy).length, '⏳ PENDING ({n})', '⏳ PENDING ({n})')}</Text>
+                                            {invites.filter((i: any) => !i.usedBy).map((inv: any) => (
+                                                <View key={inv.code} style={[styles.pendingCard, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                                                    <View style={{ flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        <View style={{ flex: 1 }}>
+                                                            {inv.intendedFor ? (
+                                                                <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
+                                                            ) : null}
+                                                            <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
+                                                                {inv.code}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+                                                            <Pressable
+                                                                accessibilityRole="button"
+                                                                accessibilityLabel={t('Show QR code')}
+                                                                style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }]}
+                                                                onPress={() => {
+                                                                    const off = newCode === inv.code;
+                                                                    setNewCode(off ? '' : inv.code);
+                                                                    setMadeCard(off ? null : { who: inv.intendedFor ?? null, invite: inv });
+                                                                }}
+                                                            >
+                                                                <Text style={styles.btnCopySmallText}>📱</Text>
+                                                            </Pressable>
+                                                        </View>
+                                                    </View>
+                                                    <View style={{ marginTop: 10 }}>
+                                                        <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
+                                                    </View>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                    {invites.some((i: any) => i.usedBy) && (
+                                        <View style={{ marginTop: 24 }}>
+                                            <Text style={styles.pendingHeader}>{t('✅ REDEEMED ({count})', { count: invites.filter((i: any) => i.usedBy).length })}</Text>
+                                            {invites.filter((i: any) => i.usedBy).map((inv: any) => (
+                                                <View key={inv.code} style={[styles.pendingCard, { opacity: 0.7 }]}>
+                                                    <View style={{ flex: 1 }}>
+                                                        {inv.intendedFor ? (
+                                                            <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
+                                                        ) : null}
+                                                        <Text style={[styles.pendingCode, { textDecorationLine: 'line-through' }]} numberOfLines={1} ellipsizeMode="middle">
+                                                            {inv.code}
+                                                        </Text>
+                                                        {inv.usedAt ? (
+                                                            <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 4 }}>
+                                                                {t('Used {date}', { date: dateWords(inv.usedAt, 'day-month-year') })}
+                                                            </Text>
+                                                        ) : null}
+                                                    </View>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
+                            ) : (
+                                <PendingInvites
+                                    invites={invites}
+                                    now={Date.now()}
+                                    names={inviteNames.entryNames}
+                                    onNeedNames={setNeedList}
+                                    qrValue={(code) => `${anchorUrl}/?invite=${code}`}
+                                    shareSlot={(code) => (
+                                        <Pressable accessibilityRole="button" style={[styles.btnCopyQR, { alignItems: 'center', minHeight: 48 }]} onPress={() => shareInvite(code)}>
+                                            <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
+                                        </Pressable>
+                                    )}
+                                />
+                            )}
 
                             {invitesPreview && tree.length > 0 && (
                                 <View style={{ marginTop: 24 }}>

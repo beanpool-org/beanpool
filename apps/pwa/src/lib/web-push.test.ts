@@ -13,6 +13,9 @@ import {
     pushPlace, grantedLine, cannotLines, noticeInLocation, tellMeWhenTheyAnswer, readWebPushPin, FORGED_NOTICE_LINE, type PushEnv,
 } from './web-push';
 import { APP_STORE_URL, PLAY_URL } from './peek';
+import { signedFetchAt } from './api';
+
+vi.mock('./api', () => ({ signedFetchAt: vi.fn() }));
 
 const SW_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
 
@@ -148,6 +151,11 @@ describe('where push works, by feature tests (design §2.4)', () => {
         expect(pushPlace(env({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0' }))).toEqual({ kind: 'ok', device: 'computer', browser: 'Firefox' });
         expect(pushPlace(env({ brave: true }))).toEqual({ kind: 'ok', device: 'computer', browser: 'Brave' });
         expect(pushPlace(env({ userAgent: MAC_SAFARI }))).toEqual({ kind: 'ok', device: 'safari' });
+        // A Chromium that names itself otherwise still says Safari/ in its user agent: never told "even with Safari closed".
+        expect(pushPlace(env({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0 Safari/537.36' })))
+            .toEqual({ kind: 'ok', device: 'computer', browser: 'Chrome' });
+        expect(pushPlace(env({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) SomeBrowser/1.0 Safari/537.36' })))
+            .toEqual({ kind: 'ok', device: 'computer', browser: 'your browser' });
         expect(grantedLine(pushPlace(env({})))).toBe("We'll tell you here while Chrome is running.");
         expect(grantedLine(pushPlace(env({ userAgent: MAC_SAFARI })))).toBe("We'll tell you here, even with Safari closed.");
         expect(grantedLine(pushPlace(env({ userAgent: ANDROID })))).toBe("We'll tell you on this phone, even with the browser closed.");
@@ -230,6 +238,35 @@ describe('the tap (tellMeWhenTheyAnswer)', () => {
         expect(r).toEqual({ ok: false, place: { kind: 'blocked', phone: false }, reason: 'blocked' });
         expect(register).not.toHaveBeenCalled();
         expect(readWebPushPin('https://node.example', ASKER)).toBeNull();
+    });
+
+    it('granted: registers the worker at /app/, waits for it to be active (not for one over this page), subscribes with the community key, posts it signed, keeps the pin', async () => {
+        requestPermission.mockImplementation(async () => 'granted');
+        const vapidKey = Buffer.from(new Uint8Array(65).fill(4)).toString('base64url');
+        const worker: any = { state: 'installing', listeners: [] as (() => void)[], addEventListener(_: string, fn: () => void) { this.listeners.push(fn); } };
+        const subscribe = vi.fn(async () => ({ toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'P', auth: 'A' } }) }));
+        const registration: any = { installing: worker, waiting: null, active: null, pushManager: { getSubscription: async () => null, subscribe } };
+        register.mockImplementation(async () => {
+            setTimeout(() => { worker.state = 'activated'; worker.listeners.forEach((f: () => void) => f()); }, 10);
+            return registration;
+        });
+        // `ready` never settles for a page outside the worker's scope: the tap must not wait on it.
+        Object.defineProperty(navigator, 'serviceWorker', { value: { register, ready: new Promise(() => {}) }, configurable: true });
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ vapidKey }), { status: 200 }));
+        vi.mocked(signedFetchAt).mockImplementation(async () => new Response(JSON.stringify({ success: true, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey }), { status: 201 }));
+        try {
+            const r = await tellMeWhenTheyAnswer('https://node.example', identity, 'fr', env({}));
+            expect(r).toEqual({ ok: true, place: { kind: 'ok', device: 'computer', browser: 'Chrome' } });
+            expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/app/' });
+            expect(fetchSpy).toHaveBeenCalledWith('https://node.example/api/web-push/key', expect.anything());
+            expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: expect.any(Uint8Array) });
+            const [method, origin, p, body] = vi.mocked(signedFetchAt).mock.calls[0];
+            expect([method, origin, p]).toEqual(['POST', 'https://node.example', '/api/web-push']);
+            expect(JSON.parse(body)).toEqual({ subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'P', auth: 'A' } }, lang: 'fr' });
+            expect(readWebPushPin('https://node.example', ASKER)).toEqual({ origin: 'https://node.example', publicKey: ASKER, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey });
+        } finally {
+            fetchSpy.mockRestore();
+        }
     });
 
     it('nothing in this module registers a worker or asks for permission on its own (only the tap does)', async () => {

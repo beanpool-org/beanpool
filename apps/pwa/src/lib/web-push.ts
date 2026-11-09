@@ -107,8 +107,9 @@ export function pushPlace(env: PushEnv = pushEnv()): PushPlace {
     if (/\bEdg\//.test(env.userAgent)) return { kind: 'ok', device: 'computer', browser: 'Edge' };
     if (/\bFirefox\//.test(env.userAgent)) return { kind: 'ok', device: 'computer', browser: 'Firefox' };
     if (env.brave) return { kind: 'ok', device: 'computer', browser: 'Brave' };
-    if (/\bChrom(e|ium)\//.test(env.userAgent)) return { kind: 'ok', device: 'computer', browser: 'Chrome' };
-    if (/\bSafari\//.test(env.userAgent)) return { kind: 'ok', device: 'safari' };
+    if (/Chrom(e|ium)\//.test(env.userAgent)) return { kind: 'ok', device: 'computer', browser: 'Chrome' };
+    // Every Chromium browser says Safari/ too: Safari itself says Version/ and no Chromium, Edge or Firefox.
+    if (/\bVersion\/[\d.]+.*\bSafari\//.test(env.userAgent) && !/Chrom|CriOS|FxiOS|Edg/.test(env.userAgent)) return { kind: 'ok', device: 'safari' };
     return { kind: 'ok', device: 'computer', browser: t('your browser') };
 }
 
@@ -181,7 +182,8 @@ export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIde
         const keyRes = await fetch(`${origin}${WEB_PUSH_KEY_PATH}`, { cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
         const vapidKey = keyRes.ok ? (await keyRes.json())?.vapidKey : null;
         if (typeof vapidKey !== 'string') return { ok: false, place, reason: 'failed' };
-        const ready = await navigator.serviceWorker.ready.catch(() => registration);
+        // Not navigator.serviceWorker.ready: that waits for a worker over THIS page, and /app is outside the scope /app/.
+        const ready = await activated(registration);
         let subscription = await ready.pushManager.getSubscription();
         // A subscription to another key (the community's key changed) can't be told by this one: it goes first.
         const current = subscription?.options?.applicationServerKey;
@@ -210,6 +212,20 @@ export async function stopTellingMe(origin: string, identity: BeanPoolIdentity):
         await signedFetchAt('DELETE', origin, WEB_PUSH_PATH, JSON.stringify({ subId: pin.subId }), identity);
     } catch { /* the community lets it go when the request closes */ }
     forgetWebPushPin(origin, identity.publicKey);
+}
+
+/** The registration once its worker is active (a subscription needs one); at most WORKER_WAIT_MS. */
+const WORKER_WAIT_MS = 10_000;
+async function activated(registration: ServiceWorkerRegistration): Promise<ServiceWorkerRegistration> {
+    const worker = registration.installing ?? registration.waiting;
+    if (registration.active || !worker) return registration;
+    await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, WORKER_WAIT_MS);
+        const check = () => { if (worker.state === 'activated') { clearTimeout(timer); resolve(); } };
+        worker.addEventListener('statechange', check);
+        check();
+    });
+    return registration;
 }
 
 function base64url(bytes: Uint8Array): string {

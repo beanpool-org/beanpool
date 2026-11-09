@@ -12,7 +12,7 @@
  *      to a document at exactly that address;
  *   4. reads the answer the same way: `joined`, or a refusal (the fallback card).
  *
- * The receiver (the community's page, components/HandoffReceiver.tsx): `ready` goes to `window.opener` at `from` only; it
+ * The receiver (the community's page, pages/HandoffPage.tsx): `ready` goes to `window.opener` at `from` only; it
  * takes one message, from `window.opener`, at `from`, with its nonce, of the account's shape, whose private key makes its
  * public key and whose 12 words make the same key; anything else is dropped, and after that message or 60 s it listens no
  * more. The rest (a yes here for that key, no account here, the person's own Join) is the receiver's.
@@ -312,7 +312,28 @@ export function handoffJoined(publicKey: string): string | null {
     reply = null;
     try { opener.postMessage(answerMessage(nonce, 'joined'), from); } catch { /* its tab has gone: its next status read says member */ }
     dropOpener();
+    markHandedOver(publicKey);
     return photo;
+}
+
+const HANDED_OVER_KEY = 'beanpool_handed_over';
+
+/**
+ * A handoff made `publicKey` a member here (design §2.2): on a phone's browser, Home then offers the phone app once, the
+ * guide's own advice (pages/HomePage.tsx). Kept in this browser until Home has read it. The public key only.
+ */
+export function markHandedOver(publicKey: string): void {
+    try { localStorage.setItem(HANDED_OVER_KEY, publicKey); } catch { /* storage off: Home offers the app at its usual time */ }
+}
+
+/** Whether a handoff made `publicKey` a member here and Home hasn't read it since. */
+export function handedOverHere(publicKey: string): boolean {
+    try { return localStorage.getItem(HANDED_OVER_KEY) === publicKey; } catch { return false; }
+}
+
+/** Home has read it: the offer is made once. */
+export function forgetHandedOver(): void {
+    try { localStorage.removeItem(HANDED_OVER_KEY); } catch { /* nothing kept to forget */ }
 }
 
 /**

@@ -7,8 +7,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    HANDOFF_DOOR, accountFrom, accountMessage, answerFrom, answerMessage, awaitHandoffJoin, handoffAtLoad, handoffJoined, handoffOrigin,
-    handoffUrl, isHandoffNonce, isReadyFrom, newHandoffNonce, readyMessage, runHandoff,
+    HANDOFF_DOOR, accountFrom, accountMessage, answerFrom, answerMessage, awaitHandoffJoin, forgetHandedOver, handedOverHere, handoffAtLoad,
+    handoffJoined, handoffOrigin, handoffUrl, isHandoffNonce, isReadyFrom, markHandedOver, newHandoffNonce, readyMessage, runHandoff,
 } from './handoff';
 import { generateIdentity, type BeanPoolIdentity } from './identity';
 
@@ -238,5 +238,25 @@ describe('the receiver, after Join', () => {
         expect(window.opener).toBeNull();
         expect(handoffJoined(me.publicKey)).toBeNull();
         expect(posted).toHaveLength(1);
+    });
+
+    it('marks this key as handed over once the yes made it a member, for Home to offer the phone app once (design §2.2)', () => {
+        localStorage.clear();
+        const { win: opener } = fakeWindow();
+        Object.defineProperty(window, 'opener', { value: opener, configurable: true, writable: true });
+        awaitHandoffJoin(me.publicKey, opener, GLOBAL, 'f'.repeat(32), null);
+        // Another key's join is not this handoff's: no mark.
+        expect(handoffJoined('9'.repeat(64))).toBeNull();
+        expect(handedOverHere(me.publicKey)).toBe(false);
+        // This key's: marked (no photo ticked, still marked), and for this key only.
+        expect(handoffJoined(me.publicKey)).toBeNull();
+        expect(handedOverHere(me.publicKey)).toBe(true);
+        expect(handedOverHere('9'.repeat(64))).toBe(false);
+        // Home takes it once.
+        forgetHandedOver();
+        expect(handedOverHere(me.publicKey)).toBe(false);
+        // The receiver's own path for a key that was a member already (HandoffPage) marks it the same way.
+        markHandedOver(me.publicKey);
+        expect(handedOverHere(me.publicKey)).toBe(true);
     });
 });

@@ -48,6 +48,8 @@ import {
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { YesJoin } from '../components/YesJoin';
+import { forgetHandedOver, handedOverHere } from '../lib/handoff';
+import { isPhoneBrowser } from '../lib/global-entry';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
@@ -1276,6 +1278,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
     }, [publicKey]);
+    /*
+     * Joined here by a handoff from the page that held the account (global yes Y1, DESIGN-global-yes-join-fable.md §2.2): on
+     * a phone's browser this first Home offers the "Use the phone app" card at once (the guide's own advice), and once: the
+     * mark is read here and goes, and later Homes follow the usual rule. Read in the state's start, taken in an effect.
+     */
+    const [handedOverOnPhone] = useState(() => !!publicKey && handedOverHere(publicKey) && isPhoneBrowser());
+    useEffect(() => { if (publicKey && handedOverHere(publicKey)) forgetHandedOver(); }, [publicKey]);
 
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
     const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
@@ -3429,12 +3438,12 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     const p = a.me?.probation;
                     const weekEnds = a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null;
                     const keptPosts = Math.max(Number(p?.keptPosts) || 0, a.me?.firstOffer || a.cards?.steps?.firstPost ? 1 : 0);
-                    const due = publicKey && !visitor && !phoneAppDismissed && usePhoneAppCardDue({
+                    const due = publicKey && !visitor && !phoneAppDismissed && (handedOverOnPhone || usePhoneAppCardDue({
                         dismissed: phoneAppDismissed,
                         keptPosts,
                         weekOverAt: Number.isFinite(weekEnds) ? weekEnds : null,
                         now,
-                    });
+                    }));
                     return due ? (
                         <UsePhoneAppCard
                             publicKey={publicKey}

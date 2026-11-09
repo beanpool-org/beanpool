@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 import { communityCardName, t, type CommunityCard } from '@beanpool/core';
 import { getCommunityCard } from '../lib/api';
 import {
-    HANDOFF_LISTEN_MS, accountFrom, answerMessage, awaitHandoffJoin, dropOpener, readyMessage, type HandoffAnswer,
+    HANDOFF_LISTEN_MS, accountFrom, answerMessage, awaitHandoffJoin, dropOpener, markHandedOver, readyMessage, type HandoffAnswer,
 } from '../lib/handoff';
 import {
     IdentityHeldError, IdentityStoreUnavailableError, NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, SentJoinWaitingError,
@@ -166,6 +166,7 @@ export function HandoffPage({ handoff, onOpen, onJoin, onMember }: {
                 // A member here already (it joined on another device): kept here as that member.
                 await importIdentity(account, SAVE_GUARD);
                 answer('joined');
+                markHandedOver(account.publicKey);
                 onMember(account);
                 return;
             }

@@ -6,6 +6,8 @@
  * the system bar at rest and above the keyboard while typing (a KeyboardStickyView, as app/group-post.tsx's footer). The
  * screen is never a Modal, so the root layout's KeyboardProvider serves it (never a KeyboardProvider inside a Modal).
  *
+ * Opaque on surface.chrome, never surface.page: the doodle pattern turns the page token see-through.
+ *
  * Its measured height goes back to the step through `onHeight`, so a KeyboardAwareScrollView above it keeps the field being
  * typed in clear of the keyboard AND this footer (its bottomOffset).
  */
@@ -27,7 +29,9 @@ export function StepFooter({ children, onHeight, testID }: { children: React.Rea
                 style={[
                     styles.footer,
                     {
-                        backgroundColor: colors.surface.page,
+                        // Opaque: the step's words scroll under it. surface.page turns 'transparent' when the doodle pattern is
+                        // on (app/ThemeContext.tsx); chrome is the pattern's ground then, as the tab strip's.
+                        backgroundColor: colors.surface.chrome,
                         borderTopColor: colors.border.default,
                         // The screen's SafeAreaView pads iOS only: on an Android phone drawn edge to edge the footer stays above
                         // its navigation bar. Zero where the bar isn't drawn over.

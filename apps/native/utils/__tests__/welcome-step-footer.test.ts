@@ -15,6 +15,7 @@ import * as path from 'node:path';
 const root = path.join(__dirname, '..', '..');
 const welcome = fs.readFileSync(path.join(root, 'app/welcome.tsx'), 'utf8');
 const footer = fs.readFileSync(path.join(root, 'components/welcome/StepFooter.tsx'), 'utf8');
+const theme = fs.readFileSync(path.join(root, 'app/ThemeContext.tsx'), 'utf8');
 
 /** The source of one step: from its `if (mode === '<mode>'` to the next step's. */
 function step(mode: string): string {
@@ -58,9 +59,17 @@ describe('the join steps\' main button is in a footer that stays on screen', () 
     it('the footer rides above the keyboard and the system bar, from the central colour tokens', () => {
         expect(footer).toMatch(/<KeyboardStickyView offset=\{\{ opened: Platform\.OS === 'ios' \? insets\.bottom : 0 \}\}/);
         expect(footer).toMatch(/paddingBottom: 12 \+ \(Platform\.OS === 'android' \? insets\.bottom : 0\)/);
-        expect(footer).toMatch(/backgroundColor: colors\.surface\.page/);
+        expect(footer).toMatch(/backgroundColor: colors\.surface\.chrome/);
         expect(footer).toMatch(/borderTopColor: colors\.border\.default/);
         expect(footer).not.toMatch(/<KeyboardProvider|import \{[^}]*KeyboardProvider/);
         expect(footer).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+    });
+
+    // Walked on the emulator (9 Nov): on surface.page the footer was see-through, because the doodle pattern turns that token
+    // 'transparent', and the step's words scrolled visibly behind and beside Next (a tablet in landscape showed the code
+    // field through it). surface.chrome is the token for bars that content slides under: the pattern's ground when it is on.
+    it('the footer is opaque with the pattern on: never on the token the pattern turns transparent', () => {
+        expect(theme).toMatch(/surface: \{ \.\.\.base\.surface, page: 'transparent', chrome: ground \}/);
+        expect(footer).not.toMatch(/colors\.surface\.page/);
     });
 });

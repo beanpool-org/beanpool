@@ -67,13 +67,17 @@ const measure = () => {
         const slot = header.querySelector('[data-needs-slot]');
         const span = header.querySelector('[data-testid="header-title"]');
         const logo = header.querySelector('[data-testid="header-logo"]');
-        const pill = r(header.querySelector('[data-testid="header-pill"]'));
+        // One set of controls per width (Marty, 9 Nov 2026): the pill under 768 px, the side bar's from there.
+        const pillEl = header.querySelector('[data-testid="header-pill"]');
+        const pill = pillEl ? r(pillEl) : null;
+        if (matchMedia('(min-width: 768px)').matches && pillEl) out.problems.push('the pill is drawn beside the side bar');
+        if (!matchMedia('(min-width: 768px)').matches && !pillEl) out.problems.push('no pill under 768 px');
         const chipEl = header.querySelector('[data-testid="sync-chip"]');
         const buttons = [...slot.querySelectorAll('button')];
         const s = r(slot), m = r(middle);
         const basis = parseFloat(slot.style.flexBasis) || 0;
         const drawn = buttons.map(b => (b.style.width === `${CHIP}px` ? 'small' : 'bell'));
-        const h = { basis, drawn, slot: Math.round(s.width * 10) / 10, middle: Math.round(m.width * 10) / 10, dotOnly: chipEl?.dataset.dotOnly === 'true', pillRight: Math.round(pill.right) };
+        const h = { basis, drawn, slot: Math.round(s.width * 10) / 10, middle: Math.round(m.width * 10) / 10, dotOnly: chipEl?.dataset.dotOnly === 'true', pillRight: pill ? Math.round(pill.right) : null };
         if (basis !== SLOT) out.problems.push(`slot basis ${basis} px, not the bell's ${SLOT}`);
         let expectSlot;
         if (span) {
@@ -112,7 +116,7 @@ const measure = () => {
             if (!count) out.problems.push('no red count with three notices');
             else if (r(count).right > s.right + 0.5 || r(count).left < s.left - 0.5) out.problems.push('the red count outside the slot');
         }
-        if (pill.right > innerWidth + 0.5) out.problems.push(`pill off the screen (${h.pillRight})`);
+        if (pill && pill.right > innerWidth + 0.5) out.problems.push(`pill off the screen (${h.pillRight})`);
         out.header = h;
     }
     const aside = document.querySelector('aside');

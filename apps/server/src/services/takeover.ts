@@ -98,6 +98,7 @@ import {
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMainServer, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import { retireStandbyMain, STANDBY_MAIN_FILE } from './standby-main.js';
+import { VAPID_KEY_FILE } from './web-push.js';
 import {
     BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
@@ -885,7 +886,9 @@ function bundleEpoch(bundle: TakeoverBundle): number {
 // kept here too, byte for byte (and beside the carried one, installCarried…Key), so undoing puts back exactly what was there.
 // No tunnel-token: the tunnel runs from publicAddress in node_config (services/tunnel-connector.ts), which is kept below.
 // standby-main.json: the standby's pin (services/standby-main.ts), retired by `pull-config` and put back by a roll-back.
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, STANDBY_MAIN_FILE];
+// vapid.key: the web push key (services/web-push.ts), written by `identity-files` from the bundle; a roll-back puts back
+// what was here (a standby makes none, so usually: it goes).
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, STANDBY_MAIN_FILE, VAPID_KEY_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;

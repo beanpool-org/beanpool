@@ -881,6 +881,26 @@ CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves
 -- STRANGER_PUSH_RULES): a search on this too.
 CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
 
+-- 11b2. Browsers that take this server's web pushes (engine/web-push-subscriptions.ts, services/web-push.ts;
+-- DESIGN-web-notifications-fable.md §2.2, slice W1). `kind` 'asker': a key with an open request to join here tapped "Tell me
+-- when they answer" on the waiting page; one row per key; no reference to members (it is no member yet); deleted when the
+-- request lapses, is cancelled or declined, kept when the key joins. Locked at rest as push_tokens are: `sub_id` is the
+-- endpoint's HMAC and `sub_box` the endpoint, the browser's keys and this server's address as the browser reached it,
+-- sealed, both under keys from data/recovery-seal.key (info beanpool-web-push/v1), which the database never holds. This
+-- server's own (engine/replication-manifest.ts, local).
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+    public_key TEXT NOT NULL,
+    sub_id TEXT NOT NULL CHECK (length(sub_id) = 64),
+    sub_box TEXT NOT NULL CHECK (length(sub_box) <= 4000),
+    -- One of core's LANGS, so the push's sentence is in it; NULL: English.
+    lang TEXT CHECK (lang IS NULL OR length(lang) <= 16),
+    kind TEXT NOT NULL CHECK (kind IN ('asker')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, sub_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_one_asker ON web_push_subscriptions(public_key) WHERE kind = 'asker';
+
 -- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
 -- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
 -- report without a member's key (db/pricing-guide-db.ts PRICE_REPORT_RULES). What one address, and every address

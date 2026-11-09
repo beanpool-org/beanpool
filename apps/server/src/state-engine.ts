@@ -66,6 +66,7 @@ import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -10680,6 +10681,10 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
  * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
+ *
+ * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
+ * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
+ * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
  */
 export function dispatchPushNotification(
     targetPubkeys: string[],
@@ -10695,6 +10700,7 @@ export function dispatchPushNotification(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
+    options: { ttlSeconds?: number } = {},
 ): number {
     if (getNodeRole() === 'backup') return 0;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
@@ -10740,6 +10746,7 @@ export function dispatchPushNotification(
     // is here only for the ticket's check, in memory, while this send lasts.
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    const webSends: WebPushSend[] = [];
     // The key read once for the whole send (an announcement reaches every member's phones).
     const open = pushTokenOpener();
 
@@ -10747,7 +10754,8 @@ export function dispatchPushNotification(
         // Check user's notification preference for this category
         // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
         // for it. The role is looked up for that kind only.
-        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
+        // The applicant who tapped "Tell me when they answer" asked for exactly this one (web push W1), and has no switches.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind) || kind === 'join.answered'
             || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
@@ -10756,7 +10764,8 @@ export function dispatchPushNotification(
         }
 
         const tokens = getPushTokens(pk, open);
-        if (tokens.length === 0) continue;
+        const browsers = webPushTargetsFor(pk, kind);
+        if (tokens.length === 0 && browsers.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
@@ -10790,9 +10799,17 @@ export function dispatchPushNotification(
             allMessages.push(msg);
             phones.push({ publicKey: pk, tokenId, token });
         }
+
+        for (const { subId, lang, target } of browsers) {
+            const words = phoneWords(lang);
+            webSends.push({
+                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
+            });
+        }
     }
 
-    if (allMessages.length === 0) return 0;
+    if (allMessages.length === 0 && webSends.length === 0) return 0;
     if (rehearsal) return 0;
     keepPushNotices(notices);
 
@@ -10813,7 +10830,8 @@ export function dispatchPushNotification(
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
-    return allMessages.length;
+    sendWebPushes(webSends);
+    return allMessages.length + webSends.length;
 }
 
 /**

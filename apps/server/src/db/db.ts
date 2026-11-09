@@ -1964,9 +1964,11 @@ export function initSchema() {
     // standing_deals: each period is paid at its start (DESIGN-standing-deals-upfront-fable.md, Marty 10 Nov 2026), so the
     // phase CHECK becomes ('paid', 'short', 'ended') and held_back_reason goes. A CHECK cannot be altered in place, so the
     // table is rebuilt, BEFORE the schema.sql exec, which re-creates its indexes and touch trigger against the new table.
-    // The table is empty on every community (the one live standing deal was cancelled by hand, 10 Nov). The copy is
-    // verbatim, never a mapping: a row in a phase the new CHECK refuses fails the rebuild, which is logged and leaves the
-    // table as it was (no conversion code: nothing here reads, maps or ends a row in an old phase).
+    // No community holds a LIVE standing deal (the one there was, Marty's with Rob, was cancelled by hand, 10 Nov), but
+    // each one ever made left its row, ended (a cancelled one with ended_reason 'cancelled'): those are copied as they
+    // are. The copy is verbatim, never a mapping: a row in a phase the new CHECK refuses fails the rebuild, which is
+    // logged and leaves the table as it was (no conversion code: nothing here reads, maps or ends a row in an old phase).
+    // test-schema-upgrade-fresh-shape.ts 8e boots both.
     try {
         const sdSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='standing_deals'").get() as any;
         if (sdSql?.sql && sdSql.sql.includes("'held_back'")) {

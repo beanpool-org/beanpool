@@ -22,6 +22,7 @@
  *  5. No late-added column may be referenced by schema.sql (static).
  *  6. The tables that actually broke (posts, members, abuse_reports), booted for real.
  *  8. group_members gains the 'removed' status (compared with the fresh install's indexes).
+ *  8e. standing_deals: the phases paid, short, ended (an ended row kept as it was; a live old-phase row left alone).
  *  accounts.balance NOT NULL, fresh or upgraded.
  *  Members' photos out of their rows, killed part way, stopped part way, and on a standby.
  * Each reads the fresh install of 1, so they stay together.
@@ -453,6 +454,85 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
             'the row kept as it was, unattested');
         after.close();
         assert(bootInto(dir).ok, 'a second boot is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 8e. standing_deals: each period paid at its start (DESIGN-standing-deals-upfront, Marty 10 Nov 2026) ───────────
+    // The phase CHECK becomes ('paid', 'short', 'ended') and held_back_reason goes, so db.ts rebuilds the table. Every
+    // node that ran 1.2.37 holds the old shape, and an ended row is kept there for every standing deal it ever had (one
+    // cancelled is 'ended' with reason 'cancelled'): the copy keeps each as it was, never mapped. A live row in an old
+    // phase is refused by the new CHECK, so the rebuild leaves the table as it was and the node still boots.
+    console.log("\n--- 8e. Legacy standing_deals with the held/due/held_back phases ---");
+    {
+        const dir = tmp('legacy-standing-deals');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const oldDdl = legacyDdl('standing_deals', [])
+            .replace("CHECK (phase IN ('paid', 'short', 'ended'))", "CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended'))")
+            .replace(/(\n\s*short_since TEXT,)/, '$1\n    held_back_reason TEXT,');
+        assert(oldDdl.includes("'held_back'") && oldDdl.includes('held_back_reason TEXT'), "the fixture DDL is 1.2.37's: the old phase CHECK and held_back_reason");
+        const at = '2026-11-09T15:30:00.000Z';
+        const sd = (d: Database.Database, id: string, phase: string, ended: boolean) =>
+            d.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase,
+                           periods_done, current_tx_id, next_due_at, short_since, held_back_reason, stopped_by, stopped_at, ended_at, ended_reason,
+                           auth_signer, auth_signature, auth_payload, created_at, updated_at)
+                       VALUES (?, 'post-1', ?, ?, 50, 'month', ?, NULL, ?, 1, 'tx-1', '2026-12-09T15:30:00.000Z', NULL, NULL, ?, ?, ?, ?, ?, 'sig', 'text', ?, ?)`)
+                .run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, ended ? 'aa'.repeat(32) : null, ended ? at : null, ended ? at : null,
+                    ended ? 'cancelled' : null, 'aa'.repeat(32), at, at);
+        const tableSql = (d: Database.Database) => (d.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'standing_deals'").get() as any).sql as string;
+        const triggers = (d: Database.Database) => (d.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'standing_deals' ORDER BY name").all() as any[]).map((r) => r.name).join(',');
+
+        // The node runs with foreign keys off (db.ts); so does each fixture write.
+        let d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TABLE standing_deals; ${oldDdl}`);
+        sd(d, 'sd-ended', 'ended', true);
+        const before = d.prepare("SELECT * FROM standing_deals WHERE id = 'sd-ended'").get() as any;
+        d.close();
+        const result = bootInto(dir);
+        assert(result.ok && /Rebuilt standing_deals/.test(result.output), 'the node from 1.2.37 boots and rebuilds the table');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        after.pragma('foreign_keys = OFF');
+        assert(tableSql(after).includes("CHECK (phase IN ('paid', 'short', 'ended'))") && !tableSql(after).includes("'held_back'"), 'its phase CHECK is the new one');
+        assert(JSON.stringify(columns(after, 'standing_deals')) === JSON.stringify(columns(freshDb, 'standing_deals')),
+            `ending with exactly a fresh install's columns, held_back_reason gone (got ${columns(after, 'standing_deals').join(',')})`);
+        const kept = after.prepare("SELECT * FROM standing_deals WHERE id = 'sd-ended'").get() as any;
+        const { held_back_reason: _gone, ...wanted } = before;
+        assert(JSON.stringify(kept) === JSON.stringify(wanted), `the ended row kept as it was, reason 'cancelled' and its times included (got ${JSON.stringify(kept)})`);
+        assert(JSON.stringify(indexes(after, 'standing_deals')) === JSON.stringify(indexes(freshDb, 'standing_deals')), 'its indexes are a fresh install\'s');
+        assert(triggers(after) === triggers(freshDb) && triggers(after).length > 0, `and so are its triggers (${triggers(after)})`);
+        // The new shape has no held_back_reason, so these rows are written without it.
+        const sdNew = (id: string, phase: string) => after.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period,
+                period_unit, starts_at, phase, periods_done, next_due_at, auth_signer, auth_signature, auth_payload)
+            VALUES (?, 'post-1', ?, ?, 50, 'month', ?, ?, 1, '2026-12-09T15:30:00.000Z', ?, 'sig', 'text')`).run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, 'aa'.repeat(32));
+        let paid = true;
+        try { sdNew('sd-new', 'paid'); } catch (e: any) { paid = false; console.error(e?.message); }
+        let held = true;
+        try { sdNew('sd-old', 'held'); } catch (e: any) { held = !/CHECK constraint failed/.test(e?.message || ''); }
+        assert(paid && !held, "the rebuilt table takes phase 'paid' and its CHECK refuses 'held'");
+        after.close();
+        assert(!/Rebuilt standing_deals/.test(bootInto(dir).output), 'a second boot does not rebuild again');
+
+        // A live row in an old phase: nothing at boot reads, maps or ends it; the rebuild fails, is logged, and leaves it.
+        // (bootInto returns a good boot's stdout only, and the refusal is a console.error: this boot prints it to stdout.)
+        d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TABLE standing_deals; ${oldDdl}`);
+        sd(d, 'sd-held', 'held', false);
+        d.close();
+        const refused = bootInto(dir, {}, `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(DB_TS_PATH)});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        assert(refused.ok && /Failed to rebuild standing_deals/.test(refused.output) && !/Rebuilt standing_deals/.test(refused.output),
+            'a node holding a live row in an old phase still boots, and says the rebuild failed');
+        const left = new Database(path.join(dir, 'state.db'), { readonly: true });
+        const heldRow = left.prepare("SELECT phase, held_back_reason, updated_at FROM standing_deals WHERE id = 'sd-held'").get() as any;
+        assert(tableSql(left).includes("'held_back'") && heldRow?.phase === 'held' && heldRow?.updated_at === at,
+            'the table and the row are left as they were (no conversion)');
+        left.close();
         fs.rmSync(dir, { recursive: true, force: true });
     }
 

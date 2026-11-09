@@ -37,13 +37,13 @@
  *
  * A find keeps what it verified (provider, sub, the accounts it named) in memory for {@link FIND_HOLD_TTL_MS}, keyed by the
  * restore's throwaway key, so the collect that follows needs no second sign-in. Never persisted, never replicated, swept
- * as nonces are (sso.ts issueNonce), replaced by that key's next find, and spent by one collect.
+ * once a minute as nonces are (sso.ts issueNonce), replaced by that key's next find, and spent by one collect.
  */
 
 import crypto from 'node:crypto';
 import { word } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { ssoLookupHash, type SsoProvider } from '../sso.js';
+import { SSO_PROVIDERS, ssoLookupHash, type SsoProvider } from '../sso.js';
 import { RecoverySealKeyMissing, recoverySealSubkey, retiredRecoverySealSubkeys } from '../services/recovery-seal-key.js';
 
 /** The HKDF info of the find key under data/recovery-seal.key: never any other use's. */
@@ -168,10 +168,14 @@ export async function findAccountsBySignIn(provider: SsoProvider, sub: string): 
         .sort((a, b) => a.callsign.localeCompare(b.callsign) || a.publicKey.localeCompare(b.publicKey));
 }
 
-/** How many current sign-in copies of restorable members no restore can find by the index yet: the boot log's count. */
+/**
+ * How many current sign-in copies of restorable members no restore can find by the index yet: the boot log's count. Only
+ * a provider a sign-in can still use: a copy of any other could never be found, and would keep the count above 0.
+ */
 export function countUnfindableSignInCopies(): number {
-    return (db.prepare(`SELECT COUNT(*) AS n FROM recovery_shares s JOIN members m ON m.public_key = s.owner_pubkey WHERE ${UNFINDABLE}`)
-        .get() as { n: number }).n;
+    return (db.prepare(`SELECT COUNT(*) AS n FROM recovery_shares s JOIN members m ON m.public_key = s.owner_pubkey
+                        WHERE ${UNFINDABLE} AND s.holder_ref IN (${SSO_PROVIDERS.map(() => '?').join(', ')})`)
+        .get(...SSO_PROVIDERS) as { n: number }).n;
 }
 
 let countedAs: 'main' | 'standby' | null = null;
@@ -212,16 +216,22 @@ const holds = new Map<string, FindHold>();
 let lastHoldSweep = 0;
 
 /**
+ * Expired holds dropped, at most once a minute, as the nonces' sweep is throttled (sso.ts issueNonce), but whatever the
+ * map's size: a hold keeps a verified sub, so none outlives its 5 minutes by much more than a minute of finds and collects.
+ */
+function sweepHolds(now: number): void {
+    if (now - lastHoldSweep <= 60_000) return;
+    lastHoldSweep = now;
+    for (const [k, h] of holds) if (h.expiresAt <= now) holds.delete(k);
+}
+
+/**
  * Hold a find for the throwaway key that signed it, in place of any it held before. A find that named nobody holds
  * nothing, and ends the older one too: the hold is always that key's latest sign-in.
  */
 export function holdFind(throwawayKey: string, provider: SsoProvider, sub: string, accounts: FoundAccount[]): void {
     const now = Date.now();
-    // The nonces' throttled sweep (sso.ts issueNonce): the map holds at most the last few minutes of finds.
-    if (holds.size > 1000 && now - lastHoldSweep > 60_000) {
-        lastHoldSweep = now;
-        for (const [k, h] of holds) if (h.expiresAt <= now) holds.delete(k);
-    }
+    sweepHolds(now);
     if (accounts.length === 0) { holds.delete(throwawayKey); return; }
     holds.set(throwawayKey, { provider, sub, accounts, expiresAt: now + FIND_HOLD_TTL_MS });
 }
@@ -231,9 +241,11 @@ export function holdFind(throwawayKey: string, provider: SsoProvider, sub: strin
  * Null, and nothing taken, for no hold or an account the find did not name; an expired hold is dropped.
  */
 export function takeFindHold(throwawayKey: string, publicKey: string): FindHold | null {
+    const now = Date.now();
+    sweepHolds(now);
     const h = holds.get(throwawayKey);
     if (!h) return null;
-    if (h.expiresAt <= Date.now()) { holds.delete(throwawayKey); return null; }
+    if (h.expiresAt <= now) { holds.delete(throwawayKey); return null; }
     if (!h.accounts.some((a) => a.publicKey === publicKey)) return null;
     holds.delete(throwawayKey);
     return h;

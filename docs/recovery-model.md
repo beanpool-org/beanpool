@@ -86,6 +86,24 @@ option B, Marty 2026-09-26, card sso-copy-lock), in `apps/server/src/services/re
 The apps changed nothing for this: `sso-share-vectors` and `test-sso-recovery-roundtrip` are
 unchanged, which is the proof.
 
+**Finding the copy from the sign-in** (design `scratch/fable-design/DESIGN-recovery-no-callsign-fable.md`,
+slice S0, 2026-11-09). The lookup hash's salt is random per row, so a verified sign-in can be checked
+against one row but not looked up, and a restore had to be told the account's exact name. Each sign-in
+copy now also holds `sso_find_hash`: HMAC-SHA-256 of `provider|sub` under a key derived from
+`data/recovery-seal.key` (`beanpool-recovery-find/v1`), written at every deposit from the sub the node
+has just verified (`apps/server/src/engine/recovery-find.ts`). A copy of the database cannot test a
+known id against it, for the same reason it cannot open a copy. `POST /api/recovery/find-nonce` and
+`POST /api/recovery/find` answer the accounts a verified sign-in protects here, by name and key; the
+find holds that sign-in for 5 minutes, keyed by the restore's throwaway key, and
+`POST /api/recovery/collect {candidatePublicKey}` opens the session for the account picked and releases
+its copy in the same request through the per-row lookup-hash proof above. The find hash is an index,
+never a proof. A copy made before it is found by a one-at-a-time scan (one scrypt per such copy) and
+made findable at its member's first restore; a main server's boot log counts the copies not yet
+findable, and the scan goes once live servers count 0. The apps move to these routes in S1 (web) and
+S2 (phone); the name routes (`/api/recovery/lookup/:callsign`, `callsign` in `/collect`,
+`/collect/sso-nonce`, `/collect/sso`) are deleted in S3, in the same release as the S2 phone build,
+nodes first and the app the same day (Marty, 2026-11-09).
+
 **Before #750** the phone made two-part copies, `seed = A ⊕ B`: `A` (the hub) in the clear in the
 node's database, `B` sealed to the `sub`. #750 replaced them for correctness (an unauthenticated
 XOR gave silent wrong seeds, #489), not for security: `A` never protected against anyone holding

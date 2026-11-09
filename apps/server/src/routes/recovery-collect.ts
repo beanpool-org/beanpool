@@ -273,15 +273,17 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         try {
             assertPlainTablesWritable();
             requireRecoverySealKey();
-            if (!isRestorableMember(publicKey)) {
-                ctx.status = 400;
-                ctx.body = { error: word('That account has no recovery fragments to collect.') };
-                return;
-            }
+            // The hold first: without one, every key gets this one answer, so no caller learns whether a key is a member's.
             const hold = takeFindHold(requester, publicKey);
             if (!hold) {
                 ctx.status = 400;
                 ctx.body = { error: word("Sign in with your account's sign-in first.") };
+                return;
+            }
+            // Still one a restore may bring back (the find asked the same): not pruned, migrated or made a visitor since.
+            if (!isRestorableMember(publicKey)) {
+                ctx.status = 400;
+                ctx.body = { error: word('That account has no recovery fragments to collect.') };
                 return;
             }
             collection = openCollection(publicKey, requester);

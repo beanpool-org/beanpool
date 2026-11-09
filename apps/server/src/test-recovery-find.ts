@@ -329,8 +329,15 @@ async function main(): Promise<void> {
     // As a copy deposited by code from before S0 sits: no find hash, stamped long ago.
     const oldStamp = '2026-10-01T00:00:00.000Z';
     try { db.prepare(`UPDATE recovery_shares SET sso_find_hash = NULL, updated_at = ? WHERE owner_pubkey = ? AND holder_type = 'sso'`).run(oldStamp, lee.pk); } catch { /* no column yet */ }
+    // And a GitHub copy the boot's removal left (it never throws; engine/github-sign-in-removal.ts): no sign-in can find it.
+    const leftover = newId();
+    addMember(leftover, `Leftover${leftover.pk.slice(0, 6)}`);
+    db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag,
+                sso_lookup_hash, sso_lookup_salt, kdf_params, generation) VALUES (?, 'sso', 'github', 1, 'x', 'x', 'x', ?, ?, '{}', 1)`)
+        .run(leftover.pk, crypto.randomBytes(32).toString('base64url'), crypto.randomBytes(16).toString('base64url'));
     const unfindableBefore = engine?.countUnfindableSignInCopies() ?? -1;
-    check(unfindableBefore === 1, `the boot count's query counts Lee's copy as not yet findable (${unfindableBefore})`);
+    check(unfindableBefore === 1, `the boot count's query counts Lee's copy as not yet findable, and not a copy of a provider no sign-in uses (${unfindableBefore})`);
+    db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(leftover.pk);
     const statsBefore = engine?.findScanStats() ?? { scans: -1, scrypts: -1, healed: -1, scanning: false };
     const leeFound = await findBy(newId(), 'google', LEE_SUB);
     const statsAfterFirst = engine?.findScanStats() ?? statsBefore;
@@ -402,6 +409,15 @@ async function main(): Promise<void> {
     const noHold = await collect(newId(), damo.pk);
     check(noHold.status === 400 && noHold.body?.error === "Sign in with your account's sign-in first." && allSessions() === sessions6,
         `a device that never found anything: 400 "Sign in with your account's sign-in first.", nothing opened (${noHold.status} ${brief(noHold.body)})`);
+    // With no hold, every key gets that same answer: a member's here, a key that is no member, a visitor's row. Otherwise a
+    // stranger holding a key from another community could ask whether it belongs to a member here.
+    const visitor = newId();
+    addMember(visitor, `Visitor${visitor.pk.slice(0, 6)}`);
+    db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(visitor.pk);
+    const probes = [damo.pk, newId().pk, visitor.pk];
+    const answers = await Promise.all(probes.map((pk) => collect(newId(), pk)));
+    check(answers.every((a) => a.status === 400 && a.body?.error === "Sign in with your account's sign-in first.") && allSessions() === sessions6,
+        `with no hold, a member's key, a key that is no member and a visitor's row all get the same 400: no oracle for who is a member (${brief(answers.map((a) => a.body?.error))})`);
     const patPhone = newId();
     const patFind = await findBy(patPhone, 'google', PARENT_SUB);
     check(names(patFind.found).length === 2, 'setup: the parent\'s Google names Pat and Kit');

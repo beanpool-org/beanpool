@@ -146,6 +146,10 @@ async function main() {
     // ── a month after the yes: tidyKnocks deletes the knock row, and the invite still says what it was for ──
     const knockRows = (code: string) => (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE invite_code = ?').get(code) as { n: number }).n;
     assert(knockRows(USED_KNOCK) === 1 && knockRows(KNOCK) === 1, 'before the tidy-up, both knock rows are there');
+    // The applicant re-keys before the tidy-up (SSO recovery or an admin re-key): used_by moves, the note does not.
+    const { moveMemberKeyRows } = await import('./engine/key-move.js');
+    const lateNewKey = crypto.randomBytes(32).toString('hex');
+    db.transaction(() => moveMemberKeyRows(applicantLate.pubKeyHex, lateNewKey, new Date().toISOString(), { keepStamps: false }))();
     const { tidyKnocks } = await import('./engine/knocks.js');
     const tidied = tidyKnocks();
     assert(tidied.deleted === 1 && knockRows(USED_KNOCK) === 0, `tidyKnocks deletes the knock row of the yes given 31 days ago (${JSON.stringify(tidied)})`);
@@ -156,12 +160,14 @@ async function main() {
     assert(lateByCode[USED_KNOCK]?.forKnock === true && lateByCode[USED_KNOCK]?.intendedFor === applicantLate.pubKeyHex,
         'a used invite made for a request to join still says so with its knock row gone');
     assert(lateByCode[USED_KNOCK]?.usedByCallsign === 'applicantBo', '…and still says who joined');
+    assert(lateByCode[USED_KNOCK]?.usedBy === lateNewKey && lateByCode[USED_KNOCK]?.forKnock === true,
+        '…even though its joiner re-keyed before the tidy-up (used_by moved, the note did not)');
     assert(lateByCode[KNOCK]?.forKnock === true, 'an unused knock invite whose row is still there says so as before');
     assert(lateByCode[USED]?.forKnock === false && lateByCode[USED_NOTE]?.forKnock === false && lateByCode[NOTE]?.forKnock === false,
         'and no other invite does');
 
     // ── nobody else (the STOP rule) ──────────────────────────────────────────────────────────────
-    const secrets = [BOUND, NOTE, BARE, KNOCK, USED, USED_KNOCK, USED_NOTE, ENTRY, joiner.pubKeyHex, applicant.pubKeyHex, applicantLate.pubKeyHex];
+    const secrets = [BOUND, NOTE, BARE, KNOCK, USED, USED_KNOCK, USED_NOTE, ENTRY, joiner.pubKeyHex, applicant.pubKeyHex, applicantLate.pubKeyHex, lateNewKey];
     const leaked = (text: string) => secrets.filter((s) => text.includes(s));
     const readers: [string, Id | undefined, number][] = [
         ['another member', other, 403],

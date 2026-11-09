@@ -2275,8 +2275,11 @@ export function getInvitesByMember(pubkey: string): MyInviteRead[] {
         if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
         // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
         // columns: while the row lived, redeemInvite admitted only the applicant's key to this code, so a used one has its
-        // note (the applicant's key) equal to the key that used it. A plain invite's note is the maker's own words.
-        const forKnock = knocked.has(r.code) || (!!r.usedBy && r.intendedFor === r.usedBy);
+        // note (the applicant's key) equal to the key that used it. A re-key moves used_by and not the note, so a note that
+        // is a key spelling counts too (a maker typing a whole key as a note is the one false positive). A plain invite's note
+        // is the maker's own words.
+        const forKnock = knocked.has(r.code)
+            || (!!r.usedBy && (r.intendedFor === r.usedBy || (r.intendedFor != null && isMemberKeySpelling(r.intendedFor))));
         return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
     });
 }

@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "{left} von {budget} übrig",
   "{left} of {level} left": "{left} von {level} übrig",
   "{left} of {level} left · {vouched} vouched": "{left} von {level} übrig · {vouched} verbürgt",
+  "No limit · {vouched} vouched": "Kein Limit · {vouched} verbürgt",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "{left} von {level} übrig · {vouched} verbürgt · {belowZero} im Minus · {writtenOff} abgeschrieben · {passedOn} weitergegeben",
   "{name} · Voucher": "{name} · Bürge",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · {left} von {budget} übrig · {vouched} verbürgt · {belowZero} im Minus ›",

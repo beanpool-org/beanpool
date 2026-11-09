@@ -7054,6 +7054,7 @@
   "{left} of {budget} left": "{budget} में से {left} बचा है",
   "{left} of {level} left": "{level} में से {left} बचा है",
   "{left} of {level} left · {vouched} vouched": "{level} में से {left} बचा है · {vouched} गारंटीकृत",
+  "No limit · {vouched} vouched": "कोई सीमा नहीं · {vouched} गारंटीकृत",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "{level} में से {left} बचा है · {vouched} गारंटीकृत · {belowZero} शून्य से नीचे · {writtenOff} बट्टे खाते डाला गया · {passedOn} आगे दिया गया",
   "{name} · Voucher": "{name} · गारंटीकर्ता",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · {budget} में से {left} बचा है · {vouched} गारंटीकृत · {belowZero} शून्य से नीचे ›",

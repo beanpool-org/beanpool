@@ -7563,6 +7563,7 @@
   "{left} of {budget} left": "залишилося {left} із {budget}",
   "{left} of {level} left": "залишилося {left} із {level}",
   "{left} of {level} left · {vouched} vouched": "залишилося {left} із {level} · під порукою {vouched}",
+  "No limit · {vouched} vouched": "Без обмежень · під порукою {vouched}",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "залишилося {left} із {level} · під порукою {vouched} · нижче нуля {belowZero} · списано {writtenOff} · передано {passedOn}",
   "{name} · Voucher": "{name} · Поручитель",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · залишилося {left} із {budget} · під порукою {vouched} · нижче нуля {belowZero} ›",

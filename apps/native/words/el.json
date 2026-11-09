@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "απομένουν {left} από {budget}",
   "{left} of {level} left": "απομένουν {left} από {level}",
   "{left} of {level} left · {vouched} vouched": "απομένουν {left} από {level} · {vouched} με εγγύηση",
+  "No limit · {vouched} vouched": "Χωρίς όριο · {vouched} με εγγύηση",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "απομένουν {left} από {level} · {vouched} με εγγύηση · {belowZero} κάτω από το μηδέν · διαγράφηκαν {writtenOff} · μεταβιβάστηκαν {passedOn}",
   "{name} · Voucher": "{name} · Εγγυητής",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · απομένουν {left} από {budget} · {vouched} με εγγύηση · {belowZero} κάτω από το μηδέν ›",

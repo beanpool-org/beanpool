@@ -6792,6 +6792,7 @@
   "{left} of {budget} left": "剩余 {left} / 总计 {budget}",
   "{left} of {level} left": "剩余 {left} / 总计 {level}",
   "{left} of {level} left · {vouched} vouched": "剩余 {left} / 总计 {level} · 已担保 {vouched}",
+  "No limit · {vouched} vouched": "无上限 · 已担保 {vouched}",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "剩余 {left} / 总计 {level} · 已担保 {vouched} · {belowZero} 为负 · 已注销 {writtenOff} · 已转赠 {passedOn}",
   "{name} · Voucher": "{name} · 担保人",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · 剩余 {left} / 总计 {budget} · 已担保 {vouched} · {belowZero} 为负 ›",

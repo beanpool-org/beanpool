@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "{budget}-ல் {left} மீதம்",
   "{left} of {level} left": "{level}-ல் {left} மீதம்",
   "{left} of {level} left · {vouched} vouched": "{level}-ல் {left} மீதம் · {vouched} உறுதியளிக்கப்பட்டது",
+  "No limit · {vouched} vouched": "வரம்பு இல்லை · {vouched} உறுதியளிக்கப்பட்டது",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "{level}-ல் {left} மீதம் · {vouched} உறுதியளிக்கப்பட்டது · {belowZero} பூஜ்ஜியத்திற்குக் கீழே · {writtenOff} தள்ளுபடி செய்யப்பட்டது · {passedOn} வழங்கப்பட்டது",
   "{name} · Voucher": "{name} · உறுதியளிப்பவர்",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · {budget}-ல் {left} மீதம் · {vouched} உறுதியளிக்கப்பட்டது · {belowZero} பூஜ்ஜியத்திற்குக் கீழே ›",

@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "quedan {left} de {budget}",
   "{left} of {level} left": "quedan {left} de {level}",
   "{left} of {level} left · {vouched} vouched": "quedan {left} de {level} · {vouched} avalados",
+  "No limit · {vouched} vouched": "Sin límite · {vouched} avalados",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "quedan {left} de {level} · {vouched} avalados · {belowZero} bajo cero · {writtenOff} condonados · {passedOn} transferidos",
   "{name} · Voucher": "{name} · Avalista",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · quedan {left} de {budget} · {vouched} avalados · {belowZero} bajo cero ›",

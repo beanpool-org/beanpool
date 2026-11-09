@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "{budget}-ൽ {left} ബാക്കി",
   "{left} of {level} left": "{level}-ൽ {left} ബാക്കി",
   "{left} of {level} left · {vouched} vouched": "{level}-ൽ {left} ബാക്കി · {vouched} ഉറപ്പുനൽകി",
+  "No limit · {vouched} vouched": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "{level}-ൽ {left} ബാക്കി · {vouched} ഉറപ്പുനൽകി · {belowZero} പൂജ്യത്തിന് താഴെ · {writtenOff} എഴുതിത്തള്ളി · {passedOn} കൈമാറി",
   "{name} · Voucher": "{name} · ഗ്യാരന്റർ",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · {budget}-ൽ {left} ബാക്കി · {vouched} ഉറപ്പുനൽകി · {belowZero} പൂജ്യത്തിന് താഴെ ›",

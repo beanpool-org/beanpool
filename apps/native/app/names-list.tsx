@@ -1121,11 +1121,14 @@ export default function NamesListScreen() {
                                 <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
                             </View>
                             <Text style={styles.entryMeta}>
-                                {t('{left} of {level} left · {vouched} vouched', {
-                                    left: formatNumber(rv.left),
-                                    level: formatNumber(rv.level),
-                                    vouched: formatNumber(rv.peopleVouched),
-                                })}
+                                {rv.noLimit
+                                    // An owner vouches with no limit (Marty, 9 Nov): no budget figure, as the VOUCHERS section.
+                                    ? t('No limit · {vouched} vouched', { vouched: formatNumber(rv.peopleVouched) })
+                                    : t('{left} of {level} left · {vouched} vouched', {
+                                        left: formatNumber(rv.left),
+                                        level: formatNumber(rv.level),
+                                        vouched: formatNumber(rv.peopleVouched),
+                                    })}
                             </Text>
                         </View>
                         <View style={styles.buttonRow}>

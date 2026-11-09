@@ -3503,3 +3503,12 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
         }
     });
 });
+
+describe('the Vouchers filter: an owner role row has no budget figure (Marty, 9 Nov; review of 94c4e904)', () => {
+    it("an owner's role row says No limit, as the VOUCHERS section and the entry tag do", () => {
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        const block = screen.slice(screen.indexOf("filter === 'vouchers' && filteredRoleVouchers.map("), screen.indexOf("filter === 'vouchers' && filteredRoleVouchers.map(") + 1200);
+        expect(block).toMatch(/rv\.noLimit\s*\n?\s*(\/\/[^\n]*\n\s*)?\?\s*t\('No limit · \{vouched\} vouched'/);
+        expect(block).toMatch(/:\s*t\('\{left\} of \{level\} left · \{vouched\} vouched'/);
+    });
+});

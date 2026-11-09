@@ -7049,6 +7049,7 @@
   "{left} of {budget} left": "restano {left} su {budget}",
   "{left} of {level} left": "restano {left} su {level}",
   "{left} of {level} left · {vouched} vouched": "restano {left} su {level} · {vouched} garantiti",
+  "No limit · {vouched} vouched": "Nessun limite · {vouched} garantiti",
   "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "restano {left} su {level} · {vouched} garantiti · {belowZero} sotto zero · {writtenOff} cancellati · {passedOn} trasmessi",
   "{name} · Voucher": "{name} · Garante",
   "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · restano {left} su {budget} · {vouched} garantiti · {belowZero} sotto zero ›",

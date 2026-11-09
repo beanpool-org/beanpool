@@ -10756,7 +10756,7 @@ export function dispatchPushNotification(
         // for it. The role is looked up for that kind only.
         // The applicant who tapped "Tell me when they answer" asked for exactly this one (web push W1), and has no switches.
         const alwaysTold = OWNER_SERVER_KINDS.has(kind) || kind === 'join.answered'
-            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+            || ((kind === 'community.knock' || kind === 'community.knock-shared') && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);

@@ -106,7 +106,7 @@ Where your community allows it, you can also tap **Share outside the community**
 - Whoever opens it can ask to join your community, open it in the app, or look around the global community.
 - A post only your group or one person can see can't be shared outside.
 
-Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off.
+Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. When someone asks to join after reading it, its row counts them, such as **2 asked to join from this link**, and your phone tells you: **Someone asked to join after a listing you shared.** It never says who. Where only admins answer requests, the count is all you see. The person who wrote the listing is not told. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off.
 
 ### Inviting a friend from the post
 

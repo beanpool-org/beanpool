@@ -440,6 +440,12 @@ export interface SyncJoinRequest {
     inviteCode: string | null;
     decidedAt: string | null;
     updatedAt: string;
+    /**
+     * The post and the member whose link shared outside the knock came with (shared-listing door A3), or null; cleared
+     * with what the applicant sent. Absent from a main server older than them.
+     */
+    viaPostId?: string | null;
+    viaSharerPubkey?: string | null;
 }
 
 /**
@@ -1520,6 +1526,8 @@ function joinRequestOfRow(r: any): SyncJoinRequest {
         inviteCode: r.invite_code ?? null,
         decidedAt: r.decided_at ?? null,
         updatedAt: r.updated_at,
+        viaPostId: r.via_post_id ?? null,
+        viaSharerPubkey: r.via_sharer_pubkey ?? null,
     };
 }
 

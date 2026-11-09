@@ -2257,6 +2257,13 @@ export function initSchema() {
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate join_requests table for cancelled status:', err?.message || err);
     }
+    // Where a request to join came from (shared-listing door A3, engine/peek-tickets.ts peekProvenance), after the
+    // migration above, which copies the table's thirteen columns as they were. No table yet on a database from before
+    // requests to join: schema.sql makes it with these.
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_post_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_sharer_pubkey TEXT`).run(); } catch { }
+    // How many asked to join from each link shared outside (the sharer's Shared outside row).
+    try { db.prepare(`ALTER TABLE peek_tickets ADD COLUMN asked INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)`).run(); } catch { }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).

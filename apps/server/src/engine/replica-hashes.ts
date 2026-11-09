@@ -150,7 +150,13 @@ export interface TableHashes {
  * after a take-over from such a copy each member's copy is found by the scan of copies with no find hash, and made
  * findable, at their first restore (engine/recovery-find.ts).
  */
-export const TABLE_HASHES_VERSION = 25;
+/**
+ * 26: join_requests gains via_post_id and via_sharer_pubkey (where a request to join came from, shared-listing door A3,
+ * DESIGN-shared-listing-door-fable.md §2.2). Raised for the same reason as 8: a standby updated before its main server hashes
+ * `join_requests` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the provenance line answerers
+ * read; the request itself is copied whole, and after a take-over from such a copy it simply shows no "After reading" line.
+ */
+export const TABLE_HASHES_VERSION = 26;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

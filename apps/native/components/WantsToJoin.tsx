@@ -9,7 +9,7 @@ import {
 } from '../utils/knock-inbox';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from './VouchPresetChoice';
-import { t, tn, word } from '@beanpool/core';
+import { PEEK_WORDS, t, tn, word } from '@beanpool/core';
 
 /**
  * The words of this section, in the member's language. utils/knock-inbox.ts signs its requests with the member's key and
@@ -76,6 +76,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true, fromN
         name: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
         meta: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
         message: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 10 },
+        via: { fontSize: 14, color: colors.text.secondary, lineHeight: 20, marginTop: 8 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
         invite: { minHeight: 44, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         inviteText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
@@ -178,6 +179,12 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true, fromN
                         </View>
                     </View>
                     <Text style={styles.message}>{req.message}</Text>
+                    {/* Where it came from (shared-listing door A3): the listing shared outside and the member who shared it. */}
+                    {req.via && (
+                        <Text style={styles.via} testID={`wants-to-join-via-${req.id}`}>
+                            {t(PEEK_WORDS.askedAfter, { title: req.via.title, sharer: req.via.sharer })}
+                        </Text>
+                    )}
                     {myVouching?.voucher && (
                         <View style={{ marginTop: 8 }}>
                             <VouchPresetChoice

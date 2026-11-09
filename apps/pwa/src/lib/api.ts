@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -749,6 +749,8 @@ export interface JoinRequest {
     /** Where their app says it came from (`global.beanpool.org`); not checked by anyone. */
     fromNode: string | null;
     createdAt: string;
+    /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
+    via: KnockVia | null;
 }
 
 export type JoinRequestsResult =
@@ -775,6 +777,7 @@ function readJoinRequest(raw: unknown): JoinRequest | null {
         avatar: typeof k.avatar === 'string' && k.avatar ? k.avatar : null,
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
+        via: readKnockVia(k.via),
     };
 }
 

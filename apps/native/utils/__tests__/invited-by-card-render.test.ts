@@ -78,7 +78,7 @@ afterEach(() => {
 const member = (role: 'owner' | 'admin' | null) => ({ kind: 'member' as const, publicKey: OLIVE, callsign: 'Olive', avatarUrl: null, tier: 'Elder', role });
 const tierWords = (tier: string | null) => tier ?? '';
 async function draw(props: Record<string, unknown>) {
-    await act(async () => { root.render(createElement(InvitedByCard as any, { isSelf: false, targetPubkey: MIA, tierWords, ...props })); });
+    await act(async () => { root.render(createElement(InvitedByCard as any, { isSelf: false, targetPubkey: MIA, tierWords, ...props }) as unknown as Parameters<Root['render']>[0]); });
 }
 const GONE = ['Invited directly by the system admin', 'Vetted by the admin at sign-up'];
 

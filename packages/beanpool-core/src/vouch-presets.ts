@@ -103,6 +103,8 @@ export const VOUCH_PRESET_WORDS = {
     belowZero: word('@{name} is below zero: a credit-line gift or a Decision can help.'),
     invitedBy: word('Invited by @{name}'),
     ledgerVouchedBy: word('vouched by @{name}'),
+    // The Ledger's line for a vouch (I3; DESIGN-invites-vouching-review-fable.md §2): how much of your credit line, and who stood behind it, named whatever their role.
+    ledgerCreditLine: word('Your credit line: {amount}, vouched by @{name}'),
     ledgerBudget: word('Your budget: {left} of {total} left'),
     ledgerBudgetNoLimit: word('Your budget: No limit'),
     budgetHistory: word('Budget history'),
@@ -182,6 +184,7 @@ export const vouchFor = (name: string) => t(VOUCH_PRESET_WORDS.vouchFor, { name 
 export const raiseVouchFor = (name: string) => t(VOUCH_PRESET_WORDS.raiseVouchFor, { name });
 export const invitedBy = (name: string) => t(VOUCH_PRESET_WORDS.invitedBy, { name });
 export const ledgerVouchedBy = (name: string) => t(VOUCH_PRESET_WORDS.ledgerVouchedBy, { name });
+export const ledgerCreditLine = (name: string, amount: number) => t(VOUCH_PRESET_WORDS.ledgerCreditLine, { name, amount: formatNumber(amount) });
 export const ledgerBudget = (left: number, total: number) =>
     t(VOUCH_PRESET_WORDS.ledgerBudget, { left: formatNumber(left), total: formatNumber(total) });
 

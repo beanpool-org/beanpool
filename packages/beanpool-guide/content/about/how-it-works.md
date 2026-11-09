@@ -44,7 +44,7 @@ You can also send beans to someone as a gift, with no trade.
 
 You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later.
 
-Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget.
+Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget. An owner can also vouch 200 or 500 beans, and has no budget limit. Once an owner has vouched for you, your vouches can add up to 500 beans in all (300 otherwise).
 
 Your credit line grows with your **trust**:
 

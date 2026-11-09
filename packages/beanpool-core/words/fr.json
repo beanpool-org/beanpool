@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Sur votre budget : Sans limite",
   "No limit": "Sans limite",
   "Your budget: No limit": "Votre budget : Sans limite",
-  "No limit · {vouched} vouched · {below} below zero": "Sans limite · {vouched} parrainés · {below} sous zéro"
+  "No limit · {vouched} vouched · {below} below zero": "Sans limite · {vouched} parrainés · {below} sous zéro",
+  "Clear all": "Tout effacer",
+  "Clear this notice": "Effacer cette notification"
 }

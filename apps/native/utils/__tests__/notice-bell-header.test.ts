@@ -28,7 +28,9 @@ vi.mock('react-native', async () => {
         // The header's row at the floor's width (320 dp less the bean and the right-hand icons).
         useEffect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 120, height: 48 } } }); }, []);
         const attrs: Record<string, unknown> = {};
-        if (onPress) attrs.onClick = () => onPress();
+        // A press goes to the innermost Pressable alone, as React Native's responder does: a ✕ on a row never also presses the
+        // backdrop behind the sheet (a DOM click would bubble to it).
+        if (onPress) attrs.onClick = (e: { stopPropagation: () => void }) => { e.stopPropagation(); onPress(); };
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
@@ -104,6 +106,8 @@ beforeEach(() => {
     resetHomeStoreForTests();
     nav.push.mockClear();
     vi.mocked(nodePost.signedPost).mockClear();
+    vi.mocked(db.getUnreadByConversation).mockReset();
+    vi.mocked(db.getUnreadByConversation).mockResolvedValue([] as never);
     node.notices = [];
     vi.mocked(db.signedGet).mockReset();
     vi.mocked(db.signedGet).mockImplementation(async (p: string) => ({
@@ -179,6 +183,72 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(nav.push).toHaveBeenLastCalledWith(`/chat/${CHAT}`);
         expect(bell().getAttribute('aria-label')).toBe('Notifications');
         expect(bell().textContent).toBe('');
+    });
+
+    const xFor = (id: number) => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => b.getAttribute('aria-label') === 'Clear this notice')[id] as HTMLElement;
+    const clearAllButton = () => Array.from(document.querySelectorAll('[role="dialog"] button')).find(b => b.getAttribute('aria-label') === 'Clear all') as HTMLElement | undefined;
+
+    it("a row's ✕ clears it without opening it: off the list and the count, marked on the node, the sheet stays up", async () => {
+        node.notices = [notice('n1'), notice('n2', { kind: 'market.request', title: '🤝 Request', body: 'Ben asked for your jam', data: { screen: 'post', postId: POST } })];
+        await renderHeader();
+        await openSheet();
+        expect(document.querySelectorAll('[aria-label="Clear this notice"]')).toHaveLength(2);
+        await act(async () => { xFor(1).click(); });
+        await settle();
+        expect(nodePost.signedPost).toHaveBeenCalledTimes(1);
+        expect(nodePost.signedPost).toHaveBeenCalledWith(NODE, '/api/notices/push/seen', { ids: ['n2'] }, IDENTITY);
+        expect(nav.push).not.toHaveBeenCalled();
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+        expect(rows().map(r => r.getAttribute('aria-label'))).toEqual(['💬 New Message. Maya sent you a message']);
+        expect(bell().textContent).toBe('1');
+        await act(async () => { xFor(0).click(); });
+        await settle();
+        expect(nodePost.signedPost).toHaveBeenLastCalledWith(NODE, '/api/notices/push/seen', { ids: ['n1'] }, IDENTITY);
+        expect(bell().textContent).toBe('');
+        expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Nothing new.');
+    });
+
+    it('"Clear all" clears every notice in one request, and leaves "Needs you" alone', async () => {
+        // One unread chat from the phone's own database: a "Needs you" line, which is not a notice.
+        vi.mocked(db.getUnreadByConversation).mockResolvedValue([{ id: CHAT, type: 'dm', unread: 2, peer: 'Maya' }] as never);
+        node.notices = [notice('n1'), notice('n2'), notice('n3')];
+        await renderHeader();
+        expect(bell().textContent).toBe('3');
+        await openSheet();
+        const needs = Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => /Maya|message/i.test(b.getAttribute('aria-label') ?? '')
+            && !/Clear|sent you a message/.test(b.getAttribute('aria-label') ?? ''));
+        expect(needs.length).toBeGreaterThan(0);
+        expect(clearAllButton()).toBeDefined();
+        await act(async () => { clearAllButton()!.click(); });
+        await settle();
+        expect(nodePost.signedPost).toHaveBeenCalledTimes(1);
+        expect(nodePost.signedPost).toHaveBeenCalledWith(NODE, '/api/notices/push/seen', { all: true }, IDENTITY);
+        expect(nav.push).not.toHaveBeenCalled();
+        expect(rows()).toHaveLength(0);
+        expect(clearAllButton()).toBeUndefined();
+        expect(document.querySelectorAll('[aria-label="Clear this notice"]')).toHaveLength(0);
+        // The open thing stays, and the bell falls back to its "needs you" state (no count).
+        const stillNeeds = Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => /Maya|message/i.test(b.getAttribute('aria-label') ?? ''));
+        expect(stillNeeds.length).toBe(needs.length);
+        expect(bell().textContent).toBe('');
+        expect(bell().getAttribute('aria-label')).toMatch(/needs? you/);
+    });
+
+    it('with no notices there is no "Clear all"', async () => {
+        node.notices = [];
+        await renderHeader();
+        await openSheet();
+        expect(clearAllButton()).toBeUndefined();
+    });
+
+    it('a clear the node did not take: the list is read again and the rows come back', async () => {
+        node.notices = [notice('n1'), notice('n2')];
+        vi.mocked(nodePost.signedPost).mockResolvedValueOnce({ ok: false, json: async () => ({}) } as never);
+        await renderHeader();
+        await openSheet();
+        await act(async () => { clearAllButton()!.click(); });
+        await settle();
+        expect(bell().textContent).toBe('2');
     });
 
     it("opening the chat marks its rows: the node's word takes them off, and the count follows", async () => {

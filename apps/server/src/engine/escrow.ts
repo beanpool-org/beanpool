@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, standingHoldPayload, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, loanDays, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -13,10 +13,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isDealQuantity, DEAL_QUANTITY_ERROR } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
-import {
-    assertNotRunningStandingPeriod, checkStandingStart, insertStandingDeal, standingPeriodSettled, tellStanding,
-    type StandingNotice, type StandingStart,
-} from './standing-deals.js';
+import { checkStandingStart, firstPeriodOf, insertStandingDeal, type CheckedStandingStart, type StandingStart } from './standing-deals.js';
 import type { KeptNoticePushOptions } from './kept-notices.js';
 import crypto from 'node:crypto';
 import {
@@ -518,8 +515,8 @@ export interface HoldParties {
 
 /**
  * A refusal that means the payer's Beans can't cover the hold right now (the floor, a credit line frozen, an enterprise's
- * Rules 5 and 6), as opposed to one that means the deal can't go on at all. Only the standing deal's scheduled hold asks
- * (engine/standing-deals.ts): it tries a short payer again for a week (DESIGN-standing-deals-fable §1.4).
+ * Rules 5 and 6), as opposed to one that means the deal can't go on at all. Only the standing deal's scheduled payment asks
+ * (engine/standing-deals.ts): it tries a short payer again until the period's grace ends (DESIGN-standing-deals-upfront).
  */
 export function isShortRefusal(e: unknown): boolean {
     return !!(e && typeof e === 'object' && (e as any).holdShort === true);
@@ -575,7 +572,7 @@ function assertHoldFunded(cb: EscrowCallbacks, p: HoldParties, amount: number, o
     }
 }
 
-/** A deal row to hold Beans for: a new one (acceptPost, a standing deal's next period) or a request approved. */
+/** A deal row to hold Beans for: a new one (acceptPost) or a request approved. */
 export interface HoldOpening {
     txId: string;
     postId: string;
@@ -583,20 +580,18 @@ export interface HoldOpening {
     amount: number;
     hours?: number | null;
     memo: string;
-    /** The ledger row's auth columns (an enterprise's keeper, or a standing deal's payer and its period's payload). */
+    /** The ledger row's auth columns (an enterprise's keeper). */
     auth?: { signer: string; payload?: string };
     /** A new row to write ('insert'), or a request to move on to held ('approve'). */
     row: 'insert' | 'approve';
     createdAt: string;
     /** The listing comes off the board under this deal (one deal at a time): the words when it is no longer there. */
     takeListing: { gone: string } | null;
-    /** A period of a standing deal: its row carries both, and a one-off listing already under it is moved on to it. */
-    standing?: { id: string; periodNo: number };
 }
 
 /**
- * Hold a deal's Beans: the one copy of the hold for every door (acceptPost, approvePostRequest, and the standing deal's
- * scheduled hold, engine/standing-deals.ts). INSIDE the caller's conservingTransaction: any throw here unwinds the row, the
+ * Hold a deal's Beans: the one copy of the hold for every door that holds (acceptPost, approvePostRequest; a standing deal
+ * holds nothing, payStandingPeriod). INSIDE the caller's conservingTransaction: any throw here unwinds the row, the
  * listing and the ledger together. The payer's Beans go into the deal's own escrow account through transfer(), fee-exempt
  * (the 1.5% is taken at the release), which checks the payer's floor again; a keeper's pay comes off the enterprise's earned
  * surplus with it (Rule 6).
@@ -605,21 +600,12 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
     if (h.row === 'approve') {
         const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(h.txId);
         if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
-        if (h.standing) {
-            db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=NULL, standing_id=?, period_no=? WHERE id=?`)
-                .run(h.amount, h.standing.id, h.standing.periodNo, h.txId);
-        }
     }
 
     if (h.takeListing) {
-        // Off the board under this deal. A standing deal's later period moves a one-off listing it already holds on to
-        // its new row (engine/standing-deals.ts): the listing stays taken for as long as the standing deal runs.
-        const updated = h.standing
-            ? db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                          WHERE id=? AND (status='active' OR (status='pending' AND pending_transaction_id IN (SELECT id FROM marketplace_transactions WHERE standing_id = ?)))`)
-                .run(h.parties.payer, h.createdAt, h.txId, h.postId, h.standing.id)
-            : db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`)
-                .run(h.parties.payer, h.createdAt, h.txId, h.postId);
+        // Off the board under this deal.
+        const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`)
+            .run(h.parties.payer, h.createdAt, h.txId, h.postId);
         if (updated.changes === 0) throw new Error(h.takeListing.gone);
 
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
@@ -641,9 +627,61 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
     }
 
     if (h.row === 'insert') {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, standing_id, period_no) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
-            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount, h.hours ?? null, h.createdAt, h.standing?.id ?? null, h.standing?.periodNo ?? null);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
+            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount, h.hours ?? null, h.createdAt);
     }
+}
+
+/** One period of a standing deal to pay: a new row (the take-up of an Offer, every later period) or a Need's request approved. */
+export interface StandingPayment {
+    txId: string;
+    postId: string;
+    parties: HoldParties;
+    standingId: string;
+    periodNo: number;
+    amount: number;
+    memo: string;
+    /** The ledger row's auth columns: the authorisation's signer and `standing:<id>:<n>`. */
+    auth: { signer: string; payload: string };
+    /** A new row to write ('insert'), or a Need's request to move on to paid ('approve'). */
+    row: 'insert' | 'approve';
+    paidAt: string;
+    /** A one-off listing is off the board under the standing deal's latest period while it runs. */
+    takeListing: boolean;
+}
+
+/**
+ * Pay one period of a standing deal, at its start (DESIGN-standing-deals-upfront-fable §1): the period's row written
+ * `completed` (completed_at its created_at, standing_id, period_no; the UNIQUE (standing_id, period_no) index refuses a
+ * second), and ONE ledger row, transfer(payer, payee, amount, memo, 'escrow', not exempt): the one combination that takes
+ * the 1.5% to the Commons, as every release does, and re-checks the payer's usable floor and the enterprise floor itself.
+ * Nothing is held in trust and no escrow account is made. A refused transfer throws a short refusal (isShortRefusal).
+ * INSIDE the caller's conservingTransaction: any throw unwinds the row, the listing and the ledger together. Returns what a
+ * release returns, for afterRelease.
+ */
+export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { releaseResult: any; releaseCredits: number } {
+    if (p.row === 'approve') {
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, created_at=?, credits=?, hours=NULL, standing_id=?, period_no=?
+                                WHERE id=? AND status='requested'`).run(p.paidAt, p.paidAt, p.amount, p.standingId, p.periodNo, p.txId);
+        if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
+    } else {
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, standing_id, period_no)
+                    VALUES (?, ?, ?, ?, ?, NULL, 'completed', ?, ?, ?, ?)`)
+            .run(p.txId, p.postId, p.parties.payer, p.parties.payee, p.amount, p.paidAt, p.paidAt, p.standingId, p.periodNo);
+    }
+    if (p.takeListing) {
+        // A one-off listing stays off the board under the standing deal's latest period (design §3): taken at the first,
+        // moved on to each later one, back when the standing deal ends (standing-deals.ts listingBack).
+        const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=COALESCE(accepted_at, ?), pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                                    WHERE id=? AND (status='active' OR (status='pending' AND pending_transaction_id IN (SELECT id FROM marketplace_transactions WHERE standing_id = ?)))`)
+            .run(p.parties.payer, p.paidAt, p.txId, p.postId, p.standingId);
+        if (updated.changes === 0) throw new Error(word('Post is no longer available'));
+        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
+            .run(p.postId, p.txId);
+    }
+    const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount, p.memo, 'escrow', false, p.auth);
+    if (!releaseResult) throw short(new Error(word('Insufficient balance to accept this offer')));
+    return { releaseResult, releaseCredits: p.amount };
 }
 
 /** A request's deal as approvePostRequest's checks read it: a requested row, or a standing deal's next period on a Need. */
@@ -789,9 +827,9 @@ export function approvePostRequest(
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (!post || post.type === 'poll' || post.type === 'event') return null;
 
-    // A standing deal on a Need (DESIGN-standing-deals-fable §4): the author pays, and signs as they approve. What they
-    // signed must be this listing, this helper and its price per period; the period's Beans are what is held. Read after
-    // the checks that say the request is not this caller's to approve, as for any approval.
+    // A standing deal on a Need (DESIGN-standing-deals-upfront-fable §1): the author pays, and signs as they approve. What
+    // they signed must be this listing, this helper and its price per period; the period's Beans are what is paid. Read
+    // after the checks that say the request is not this caller's to approve, as for any approval.
     assertNoDealOnCopy(post.shown_from_host);
     if ((post.type === 'offer' ? row.seller_pubkey : row.buyer_pubkey) !== authorPublicKey) return null;
     const standing = opts?.standing
@@ -806,24 +844,25 @@ export function approvePostRequest(
         : [];
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
+    if (standing) {
+        // A standing deal on a Need: the author pays the helper the first period now, nothing held (design §1).
+        const tx = startStanding(cb, standing, { txId: row.id, row: 'approve', post, parties, actor: authorPublicKey });
+        tellWaitingBorrowers(cb, waitingBorrowers, authorPublicKey, post);
+        return tx;
+    }
 
     cb.conservingTransaction(() => {
-        if (standing) insertStandingDeal(standing, row.id);
         openHold(cb, {
             txId: row.id,
             postId: post.id,
             parties,
             amount: deal.credits,
-            memo: standing ? standingLines.memo(standing.auth.unit, post.title || '', 1) : `Escrow hold for approved deal ${row.post_id}`,
-            // Only attribute authSigner when the debited account is the enterprise itself (Need listings); a standing deal's
-            // hold names its signed authorisation's signer and period (DESIGN-standing-deals-fable §6).
-            auth: standing
-                ? { signer: standing.signer, payload: standingHoldPayload(standing.auth.standingId, 1) }
-                : (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
+            memo: `Escrow hold for approved deal ${row.post_id}`,
+            // Only attribute authSigner when the debited account is the enterprise itself (Need listings).
+            auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
             row: 'approve',
             createdAt: new Date().toISOString(),
             takeListing: parties.oneAtATime ? { gone: word('Post is no longer available') } : null,
-            standing: standing ? { id: standing.auth.standingId, periodNo: 1 } : undefined,
         });
     });
 
@@ -1084,9 +1123,9 @@ export function acceptPost(
         throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
 
-    // A standing deal (DESIGN-standing-deals-fable; Marty, 9 Nov 2026): a listing priced per week or per month, taken up with
-    // the payer's signed authorisation. What they signed must be this listing, its author and its price per period; one
-    // period's Beans are held, and the period is the deal's quantity. Without `standing` the accept is today's.
+    // A standing deal (DESIGN-standing-deals-upfront-fable; Marty, 10 Nov 2026): a listing priced per week or per month,
+    // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per
+    // period; the first period is paid now, and the period is the deal's quantity. Without `standing` the accept is today's.
     const standing = opts?.standing
         ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.priceType, price: post.credits, payer: buyerPublicKey, payee: post.authorPublicKey, signer: opts.authSigner })
         : null;
@@ -1102,6 +1141,10 @@ export function acceptPost(
         return post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
     }, { authSigner: opts?.authSigner, standing: !!standing });
     const finalCredits = parties.amount;
+    if (standing) {
+        cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
+        return startStanding(cb, standing, { txId: crypto.randomUUID(), row: 'insert', post, parties: { ...parties, oneAtATime: !post.repeatable }, actor: buyerPublicKey });
+    }
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(),
@@ -1120,24 +1163,20 @@ export function acceptPost(
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
     cb.conservingTransaction(() => {
-        if (standing) insertStandingDeal(standing, tx.id);
         openHold(cb, {
             txId: tx.id,
             postId: post.id,
             parties,
             amount: finalCredits,
             hours: keptHours,
-            memo: standing ? standingLines.memo(standing.auth.unit, post.title || '', 1) : `Escrow hold for offer ${post.id}`,
-            auth: standing
-                ? { signer: standing.signer, payload: standingHoldPayload(standing.auth.standingId, 1) }
-                : (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
+            memo: `Escrow hold for offer ${post.id}`,
+            auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
             row: 'insert',
             createdAt: tx.createdAt,
             takeListing: !post.repeatable ? { gone: word('Post is no longer available — it is already committed to another deal') } : null,
-            standing: standing ? { id: standing.auth.standingId, periodNo: 1 } : undefined,
         });
     });
-    const held = standing ? getMarketplaceTransaction(db, tx.id) ?? tx : tx;
+    const held = tx;
 
     // The listing is now pending on everyone's board: the others get a bare doorbell to re-fetch it.
     cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: held }, tradeRecipients(cb, held), { othersGetDoorbell: true });
@@ -1172,24 +1211,43 @@ export function acceptPost(
     return held;
 }
 
-/** What becomes of a listing when a deal on it is released: today's rule, kept as it is, or (a standing deal) left alone. */
-export type ListingAfterRelease = 'as-deal' | 'keep';
+/**
+ * A standing deal taken up (acceptPost on an Offer, approvePostRequest on a Need): its row and its first period paid to the
+ * payee now, in one conservingTransaction (DESIGN-standing-deals-upfront-fable §1), then what a release does after its
+ * commit, with the payee's push saying what came in. Nothing is held, so there is no escrow line and no hold's push.
+ */
+function startStanding(cb: EscrowCallbacks, v: CheckedStandingStart, d: {
+    txId: string; row: 'insert' | 'approve'; post: any; parties: HoldParties & { oneAtATime: boolean }; actor: string;
+}): MarketplaceTransaction {
+    const title = String(d.post.title || '');
+    const first = firstPeriodOf(v, title);
+    let paid: { releaseResult: any; releaseCredits: number } | null = null;
+    cb.conservingTransaction(() => {
+        insertStandingDeal(v, d.txId);
+        paid = payStandingPeriod(cb, {
+            txId: d.txId, postId: d.post.id, parties: d.parties, standingId: v.auth.standingId, ...first,
+            row: d.row, paidAt: new Date().toISOString(), takeListing: d.parties.oneAtATime,
+        });
+    });
+    const row = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(d.txId) as any;
+    const payerName = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(v.payer) as { callsign?: string } | undefined)?.callsign || 'A member';
+    return afterRelease(cb, row, d.post, paid!, d.actor, {
+        title: standingLines.noticeTitle(), body: standingLines.paidIn(v.auth.unit, v.auth.beansPerPeriod, title, payerName, 1),
+    });
+}
 
 /**
- * Release a held deal to its payee: the one copy of the release for completePostTransaction and the standing deal's
- * period end (engine/standing-deals.ts). INSIDE the caller's conservingTransaction. The row goes from pending to completed,
- * exactly one row or it throws (a second release of the same deal, from any door, finds none); `adjust` then runs (a deal
- * struck for a time and confirmed for another: the top-up or the refund) and returns what is released; the payee is paid
- * that, less the 1.5% to the Commons (the one transfer here that is not fee-exempt); and the listing comes off the board
- * for good, or back on it for a repeatable one or a loan, or (a standing deal's period) is left as it is.
+ * Release a held deal to its payee (completePostTransaction). INSIDE the caller's conservingTransaction. The row goes from
+ * pending to completed, exactly one row or it throws (a second release of the same deal, from any door, finds none);
+ * `adjust` then runs (a deal struck for a time and confirmed for another: the top-up or the refund) and returns what is
+ * released; the payee is paid that, less the 1.5% to the Commons (the one transfer here that is not fee-exempt); and the
+ * listing comes off the board for good, or back on it for a repeatable one or a loan.
  */
 export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
     completedAt: string;
     credits: number;
-    memo?: string;
     authSigner?: string;
     adjust?: () => number;
-    listing: ListingAfterRelease;
 }): { releaseResult: any; releaseCredits: number } {
     const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(opts.completedAt, row.id);
     if (updateRes.changes !== 1) throw new Error(word('Deal was already completed or cancelled'));
@@ -1200,10 +1258,10 @@ export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
     // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
     // settles to a real member's account. Cross-node settlement handles its own fee separately
     // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
-    const releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, opts.memo ?? `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts.authSigner ? { signer: opts.authSigner } : undefined);
+    const releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts.authSigner ? { signer: opts.authSigner } : undefined);
     if (!releaseResult) throw new Error(word('Failed to release escrow funds'));
 
-    if (post && opts.listing === 'as-deal') {
+    if (post) {
         if (!backOnBoardAfterDeal(post)) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(opts.completedAt, opts.completedAt, row.post_id);
         } else {
@@ -1217,10 +1275,12 @@ export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
 
 /**
  * After a release's commit: the enterprise's earned surplus and the sweeps (Rules 6 and 7, docs/the-commons.md §2.4), the
- * live event, the activity feed, the chat line and the payee's push. The one copy, for completePostTransaction and the
- * standing deal's period end (`actor` 'SYSTEM' there: none of it needs a signer).
+ * live event, the activity feed, the chat line and the payee's push. The one copy, for completePostTransaction and each
+ * period a standing deal pays (engine/standing-deals.ts; `actor` 'SYSTEM' from the tick: none of it needs a signer), whose
+ * push says what came in (`push`), or none (null: a period covered in its grace, told by its own notice).
  */
-export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released: { releaseResult: any; releaseCredits: number }, actor: string): MarketplaceTransaction {
+export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released: { releaseResult: any; releaseCredits: number }, actor: string,
+    push?: { title: string; body: string } | null): MarketplaceTransaction {
     const { releaseResult, releaseCredits } = released;
     // Rule 6 & 7: Earned surplus tracking, deferred wage claims, and working capital ceiling sweep (docs/the-commons.md §2.4).
     const sellerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(row.seller_pubkey) as any;
@@ -1274,15 +1334,17 @@ export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released:
         console.warn('[Marketplace] ESCROW_RELEASED system message failed:', e);
     }
 
-    cb.dispatchPushNotification(
-        [row.seller_pubkey],
-        actor,
-        '🎉 Deal Completed!',
-        `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
-        { screen: 'post', postId: row.post_id, txId: row.id },
-        'escrow',
-        'trade.update'
-    );
+    if (push !== null) {
+        cb.dispatchPushNotification(
+            [row.seller_pubkey],
+            actor,
+            push?.title ?? '🎉 Deal Completed!',
+            push?.body ?? `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
+            { screen: 'post', postId: row.post_id, txId: row.id },
+            'escrow',
+            'trade.update'
+        );
+    }
     return tx;
 }
 
@@ -1308,9 +1370,6 @@ export function completePostTransaction(
 
     if (row.buyer_pubkey !== confirmerPublicKey) return null;
     assertNodeMember(confirmerPublicKey);
-    // A standing deal's period running by itself is released by the node at its end (decision 3); the payer settles it
-    // themselves once they have held it back (engine/standing-deals.ts).
-    assertNotRunningStandingPeriod(row);
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator completing the deal
@@ -1359,15 +1418,15 @@ export function completePostTransaction(
     // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
     // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
     // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
-    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, a standing deal's period, or an old row that
-    // never stored them) pays what it holds, whatever hours are confirmed.
+    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays what
+    // it holds, whatever hours are confirmed.
     const bookedHours = Number(row.hours);
     // A loan for one fee (a Free loan included) keeps its days on the deal to say when it is due back, not to price it: it
     // pays what it holds, whatever days are confirmed, as every deal on a fixed price does. The listing's price and its
     // lending hold while the deal is open (engine/posts.ts assertPriceNotFrozen, lendColumnsOnEdit), so what they say
     // here is what the deal was struck under.
     const oneFeeLoan = post?.lendable === 1 && (post?.price_type || 'fixed') === 'fixed';
-    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan && !row.standing_id;
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan;
 
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
@@ -1407,14 +1466,12 @@ export function completePostTransaction(
 
     const completedAt = new Date().toISOString();
     let released: { releaseResult: any; releaseCredits: number } = { releaseResult: null, releaseCredits };
-    let told: StandingNotice[] = [];
 
     cb.conservingTransaction(() => {
         released = releaseHeld(cb, row, post, {
             completedAt,
             credits: releaseCredits,
             authSigner: opts?.authSigner,
-            listing: row.standing_id ? 'keep' : 'as-deal',
             adjust: !(isHourly && releaseCredits !== row.credits) ? undefined : () => {
                 const diff = releaseCredits - row.credits;
                 if (diff > 0) {
@@ -1475,14 +1532,9 @@ export function completePostTransaction(
                 return releaseCredits;
             },
         });
-        // A standing deal's period settled by a person (held back, or the node held it): it carries on, or ends
-        // (engine/standing-deals.ts standingPeriodSettled), in this same transaction as the money.
-        if (row.standing_id) told = standingPeriodSettled(row, 'released', completedAt);
     });
 
-    const tx = afterRelease(cb, row, post, released, confirmerPublicKey);
-    tellStanding(cb, told);
-    return tx;
+    return afterRelease(cb, row, post, released, confirmerPublicKey);
 }
 
 export function cancelPostTransaction(
@@ -1499,7 +1551,6 @@ export function cancelPostTransaction(
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
     const completedAt = new Date().toISOString();
-    let told: StandingNotice[] = [];
 
     cb.conservingTransaction(() => {
         const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
@@ -1528,8 +1579,6 @@ export function cancelPostTransaction(
         if (post) {
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
-        // A standing deal's period refunded: the standing deal ends (DESIGN-standing-deals-fable §1.3).
-        if (row.standing_id) told = standingPeriodSettled(row, 'refunded', completedAt);
     });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
@@ -1565,7 +1614,6 @@ export function cancelPostTransaction(
         'escrow',
         'trade.update'
     );
-    tellStanding(cb, told);
 
     return tx;
 }
@@ -1634,7 +1682,6 @@ export function resolveEscrowDispute(
 
     let buyerShare = 0;
     let sellerShare = 0;
-    let told: StandingNotice[] = [];
 
     if (action === 'release_to_seller') {
         sellerShare = row.credits;
@@ -1687,10 +1734,9 @@ export function resolveEscrowDispute(
                 }
             }
 
-            // A standing deal's period: its listing is the standing deal's, which says what becomes of it (standingPeriodSettled).
-            if (post && !row.standing_id && !backOnBoardAfterDeal(post)) {
+            if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-            } else if (post && !row.standing_id) {
+            } else if (post) {
                 // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it
                 // stays down.
                 db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
@@ -1778,18 +1824,14 @@ export function resolveEscrowDispute(
                 }
             }
 
-            // A standing deal's period: its listing is the standing deal's, which says what becomes of it (standingPeriodSettled).
-            if (post && !row.standing_id && !backOnBoardAfterDeal(post)) {
+            if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-            } else if (post && !row.standing_id) {
+            } else if (post) {
                 // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it
                 // stays down.
                 db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         }
-        // A standing deal's period ruled on: released to the payee, it carries on as a release does; refunded or split (a
-        // ruling against the payee), it ends (DESIGN-standing-deals-fable §1.2). In this same transaction as the money.
-        if (row.standing_id) told = standingPeriodSettled(row, action === 'release_to_seller' ? 'released' : 'refunded', completedAt);
     });
 
     // Wage claims and ceiling sweep executed outside conservingTransaction to prevent nested transactions
@@ -1868,7 +1910,6 @@ export function resolveEscrowDispute(
         'escrow',
         'trade.update'
     );
-    tellStanding(cb, told);
 
     return tx;
 }

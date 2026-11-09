@@ -93,7 +93,7 @@ import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledge
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
-    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart, type StandingHooks,
+    extendStandingDeal as extendStandingDealEngine, hasShortStandingDeal, payShortStandingDealsOf, type StandingStart, type StandingHooks,
 } from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -1186,8 +1186,9 @@ function armMainServerTimers(): void {
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
-        // Standing deals (engine/standing-deals.ts): each period's Beans to the payee at its end and the next period held,
-        // short payers tried again, and warned ahead. Main server only, like the rest; Beans off moves nothing.
+        // Standing deals (engine/standing-deals.ts): each period paid to the payee at its start, short ones tried again and
+        // ended when their grace is over, the grace's pushes on their cadence, payers warned ahead. Main server only, like
+        // the rest; Beans off moves nothing.
         try { runStandingDeals(); } catch (e) { console.warn('[Standing] Standing deals tick failed:', e); }
     }), 60 * 1000);
 }
@@ -1200,6 +1201,32 @@ export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => 
     const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
     // `wrap`: a suite's way to watch or fail the node's own primitives (a crash in the middle of a step).
     return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
+}
+
+/** A suite's way to watch or fail the hook's primitives too, as runStandingDeals' `wrap` does the tick's. */
+let standingHookWrap: ((hooks: StandingHooks) => StandingHooks) | null = null;
+export function setStandingHookWrapForTests(wrap: ((hooks: StandingHooks) => StandingHooks) | null): void {
+    standingHookWrap = wrap;
+}
+
+/**
+ * Beans reached `to` and the move that brought them has committed (transfer() and payFromCommons(), the two doors every
+ * credit to a member goes through): each of their short standing deals is paid at once, the whole period, oldest due first
+ * (DESIGN-standing-deals-upfront-amend-fable §3). Run when the batch of after-commit work now running is over, so each
+ * payment is its own transaction, one after another and never nested in another's commit; a payee paid there who is short
+ * on a standing deal of their own is tried in the same way, and every payment moves one deal out of short, so a chain ends.
+ * Main server only (payShortStandingDealsOf); a cheap read first, so a credit to anyone not short costs one indexed lookup.
+ */
+function payShortStandingDealsAfterCredit(to: string): void {
+    if (isSyntheticAccount(to) || to === 'genesis' || to === 'COMMONS_POOL' || !hasShortStandingDeal(to)) return;
+    whenPostCommitBatchOver(() => {
+        try {
+            const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+            payShortStandingDealsOf(standingHookWrap ? standingHookWrap(hooks) : hooks, to);
+        } catch (e) {
+            console.warn('[Standing] Paying short standing deals after a credit failed:', e);
+        }
+    });
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
@@ -1473,9 +1500,6 @@ export function runMarketplaceHygiene(): void {
         WHERE t.status='pending'
           AND t.created_at < datetime('now', ?)
           AND (t.last_reminded_at IS NULL OR t.last_reminded_at < datetime('now', ?))
-          -- A standing deal's period running by itself is released by the node at its end (engine/standing-deals.ts):
-          -- nobody is asked to release it. One held back is a plain held deal again, and is nudged like any.
-          AND NOT EXISTS (SELECT 1 FROM standing_deals sd WHERE sd.id = t.standing_id AND sd.current_tx_id = t.id AND sd.phase = 'held')
     `).all(`-${ESCROW_NUDGE_DAYS} days`, `-${ESCROW_NUDGE_DAYS} days`) as any[];
     for (const row of lingering) {
         // A loan (a lendable Offer, S3) is asked about the thing, not the Beans: the borrower is the one who says it's back.
@@ -3121,6 +3145,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // What this payment brought them, net of the fee: the hardship shield is read against it.
             sweepRepayment(to, txn.amount - (txn.taxFee || 0));
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     const fromMember = getMember(from);
@@ -3545,6 +3570,7 @@ export function payFromCommons(
         } else {
             sweepRepayment(to, txn.amount);
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     return txn;
@@ -6893,16 +6919,11 @@ export function cancelPostTransaction(transactionId: string, cancellerPublicKey:
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
 }
 
-// A standing deal's Stop, Hold back and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
-// holds, so each refuses on a standby first, as every step of a trade does.
+// A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's payments,
+// so each refuses on a standby first, as every step of a trade does.
 export function stopStandingDeal(id: string, actor: string): Record<string, unknown> {
     assertLedgerWritable();
     return stopStandingDealEngine(getEscrowCb(), id, actor);
-}
-
-export function holdBackStandingDeal(id: string, actor: string): Record<string, unknown> {
-    assertLedgerWritable();
-    return holdBackStandingDealEngine(getEscrowCb(), id, actor);
 }
 
 export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {

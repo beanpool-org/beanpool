@@ -1961,6 +1961,54 @@ export function initSchema() {
     try { db.prepare('ALTER TABLE decision_electors ADD COLUMN answered_at DATETIME').run(); } catch { }
     try { db.prepare('ALTER TABLE decision_electors ADD COLUMN reminded_at DATETIME').run(); } catch { }
 
+    // standing_deals: each period is paid at its start (DESIGN-standing-deals-upfront-fable.md, Marty 10 Nov 2026), so the
+    // phase CHECK becomes ('paid', 'short', 'ended') and held_back_reason goes. A CHECK cannot be altered in place, so the
+    // table is rebuilt, BEFORE the schema.sql exec, which re-creates its indexes and touch trigger against the new table.
+    // The table is empty on every community (the one live standing deal was cancelled by hand, 10 Nov). The copy is
+    // verbatim, never a mapping: a row in a phase the new CHECK refuses fails the rebuild, which is logged and leaves the
+    // table as it was (no conversion code: nothing here reads, maps or ends a row in an old phase).
+    try {
+        const sdSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='standing_deals'").get() as any;
+        if (sdSql?.sql && sdSql.sql.includes("'held_back'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS standing_deals_migration;
+                    CREATE TABLE standing_deals_migration (
+            id TEXT PRIMARY KEY,
+            post_id TEXT NOT NULL REFERENCES posts(id),
+            payer_pubkey TEXT NOT NULL,
+            payee_pubkey TEXT NOT NULL,
+            beans_per_period REAL NOT NULL,
+            period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
+            starts_at TEXT NOT NULL,
+            max_periods INTEGER,
+            phase TEXT NOT NULL CHECK (phase IN ('paid', 'short', 'ended')),
+            periods_done INTEGER NOT NULL DEFAULT 0,
+            current_tx_id TEXT REFERENCES marketplace_transactions(id),
+            next_due_at TEXT NOT NULL,
+            short_since TEXT,
+            stopped_by TEXT,
+            stopped_at TEXT,
+            ended_at TEXT,
+            ended_reason TEXT,
+            auth_signer TEXT NOT NULL,
+            auth_signature TEXT NOT NULL,
+            auth_payload TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    );
+                    INSERT INTO standing_deals_migration (id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase, periods_done, current_tx_id, next_due_at, short_since, stopped_by, stopped_at, ended_at, ended_reason, auth_signer, auth_signature, auth_payload, created_at, updated_at)
+                        SELECT id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase, periods_done, current_tx_id, next_due_at, short_since, stopped_by, stopped_at, ended_at, ended_reason, auth_signer, auth_signature, auth_payload, created_at, updated_at FROM standing_deals;
+                    DROP TABLE standing_deals;
+                    ALTER TABLE standing_deals_migration RENAME TO standing_deals;
+                `);
+            })();
+            console.log("[DB] ✅ Rebuilt standing_deals for standing deals paid at their start (phases paid, short, ended)");
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to rebuild standing_deals for standing deals paid at their start (a row in an old phase?):', err?.message || err);
+    }
+
     // groups.lead_pubkey: the group's LEAD convenor (2026-09-23). A plain ADD COLUMN, on purpose — a fourth value
     // in group_members.role would mean rebuilding that table for its CHECK constraint. Before the schema.sql exec
     // so anything the exec re-creates already sees the column. The backfill is further down, behind a marker.

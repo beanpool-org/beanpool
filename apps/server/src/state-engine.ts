@@ -27,6 +27,7 @@ import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { noteUnfindableSignInCopiesAtBoot } from './engine/recovery-find.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
@@ -795,6 +796,9 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // How many sign-in copies a restore can't find from the sign-in yet (engine/recovery-find.ts): one line on a main
+    // server, 0 included. Never throws.
+    noteUnfindableSignInCopiesAtBoot({ standby: getNodeRole() === 'backup' });
     // Members' push tokens are locked with a key from the same file (services/push-token-seal.ts): a main server locks
     // the rows stored in the clear before and checks every row opens; a standby drops those rows (it has no key). Never
     // throws.

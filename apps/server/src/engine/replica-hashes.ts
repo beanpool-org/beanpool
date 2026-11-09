@@ -143,7 +143,14 @@ export interface TableHashes {
  * a copy each period still held is a plain held deal its two members settle, and nothing more is held, since no hold is made
  * without the signed authorisation the dropped row keeps.
  */
-export const TABLE_HASHES_VERSION = 24;
+/**
+ * 25: recovery_shares gains sso_find_hash (a restore finds the account from the sign-in alone, DESIGN-recovery-no-callsign-
+ * fable.md §3, slice S0). Raised for the same reason as 8: a standby updated before its main server hashes
+ * `recovery_shares` over one more column. REPLICA_FORMAT stays: what an older importer drops is an index, not a copy;
+ * after a take-over from such a copy each member's copy is found by the scan of copies with no find hash, and made
+ * findable, at their first restore (engine/recovery-find.ts).
+ */
+export const TABLE_HASHES_VERSION = 25;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

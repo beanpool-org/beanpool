@@ -1057,6 +1057,10 @@ CREATE TABLE IF NOT EXISTS recovery_shares (
     -- move together by construction. The column exists so the table can join the delta set
     -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- For 'sso' holders: HMAC-SHA-256 of `provider|sub` under a key derived from data/recovery-seal.key, never stored in
+    -- this database, so a restore finds the account from the verified sign-in alone (engine/recovery-find.ts). An index,
+    -- never a proof: a release still checks sso_lookup_hash. NULL on a copy made before it, until its first restore.
+    sso_find_hash TEXT,
     -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
     -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
     -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
@@ -1071,6 +1075,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
     ON recovery_shares(sso_lookup_hash)
     WHERE sso_lookup_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
+-- Plain, not unique: one sign-in may protect two accounts (Settings' Connect checks no other owner), and a restore names
+-- them all. It also answers the scan's `sso_find_hash IS NULL` for copies made before the column.
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_find ON recovery_shares(sso_find_hash);
 
 -- 14b. Recovery collection — one attempt to gather enough fragments to rebuild a phrase.
 --

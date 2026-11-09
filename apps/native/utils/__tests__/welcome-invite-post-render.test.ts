@@ -132,7 +132,7 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 vi.mock('react-native-keyboard-controller', () => {
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
-    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardStickyView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({

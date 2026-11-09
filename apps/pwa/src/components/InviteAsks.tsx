@@ -7,7 +7,7 @@
  * What someone typed is always in `Fenced`, as plain text in its own box, and never put into one of the app's sentences.
  * Every control is at least 44 px tall and wraps at 320 px with 1.3× text; the sheet keeps focus inside and Escape closes it.
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
     INVITE_ASK_LIMITS, INVITE_ASK_WORDS, formatDate, inviteAskAnswerWords, inviteAskReady, t,
     type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting,
@@ -16,6 +16,7 @@ import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk,
 import { getMyVouching, type MyVouching } from '../lib/api';
 import { VouchPresetChoice } from './VouchPresetChoice';
 import { useDialogFocus } from './dialog-focus';
+import { InvitePictureQueue } from './InvitePictures';
 
 const askedWords = (iso: string) => t(INVITE_ASK_WORDS.asked, { date: formatDate(new Date(iso), 'day-month-year') });
 
@@ -50,7 +51,7 @@ function Waiting({ ask, busy, onTakeBack }: { ask: InviteAskWaiting; busy: boole
     );
 }
 
-function Answered({ answer, onCopy, onShare }: { answer: InviteAskAnswer; onCopy: (code: string) => void; onShare: (code: string) => void }) {
+function Answered({ answer, onCopy, onShare, note }: { answer: InviteAskAnswer; onCopy: (code: string) => void; onShare: (code: string) => void; note?: ReactNode }) {
     return (
         <div className={CARD} data-testid={`invite-ask-answer-${answer.id}`}>
             <p className={META}>{askedWords(answer.askedAt)}</p>
@@ -63,6 +64,7 @@ function Answered({ answer, onCopy, onShare }: { answer: InviteAskAnswer; onCopy
                         <button type="button" className={QUIET} onClick={() => onCopy(answer.code!)} aria-label={t('Copy invite link')}>{t('📋 Copy')}</button>
                         <button type="button" className={STRONG} onClick={() => onShare(answer.code!)} aria-label={t('Share invite link')}>{t('📤 Share')}</button>
                     </div>
+                    {note}
                 </>
             )}
         </div>
@@ -119,7 +121,12 @@ export function AskSheet({ onClose, onSent, fallback }: { onClose: () => void; o
 }
 
 /** For a member where only admins invite: the small button, the short sheet, and what they've asked. */
-export function AskAnAdmin({ onCopy, onShare }: { onCopy: (code: string) => void; onShare: (code: string) => void }) {
+export function AskAnAdmin({ onCopy, onShare, noteFor }: {
+    onCopy: (code: string) => void;
+    onShare: (code: string) => void;
+    /** What to show under an answered invite's buttons (the page's "Invite message copied" note), by its code. */
+    noteFor?: (code: string) => ReactNode;
+}) {
     const [mine, setMine] = useState<{ waiting: InviteAskWaiting[]; answers: InviteAskAnswer[] } | null>(null);
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -143,7 +150,9 @@ export function AskAnAdmin({ onCopy, onShare }: { onCopy: (code: string) => void
             {refusal && <p role="alert" className={`${REFUSAL} mt-3`}>{refusal}</p>}
             {shown && <h3 className="m-0 mt-5 mb-3 text-[15px] font-extrabold text-nature-950 dark:text-white">{t(INVITE_ASK_WORDS.mine)}</h3>}
             {mine?.waiting.map(ask => <Waiting key={ask.id} ask={ask} busy={busy} onTakeBack={() => void takeBack(ask.id)} />)}
-            {mine?.answers.map(answer => <Answered key={answer.id} answer={answer} onCopy={onCopy} onShare={onShare} />)}
+            {mine?.answers.map(answer => <Answered key={answer.id} answer={answer} onCopy={onCopy} onShare={onShare} note={answer.code ? noteFor?.(answer.code) : undefined} />)}
+            {/* The QR pictures Share sends with these invites, made now so the tap only has to share. */}
+            <InvitePictureQueue codes={mine?.answers.map(answer => answer.code) ?? []} />
             {open && <AskSheet onClose={() => setOpen(false)} onSent={() => { setOpen(false); void load(); }} />}
         </div>
     );

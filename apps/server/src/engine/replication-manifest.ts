@@ -314,7 +314,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     recovery_shares: {
         kind: 'replicated-except', payload: 'recoveryShares', watermark: 'updated_at',
-        columns: cols('owner_pubkey holder_type holder_ref share_index encrypted_share share_iv share_tag ephemeral_pubkey sso_lookup_hash sso_lookup_salt kdf_params generation created_at updated_at'),
+        columns: cols('owner_pubkey holder_type holder_ref share_index encrypted_share share_iv share_tag ephemeral_pubkey sso_lookup_hash sso_lookup_salt kdf_params generation created_at updated_at sso_find_hash'),
         key: ['owner_pubkey', 'generation', 'holder_type', 'holder_ref'],
         except: { id: { reason: 'a local row id: rows are matched by owner, generation and holder' } },
     },

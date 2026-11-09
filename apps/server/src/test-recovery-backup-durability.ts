@@ -76,12 +76,12 @@ async function run() {
 
         // Seed SSO Fragment (share_index 2)
         db.prepare(`INSERT OR REPLACE INTO recovery_shares
-            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, sso_lookup_hash, sso_lookup_salt, kdf_params, generation, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, sso_lookup_hash, sso_lookup_salt, kdf_params, generation, created_at, updated_at, sso_find_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             ownerPubkey, 'sso', 'google', 2,
             'sealed-sso-fragment-B', 'iv-base64', 'tag-base64',
             'hash-lookup-123', 'salt-base64', '{"n":16384,"r":8,"p":1}',
-            1, '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z'
+            1, '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z', 'find-hash-123'
         );
 
         console.log('--- TEST PART 1: ATOMIC DATABASE SNAPSHOT DURABILITY (VACUUM INTO) ---');
@@ -100,6 +100,7 @@ async function run() {
         assert(snapShares.length === 2, `Snapshot captured exactly 2 recovery shares (got ${snapShares.length})`);
         assert(snapShares[0].holder_type === 'hub' && snapShares[0].encrypted_share === 'plain-hub-fragment-A', 'Hub share A preserved in snapshot');
         assert(snapShares[1].holder_type === 'sso' && snapShares[1].sso_lookup_hash === 'hash-lookup-123', 'SSO share B and lookup hash preserved in snapshot');
+        assert(snapShares[1].sso_find_hash === 'find-hash-123', 'and its find hash (a restore by sign-in finds the copy by it, engine/recovery-find.ts)');
 
         snapDb.close();
         fs.unlinkSync(snapshotFile);
@@ -109,6 +110,8 @@ async function run() {
         const payload = await exportSyncState(nodeId);
         assert(Array.isArray(payload.recoveryShares), 'exportSyncState includes recoveryShares array');
         assert(payload.recoveryShares!.length >= 2, `exportSyncState exported ${payload.recoveryShares!.length} recovery shares`);
+        const sentSso = payload.recoveryShares!.find((s) => s.ownerPubkey === ownerPubkey && s.holderType === 'sso');
+        assert(sentSso?.ssoFindHash === 'find-hash-123', `the payload carries the SSO share's find hash (${sentSso?.ssoFindHash})`);
 
         // The backup's copy starts from nothing, as a whole copy does (engine/copied-tables.ts)
         emptyCopiedTables(db);
@@ -127,6 +130,7 @@ async function run() {
         assert(importedShares.length === 2, `Backup mirror ingested 2 recovery shares (got ${importedShares.length})`);
         assert(importedShares[0].holder_type === 'hub' && importedShares[0].encrypted_share === 'plain-hub-fragment-A', 'Backup mirror holds Hub share A');
         assert(importedShares[1].holder_type === 'sso' && importedShares[1].sso_lookup_hash === 'hash-lookup-123', 'Backup mirror holds SSO share B');
+        assert(importedShares[1].sso_find_hash === 'find-hash-123', 'with the main server\'s find hash, so a promoted standby finds the copy from a sign-in');
 
         unpinMainServerForTests();
         setNodeRole('primary');

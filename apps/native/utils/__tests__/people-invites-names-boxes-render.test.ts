@@ -732,10 +732,10 @@ describe('People → Invites: Pending and Joined are folded, and each row says w
         await open();
         await press('invites-pending-fold');
         expect(list.opens, 'the list is opened once, for the bound invite in it').toBe(1);
-        const deeDee = rowsText().find((r) => r.includes('Jane Albury'));
-        expect(deeDee).toBeTruthy();
-        expect(deeDee).toContain('200 vouch · voucher budget 1,000 · confirms them as known');
-        expect(deeDee).toContain('23 days left');
+        const boundRow = rowsText().find((r) => r.includes('Jane Albury'));
+        expect(boundRow).toBeTruthy();
+        expect(boundRow).toContain('200 vouch · voucher budget 1,000 · confirms them as known');
+        expect(boundRow).toContain('23 days left');
         const kim = rowsText().find((r) => r.includes('For: Kim'))!;
         expect(kim).toContain('Plain invite');
         expect(kim).toContain('29 days left');

@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPeekTicket, isPublicIpv4, knockStillAnswerable, t, tn, word } from '@beanpool/core';
+import { isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 
@@ -65,7 +65,8 @@ export type KnockStatus =
 
 export type KnockStatusResult =
     | { ok: true; value: KnockStatus }
-    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string }
+    /** `retryAfterSeconds`: a 429's Retry-After, when it named a wait (the page waits that long before asking again). */
+    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string; retryAfterSeconds?: number }
     | { ok: false; kind: 'no_address' | 'unreachable'; message: string };
 
 export interface RememberedKnock {
@@ -314,7 +315,8 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     }
     if (!res.ok) {
         const { message, code } = await readError(res);
-        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? t(KNOCK_MESSAGES.unreadable) };
+        const wait = retryAfterSecondsOf(res.headers?.get?.('Retry-After'));
+        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? t(KNOCK_MESSAGES.unreadable), ...(wait !== null ? { retryAfterSeconds: wait } : {}) };
     }
     const body = await res.json().catch(() => null) as Record<string, unknown> | null;
     const status = readStatus(body);

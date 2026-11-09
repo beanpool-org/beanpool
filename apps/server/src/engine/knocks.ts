@@ -141,7 +141,7 @@ import { getNodeRole } from './sync.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
-import { dispatchPushNotification } from '../state-engine.js';
+import { deliverPushNotices, dispatchPushNotification } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { pushTtl } from '../services/web-push.js';
 import { dropAskerSubscriptionsOf } from './web-push-subscriptions.js';
@@ -669,13 +669,14 @@ export function notifyKnockReceived(_now = Date.now(), sharer: string | null = n
     let sharerTold = false;
     if (sharerKey) {
         try {
-            sharerTold = dispatchPushNotification([sharerKey], 'SYSTEM', 'BeanPool', 'Someone asked to join after a listing you shared.',
-                { screen: 'shared-outside' }, 'marketplace', 'community.knock-shared') > 0;
+            sharerTold = deliverPushNotices([sharerKey], 'SYSTEM', 'BeanPool', 'Someone asked to join after a listing you shared.',
+                { screen: 'shared-outside' }, 'marketplace', 'community.knock-shared').told > 0;
         } catch { }
     }
 
-    // One push per person for one request: a sharer whose own push went has theirs. One whose didn't (their listings'
-    // switch off, or no phone) stays on the plain one if it is theirs to get, as for any member.
+    // One notice per person for one request: a sharer told by their own has theirs, on their phone or, with no phone, on
+    // their bell (web notifications W0). One whose wasn't kept (their listings' switch off) stays on the plain one if it
+    // is theirs to get, as for any member.
     const recipients = Array.from(new Set([...adminPks, ...memberPks])).filter(pk => !(sharerTold && pk === sharerKey));
     if (recipients.length === 0) return;
 

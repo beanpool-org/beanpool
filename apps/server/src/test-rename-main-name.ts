@@ -247,7 +247,21 @@ async function main(): Promise<void> {
 
     const notes: any[] = [];
     setSecurityAlertHandler((n) => { notes.push(n); });
-    const notices = () => db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid").all() as Array<{ title: string; body: string }>;
+    /**
+     * What the members were told, one row per telling. Every member told keeps their own copy, a phone or not (the bell,
+     * web notifications W0), so the table holds one row per member per telling: the tellings are Mia's rows (her phone is
+     * the one buzzed, the only rows before the bell), and every other member told must hold exactly the same. One who
+     * doesn't (told twice, told what Mia wasn't, told alone) answers the whole table instead, which fails every count here.
+     */
+    const notices = () => {
+        const rowsOf = (pk: string) => db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' AND recipient = ? ORDER BY rowid")
+            .all(pk) as Array<{ title: string; body: string }>;
+        const told = (db.prepare("SELECT DISTINCT recipient FROM push_notices WHERE kind = 'community.notice'").all() as Array<{ recipient: string }>)
+            .map((r) => r.recipient);
+        const mia = rowsOf(memberKey);
+        const alike = told.every((pk) => JSON.stringify(rowsOf(pk)) === JSON.stringify(mia));
+        return alike ? mia : db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid").all() as Array<{ title: string; body: string }>;
+    };
     /** Forget everything of the scene before: a node as `scene` says, with what it holds at the address service. */
     const scene = (s: { cf?: string; env?: string; config?: Record<string, unknown>; names?: string[] } = {}) => {
         delete process.env.CF_RECORD_NAME;

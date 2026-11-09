@@ -2,11 +2,15 @@
  * Waiting to be let in (DESIGN-shared-listing-door-fable.md §2.1, slice A1): a browser that asked this community to let it
  * in, with the key it made at Send (lib/knock-key.ts), and no answer yet. Not the member app: nothing here is read as a
  * member, and the root (App.tsx) never sets this key as one. What it reads is the request's own status, signed by the key,
- * from this community's knock route (lib/knock.ts readKnockStatus), as the page opens and every 5 minutes while it is open.
+ * from this community's knock route (lib/knock.ts readKnockStatus), as the page opens and then by itself while it is on screen
+ * (lib/use-knock-status-watch.ts: every 20 s for 10 minutes, every 60 s to the hour, every 5 minutes after; never while the
+ * tab is hidden; at once when the tab or window comes back; slower on an error or a 429).
  *
  *   - waiting: "You asked to join {name} on {date}. Your request arrived.", Check again, Cancel my request (the 24 h rule);
- *   - a yes: "🎉 {name} said yes." and **Join {name}**, which hands the invite to the welcome page, where it is redeemed
- *     with this same key (the invite is bound to it), then the wizard with the 12 words for the first time;
+ *   - a yes: it shows itself, with no reload, announced politely: "🎉 {name} said yes." and a big **Join {name}**, first,
+ *     which hands the invite to the welcome page, where it is redeemed with this same key (the invite is bound to it), then
+ *     the wizard with the 12 words for the first time. The page takes the member nowhere by itself: a browser blocks that,
+ *     and Join needs the tap;
  *   - nothing open (lapsed, cancelled, refused): today's words, Ask again, and Forget this request, which wipes a key no
  *     community accepted;
  *   - always: I have an invite, Already a member, and 🌍 Look around the global community (with `?ask=<host>`, so a join
@@ -17,11 +21,12 @@
  *     and shows the phone's warning once.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { COMMUNITY_CARD_WORDS as CW, FIND_COMMUNITY_WORDS as FW, communityCardName, formatDate, t, type CommunityCard } from '@beanpool/core';
+import { COMMUNITY_CARD_WORDS as CW, FIND_COMMUNITY_WORDS as FW, communityCardName, formatDate, knockTickOf, t, type CommunityCard } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getCommunityCard } from '../lib/api';
 import { KNOCK_MESSAGES, cancelKnock, cancelledKnocks, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { forgetKnockKey } from '../lib/knock-key';
+import { useKnockStatusWatch } from '../lib/use-knock-status-watch';
 import { lookAroundUrl } from '../lib/community-card';
 import { AskHere, thisCommunityOrigin } from '../components/AskHere';
 import { LanguageSwitch } from '../components/LanguageSwitch';
@@ -31,12 +36,11 @@ import {
 } from '../lib/web-push';
 import { PEEK_WORDS, currentLanguage } from '@beanpool/core';
 
-/** How often the page reads the request's status while it is open. */
-export const KNOCK_STATUS_EVERY_MS = 5 * 60_000;
-
 const DOOR = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
 const PRIMARY = `${DOOR} border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer disabled:cursor-default disabled:opacity-60`;
 const SECONDARY = `${DOOR} bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer disabled:cursor-default disabled:opacity-60`;
+/** A yes's Join: the one thing to do, bigger than the doors below it. */
+const JOIN = 'block w-full min-h-[56px] px-4 py-4 rounded-xl text-center text-lg font-bold break-words no-underline border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
 
 export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgotten }: {
     identity: BeanPoolIdentity;
@@ -77,8 +81,9 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
         return () => { alive = false; };
     }, [identity.publicKey, origin]);
 
+    // One read: the page's own state, and what it heard for the schedule. A read in the background does not turn the button
+    // into "Checking…" (only the first read, and Check again, do).
     const check = useCallback(async () => {
-        setChecking(true);
         const s = await readKnockStatus(origin, identity);
         // Nothing open here (lapsed, cancelled, or a no whose 24 hours are up): the community let go of this browser with
         // the request, so this browser lets go of its pin too, and an Ask again with this key shows Tell me afresh. A no
@@ -86,14 +91,15 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
         if (origin && s.ok && s.value.status === 'none') forgetWebPushPin(origin, identity.publicKey);
         setStatus(s);
         setChecking(false);
+        return knockTickOf(s);
     }, [origin, identity]);
 
-    // On open, and every 5 minutes while open.
-    useEffect(() => {
-        void check();
-        const timer = setInterval(() => { void check(); }, KNOCK_STATUS_EVERY_MS);
-        return () => clearInterval(timer);
-    }, [check]);
+    // On open, then by itself while the tab is shown (see the header).
+    const watch = useKnockStatusWatch(check);
+    const checkAgain = () => {
+        setChecking(true);
+        void watch.readNow();
+    };
 
     const name = card ? communityCardName(card, { t }) : knock?.name ?? (origin ? origin.replace(/^https:\/\//, '') : t('this community'));
     const pending = !!status?.ok && status.value.status === 'pending';
@@ -134,7 +140,8 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                     setAskAgain(false);
                     setCancelled(false);
                     void rememberedKnocks(identity.publicKey).then(ks => setKnock(ks.find(x => x.url === origin) ?? null));
-                    void check();
+                    setChecking(true);
+                    watch.restart();
                 }} onClose={() => setAskAgain(false)} />
             </main>
         );
@@ -154,35 +161,36 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
             <div className="max-w-lg mx-auto">
                 <div className="flex justify-end mb-2"><LanguageSwitch /></div>
                 <section className="p-5 max-[359px]:px-4 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm">
-                    {approved ? (
-                        <>
+                    {!approved && (
+                        <h1 dir="auto" data-testid="knock-waiting-sent" className="m-0 mb-2 text-xl font-bold leading-tight break-words">
+                            {knock
+                                ? t(FW.askedOnDate, { name, date: formatDate(new Date(knock.sentAt), 'day-month-year') })
+                                : pending
+                                    // Asked from another community (global's Find card) and restored here (slice Y0):
+                                    // this browser never saw it sent, so no date.
+                                    ? t('You asked to join {name}.', { name })
+                                    : t(CW.askName, { name })}
+                        </h1>
+                    )}
+                    {/* Always in the page, polite: a yes put into it is read out to a screen reader, and nothing moves the focus. */}
+                    <div role="status" aria-live="polite" data-testid="knock-waiting-live">
+                        {approved ? (
                             <h1 dir="auto" data-testid="knock-waiting-yes" className="m-0 mb-4 text-2xl font-bold leading-tight break-words">{t('🎉 {name} said yes.', { name })}</h1>
-                            <button type="button" data-testid="knock-waiting-join" className={`${PRIMARY} mb-3`} onClick={() => onJoin({ invite: approved.invite, name })}>
-                                {t('Join {name}', { name })}
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <h1 dir="auto" data-testid="knock-waiting-sent" className="m-0 mb-2 text-xl font-bold leading-tight break-words">
-                                {knock
-                                    ? t(FW.askedOnDate, { name, date: formatDate(new Date(knock.sentAt), 'day-month-year') })
-                                    : pending
-                                        // Asked from another community (global's Find card) and restored here (slice Y0):
-                                        // this browser never saw it sent, so no date.
-                                        ? t('You asked to join {name}.', { name })
-                                        : t(CW.askName, { name })}
-                            </h1>
-                            <div role="status">
-                                <p dir="auto" data-testid="knock-waiting-line" className="m-0 mb-4 text-base break-words">{line}</p>
-                            </div>
-                        </>
+                        ) : (
+                            <p dir="auto" data-testid="knock-waiting-line" className="m-0 mb-4 text-base break-words">{line}</p>
+                        )}
+                    </div>
+                    {approved && (
+                        <button type="button" data-testid="knock-waiting-join" className={`${JOIN} mb-3`} onClick={() => onJoin({ invite: approved.invite, name })}>
+                            {t('Join {name}', { name })}
+                        </button>
                     )}
                     {note && <p role="alert" className="m-0 mb-3 text-sm text-bp-ink-danger break-words">{note}</p>}
                     {pending && !cancelled && origin && origin === window.location.origin && <TellMeCard origin={origin} identity={identity} name={name} />}
 
                     <div className="grid gap-3">
                         {!approved && !closed && !cancelled && (
-                            <button type="button" data-testid="knock-waiting-check" className={SECONDARY} disabled={checking} aria-busy={checking} onClick={() => void check()}>
+                            <button type="button" data-testid="knock-waiting-check" className={SECONDARY} disabled={checking} aria-busy={checking} onClick={checkAgain}>
                                 {checking ? t('Checking…') : t('Check again')}
                             </button>
                         )}

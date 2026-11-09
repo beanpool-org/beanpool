@@ -131,11 +131,20 @@ describe('a browser waiting to be let in', () => {
         expect(calls.filter(c => c.path.endsWith('/api/join/knock/status')).length).toBeGreaterThanOrEqual(2);
     });
 
-    it('reads the status again every 5 minutes while open', async () => {
-        const every = vi.spyOn(globalThis, 'setInterval');
-        render(<App />);
-        await screen.findByTestId('knock-waiting');
-        expect(every.mock.calls.some(([, ms]) => ms === 5 * 60_000)).toBe(true);
+    // Was "every 5 minutes while open" (a setInterval): Damo, 9 Nov 2026, had to reload to see the yes. The page now asks by
+    // itself about every 20 s at first (pages/KnockWaitingPage.watch.test.tsx has the whole schedule, with fake timers).
+    it('reads the status again by itself while open: the first wait is about 20 s, not 5 minutes', async () => {
+        // A jitter draw of 0.123 makes that first wait 16,984 ms: a number nothing else on the page waits.
+        vi.spyOn(Math, 'random').mockReturnValue(0.123);
+        const wait = vi.spyOn(globalThis, 'setTimeout');
+        try {
+            render(<App />);
+            await screen.findByTestId('knock-waiting');
+            await waitFor(() => expect(wait.mock.calls.some(([, ms]) => ms === 16_984)).toBe(true));
+            expect(wait.mock.calls.some(([, ms]) => ms === 5 * 60_000)).toBe(false);
+        } finally {
+            vi.restoreAllMocks();
+        }
     });
 
     it('a yes: "🎉 {name} said yes." and Join {name} hands the invite to the welcome page, for the held key', async () => {

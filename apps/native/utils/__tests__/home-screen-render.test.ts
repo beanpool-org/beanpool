@@ -2492,8 +2492,11 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         const CANCELLED = 'You cancelled your request. You can ask again after 24 hours.';
         /** Home read again within the visit: the app coming back to the front while Home is shown. */
         const refreshInVisit = async () => {
-            const onChange = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').at(-1)![1] as (s: string) => void;
-            await act(async () => { onChange('active'); });
+            // The app coming back to the front reaches every listener, as the OS delivers it: Home's own, and the Find card's
+            // watcher (utils/use-knock-status-watch.ts), which registers after it.
+            const listeners = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').map(c => c[1] as (s: string) => void);
+            expect(listeners.length).toBeGreaterThan(0);
+            await act(async () => { for (const onChange of listeners) onChange('active'); });
             await settle();
         };
         const cancelIt = async () => {

@@ -47,12 +47,13 @@ async function member(pkcs8 = false): Promise<BeanPoolIdentity> {
 
 interface Sent { url: string; method: string; headers: Record<string, string>; body: string }
 let sent: Sent[] = [];
-let answer: (req: Sent) => { status: number; body?: unknown } = () => ({ status: 500 });
+let answer: (req: Sent) => { status: number; body?: unknown; headers?: Record<string, string> } = () => ({ status: 500 });
 
-function reply(status: number, body?: unknown) {
+function reply(status: number, body?: unknown, headers: Record<string, string> = {}) {
     return {
         ok: status >= 200 && status < 300,
         status,
+        headers: { get: (name: string) => headers[name] ?? null },
         json: async () => { if (body === undefined) throw new Error('no body'); return body; },
     };
 }
@@ -64,7 +65,7 @@ beforeEach(() => {
         const req = { url, method: init?.method ?? 'GET', headers: init?.headers ?? {}, body: init?.body ?? '' };
         sent.push(req);
         const a = answer(req);
-        return reply(a.status, a.body);
+        return reply(a.status, a.body, a.headers);
     });
 });
 
@@ -225,6 +226,18 @@ describe('the knock’s status, read from the community', () => {
         const words = 'This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.';
         answer = () => ({ status: 403, body: { error: words, code: 'key_invalidated' } });
         expect(await readKnockStatus(COMMUNITY, await member())).toEqual({ ok: false, kind: 'refused', status: 403, code: 'key_invalidated', message: words });
+    });
+
+    it('a 429 carries its Retry-After, so the screen waits as long as it was told (Damo, 9 Nov 2026: the yes shows itself)', async () => {
+        answer = () => ({ status: 429, body: { error: 'Slow down.' }, headers: { 'Retry-After': '90' } });
+        expect(await readKnockStatus(COMMUNITY, await member())).toEqual({ ok: false, kind: 'refused', status: 429, code: null, message: 'Slow down.', retryAfterSeconds: 90 });
+    });
+
+    it('a refusal with no Retry-After says nothing of one', async () => {
+        answer = () => ({ status: 403, body: { error: 'No.' } });
+        const r = await readKnockStatus(COMMUNITY, await member());
+        expect(r).toEqual({ ok: false, kind: 'refused', status: 403, code: null, message: 'No.' });
+        expect('retryAfterSeconds' in r).toBe(false);
     });
 
     it('is never read from the global node', async () => {

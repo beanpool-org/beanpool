@@ -230,12 +230,13 @@ async function main() {
                 if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(full); continue; }
                 if (!entry.name.endsWith('.ts') || entry.name.startsWith('test-') || entry.name.includes('-harness') || entry.name === 'push-notices.ts') continue;
                 const text = fs.readFileSync(full, 'utf8');
-                for (const m of text.matchAll(/dispatchPushNotification\(([\s\S]*?)\);/g)) {
+                // Either entry: the dispatcher, or deliverPushNotices, the same send answering how many members were told.
+                for (const m of text.matchAll(/(?:dispatchPushNotification|deliverPushNotices)\(([\s\S]*?)\)(?:;|\.told)/g)) {
                     for (const k of m[1].matchAll(new RegExp(`'(${KIND})'`, 'g'))) named.add(k[1]);
                 }
                 // A kind on a line of its own (a table of kinds) counts only in a file that sends or types push notices, so a
                 // file name like 'community.key' in an unrelated list isn't read as a kind.
-                if (/dispatchPushNotification|PushNoticeKind|push-notices/.test(text)) {
+                if (/dispatchPushNotification|deliverPushNotices|PushNoticeKind|push-notices/.test(text)) {
                     for (const k of text.matchAll(new RegExp(`^\\s*'(${KIND})',?\\s*$`, 'gm'))) named.add(k[1]);
                     // A sender handed in as `push` (dispatchPushNotification by default, a spy in a suite): the kinds in a call
                     // to it, as in a call to the dispatcher itself. Never an array's .push.

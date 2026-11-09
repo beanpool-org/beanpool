@@ -33,7 +33,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, t, word } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, t, word, retryAfterSecondsOf } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -97,7 +97,8 @@ export type KnockStatus =
 
 export type KnockStatusResult =
     | { ok: true; value: KnockStatus }
-    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string }
+    /** `retryAfterSeconds`: a 429's Retry-After, when it named a wait (the screen waits that long before asking again). */
+    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string; retryAfterSeconds?: number }
     | { ok: false; kind: 'no_address' | 'unreachable'; message: string };
 
 export interface KnockRequest {
@@ -214,7 +215,8 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     }
     if (!res.ok) {
         const { message, code } = await readError(res);
-        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? KNOCK_MESSAGES.unreadable };
+        const wait = retryAfterSecondsOf(res.headers?.get?.('Retry-After'));
+        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? KNOCK_MESSAGES.unreadable, ...(wait !== null ? { retryAfterSeconds: wait } : {}) };
     }
     const body = await res.json().catch(() => null) as Record<string, unknown> | null;
     const status = readStatus(body);

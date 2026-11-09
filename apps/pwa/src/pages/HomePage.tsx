@@ -47,6 +47,7 @@ import {
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
 import { forgetHandedOver, handedOverHere } from '../lib/handoff';
 import { isPhoneBrowser } from '../lib/global-entry';
@@ -185,6 +186,9 @@ const findTownWords = (): AddressSearchWords => ({
     source: t(FIND_TOWN_SEARCH_WORDS.source),
     pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,
 });
+
+/** A request the community has said yes to (the card says so in the polite region above the waiting cards). */
+const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok && st.value.status === 'approved';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -1287,7 +1291,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     useEffect(() => { if (publicKey && handedOverHere(publicKey)) forgetHandedOver(); }, [publicKey]);
 
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
-    const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     /** Every cancel still out (by URL): two waiting cards are normal, and each one's button is its own. */
     const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
@@ -1317,24 +1320,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setBannerThisVisit(was => new Set(was).add(k.url));
         seeYes(k, invite);
     };
-    // The banner (Marty, 9 Nov): each yes not yet tapped, above everything else on Home, until its Join is tapped. Drawn in
-    // Home's one loaded page only: a second place (the loading page) would mount it twice, and a handoff started from the
-    // first would be cut off when Home's answer came.
-    const yesBanners = identity ? knocks.flatMap((k) => {
-        const st = knockStatuses[k.url];
-        if (!st?.ok || st.value.status !== 'approved' || st.value.member || cancelledKnocks.has(k.url)) return [];
-        const invite = st.value.invite;
-        if (seenYes.has(yesMark(k.url, invite)) && !bannerThisVisit.has(k.url)) return [];
-        const name = k.name ?? k.url.replace(/^https:\/\//, '');
-        return [(
-            <section key={k.url} data-testid={`home-yes-banner-${k.url}`} aria-label={t('🎉 {name} said yes.', { name })}
-                className="mb-3 p-4 rounded-2xl border-2 border-bp-commit-fill bg-white dark:bg-nature-900 shadow-sm">
-                <p dir="auto" className="m-0 mb-2 text-lg font-bold leading-tight text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
-                <YesJoin knock={k} name={name} identity={identity} testId="home-yes-banner"
-                    onTapped={() => tapYesBanner(k, invite)} onJoined={() => joinedHere(k)} />
-            </section>
-        )];
-    }) : [];
     const joinedHere = (k: RememberedKnock) => setJoinedKnocks(was => new Set(was).add(k.url));
 
     useEffect(() => {
@@ -1362,16 +1347,29 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     };
 
     const knockKey = knocks.map(k => k.url).join(' ');
-    useEffect(() => {
-        if (!identity || !knocks.length) return;
-        let alive = true;
-        knocks.forEach(k => {
-            readKnockStatus(k.url, identity).then(r => {
-                if (alive) setKnockStatuses(was => ({ ...was, [k.url]: r }));
-            });
-        });
-        return () => { alive = false; };
-    }, [knockKey, identity?.publicKey]);
+    // What each community says now, kept fresh while Home is on screen (lib/use-knock-statuses.ts): a yes shows itself with no
+    // reload (Damo, 9 Nov 2026). A request cancelled in this visit is not asked again; its card stays with the cancelled line.
+    const [knockStatuses, setKnockStatuses] = useKnockStatuses(knocks.filter(k => !cancelledKnocks.has(k.url)), identity);
+
+    // The banner (Marty, 9 Nov): each yes not yet tapped, above everything else on Home, until its Join is tapped. Drawn in
+    // Home's one loaded page only: a second place (the loading page) would mount it twice, and a handoff started from the
+    // first would be cut off when Home's answer came. Built after the answers it reads (`knockStatuses`, above): a yes that
+    // comes in while Home is open brings its banner with it.
+    const yesBanners = identity ? knocks.flatMap((k) => {
+        const st = knockStatuses[k.url];
+        if (!st?.ok || st.value.status !== 'approved' || st.value.member || cancelledKnocks.has(k.url)) return [];
+        const invite = st.value.invite;
+        if (seenYes.has(yesMark(k.url, invite)) && !bannerThisVisit.has(k.url)) return [];
+        const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        return [(
+            <section key={k.url} data-testid={`home-yes-banner-${k.url}`} aria-label={t('🎉 {name} said yes.', { name })}
+                className="mb-3 p-4 rounded-2xl border-2 border-bp-commit-fill bg-white dark:bg-nature-900 shadow-sm">
+                <p dir="auto" className="m-0 mb-2 text-lg font-bold leading-tight text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
+                <YesJoin knock={k} name={name} identity={identity} testId="home-yes-banner"
+                    onTapped={() => tapYesBanner(k, invite)} onJoined={() => joinedHere(k)} />
+            </section>
+        )];
+    }) : [];
 
     // A yes the key has used (the community says it is a member there now): nothing waits on it, so it is forgotten here.
     useEffect(() => {
@@ -2728,6 +2726,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
                 const helping = helped || !!f.watches?.some(w => w.wouldHelp);
                 const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
+                // The community a remembered request went to, and the name to call it by: the yes region above the waiting
+                // cards and the waiting cards below say the same name.
+                const knockCommunity = (k: RememberedKnock) => f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                const knockName = (k: RememberedKnock) => k.name ?? knockCommunity(k)?.name ?? k.url.replace(/^https:\/\//, '');
                 return (
                     <HomeCard key={id} {...common}>
                         {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
@@ -2750,41 +2752,55 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 </Fragment>
                             );
                         })}
+                        {/* Always on the card, polite: a yes put into it is read out to a screen reader (a region added with its
+                            words in it is not always announced), and so is what becomes of it. A yes is a real Join
+                            (DESIGN-global-yes-join-fable.md §2.1-2.2, slice Y1): Join brings the account to the community's page
+                            in this browser (components/YesJoin.tsx), to that page only; when the tap can't work, slice Y0's two
+                            routes in its words: its page, where the 12 words bring the account and the yes is Join, or the phone
+                            app. A yes the key has used (the community says `member: true`), or joined in this visit, says so
+                            here, with its page. Each yes is drawn here once, and not in the waiting cards below. */}
+                        <div role="status" aria-live="polite" data-testid="home-find-yes-live">
+                            {knocks.filter(k => !cancelledKnocks.has(k.url) && yesOf(knockStatuses[k.url])).map(k => {
+                                const yes = knockStatuses[k.url];
+                                if (!yes?.ok || yes.value.status !== 'approved') return null; // the filter's yesOf, narrowed for the type
+                                const yesName = knockName(k);
+                                // Joined (here, or the community says the key is a member there now): said so, with its page. The
+                                // region it sits in speaks for it.
+                                if (yes.value.member || joinedKnocks.has(k.url)) {
+                                    return (
+                                        <div key={k.url} data-testid={`home-find-joined-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                            <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('You joined {name}.', { name: yesName })}</p>
+                                            <div className="mt-2">
+                                                <a href={`${k.url}/app`} target="_blank" rel="noopener noreferrer" className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                    {t('Open {name}', { name: yesName })}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                const invite = yes.value.invite;
+                                return (
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <p dir="auto" className="m-0 mb-2 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name: yesName })}</p>
+                                        {identity && (
+                                            <YesJoin knock={k} name={yesName} identity={identity} testId="home-find-invited"
+                                                onTapped={() => seeYes(k, invite)} onJoined={() => joinedHere(k)} />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                         {knocks.map(k => {
-                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
-                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const comm = knockCommunity(k);
+                            const name = knockName(k);
                             const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);
                             const isCancelling = cancellingKnocks.has(k.url);
                             const cancelled = cancelledKnocks.has(k.url);
 
-                            if (!cancelled && st?.ok && st.value.status === 'approved') {
-                                // Joined (here, or the community says the key is a member there now): said so, with its page.
-                                if (st.value.member || joinedKnocks.has(k.url)) {
-                                    return (
-                                        <div key={k.url} data-testid={`home-find-joined-${k.url}`} role="status" className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
-                                            <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('You joined {name}.', { name })}</p>
-                                            <div className="mt-2">
-                                                <a href={`${k.url}/app`} target="_blank" rel="noopener noreferrer" className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                                    {t('Open {name}', { name })}
-                                                </a>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-                                // The yes, and Join, which brings the account to the community's page in this browser
-                                // (components/YesJoin.tsx, slice Y1); the 12 words and the phone if the tap can't work.
-                                return (
-                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
-                                        <p dir="auto" className="m-0 mb-2 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
-                                        {identity && (
-                                            <YesJoin knock={k} name={name} identity={identity} testId="home-find-invited"
-                                                onTapped={() => seeYes(k, (st.value as { invite: string }).invite)} onJoined={() => joinedHere(k)} />
-                                        )}
-                                    </div>
-                                );
-                            }
+                            // A yes is drawn in the region above, not here.
+                            if (!cancelled && yesOf(st)) return null;
 
                             // What the community now says (the phone's knockCardState): only a pending request arrived and can be
                             // taken back. An answer that could not be read is said as it is, with no Cancel. Nothing open there

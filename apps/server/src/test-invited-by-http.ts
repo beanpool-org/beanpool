@@ -12,6 +12,7 @@
  *      an admin and the inviter still do; on again, everyone does. Only a member sets it; a bad body is a 400
  *   7. "Brought in n people": for an owner, an admin and the member themself; absent for a plain member viewing someone
  *   8. the invite tree honours the switch: never shown under the inviter to a plain member, never their inviter's key
+ *   9. where invites are off (NODE_PROFILE=global), nobody reads either line: vouchedInBy null, no broughtIn (STOP rule)
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-invited-by-http.ts
  */
@@ -238,6 +239,33 @@ async function main(): Promise<void> {
     const wholeByAda = await call('GET', ada, '/api/invite/tree');
     assert(flat(wholeByAda.body ?? []).find((n) => n.publicKey === pat.pk)?.children?.some((c: any) => c.publicKey === quin.pk),
         '8d. an admin reads Quin under Pat');
+
+    // ── 9. where invites are off (the global node): neither line, for anyone ────────────────────
+    // The I3 STOP rule (state-engine.ts getMemberTrustProfile `invitesOn`): a member there came through the open door, and
+    // a row from before the switch names nobody to anyone. Same rows, same readers as above; only the profile changes.
+    console.log('── 9. invites off (global) ──');
+    const before = await profile(olive, mia);
+    assert(before.body?.vouchedInBy?.publicKey === olive.pk && (await profile(olive, olive)).body?.broughtIn === 1,
+        `9. on a local node, the same rows: Olive reads Mia's inviter and her own Brought in (${show(before)})`);
+    process.env.NODE_PROFILE = 'global';
+    try {
+        const readers: [string, Id, Id][] = [
+            ['a plain member reading an owner\'s invitee', vic, mia],
+            ['the inviter (an owner) reading her invitee', olive, mia],
+            ['an admin reading the admin\'s invitee', ada, ben],
+            ['the member on their own profile', mia, mia],
+            ['an owner on her own profile', olive, olive],
+            ['an admin reading an admin', olive, ada],
+            ['a plain member on his own profile', pat, pat],
+        ];
+        for (const [who, viewer, target] of readers) {
+            const r = await profile(viewer, target);
+            assert(r.status === 200 && r.body?.vouchedInBy === null && !('broughtIn' in (r.body ?? {})),
+                `9a. global, ${who}: vouchedInBy null, no broughtIn (${show(r)})`);
+        }
+    } finally {
+        delete process.env.NODE_PROFILE;
+    }
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

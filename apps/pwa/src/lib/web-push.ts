@@ -244,8 +244,10 @@ function fromBase64url(text: string): Uint8Array {
 /**
  * The notice a click brought (public/sw.js puts it in the address's fragment, `#notice=`), checked as the phone's checkTap
  * checks one: signed by the community key pinned at the tap, for this key, recent, and a `join.answered`. `none`: no
- * notice in the address; `ok`: the community's own; `forged`: anything else, which opens nothing and shows
- * {@link FORGED_NOTICE_LINE} once.
+ * notice in the address, or one this community signed for this key that is only late (older than core's 7-day lifetime,
+ * while the push itself lives up to 28 days) or from a clock that runs slow, which the phone's checkTap also lets pass
+ * without a word: the page reads the status as it opens either way; `ok`: the community's own; `forged`: anything else,
+ * which opens nothing and shows {@link FORGED_NOTICE_LINE} once.
  */
 export function noticeInLocation(hash: string, publicKey: string, pushKey: string | null, now?: number): 'none' | 'ok' | 'forged' {
     const m = /(?:^#|&)notice=([^&]*)/.exec(hash);
@@ -258,5 +260,7 @@ export function noticeInLocation(hash: string, publicKey: string, pushKey: strin
     }
     if (!pushKey) return 'forged';
     const check = verifyPushNotice(data, { recipient: publicKey, pushKey, ...(now === undefined ? {} : { now }) });
-    return check.ok && check.kind === 'join.answered' ? 'ok' : 'forged';
+    if (check.ok) return check.kind === 'join.answered' ? 'ok' : 'forged';
+    // Core checks the signature before the time: these two come only from a notice this community signed for this key.
+    return check.reason === 'too-old' || check.reason === 'from-the-future' ? 'none' : 'forged';
 }

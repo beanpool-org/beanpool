@@ -59,8 +59,8 @@ const pushEvent = (payload: unknown) => ({ data: { json: () => (typeof payload =
 const KEY = ed25519.utils.randomSecretKey();
 const PUSH_KEY = bytesToHex(ed25519.getPublicKey(KEY));
 const ASKER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
-function notice(kind = 'join.answered', recipient = ASKER, key = KEY) {
-    const fields = { c: pushCommunityTag(PUSH_KEY), k: kind as any, i: 'ab'.repeat(16), t: Math.floor(Date.now() / 1000) };
+function notice(kind = 'join.answered', recipient = ASKER, key = KEY, sentAt = Math.floor(Date.now() / 1000)) {
+    const fields = { c: pushCommunityTag(PUSH_KEY), k: kind as any, i: 'ab'.repeat(16), t: sentAt };
     return { bp: 1, ...fields, s: bytesToHex(ed25519.sign(pushNoticeBytes(fields, recipient), key)) };
 }
 
@@ -208,6 +208,18 @@ describe('a click on a notice (noticeInLocation)', () => {
     });
     it('no notice in the address: none', () => {
         expect(noticeInLocation('', ASKER, PUSH_KEY)).toBe('none');
+    });
+    it("a yes this community signed that is only late, or read on a slow clock, is no forgery: no warning (as the phone's checkTap)", () => {
+        const now = Math.floor(Date.now() / 1000);
+        const DAY = 24 * 60 * 60;
+        // Sent 8 days ago: past core's 7-day lifetime, inside the push's 28-day TTL (a laptop shut for a week, a tray left alone).
+        expect(noticeInLocation(hash(notice('join.answered', ASKER, KEY, now - 8 * DAY)), ASKER, PUSH_KEY, now)).toBe('none');
+        // Read on a laptop whose clock is 10 minutes slow: the notice looks 10 minutes ahead.
+        expect(noticeInLocation(hash(notice('join.answered', ASKER, KEY, now + 10 * 60)), ASKER, PUSH_KEY, now)).toBe('none');
+        // Late is no excuse for a forgery: another key, or another member, is still named.
+        const other = ed25519.utils.randomSecretKey();
+        expect(noticeInLocation(hash(notice('join.answered', ASKER, other, now - 8 * DAY)), ASKER, PUSH_KEY, now)).toBe('forged');
+        expect(noticeInLocation(hash(notice('join.answered', bytesToHex(ed25519.getPublicKey(other)), KEY, now + 10 * 60)), ASKER, PUSH_KEY, now)).toBe('forged');
     });
 });
 

@@ -1412,6 +1412,8 @@ CREATE INDEX IF NOT EXISTS idx_member_blocks_updated_at ON member_blocks(updated
 -- it (GET /api/notices/push/:id, the signer's own). `sent_at` is the notice's time in whole seconds. Bounded: 7 days, and
 -- a member's newest 100 (the hourly hygiene job); the CHECKs cap a row's size. This server's own: never copied to a
 -- standby, which sends no push. Goes with the member on a prune, a self-deletion or a re-key.
+-- Kept for every member the push is for, a phone or not: it is the list both apps' bell reads (GET /api/notices/push).
+-- `seen_at` (whole seconds): when the member tapped the row or opened its thing; NULL while it is on the bell.
 CREATE TABLE IF NOT EXISTS push_notices (
     id TEXT PRIMARY KEY CHECK (length(id) = 32),
     recipient TEXT NOT NULL,
@@ -1419,7 +1421,8 @@ CREATE TABLE IF NOT EXISTS push_notices (
     title TEXT NOT NULL CHECK (length(title) <= 200),
     body TEXT NOT NULL CHECK (length(body) <= 4000),
     data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 1000),
-    sent_at INTEGER NOT NULL
+    sent_at INTEGER NOT NULL,
+    seen_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
 CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);

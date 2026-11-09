@@ -63,9 +63,12 @@ import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notify
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
-import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import {
+    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere,
+    keptNoticeIdsOf, type PushNoticeRow,
+} from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -7296,7 +7299,33 @@ export function getConversation(id: string): Conversation | undefined {
 }
 
 export function markConversationRead(pubkey: string, conversationId: string): void {
-    return markConversationReadEngine(pubkey, conversationId);
+    markConversationReadEngine(pubkey, conversationId);
+    // Opening a chat takes its notices off the bell, on every app the member has open.
+    markBellNoticesSeenWhere(pubkey, 'conversationId', [conversationId]);
+}
+
+/** The bell's marks told to the member's own sockets, so every open app's count follows. */
+function toldBellSeen(pubkey: string, ids: string[]): string[] {
+    if (ids.length > 0) {
+        try { broadcast({ type: 'push_notices_seen', ids }, [pubkey]); } catch { /* the next read catches up */ }
+    }
+    return ids;
+}
+
+/**
+ * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen). A moderation
+ * notice's row marks its alert's kept copy too (engine/kept-notices.ts), so the web app never shows that alert after.
+ */
+export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
+    const marked = markPushNoticesSeen(pubkey, ids);
+    const kept = keptNoticeIdsOf(pubkey, marked);
+    if (kept.length > 0) markKeptNoticesSeen(pubkey, kept);
+    return toldBellSeen(pubkey, marked);
+}
+
+/** The member opened the thing these notices are about (a chat; a moderation alert acknowledged): off the bell. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
+    return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 
 export function getUnreadCounts(pubkey: string): Record<string, number> {
@@ -10695,6 +10724,8 @@ export function dispatchPushNotification(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
+    /** What one recipient's details carry beside `data` (a moderation notice's kept copy, `noticeId`): never in the push. */
+    detailsFor?: (recipient: string) => Record<string, unknown> | undefined,
 ): number {
     if (getNodeRole() === 'backup') return 0;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
@@ -10755,15 +10786,20 @@ export function dispatchPushNotification(
             continue;
         }
 
+        // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
+        // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
+        if (tokens.length === 0 && !passesReadGate(pk)) continue;
+
+        // One notice per recipient, the same on each of their phones.
+        const notice = newPushNotice(kind, pk, sentAt);
+        const extra = detailsFor?.(pk);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data: extra ? { ...data, ...extra } : data, sentAt });
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
-
-        // One notice per recipient, the same on each of their phones.
-        const notice = newPushNotice(kind, pk, sentAt);
-        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
         for (const { tokenId, token, platform, lang } of tokens) {
             const words = phoneWords(lang);
@@ -10792,9 +10828,13 @@ export function dispatchPushNotification(
         }
     }
 
-    if (allMessages.length === 0) return 0;
-    if (rehearsal) return 0;
+    if (rehearsal || notices.length === 0) return 0;
     keepPushNotices(notices);
+    // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
+    for (const n of notices) {
+        try { broadcast({ type: 'push_notice', id: n.id, kind: n.kind }, [n.recipient]); } catch { /* the 120 s read catches up */ }
+    }
+    if (allMessages.length === 0) return 0;
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {

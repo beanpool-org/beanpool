@@ -2218,6 +2218,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
     // Their cancel of that request of their own (engine/dm-requests.ts cancelReachOut).
     try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reach_out_withdrawn_at TEXT`).run(); } catch { }
+    // The bell (engine/push-notices.ts): when the member took a notice off it. No table yet on a database from before
+    // push notices: schema.sql makes it with the column.
+    try { db.prepare(`ALTER TABLE push_notices ADD COLUMN seen_at INTEGER`).run(); } catch { }
     // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
     try {
         const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;

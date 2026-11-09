@@ -429,6 +429,7 @@ export const SUITES = [
     'test-push-leave-statement',
     'test-push-access-token',
     'test-push-notices',
+    'test-notice-bell',
     'test-unread-count',
     'test-push-tokens-at-rest',
     'test-push-repeat-folds',

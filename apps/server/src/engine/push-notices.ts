@@ -178,6 +178,57 @@ export function readPushNotice(id: string, recipient: string, now: number = nowS
     return { id: row.id, kind: row.kind, title: row.title, body: row.body, data: parseData(row.data), sentAt: row.sent_at };
 }
 
+// ── The bell: the list both apps read (DESIGN-web-notifications-fable.md §2.1) ─────────────────────────────────────────
+//
+// The same rows, kept for every member a push is for, a phone or not (state-engine.ts dispatchPushNotification). A row is
+// on the bell until its member taps it or opens its thing (a chat they read: markPushNoticesSeenWhere); never by reading
+// the list, nor by time beyond the 7-day lifetime. No "Clear all" (Marty, 9 Nov 2026).
+
+/** A row on the bell: the details, and when the member took it off (whole seconds), null while it is on. */
+export interface BellNotice extends PushNoticeDetails {
+    seenAt: number | null;
+}
+
+/** At most this many ids in one mark: a member's whole list. */
+export const BELL_MARK_MAX_IDS = PUSH_NOTICES.perMember;
+
+/** A member's notices, newest first, within the lifetime and the per-member bound whenever the tidy last ran. */
+export function listPushNotices(recipient: string, opts: { unseenOnly?: boolean } = {}, now: number = nowSeconds()): BellNotice[] {
+    const rows = db.prepare(`SELECT id, kind, title, body, data, sent_at, seen_at FROM (
+                                 SELECT *, rowid AS r FROM push_notices WHERE recipient = ? AND sent_at >= ?
+                                  ORDER BY sent_at DESC, rowid DESC LIMIT ?)
+                              ${opts.unseenOnly ? 'WHERE seen_at IS NULL' : ''} ORDER BY sent_at DESC, r DESC`)
+        .all(recipient, now - PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICES.perMember) as
+        { id: string; kind: string; title: string; body: string; data: string; sent_at: number; seen_at: number | null }[];
+    return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, data: parseData(r.data), sentAt: r.sent_at, seenAt: r.seen_at ?? null }));
+}
+
+/** Marks these of the member's own notices seen; anyone else's id marks nothing. Returns the ids it marked, each once. */
+export function markPushNoticesSeen(recipient: string, ids: readonly string[], now: number = nowSeconds()): string[] {
+    const mark = db.prepare('UPDATE push_notices SET seen_at = ? WHERE id = ? AND recipient = ? AND seen_at IS NULL');
+    return db.transaction(() => [...new Set(ids)].filter(id => mark.run(now, id, recipient).changes > 0))();
+}
+
+/**
+ * Marks the member's unseen notices whose details name this thing (`field` in their data: `conversationId` for a chat
+ * they opened, `noticeId` for a moderation alert they acknowledged). Returns the ids it marked.
+ */
+export function markPushNoticesSeenWhere(recipient: string, field: 'conversationId' | 'noticeId', values: readonly string[], now: number = nowSeconds()): string[] {
+    if (values.length === 0) return [];
+    const ids = db.prepare(`SELECT id FROM push_notices WHERE recipient = ? AND seen_at IS NULL
+                               AND json_valid(data) AND json_extract(data, '$.${field}') IN (SELECT value FROM json_each(?))`)
+        .all(recipient, JSON.stringify(values)) as { id: string }[];
+    return markPushNoticesSeen(recipient, ids.map(r => r.id), now);
+}
+
+/** The `data.noticeId` of these rows of the member's (a moderation notice's kept copy), for the alert's own mark. */
+export function keptNoticeIdsOf(recipient: string, ids: readonly string[]): string[] {
+    if (ids.length === 0) return [];
+    const rows = db.prepare(`SELECT json_extract(data, '$.noticeId') AS k FROM push_notices WHERE recipient = ? AND json_valid(data)
+                               AND id IN (SELECT value FROM json_each(?))`).all(recipient, JSON.stringify(ids)) as { k: unknown }[];
+    return rows.map(r => r.k).filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 64);
+}
+
 /** The bounds, for every member at once: notices past their lifetime, and each member's past their newest perMember. */
 export function tidyPushNotices(now: number = nowSeconds()): number {
     return db.transaction(() => {

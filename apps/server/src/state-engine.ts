@@ -7327,8 +7327,9 @@ function toldBellSeen(pubkey: string, ids: string[]): string[] {
 }
 
 /**
- * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen). A moderation
- * notice's row marks its alert's kept copy too (engine/kept-notices.ts), so the web app never shows that alert after.
+ * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen; a tap on its phone
+ * notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
+ * keptNoticeDetails), so the web app never shows that alert after.
  */
 export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
     const marked = markPushNoticesSeen(pubkey, ids);
@@ -7337,7 +7338,7 @@ export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): str
     return toldBellSeen(pubkey, marked);
 }
 
-/** The member opened the thing these notices are about (a chat; a moderation alert acknowledged): off the bell. */
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */
 export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
     return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
@@ -10750,7 +10751,7 @@ export function deliverPushNotices(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
-    /** What one recipient's details carry beside `data` (a moderation notice's kept copy, `noticeId`): never in the push. */
+    /** What one recipient's details carry beside `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails): never in the push. */
     detailsFor?: (recipient: string) => Record<string, unknown> | undefined,
 ): { phones: number; told: number } {
     const none = { phones: 0, told: 0 };

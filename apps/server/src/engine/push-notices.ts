@@ -211,7 +211,7 @@ export function markPushNoticesSeen(recipient: string, ids: readonly string[], n
 
 /**
  * Marks the member's unseen notices whose details name this thing (`field` in their data: `conversationId` for a chat
- * they opened, `noticeId` for a moderation alert they acknowledged). Returns the ids it marked.
+ * they opened, `noticeId` for a kept alert they acknowledged). Returns the ids it marked.
  */
 export function markPushNoticesSeenWhere(recipient: string, field: 'conversationId' | 'noticeId', values: readonly string[], now: number = nowSeconds()): string[] {
     if (values.length === 0) return [];
@@ -221,7 +221,7 @@ export function markPushNoticesSeenWhere(recipient: string, field: 'conversation
     return markPushNoticesSeen(recipient, ids.map(r => r.id), now);
 }
 
-/** The `data.noticeId` of these rows of the member's (a moderation notice's kept copy), for the alert's own mark. */
+/** The `data.noticeId` of these rows of the member's (a kept notice's copy), for the alert's own mark. */
 export function keptNoticeIdsOf(recipient: string, ids: readonly string[]): string[] {
     if (ids.length === 0) return [];
     const rows = db.prepare(`SELECT json_extract(data, '$.noticeId') AS k FROM push_notices WHERE recipient = ? AND json_valid(data)

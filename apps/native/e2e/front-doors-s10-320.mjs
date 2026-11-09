@@ -129,7 +129,7 @@ const Page = () => {
     if (c === 'join') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={S.scroll}>
             <View style={S.card}>
-                <Text style={S.title}>🎟️ Join BeanPool</Text>
+                <Text style={S.title}>🎟️ Join with an invite</Text>
                 <View style={S.pasteCard}>
                     <Text style={S.pasteCardText}>Tap Paste to insert the code from your invite.</Text>
                     <Pressable style={S.pasteCardBtn} accessibilityRole="button"><Text style={S.pasteCardBtnText}>📋 Paste</Text></Pressable>

@@ -1203,10 +1203,15 @@ export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => 
     return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
 }
 
-/** A suite's way to watch or fail the hook's primitives too, as runStandingDeals' `wrap` does the tick's. */
+/**
+ * A suite's way to watch or fail the hook's primitives too, as runStandingDeals' `wrap` does the tick's, and to pin its clock
+ * as runStandingDeals' `now` does (a suite runs periods that start in the future).
+ */
 let standingHookWrap: ((hooks: StandingHooks) => StandingHooks) | null = null;
-export function setStandingHookWrapForTests(wrap: ((hooks: StandingHooks) => StandingHooks) | null): void {
+let standingHookNow: (() => number) | null = null;
+export function setStandingHookForTests(wrap: ((hooks: StandingHooks) => StandingHooks) | null, now: (() => number) | null = null): void {
     standingHookWrap = wrap;
+    standingHookNow = now;
 }
 
 /**
@@ -1222,7 +1227,7 @@ function payShortStandingDealsAfterCredit(to: string): void {
     whenPostCommitBatchOver(() => {
         try {
             const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
-            payShortStandingDealsOf(standingHookWrap ? standingHookWrap(hooks) : hooks, to);
+            payShortStandingDealsOf(standingHookWrap ? standingHookWrap(hooks) : hooks, to, standingHookNow ? standingHookNow() : Date.now());
         } catch (e) {
             console.warn('[Standing] Paying short standing deals after a credit failed:', e);
         }

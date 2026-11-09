@@ -10723,8 +10723,20 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
  * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
+ *
+ * Answers how many phones Expo was asked to reach. {@link deliverPushNotices} also says how many members were told: a notice
+ * kept for them is on their bell (web notifications W0), a phone or not.
  */
-export function dispatchPushNotification(
+export function dispatchPushNotification(...args: Parameters<typeof deliverPushNotices>): number {
+    return deliverPushNotices(...args).phones;
+}
+
+/**
+ * {@link dispatchPushNotification}, answering both counts: `phones`, the phones Expo was asked to reach, and `told`, the
+ * members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A sender
+ * that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
+ */
+export function deliverPushNotices(
     targetPubkeys: string[],
     actorPubkey: string,
     title: string,
@@ -10740,8 +10752,9 @@ export function dispatchPushNotification(
     rehearsal = false,
     /** What one recipient's details carry beside `data` (a moderation notice's kept copy, `noticeId`): never in the push. */
     detailsFor?: (recipient: string) => Record<string, unknown> | undefined,
-): number {
-    if (getNodeRole() === 'backup') return 0;
+): { phones: number; told: number } {
+    const none = { phones: 0, told: 0 };
+    if (getNodeRole() === 'backup') return none;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
     // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
     // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
@@ -10750,7 +10763,7 @@ export function dispatchPushNotification(
     // every other notice still go, whoever caused them (#1403 review).
     const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
-    if (recipients.length === 0) return 0;
+    if (recipients.length === 0) return none;
 
     const prefKey = `notify_${categoryId}`;
     
@@ -10842,11 +10855,12 @@ export function dispatchPushNotification(
         }
     }
 
-    if (rehearsal || notices.length === 0) return 0;
+    if (rehearsal || notices.length === 0) return none;
     keepPushNotices(notices);
     // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
     for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
-    if (allMessages.length === 0) return 0;
+    const told = notices.length;
+    if (allMessages.length === 0) return { phones: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {
@@ -10865,7 +10879,7 @@ export function dispatchPushNotification(
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
-    return allMessages.length;
+    return { phones: allMessages.length, told };
 }
 
 /**

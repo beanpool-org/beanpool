@@ -18,6 +18,7 @@
  *      tap on the row marks the alert's kept copy
  *   7. a standby answers the read and refuses the mark, 503 `standby`, writing nothing
  *   8. the bounds: at most 100, nothing older than 7 days, whatever the hourly tidy last did
+ *   9. one request to join, one row for the member whose shared listing it came after, a phone or not (shared-listing door A3)
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-notice-bell)
  */
@@ -278,6 +279,22 @@ async function main() {
         assert(bounded.notices.every((n, i, a) => i === 0 || a[i - 1].sentAt >= n.sentAt), 'newest first');
         attempt(() => notices.tidyPushNotices());
         assert(rowsOf(web).length === 100 && !rowsOf(web).some(r => r.id === oldId), `the hourly tidy keeps the newest 100 and drops the old (${rowsOf(web).length})`);
+
+        // ── 9. One request to join, one row for its sharer ─────────────────────────────────────────────────
+        // A request to join after a listing a member shared outside (shared-listing door A3, engine/knocks.ts
+        // notifyKnockReceived): the sharer is told by their own notice instead of the plain one. On the bell that holds with
+        // no phone too: an admin who shared it and has only the web app gets one row, as one with a phone gets one push.
+        console.log('\n--- 9. A request to join after a shared listing: one row for its sharer, a phone or not ---');
+        const knocks = await import('./engine/knocks.js');
+        const sid = member('Sid'); // an admin, the web app only, who shared the listing
+        db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'owner:password')").run(sid.pk);
+        const ownerBefore = rowsOf(owner).filter(r => r.kind === 'community.knock').length;
+        attempt(() => knocks.notifyKnockReceived(Date.now(), sid.pk));
+        await sleep(100);
+        const sidRows = rowsOf(sid);
+        assert(sidRows.length === 1 && sidRows[0].kind === 'community.knock-shared',
+            `the sharer, an admin with no phone, has one row, the shared one, not the plain one as well (${show(sidRows.map(r => r.kind))})`);
+        assert(rowsOf(owner).filter(r => r.kind === 'community.knock').length === ownerBefore + 1, 'the owner has the plain one');
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

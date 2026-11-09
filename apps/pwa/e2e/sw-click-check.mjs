@@ -28,7 +28,7 @@
  *      node e2e/sw-click-check.mjs <path to another sw.js>     (e.g. an older one, to see it fail)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, self, navigator, document, location, WindowClient, ExtendableEvent, DOMException -- Node, and the page's and worker's side of evaluate() */
+/* global URL, console, process, setTimeout, self, navigator, WindowClient, ExtendableEvent, DOMException -- Node, and the page's and worker's side of evaluate() */
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';

@@ -2706,5 +2706,6 @@
   "Founding member": "عضو مؤسس",
   "Here since the community began": "هنا منذ بداية المجتمع",
   "{tier} tier · tap to reach out": "مستوى {tier} · اضغط للتواصل",
-  "🌱 Invited by {name}": "🌱 بدعوة من {name}"
+  "🌱 Invited by {name}": "🌱 بدعوة من {name}",
+  "{list}, {item}": "{list}، {item}"
 }

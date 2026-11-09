@@ -2394,5 +2394,6 @@
   "Founding member": "संस्थापक सदस्य",
   "Here since the community began": "समुदाय की शुरुआत से यहीं हैं",
   "{tier} tier · tap to reach out": "{tier} स्तर · संपर्क करने के लिए टैप करें",
-  "🌱 Invited by {name}": "🌱 {name} द्वारा आमंत्रित"
+  "🌱 Invited by {name}": "🌱 {name} द्वारा आमंत्रित",
+  "{list}, {item}": "{list}, {item}"
 }

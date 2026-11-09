@@ -2316,5 +2316,6 @@
   "Founding member": "创始成员",
   "Here since the community began": "自社区创建起即在此",
   "{tier} tier · tap to reach out": "{tier} 等级 · 点击联系",
-  "🌱 Invited by {name}": "🌱 由 {name} 邀请"
+  "🌱 Invited by {name}": "🌱 由 {name} 邀请",
+  "{list}, {item}": "{list}, {item}"
 }

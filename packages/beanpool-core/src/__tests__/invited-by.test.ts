@@ -2,8 +2,11 @@
  * "Invited by", Brought in and the Ledger's credit line: one set of words for both apps (invited-by.ts, vouch-presets.ts;
  * DESIGN-invites-vouching-review-fable.md slice I3).
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { invitedByLines, broughtInWords, broughtInStatusWords, broughtInRowWords, showInviterSwitchWords, ledgerCreditLine } from '../index.js';
+import { pseudoLocalise, setLanguage } from '../words.js';
+
+afterEach(() => setLanguage('en'));
 
 const member = (role: 'owner' | 'admin' | null) => ({ kind: 'member' as const, publicKey: 'b'.repeat(64), callsign: 'marty', avatarUrl: null, tier: 'Elder', role });
 const words = (l: { title: string; sub: string | null }) => `${l.title} ${l.sub ?? ''}`;
@@ -52,6 +55,28 @@ describe('Brought in, the switch, the Ledger line', () => {
         });
     });
     it('the Ledger names the voucher and the amount', () => {
-        expect(ledgerCreditLine('marty', 200)).toBe('Your credit line: 200, vouched by @marty');
+        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }])).toBe('Your credit line: 200, vouched by @marty');
+    });
+    it('two or three vouchers: one credit line, the total once, each voucher with their part, in the order given', () => {
+        const two = ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }]);
+        expect(two).toBe('Your credit line: 300 · vouched by @marty 200, @olive 100');
+        const three = ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }, { callsign: 'kofi', amount: 50 }]);
+        expect(three).toBe('Your credit line: 350 · vouched by @marty 200, @olive 100, @kofi 50');
+        // Never one "Your credit line" per voucher (two would read as two different lines, neither the whole).
+        for (const line of [two, three]) expect(line!.match(/Your credit line/g)).toHaveLength(1);
+        expect(ledgerCreditLine([{ callsign: 'a', amount: 0.1 }, { callsign: 'b', amount: 0.2 }])).toBe('Your credit line: 0.3 · vouched by @a 0.1, @b 0.2');
+    });
+    it('nobody vouched: no line', () => {
+        expect(ledgerCreditLine([])).toBeNull();
+        expect(ledgerCreditLine(null)).toBeNull();
+        expect(ledgerCreditLine(undefined)).toBeNull();
+    });
+    it('every piece of the line goes through the words layer', () => {
+        setLanguage('xx');
+        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }])).toBe(pseudoLocalise('Your credit line: {amount}, vouched by @{name}').replace('{amount}', '200').replace('{name}', 'marty'));
+        const item = (name: string, amount: string) => pseudoLocalise('@{name} {amount}').replace('{name}', name).replace('{amount}', amount);
+        const list = pseudoLocalise('{list}, {item}').replace('{list}', item('marty', '200')).replace('{item}', item('olive', '100'));
+        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }]))
+            .toBe(pseudoLocalise('Your credit line: {total} · vouched by {vouchers}').replace('{total}', '300').replace('{vouchers}', list));
     });
 });

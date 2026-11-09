@@ -2394,5 +2394,6 @@
   "Founding member": "Kurucu üye",
   "Here since the community began": "Topluluk başladığından beri burada",
   "{tier} tier · tap to reach out": "{tier} kademesi · iletişime geçmek için dokun",
-  "🌱 Invited by {name}": "🌱 {name} tarafından davet edildi"
+  "🌱 Invited by {name}": "🌱 {name} tarafından davet edildi",
+  "{list}, {item}": "{list}, {item}"
 }

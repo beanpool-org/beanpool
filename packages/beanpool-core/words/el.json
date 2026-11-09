@@ -2394,5 +2394,6 @@
   "Founding member": "Ιδρυτικό μέλος",
   "Here since the community began": "Εδώ από την ίδρυση της κοινότητας",
   "{tier} tier · tap to reach out": "Επίπεδο {tier} · πάτα για επικοινωνία",
-  "🌱 Invited by {name}": "🌱 Προσκλήθηκε από {name}"
+  "🌱 Invited by {name}": "🌱 Προσκλήθηκε από {name}",
+  "{list}, {item}": "{list}, {item}"
 }

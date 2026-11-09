@@ -2394,5 +2394,6 @@
   "Founding member": "عضو مؤسس",
   "Here since the community began": "حاضر از ابتدای شکل‌گیری جامعه",
   "{tier} tier · tap to reach out": "سطح {tier} · برای ارتباط ضربه بزنید",
-  "🌱 Invited by {name}": "🌱 دعوت‌شده توسط {name}"
+  "🌱 Invited by {name}": "🌱 دعوت‌شده توسط {name}",
+  "{list}, {item}": "{list}، {item}"
 }

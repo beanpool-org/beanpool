@@ -2316,5 +2316,6 @@
   "Founding member": "創設メンバー",
   "Here since the community began": "コミュニティ創設当初からのメンバー",
   "{tier} tier · tap to reach out": "{tier}ランク · タップして連絡",
-  "🌱 Invited by {name}": "🌱 {name}による招待"
+  "🌱 Invited by {name}": "🌱 {name}による招待",
+  "{list}, {item}": "{list}、{item}"
 }

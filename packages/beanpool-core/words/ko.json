@@ -2316,5 +2316,6 @@
   "Founding member": "창립 멤버",
   "Here since the community began": "커뮤니티 시작부터 함께함",
   "{tier} tier · tap to reach out": "{tier} 등급 · 탭하여 연락하기",
-  "🌱 Invited by {name}": "🌱 {name} 님의 초대"
+  "🌱 Invited by {name}": "🌱 {name} 님의 초대",
+  "{list}, {item}": "{list}, {item}"
 }

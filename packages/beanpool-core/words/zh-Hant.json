@@ -2316,5 +2316,6 @@
   "Founding member": "創始成員",
   "Here since the community began": "社群成立時即加入",
   "{tier} tier · tap to reach out": "{tier} 等級 · 輕觸以聯絡",
-  "🌱 Invited by {name}": "🌱 由 {name} 邀請"
+  "🌱 Invited by {name}": "🌱 由 {name} 邀請",
+  "{list}, {item}": "{list}、{item}"
 }

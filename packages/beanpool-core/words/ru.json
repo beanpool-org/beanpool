@@ -2550,5 +2550,6 @@
   "Founding member": "Участник-основатель",
   "Here since the community began": "В сообществе с момента основания",
   "{tier} tier · tap to reach out": "Уровень «{tier}» · нажмите, чтобы связаться",
-  "🌱 Invited by {name}": "🌱 Приглашение от {name}"
+  "🌱 Invited by {name}": "🌱 Приглашение от {name}",
+  "{list}, {item}": "{list}, {item}"
 }

@@ -2394,5 +2394,6 @@
   "Founding member": "Gründungsmitglied",
   "Here since the community began": "Dabei seit Gründung der Community",
   "{tier} tier · tap to reach out": "Stufe {tier} · tippen zum Kontaktieren",
-  "🌱 Invited by {name}": "🌱 Eingeladen von {name}"
+  "🌱 Invited by {name}": "🌱 Eingeladen von {name}",
+  "{list}, {item}": "{list}, {item}"
 }

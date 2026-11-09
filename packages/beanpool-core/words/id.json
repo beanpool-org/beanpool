@@ -2316,5 +2316,6 @@
   "Founding member": "Anggota pendiri",
   "Here since the community began": "Di sini sejak komunitas dimulai",
   "{tier} tier · tap to reach out": "Tingkat {tier} · ketuk untuk menghubungi",
-  "🌱 Invited by {name}": "🌱 Diundang oleh {name}"
+  "🌱 Invited by {name}": "🌱 Diundang oleh {name}",
+  "{list}, {item}": "{list}, {item}"
 }

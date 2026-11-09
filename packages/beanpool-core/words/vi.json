@@ -2316,5 +2316,6 @@
   "Founding member": "Thành viên sáng lập",
   "Here since the community began": "Có mặt từ khi cộng đồng mới bắt đầu",
   "{tier} tier · tap to reach out": "Cấp {tier} · nhấn để liên hệ",
-  "🌱 Invited by {name}": "🌱 Được mời bởi {name}"
+  "🌱 Invited by {name}": "🌱 Được mời bởi {name}",
+  "{list}, {item}": "{list}, {item}"
 }

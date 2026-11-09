@@ -603,7 +603,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                                 <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                                    {balanceInfo.vouchedBy.map(v => ledgerCreditLine(v.callsign, v.amount)).join(' · ')}
+                                    {ledgerCreditLine(balanceInfo.vouchedBy)}
                                 </div>
                             )}
                         </div>
@@ -618,7 +618,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     )}
                     {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                         <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                            {balanceInfo.vouchedBy.map(v => ledgerCreditLine(v.callsign, v.amount)).join(' · ')}
+                            {ledgerCreditLine(balanceInfo.vouchedBy)}
                         </div>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}

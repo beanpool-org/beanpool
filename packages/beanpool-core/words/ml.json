@@ -2394,5 +2394,6 @@
   "Founding member": "സ്ഥാപകാംഗം",
   "Here since the community began": "കമ്മ്യൂണിറ്റി തുടങ്ങിയതുമുതൽ ഇവിടെയുണ്ട്",
   "{tier} tier · tap to reach out": "{tier} തലം · ബന്ധപ്പെടാൻ ടാപ്പ് ചെയ്യുക",
-  "🌱 Invited by {name}": "🌱 {name} ക്ഷണിച്ചു"
+  "🌱 Invited by {name}": "🌱 {name} ക്ഷണിച്ചു",
+  "{list}, {item}": "{list}, {item}"
 }

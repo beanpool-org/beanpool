@@ -2394,5 +2394,6 @@
   "Founding member": "প্রতিষ্ঠাতা সদস্য",
   "Here since the community began": "কমিউনিটির শুরু থেকেই আছেন",
   "{tier} tier · tap to reach out": "{tier} স্তর · যোগাযোগ করতে ট্যাপ করুন",
-  "🌱 Invited by {name}": "🌱 {name} কর্তৃক আমন্ত্রিত"
+  "🌱 Invited by {name}": "🌱 {name} কর্তৃক আমন্ত্রিত",
+  "{list}, {item}": "{list}, {item}"
 }

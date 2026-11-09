@@ -2550,5 +2550,6 @@
   "Founding member": "Засновник спільноти",
   "Here since the community began": "Тут від початку заснування спільноти",
   "{tier} tier · tap to reach out": "Рівень {tier} · торкніться, щоб зв'язатися",
-  "🌱 Invited by {name}": "🌱 Запрошено {name}"
+  "🌱 Invited by {name}": "🌱 Запрошено {name}",
+  "{list}, {item}": "{list}, {item}"
 }

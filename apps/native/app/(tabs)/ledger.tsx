@@ -1256,7 +1256,7 @@ export default function LedgerScreen() {
                             </Text>
                             {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
                                 <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                                    {balanceState.vouchedBy.map((v: any) => ledgerCreditLine(v.callsign, v.amount)).join(' · ')}
+                                    {ledgerCreditLine(balanceState.vouchedBy)}
                                 </Text>
                             )}
                         </View>
@@ -1276,7 +1276,7 @@ export default function LedgerScreen() {
                     )}
                     {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
                         <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                            {balanceState.vouchedBy.map((v: any) => ledgerCreditLine(v.callsign, v.amount)).join(' · ')}
+                            {ledgerCreditLine(balanceState.vouchedBy)}
                         </Text>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}

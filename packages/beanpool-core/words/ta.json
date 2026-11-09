@@ -2394,5 +2394,6 @@
   "Founding member": "நிறுவன உறுப்பினர்",
   "Here since the community began": "சமூகம் தொடங்கியதிலிருந்து இங்கே உள்ளார்",
   "{tier} tier · tap to reach out": "{tier} நிலை · தொடர்பு கொள்ளத் தட்டவும்",
-  "🌱 Invited by {name}": "🌱 {name} அழைத்தார்"
+  "🌱 Invited by {name}": "🌱 {name} அழைத்தார்",
+  "{list}, {item}": "{list}, {item}"
 }

@@ -98,7 +98,9 @@ find holds that sign-in for 5 minutes, keyed by the restore's throwaway key, and
 `POST /api/recovery/collect {candidatePublicKey}` opens the session for the account picked and releases
 its copy in the same request through the per-row lookup-hash proof above. The find hash is an index,
 never a proof. A copy made before it is found by a one-at-a-time scan (one scrypt per such copy) and
-made findable at its member's first restore; a main server's boot log counts the copies not yet
+made findable at its member's first restore. Every find runs that scan, even when the index found
+accounts, because one sign-in can protect a copy made before the find hash and another made after it
+(Marty, 9 Nov, decision 3); a find names both sets or none. A main server's boot log counts the copies not yet
 findable, and the scan goes once live servers count 0. A copy deposited while a server ran on its own
 key, before a take-over brought the community's, is found the same way: its find hash is the replaced
 key's, which no take-over carries, so the start that locks the copy again with the community's key

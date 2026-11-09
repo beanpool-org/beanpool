@@ -41,7 +41,7 @@ const SMALL_BELL_PX = 28;
 const BELL_SETTLE_MS = 300;
 
 /** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
-export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
+export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void, kind?: NeedsItem['kind']): void {
     if (!onNavigate) return;
     switch (target.to) {
         // On the deal itself, not only its listing: a recurring listing's author lands on this one (deals S4).
@@ -54,7 +54,9 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
         case 'group': return onNavigate('group', target.id);
         case 'invite': return onNavigate('group', target.id);
         case 'invites': return onNavigate('projects');
-        case 'people': return onNavigate('people-invites');
+        // The line "N people asked to join" (not "N asked for an invite", which lands here too) is a notice: 'asked' tells Invites
+        // so, and it says so if they are answered by now instead of showing nothing (WantsToJoin).
+        case 'people': return kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
         default: return undefined;
     }
 }
@@ -451,9 +453,9 @@ export function NeedsYouIcons({
 
     const isSidebar = variant === 'sidebar';
     // A tap on a need: that need is about to change, so Home's copy of it no longer stands in.
-    const go = (target: NeedsTarget) => {
+    const go = (target: NeedsTarget, kind?: NeedsItem['kind']) => {
         forgetHomeForHeader();
-        goToWebNeedsTarget(target, onNavigate);
+        goToWebNeedsTarget(target, onNavigate, kind);
     };
     // A tap on a notice: off the bell at once (and on the node, which tells the member's other apps), then to its thing.
     const openNotice = (n: BellNotice) => {
@@ -560,7 +562,7 @@ function NeedsSheet({
     entries: NeedsItem[];
     notices: BellNotice[];
     onClose: () => void;
-    onPick: (target: NeedsTarget) => void;
+    onPick: (target: NeedsTarget, kind: NeedsItem['kind']) => void;
     onOpenNotice: (notice: BellNotice) => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -611,7 +613,7 @@ function NeedsSheet({
                                     type="button"
                                     onClick={() => {
                                         onClose();
-                                        onPick(e.target);
+                                        onPick(e.target, e.kind);
                                     }}
                                     aria-label={e.label}
                                     data-testid={`header-needs-${e.kind}`}

@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { door, doorOutcome, joinVerdict, requestDoorWork, wordsWorkRefusal, WRONG_CLOCK } from './web-join';
 import { requestLinkNonce, linkRefusalMessage } from './link-signin';
-import { makeEphemeralKey, openRestoreSession, releaseRefusalMessage, sessionRefusalMessage } from './web-restore';
+import { collectAccount, collectRefusalMessage, findAccounts, findRefusalMessage, makeEphemeralKey, requestFindNonce } from './web-restore';
 import { generateIdentity, type BeanPoolIdentity } from './identity';
 
 const STALE = { error: 'Request timestamp is stale or invalid' };
@@ -64,16 +64,19 @@ describe('a wrong clock, said at the web door', () => {
         expect(linkRefusalMessage({ status: 401, body: { code: 'sign_in', error: 'x' } }, 'google')).toBe("Google couldn't confirm that sign-in. Try again.");
     });
 
-    it('restoring: opening the session, and releasing the copy, say the clock', async () => {
+    it('restoring: the find nonce, the find and the collect say the clock', async () => {
         stub401();
         const eph = makeEphemeralKey();
-        const opened = await openRestoreSession(eph, 'Bea');
-        expect('answer' in opened).toBe(true);
-        if (!('answer' in opened)) return;
-        expect(sessionRefusalMessage(opened.answer, 'Bea')).toBe(WRONG_CLOCK);
-        expect(releaseRefusalMessage(opened.answer, 'google', 'Bea')).toBe(WRONG_CLOCK);
+        const nonce = await requestFindNonce(eph);
+        expect('answer' in nonce).toBe(true);
+        if (!('answer' in nonce)) return;
+        expect(findRefusalMessage(nonce.answer, null)).toBe(WRONG_CLOCK);
+        const found = await findAccounts(eph, { provider: 'google', idToken: 'a.b.c', nonce: 'n', sub: 's' });
+        expect('answer' in found && findRefusalMessage(found.answer, 'google')).toBe(WRONG_CLOCK);
+        const collected = await collectAccount(eph, { publicKey: 'a'.repeat(64), callsign: 'Bea' });
+        expect('answer' in collected && collectRefusalMessage(collected.answer)).toBe(WRONG_CLOCK);
         // A sign-in's own 401 keeps its sentence.
-        expect(releaseRefusalMessage({ status: 401, body: { code: 'sign_in', error: 'x' } }, 'google', 'Bea'))
+        expect(findRefusalMessage({ status: 401, body: { code: 'sign_in', error: 'x' } }, 'google'))
             .toBe("Google sign-in couldn't be checked or took too long. Try again.");
     });
 });

@@ -550,7 +550,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(within(needs).getByTestId('home-needs-knock')).toHaveTextContent('2 people asked to join');
         expect(within(needs).queryByRole('link', { name: /asked to join/ })).toBeNull();
         fireEvent.click(within(needs).getByRole('button', { name: '2 people asked to join. Waiting on you.' }));
+        expect(nav).toHaveBeenCalledWith('people-invites', 'asked');
+    });
+
+    it('an ask-for-an-invite line lands on the same page, but as an ordinary visit: it is not a notice about requests to join', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'ask', count: 1, accent: true, label: '1 person asked for an invite', target: { to: 'people' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs).getByTestId('home-needs-ask').closest('button')!);
         expect(nav).toHaveBeenCalledWith('people-invites');
+        expect(nav).not.toHaveBeenCalledWith('people-invites', 'asked');
     });
 
     it("a group's vote line lands on the group (DESIGN-group-decisions S3), not Messages and not Commons → Decide", async () => {

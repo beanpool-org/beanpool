@@ -63,20 +63,22 @@ Your own local community has none of these limits.
 
 ## Getting your account back with your sign-in
 
-On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
+The sign-in you joined with, or linked in Settings, brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
 
-- Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)
+- On the global community, tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.) On your own local community's web address, tap **Restore Existing Identity**, then **Recover with Social Sign-In**.
 - A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.
-- Type your name here. Tap your account when it shows.
+- The page shows the community it looks in: the one whose web address you opened. There is nothing to type.
 - Choose the sign-in you joined with: **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.
-- The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.
+- The page says **Finding your account…** while the community finds the account that sign-in protects. If it protects more than one account there, the page asks **Which account is yours?**: tap yours.
+- If no account at that community uses the sign-in, the page says so. Try your own community's web address, or your 12 words.
+- The page opens your account's locked copy in the browser, and checks that it really is the account the community found. If it isn't, it says **That isn't** (the name) and saves nothing.
 - You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them. If the copy didn't keep them, this browser doesn't have them, and Settings says so (see "Keep your 12 words" below).
 
 Your account's devices are told that it is being brought back, in case it isn't you.
 
 If you joined with GitHub, it can't bring your account back: BeanPool no longer uses GitHub (see "Getting your account back"). Use your 12 words instead.
 
-If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in).
+If you sign in with an account that isn't the one you joined with, the page says no account there uses it, and lets you start again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in).
 
 **One account per browser** holds here too. If this browser already has another account, nothing replaces it: the page says **This browser already has an account** and offers to open it. To bring yours here instead, sign out of that one first. If this browser already has your account, the page says it is already here.
 

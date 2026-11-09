@@ -13,7 +13,10 @@
  *   2. a stranger's valid token: an empty list, no session row, no push
  *   3. two owners, one sub: both names; collect for one opens one session and one push
  *   4. a row without a find hash is found by the scan and healed; the second find runs no scan (counter); one scan at a
- *      time, a second caller gets the 503 sentence (worded so no app's match catches it); the boot count falls by one
+ *      time, a second caller gets the 503 sentence (worded so no app's match catches it); the boot count falls by one.
+ *      One sign-in protecting a copy made before the find hash and one made after it: the scan runs even though the
+ *      index found one, both are named, and the second find runs no scan (Marty's decision 3, 9 Nov); while another
+ *      scan runs, that find gets the 503 too (both sets or none)
  *   5. keys a take-over replaced (the deciding review of 38f03fac): a copy deposited while the server ran on its own key,
  *      whose member doesn't restore before the next take-over, is still found there, by the scan: the start's relock
  *      clears the retired key's find hash, and so does a deposit or a disconnect that carries the copy; the boot count
@@ -362,6 +365,41 @@ async function main(): Promise<void> {
     check(leeAgain.found.status === 200 && names(leeAgain.found).length === 1 && statsAfterSecond.scans === statsAfterFirst.scans && statsAfterSecond.scrypts === statsAfterFirst.scrypts,
         `the second find comes from the index and runs no scan (${brief({ scans: statsAfterSecond.scans, scrypts: statsAfterSecond.scrypts })})`);
 
+    // One sign-in protecting a copy made before the find hash and one made after it (Marty's decision 3, 9 Nov: known limit
+    // 1 of S0). The index finds the newer copy, and the scan still runs for the older one, so both are named, the older one
+    // is made findable, and the next find needs no scan.
+    const SAM_SUB = '103333333333333333333';
+    const ola = newId(), pia = newId();
+    const olaName = GLOBAL ? 'Ola5150' : 'Ola', piaName = GLOBAL ? 'Pia8675' : 'Pia';
+    addMember(ola, olaName);
+    addMember(pia, piaName);
+    check((await connect(ola, 'google', SAM_SUB)).status === 200, `${olaName} connects Sam's Google`);
+    // Ola's copy, as code from before S0 deposited it: no find hash, stamped long ago.
+    try { db.prepare(`UPDATE recovery_shares SET sso_find_hash = NULL, updated_at = ? WHERE owner_pubkey = ? AND holder_type = 'sso'`).run(oldStamp, ola.pk); } catch { /* no column yet */ }
+    const piaConnected = await connect(pia, 'google', SAM_SUB);
+    check(piaConnected.status === 200 && rowOf(pia.pk, 'google')?.findHash === expectedFindHash('google', SAM_SUB),
+        `${piaName} connects the same Google after the find hash came, and ${piaName}'s copy holds it (${piaConnected.status})`);
+    const unfindableSam = engine?.countUnfindableSignInCopies() ?? -1;
+    check(unfindableSam === 1, `setup: ${olaName}'s copy is the only one not yet findable (${unfindableSam})`);
+    const samStats0 = engine?.findScanStats() ?? { scans: -1, scrypts: -1, healed: -1, scanning: false };
+    const samPhone = newId();
+    const samFirst = await findBy(samPhone, 'google', SAM_SUB);
+    const samStats1 = engine?.findScanStats() ?? samStats0;
+    const samBoth = brief([`${olaName}:${ola.pk}`, `${piaName}:${pia.pk}`].sort());
+    check(samFirst.found.status === 200 && brief(names(samFirst.found)) === samBoth,
+        `the index finds ${piaName}, and the scan still runs and finds ${olaName}: both are named (${samFirst.found.status} ${brief(samFirst.found.body)})`);
+    check(samStats1.scans === samStats0.scans + 1 && samStats1.healed === samStats0.healed + 1
+        && rowOf(ola.pk, 'google')?.findHash === expectedFindHash('google', SAM_SUB) && (engine?.countUnfindableSignInCopies() ?? -1) === 0,
+        `one scan ran and made ${olaName}'s copy findable; the boot count is 0 again (${brief({ before: samStats0, after: samStats1 })})`);
+    const olaBack = await collect(samPhone, ola.pk);
+    const olaOpened = await openReleased(samPhone, olaBack.body?.collectionId, 'google', SAM_SUB);
+    check(olaBack.status === 200 && olaOpened.pk === ola.pk,
+        `the hold names the scan's account too: collect for ${olaName} opens, and the copy opens to ${olaName}'s key (${olaBack.status} ${olaOpened.pk === ola.pk ? 'equal' : olaOpened.error})`);
+    const samSecond = await findBy(newId(), 'google', SAM_SUB);
+    const samStats2 = engine?.findScanStats() ?? samStats1;
+    check(samSecond.found.status === 200 && brief(names(samSecond.found)) === samBoth && samStats2.scans === samStats1.scans && samStats2.scrypts === samStats1.scrypts,
+        `the second find names both from the index and runs no scan (${brief({ found: names(samSecond.found).length, scans: samStats2.scans, scrypts: samStats2.scrypts })})`);
+
     // One scan at a time: copies nobody's sign-in matches (a community's old copies), and two strangers at once.
     const fillers: string[] = [];
     db.transaction(() => {
@@ -379,12 +417,20 @@ async function main(): Promise<void> {
     let waited = 0;
     while (!(engine?.findScanStats().scanning) && waited < 10_000) { await sleep(5); waited += 5; }
     check(!!engine?.findScanStats().scanning, `a stranger's find is scanning the community's ${fillers.length} old copies (waited ${waited} ms)`);
-    const secondStranger = await findBy(newId(), 'google', '888888888888888888888');
+    // Two at once, while that scan runs: a stranger, and Sam, whose copies the index finds but who needs the scan too,
+    // since the community still holds copies with no find hash. A find names both sets or none: half a list could hide
+    // the account the member came for.
+    const [secondStranger, samWhileBusy] = await Promise.all([
+        findBy(newId(), 'google', '888888888888888888888'),
+        findBy(newId(), 'google', SAM_SUB),
+    ]);
     // Worded so no app's match catches it (test-member-words: the web's join reads "try again in " as a sentence that
     // already says when); the apps read the code.
     check(secondStranger.found.status === 503 && secondStranger.found.body?.error === 'Busy finding another account. Wait a minute, then sign in again.'
         && secondStranger.found.body?.code === 'find_busy',
         `a second caller meanwhile gets 503 find_busy, "Busy finding another account. Wait a minute, then sign in again." (${secondStranger.found.status} ${brief(secondStranger.found.body)})`);
+    check(samWhileBusy.found.status === 503 && samWhileBusy.found.body?.code === 'find_busy',
+        `and so does a find whose index found accounts, while copies wait for a scan: both sets or none (${samWhileBusy.found.status} ${brief(samWhileBusy.found.body)})`);
     const firstDone = await firstStranger;
     check(firstDone.found.status === 200 && firstDone.found.body?.accounts?.length === 0 && !engine?.findScanStats().scanning,
         `the first finishes with its empty list, and the next scan may start (${firstDone.found.status})`);

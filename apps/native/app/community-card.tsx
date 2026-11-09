@@ -337,7 +337,6 @@ export default function CommunityCardScreen() {
                     </View>
                 ) : (
                     <View>
-                        {card.joining === 'requests' && <Text style={styles.note} testID="community-card-needs-account">{t(W.askViaGlobal, { name })}</Text>}
                         <View style={styles.actions}>
                             {card.joining === 'requests' && (
                                 <Pressable style={styles.primary} onPress={() => welcome()} accessibilityRole="button" testID="community-card-ask">

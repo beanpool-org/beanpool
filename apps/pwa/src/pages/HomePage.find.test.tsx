@@ -1218,6 +1218,52 @@ describe('a yes shows itself on the Find card (Damo, 9 Nov 2026: it only showed 
         expect(live).toContainElement(fallback);
     });
 
+    it('a yes that comes in while Home is open brings its banner to the top too, and the Find card draws it once, in its region (Y1 merged with #3009)', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        expect(screen.queryByTestId('home-yes-banner-https://sleepy.example.org')).toBeNull();
+
+        readSpy.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'BP-YES1', expiresAt: null } });
+        hideTab(true);
+        hideTab(false);
+        const banner = await screen.findByTestId('home-yes-banner-https://sleepy.example.org');
+        expect(banner).toHaveTextContent('🎉 Sleepy Hollow said yes.');
+        expect(within(banner).getByTestId('home-yes-banner-join-https://sleepy.example.org')).toHaveTextContent('Join Sleepy Hollow');
+        // The Find card: the yes once, with one Join, in the region; no waiting card for it.
+        const live = screen.getByTestId('home-find-yes-live');
+        expect(screen.getAllByTestId('home-find-invited-https://sleepy.example.org')).toHaveLength(1);
+        expect(screen.getAllByTestId('home-find-invited-join-https://sleepy.example.org')).toHaveLength(1);
+        expect(live).toContainElement(screen.getByTestId('home-find-invited-join-https://sleepy.example.org'));
+        expect(screen.queryByTestId('home-waiting-card-https://sleepy.example.org')).toBeNull();
+    });
+
+    it('a yes already used (member: true) that comes in while Home is open says "You joined" in the same region, once: no Join, no banner, no waiting card', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        const live = screen.getByTestId('home-find-yes-live');
+
+        readSpy.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'BP-YES1', expiresAt: null, member: true } });
+        hideTab(true);
+        hideTab(false);
+        const joined = await screen.findByTestId('home-find-joined-https://sleepy.example.org');
+        expect(joined).toHaveTextContent('You joined Sleepy Hollow.');
+        expect(within(joined).getByRole('link')).toHaveAttribute('href', 'https://sleepy.example.org/app');
+        expect(screen.getByTestId('home-find-yes-live')).toBe(live);
+        expect(live).toContainElement(joined);
+        expect(screen.getAllByText('You joined Sleepy Hollow.')).toHaveLength(1);
+        expect(screen.queryByTestId('home-find-invited-https://sleepy.example.org')).toBeNull();
+        expect(screen.queryByTestId('home-find-invited-join-https://sleepy.example.org')).toBeNull();
+        expect(screen.queryByTestId('home-yes-banner-https://sleepy.example.org')).toBeNull();
+        expect(screen.queryByTestId('home-waiting-card-https://sleepy.example.org')).toBeNull();
+        expect(document.body.textContent).not.toContain('said yes');
+    });
+
     it('a hidden tab asks nothing', async () => {
         await rememberKnock(ME.publicKey, SLEEPY, new Date());
         vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));

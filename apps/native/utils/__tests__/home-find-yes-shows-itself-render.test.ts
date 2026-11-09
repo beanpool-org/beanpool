@@ -129,6 +129,19 @@ describe('a yes while Home is open', () => {
         expect(tid(`home-find-waiting-${BYRON.url}`)).toBeNull();
     });
 
+    it('a yes already used (member: true, global yes Y1) that comes in draws no row in the region, never a lone "🎉", and the waiting card goes', async () => {
+        await mount([BYRON]);
+        const live = tid('home-find-yes-live')!;
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'BP-YES1', expiresAt: null, member: true } });
+        await pass(50_000); // the next read is by 48 s at the latest
+
+        expect(asked(BYRON.url)).toBeGreaterThan(1);
+        expect(tid(`home-find-invited-${BYRON.url}`)).toBeNull();
+        expect(tid('home-find-yes-live')).toBe(live);
+        expect(live.textContent).toBe('');
+        expect(tid(`home-find-waiting-${BYRON.url}`)).toBeNull();
+    });
+
     it('asks about every 20 s at first (16 to 24 s) and not again once there is a yes', async () => {
         await mount([BYRON]);
         await pass(15_999);

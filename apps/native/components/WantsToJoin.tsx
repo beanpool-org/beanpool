@@ -192,6 +192,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true, fromN
                                 onChange={(val) => setVouchPresets(prev => ({ ...prev, [req.id]: val }))}
                                 budgetLeft={myVouching.budget?.left ?? 0}
                                 budgetTotal={myVouching.budget?.level ?? 0}
+                                noLimit={myVouching.noLimit === true}
                             />
                         </View>
                     )}

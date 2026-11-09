@@ -38,10 +38,11 @@ You can choose not to be shown as anyone's connection in common. In Settings, un
 
 A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners and admins by role, and members set as vouchers on the names list by an owner or credit-committee admin.
 
-On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. No Beans leave the voucher's own wallet.
+On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. An owner can also choose **200** or **500**, and has no budget limit ("From your budget: No limit"). No Beans leave the voucher's own wallet.
 
-- **One vouch per person:** each voucher can vouch for a person once. You can later raise your vouch for them, up to 100 Beans in total.
+- **One vouch per person:** each voucher can vouch for a person once. You can later raise your vouch for them, up to 100 Beans in total (500 for an owner).
 - **At most 3 vouchers:** at most 3 vouchers can vouch for the same person (up to 300 Beans total).
+- **Up to 500 with an owner:** once an owner has vouched for someone, they can hold up to 500 Beans of vouches in all. An owner can top up someone who already has 3 vouchers, to 500 at most.
 - **Never below zero:** you cannot vouch for a member who is below zero now. To help someone in debt, members can give part of their credit line on Send, or propose a community Decision.
 
 See "Joining BeanPool" and "Your credit line".

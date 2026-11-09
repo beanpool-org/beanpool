@@ -831,7 +831,15 @@ export default function NamesListScreen() {
                                     <View key={v.memberPubkey} style={styles.entry}>
                                         <Text style={styles.entryName}>{(callsignOf(v.memberPubkey) || v.callsign) ? `@${callsignOf(v.memberPubkey) || v.callsign}` : t('a voucher')}</Text>
                                         <Text style={styles.entryNote}>
-                                            {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                            {v.noLimit
+                                                // An owner vouches with no limit (Marty, 9 Nov): no budget figure.
+                                                ? t('No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                                    vouched: formatNumber(v.vouched),
+                                                    belowZero: v.belowZero,
+                                                    writtenOff: formatNumber(v.writtenOff),
+                                                    passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                                })
+                                                : t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
                                                 left: formatNumber(v.left),
                                                 level: formatNumber(v.level),
                                                 vouched: formatNumber(v.vouched),
@@ -1068,7 +1076,9 @@ export default function NamesListScreen() {
                                         <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
                                     </View>
                                     <Text style={styles.entryMeta}>
-                                        {t('{left} of {level} left', { left: formatNumber(e.voucher.left), level: formatNumber(e.voucher.level) })}
+                                        {e.voucher.noLimit
+                                            ? t('No limit')
+                                            : t('{left} of {level} left', { left: formatNumber(e.voucher.left), level: formatNumber(e.voucher.level) })}
                                     </Text>
                                 </View>
                             ) : null}
@@ -1111,11 +1121,14 @@ export default function NamesListScreen() {
                                 <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
                             </View>
                             <Text style={styles.entryMeta}>
-                                {t('{left} of {level} left · {vouched} vouched', {
-                                    left: formatNumber(rv.left),
-                                    level: formatNumber(rv.level),
-                                    vouched: formatNumber(rv.peopleVouched),
-                                })}
+                                {rv.noLimit
+                                    // An owner vouches with no limit (Marty, 9 Nov): no budget figure, as the VOUCHERS section.
+                                    ? t('No limit · {vouched} vouched', { vouched: formatNumber(rv.peopleVouched) })
+                                    : t('{left} of {level} left · {vouched} vouched', {
+                                        left: formatNumber(rv.left),
+                                        level: formatNumber(rv.level),
+                                        vouched: formatNumber(rv.peopleVouched),
+                                    })}
                             </Text>
                         </View>
                         <View style={styles.buttonRow}>

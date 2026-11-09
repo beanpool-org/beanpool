@@ -4,7 +4,10 @@
  *
  * - **The vouch** is a pick of VOUCH_PRESETS, on an invite or from a member's profile. One voucher's vouches for one person
  *   come to at most VOUCH_MAX in all: a first vouch, then raises (§9 rule 1). At most VOUCHES_PER_PERSON vouchers' vouches
- *   count for one person (§9 rule 2).
+ *   count for one person (§9 rule 2), PERSON_VOUCH_MAX in all.
+ * - **An owner** (Marty, 9 Nov) has no budget limit and picks from OWNER_VOUCH_PRESETS (200 and 500 too), up to
+ *   OWNER_VOUCH_MAX for one person; a person an owner vouched for may hold PERSON_VOUCH_MAX_WITH_OWNER in all. Admins and
+ *   every other voucher: as above.
  * - **A budget level** (an appointment, a "set to", the community's default for an appointment) is VOUCHER_BUDGET_MIN to
  *   VOUCHER_BUDGET_MAX in VOUCHER_BUDGET_STEP (§10 rule 1). What a voucher has in hand, left plus held on unused invites,
  *   is never above VOUCHER_BUDGET_MAX (§10 rule 3).
@@ -18,11 +21,25 @@ import { formatNumber, t, word } from './words.js';
 export const VOUCH_PRESETS = [25, 50, 75, 100] as const;
 export type VouchPreset = (typeof VOUCH_PRESETS)[number];
 
+/**
+ * An owner's picks (Marty, 9 Nov): the same four, and 200 and 500. Nobody else may vouch 200 or 500. An owner vouches with
+ * no budget limit: every vouch is still a line in their allocation ledger, but never drawn from a budget.
+ */
+export const OWNER_VOUCH_PRESETS = [25, 50, 75, 100, 200, 500] as const;
+export type OwnerVouchPreset = (typeof OWNER_VOUCH_PRESETS)[number];
+
 /** The most one voucher's vouches for one person come to, first vouch and raises together. */
 export const VOUCH_MAX = 100;
+/** The same for an owner's vouches: one 500, or smaller ones raised to it. */
+export const OWNER_VOUCH_MAX = 500;
 
-/** At most this many vouchers' vouches count for one person. */
+/** At most this many vouchers' vouches count for one person. An owner's vouch is never refused by it (it may top them up). */
 export const VOUCHES_PER_PERSON = 3;
+
+/** The most every vouch for one person comes to: three vouchers at 100 (Marty, 9 Nov) ... */
+export const PERSON_VOUCH_MAX = 300;
+/** ... and once an owner has vouched for them (or is vouching now), 500. */
+export const PERSON_VOUCH_MAX_WITH_OWNER = 500;
 
 export const VOUCHER_BUDGET_MIN = 100;
 export const VOUCHER_BUDGET_MAX = 2000;
@@ -36,6 +53,26 @@ export const MEMBER_GIFT_MAX = VOUCH_MAX;
 /** Whether `n` is one of the vouch presets: the only amounts a vouch may be. */
 export function isVouchPreset(n: unknown): n is VouchPreset {
     return typeof n === 'number' && (VOUCH_PRESETS as readonly unknown[]).includes(n);
+}
+
+/** Whether `n` is one of an owner's vouch presets (25 to 500): the only amounts an owner's vouch may be. */
+export function isOwnerVouchPreset(n: unknown): n is OwnerVouchPreset {
+    return typeof n === 'number' && (OWNER_VOUCH_PRESETS as readonly unknown[]).includes(n);
+}
+
+/** The presets a voucher picks from: an owner's six, or everyone else's four. */
+export function vouchPresetsFor(owner: boolean): readonly number[] {
+    return owner ? OWNER_VOUCH_PRESETS : VOUCH_PRESETS;
+}
+
+/** What one voucher's vouches for one person may come to: 500 for an owner, 100 for anyone else. */
+export function vouchMaxFor(owner: boolean): number {
+    return owner ? OWNER_VOUCH_MAX : VOUCH_MAX;
+}
+
+/** What every vouch for one person may come to: 500 once an owner vouched for them, 300 otherwise. */
+export function personVouchMax(ownerVouched: boolean): number {
+    return ownerVouched ? PERSON_VOUCH_MAX_WITH_OWNER : PERSON_VOUCH_MAX;
 }
 
 /** Whether `n` is a budget level: a whole number from 100 to 2,000 in steps of 100. */
@@ -52,6 +89,8 @@ export const VOUCH_PRESET_WORDS = {
     label: word('Vouch for them'),
     none: word('None'),
     fromBudget: word('From your budget: {left} of {total} left'),
+    fromBudgetNoLimit: word('From your budget: No limit'),
+    noLimit: word('No limit'),
     notEnough: word('Not enough budget left'),
     noneLeft: word('No budget left. Ask an owner for more.'),
     notAVoucher: word('You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.'),
@@ -65,6 +104,7 @@ export const VOUCH_PRESET_WORDS = {
     invitedBy: word('Invited by @{name}'),
     ledgerVouchedBy: word('vouched by @{name}'),
     ledgerBudget: word('Your budget: {left} of {total} left'),
+    ledgerBudgetNoLimit: word('Your budget: No limit'),
     budgetHistory: word('Budget history'),
     askForMore: word('Ask for more'),
     askForMoreHelp: word('To get a bigger budget to vouch from, ask an owner of this community.'),
@@ -82,6 +122,7 @@ export const VOUCH_PRESET_WORDS = {
     increaseBudget: word('Increase budget'),
     voucherCardSections: word('Voucher card sections'),
     vouchersRowText: word('{left} of {total} left · {vouched} vouched · {below} below zero'),
+    vouchersRowTextNoLimit: word('No limit · {vouched} vouched · {below} below zero'),
     hasNotVouchedAnyone: word('Has not vouched for anyone yet.'),
     noBudgetHistoryYet: word('No budget history yet.'),
     raiseConfirmQuestion: word('You vouched {prior} for @{name} before. Raise it to {newTotal}?'),
@@ -110,6 +151,7 @@ export const vouchPresets = {
     label: VOUCH_PRESET_WORDS.label,
     none: VOUCH_PRESET_WORDS.none,
     fromBudget: VOUCH_PRESET_WORDS.fromBudget,
+    fromBudgetNoLimit: VOUCH_PRESET_WORDS.fromBudgetNoLimit,
     notEnough: VOUCH_PRESET_WORDS.notEnough,
     pastMax: VOUCH_PRESET_WORDS.pastMax,
     noneLeft: VOUCH_PRESET_WORDS.noneLeft,
@@ -133,6 +175,7 @@ export const INVITE_ADDS_WORDS = {
 export const ledger = {
     vouchedBy: VOUCH_PRESET_WORDS.ledgerVouchedBy,
     budget: VOUCH_PRESET_WORDS.ledgerBudget,
+    budgetNoLimit: VOUCH_PRESET_WORDS.ledgerBudgetNoLimit,
 } as const;
 
 export const vouchFor = (name: string) => t(VOUCH_PRESET_WORDS.vouchFor, { name });

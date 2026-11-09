@@ -201,6 +201,10 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 
 ## Vouching
 
-Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each voucher receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans).
+Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each admin and each voucher on the names list receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans). Owners have no budget limit: their vouches are still recorded on their voucher card, but nothing is taken from a budget, and nobody sets one for them.
 
-Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Each voucher can vouch for a person once (raisable up to 100 Beans total), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Trust badges never give this right.
+Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Owners can also choose 200 or 500 Beans. Each voucher can vouch for a person once (raisable up to 100 Beans total, or 500 for an owner), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Once an owner has vouched for someone, that person can hold up to 500 Beans of vouches in all, and an owner's vouch can top up someone who already has 3 vouchers, to 500 at most. Trust badges never give this right.
+
+- **Owner:** 25, 50, 75, 100, 200 or 500 Beans, no budget limit, up to 500 for one person.
+- **Admin:** 25, 50, 75 or 100 Beans, a budget of 100 to 2,000, up to 100 for one person.
+- **Voucher on the names list:** the same as an admin.

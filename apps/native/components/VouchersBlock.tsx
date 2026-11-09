@@ -15,10 +15,19 @@ import { t, formatNumber } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import type { VoucherSummaryRow } from '../utils/names-list';
 
-/** One row's words (§11), from the node's numbers: left of the level in hand, people vouched for, how many below zero now. */
-export function voucherRowText(v: Pick<VoucherSummaryRow, 'callsign' | 'left' | 'level' | 'peopleVouched' | 'belowZero'>): string {
+/**
+ * One row's words (§11), from the node's numbers: left of the level in hand, people vouched for, how many below zero now.
+ * An owner vouches with no limit (Marty, 9 Nov): "No limit" in place of the budget.
+ */
+export function voucherRowText(v: Pick<VoucherSummaryRow, 'callsign' | 'left' | 'level' | 'peopleVouched' | 'belowZero' | 'noLimit'>): string {
+    const name = v.callsign ? `@${v.callsign}` : t('a voucher');
+    if (v.noLimit) {
+        return t('{name} · No limit · {vouched} vouched · {belowZero} below zero ›', {
+            name, vouched: formatNumber(v.peopleVouched), belowZero: formatNumber(v.belowZero),
+        });
+    }
     return t('{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›', {
-        name: v.callsign ? `@${v.callsign}` : t('a voucher'),
+        name,
         left: formatNumber(v.left),
         budget: formatNumber(v.level),
         vouched: formatNumber(v.peopleVouched),

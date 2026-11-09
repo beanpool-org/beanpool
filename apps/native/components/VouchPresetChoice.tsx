@@ -3,12 +3,13 @@
  * "Vouch for them: None · 25 · 50 · 75 · 100" from core VOUCH_PRESETS,
  * with "From your budget: 550 of 1,000 left" under it;
  * presets above what is left are disabled ("Not enough budget left").
+ * An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none disabled for budget, and "From your budget: No limit".
  *
  * Meets 44 dp min target size and wraps cleanly on 320 dp screens at 1.3x text.
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { formatNumber, t, VOUCH_PRESETS, VOUCH_MAX, vouchPresets } from '@beanpool/core';
+import { formatNumber, t, vouchPresetsFor, vouchMaxFor, vouchPresets } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 export interface VouchPresetChoiceProps {
@@ -20,9 +21,14 @@ export interface VouchPresetChoiceProps {
     priorVouch?: number;
     /** Their callsign, for the sentence a greyed-by-the-cap preset says. */
     personName?: string;
+    /**
+     * The node's `noLimit` for the signer (GET /api/vouchers/me): an owner vouches with no budget limit (Marty, 9 Nov), so
+     * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your budget: No limit".
+     */
+    noLimit?: boolean;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch, personName }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch, personName, noLimit = false }: VouchPresetChoiceProps) {
     const { colors } = useTheme();
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -78,16 +84,19 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
         },
     }));
 
-    const noneLeft = budgetLeft <= 0;
-    const subtitle = noneLeft
-        ? t(vouchPresets.noneLeft)
-        : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
+    const vouchMax = vouchMaxFor(noLimit);
+    const noneLeft = !noLimit && budgetLeft <= 0;
+    const subtitle = noLimit
+        ? t(vouchPresets.fromBudgetNoLimit)
+        : noneLeft
+            ? t(vouchPresets.noneLeft)
+            : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
 
     const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
         { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
-        ...VOUCH_PRESETS.map((p) => {
-            const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX;
-            const notEnoughBudget = p > budgetLeft;
+        ...vouchPresetsFor(noLimit).map((p) => {
+            const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > vouchMax;
+            const notEnoughBudget = !noLimit && p > budgetLeft;
             return {
                 amount: p,
                 label: String(p),
@@ -95,7 +104,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                 disabled: notEnoughBudget || wouldExceedMax,
                 // The cap first: more budget would not make this preset possible.
                 why: wouldExceedMax
-                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatNumber(VOUCH_MAX) })
+                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatNumber(vouchMax) })
                     : notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
             };
         }),

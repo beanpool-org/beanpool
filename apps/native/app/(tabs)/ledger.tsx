@@ -37,7 +37,7 @@ import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
     t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
-    ledgerVouchedBy, ledgerBudget, formatHistoryLine,
+    ledgerVouchedBy, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
 import { Modal } from 'react-native';
@@ -1301,7 +1301,7 @@ export default function LedgerScreen() {
                         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.surface.subtle, borderRadius: 12 }}
                     >
                         <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }}>
-                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                            {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
                         </Text>
                         <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.muted }}>›</Text>
                     </Pressable>
@@ -1396,14 +1396,19 @@ export default function LedgerScreen() {
                             <ScrollView showsVerticalScrollIndicator={false}>
                                 <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, marginBottom: 4 }}>
-                                        {t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
+                                        {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure and no held line. */}
+                                        {myVouching.noLimit
+                                            ? t(VOUCH_PRESET_WORDS.noLimit)
+                                            : t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
                                     </Text>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 2 }}>
                                         {t('Vouched {amount} to {people} who joined', { amount: formatNumber(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}
                                     </Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary }}>
-                                        {t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}
-                                    </Text>
+                                    {!myVouching.noLimit && (
+                                        <Text style={{ fontSize: 12, color: colors.text.secondary }}>
+                                            {t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}
+                                        </Text>
+                                    )}
                                 </View>
 
                                 <View style={{ marginBottom: 12 }}>

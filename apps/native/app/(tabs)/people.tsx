@@ -1456,6 +1456,7 @@ export default function PeopleScreen() {
                                     onChange={setVouchPreset}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
+                                    noLimit={myVouching.noLimit === true}
                                 />
                             )}
 

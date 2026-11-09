@@ -590,7 +590,13 @@ export interface InviteCode {
     usedBy: string | null;
     usedAt: string | null;
     intendedFor?: string;
-    vouchAmount?: number;
+    vouchAmount?: number | null;
+    /** What the node tells the maker of an invite (GET /api/invite/mine): the names-list entry it is bound to, the budget it promises, when it lapses. */
+    namesEntryId?: string | null;
+    voucherLevel?: number | null;
+    expiresAt?: string | null;
+    forKnock?: boolean;
+    usedByCallsign?: string | null;
 }
 
 export async function generateInvite(

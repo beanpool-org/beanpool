@@ -57,8 +57,8 @@ export function AdviseTheOwners({
             const res = await adviseOwners(activeNode.url, nodeCredential(activeNode), setting, text, getTfaSessionToken(activeNode.id));
             onSent(res.shape);
             close();
-        } catch (err: any) {
-            setError(err?.message || t('Could not send your advice.'));
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : t('Could not send your advice.'));
         } finally {
             setSending(false);
         }

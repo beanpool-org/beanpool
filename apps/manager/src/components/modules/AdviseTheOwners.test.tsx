@@ -164,4 +164,27 @@ describe('AdviseTheOwners', () => {
         expect(alert).toHaveTextContent('Network error advice failed');
         expect(screen.getByTestId('shape-advise-form-beans')).toBeInTheDocument();
     });
+
+    it('falls back to default message when error is non-Error or has empty message', async () => {
+        const user = userEvent.setup();
+        vi.mocked(communityShape.adviseOwners).mockRejectedValueOnce(
+            new Error(''),
+        );
+
+        render(
+            <AdviseTheOwners
+                setting="beans"
+                settingName="Beans"
+                activeNode={mockNode}
+                onSent={vi.fn()}
+            />,
+        );
+
+        await user.click(screen.getByTestId('shape-advise-beans'));
+        await user.type(screen.getByTestId('shape-advise-text-beans'), 'Advice text');
+        await user.click(screen.getByTestId('shape-advise-send-beans'));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Could not send your advice.');
+    });
 });

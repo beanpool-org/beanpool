@@ -160,6 +160,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 **Learning:** `fetchNodeLogs` in `lib/node-client.ts` returned `Promise<any[]>`, weakening type safety across manager API callers like `App.tsx` and appliance sections.
 **Action:** Export `LogEntry` interface in `node-client.ts` and type `fetchNodeLogs` as returning `Promise<LogEntry[]>`.
 
+## 2026-12-14 - Replace catch err any in AdviseTheOwners
+**Learning:** `AdviseTheOwners.tsx` used `catch (err: any)` in its async advice send handler, bypassing strict error typing and risking issues with non-standard error throws.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
 ## 2026-11-08 - Replace any casts with strict types in PeopleSafetySection and AlertsPanel
 **Learning:** `PeopleSafetySection.tsx` passed `nodeData?.posts as any` and `nodeData?.members as any` to subcomponents, and `AlertsPanel.tsx` typed the `run` callback argument as `any`.
 **Action:** Use runtime `Array.isArray()` checks with typed interfaces (`PostModerationItem[]`, `MemberItem[]`) and generic type constraints (`T extends { status: AlertsStatus }`) instead of loose `any` casts.

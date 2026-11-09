@@ -613,14 +613,21 @@ function endShort(hooks: StandingHooks, sd: StandingRow, from: StandingRow['phas
  * enterprise keeps none, engine/kept-notices.ts canHold) or a member has cleared theirs.
  */
 const toldThisRun = new Set<string>();
-
-/** Whether a point of this kind was told for this standing deal and period: to either side, kept, or this run. */
-function toldBefore(standingId: string, kind: string, period: number): boolean {
-    if (toldThisRun.has(`${standingId}:${kind}:${period}`)) return true;
-    return !!db.prepare(`SELECT 1 FROM moderation_notices WHERE CASE WHEN json_valid(data) THEN json_extract(data, '$.kind') = ?
-                           AND json_extract(data, '$.standing') = ? AND json_extract(data, '$.period') = ? ELSE 0 END LIMIT 1`).get(kind, standingId, period);
-}
 const markTold = (standingId: string, kind: string, period: number) => toldThisRun.add(`${standingId}:${kind}:${period}`);
+
+/**
+ * Whether a point of this kind was told for this standing deal and period: to either side, kept, or this run. The notices
+ * read are the two sides' own (idx_moderation_notices_recipient), never a scan of the whole table on the minute tick; a hit
+ * there is remembered for the run.
+ */
+function toldBefore(sd: StandingRow, kind: string, period: number): boolean {
+    if (toldThisRun.has(`${sd.id}:${kind}:${period}`)) return true;
+    const kept = !!db.prepare(`SELECT 1 FROM moderation_notices WHERE recipient IN (?, ?) AND CASE WHEN json_valid(data)
+                           THEN json_extract(data, '$.kind') = ? AND json_extract(data, '$.standing') = ? AND json_extract(data, '$.period') = ?
+                           ELSE 0 END LIMIT 1`).get(sd.payer_pubkey, sd.payee_pubkey, kind, sd.id, period);
+    if (kept) markTold(sd.id, kind, period);
+    return kept;
+}
 
 /**
  * The grace's own pushes, on the minute tick (amendment §2), once per (kind, period): halfway through it (on a month only:
@@ -651,7 +658,7 @@ function graceCadence(hooks: StandingHooks, now: number): void {
             payerBody = standingLines.halfwayPayer(title, sd.beans_per_period, days, until);
             payeeBody = standingLines.halfwayPayee(nameOf(sd.payer_pubkey), sd.beans_per_period, title, days, until);
         }
-        if (!kind || toldBefore(sd.id, kind, due.n)) continue;
+        if (!kind || toldBefore(sd, kind, due.n)) continue;
         const k = kind;
         let told: StandingNotice[] = [];
         db.transaction(() => {
@@ -673,7 +680,7 @@ function warnAhead(hooks: StandingHooks, now: number): void {
         if (Date.parse(sd.next_due_at) - now > standingWarnAheadMs(sd.period_unit)) continue;
         if (countReached(sd, sd.periods_done)) continue;
         const period = sd.periods_done + 1;
-        if (toldBefore(sd.id, 'standing_short_ahead', period)) continue;
+        if (toldBefore(sd, 'standing_short_ahead', period)) continue;
         const { balance, usableFloor } = hooks.getBalance(sd.payer_pubkey);
         const shortBy = usableFloor - (balance - sd.beans_per_period);
         if (!(shortBy > 1e-9)) continue;

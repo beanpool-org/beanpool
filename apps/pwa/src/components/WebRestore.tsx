@@ -129,8 +129,9 @@ function initialOf(name: string): string {
 export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay, community, provider: hinted = null, authReturn, navigate, origin }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [notice, setNotice] = useState<Notice>(null);
-    // This restore's throwaway key: made on arrival, or brought back from the provider in the pending restore.
-    const [eph, setEph] = useState<EphemeralKey | null>(null);
+    // This restore's throwaway key: made on arrival, or brought back from the provider in the pending restore, and made
+    // anew by Start again. A ref, read when an answer comes: an answer for a key let go is not this restore's.
+    const ephRef = useRef<EphemeralKey | null>(null);
     const [nonceHeld, setNonceHeld] = useState<{ value: RestoreNonce; at: number } | null>(null);
     const [fetchingNonce, setFetchingNonce] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -195,16 +196,21 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setScreen({ name: 'providers' });
     }, []);
 
-    /** A find nonce for `key`, held for the next trip to a provider. Null when none came, and then the screen says why. */
+    /**
+     * A find nonce for `key`, held for the next trip to a provider. Null when none came, and then the screen says why.
+     * Only the answers for this restore's current key count: a key let go may answer last (React's StrictMode runs the
+     * arrival twice, each with its own key), and its nonce was issued to it, never to the key the find will sign with.
+     */
     const fetchNonce = useCallback(async (key: EphemeralKey): Promise<RestoreNonce | null> => {
+        const current = () => mounted.current && ephRef.current?.publicKey === key.publicKey;
         setFetchingNonce(true);
         try {
             const got = await requestFindNonce(key);
+            if (!current()) return null;
             if ('nonce' in got) {
-                if (mounted.current) setNonceHeld({ value: got.nonce, at: Date.now() });
+                setNonceHeld({ value: got.nonce, at: Date.now() });
                 return got.nonce;
             }
-            if (!mounted.current) return null;
             if ('tooOld' in got) {
                 setScreen({ name: 'too_old' });
                 return null;
@@ -212,9 +218,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             setNotice({ tone: 'error', text: findRefusalMessage(got.answer, null) });
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) console.error('[WebRestore] could not ask for a sign-in:', e);
-            if (mounted.current) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(RESTORE_WORDS.wentWrong) });
+            if (current()) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(RESTORE_WORDS.wentWrong) });
         } finally {
-            if (mounted.current) setFetchingNonce(false);
+            if (current()) setFetchingNonce(false);
         }
         return null;
     }, []);
@@ -334,7 +340,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setNotice({ tone: 'error', text: () => t(RESTORE_WORDS.wentWrong) });
         // A new throwaway key and a new nonce: nothing of the restore that failed is used again.
         const key = makeEphemeralKey();
-        setEph(key);
+        ephRef.current = key;
         setNonceHeld(null);
         setScreen({ name: 'providers' });
         void fetchNonce(key);
@@ -348,7 +354,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             const ret = authReturn !== undefined ? authReturn : captureAuthReturn();
             if (!ret) {
                 const key = makeEphemeralKey();
-                setEph(key);
+                ephRef.current = key;
                 setScreen({ name: 'providers' });
                 await fetchNonce(key);
                 return;
@@ -363,12 +369,12 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             if (!mounted.current) return;
             if (!r) {
                 const key = makeEphemeralKey();
-                setEph(key);
+                ephRef.current = key;
                 toProviders({ tone: 'error', text: refusalMessage('no_pending', ret.provider) });
                 await fetchNonce(key);
                 return;
             }
-            setEph(r.ephemeral);
+            ephRef.current = r.ephemeral;
             const outcome = matchAuthReturn(ret, { provider: r.provider, nonce: r.nonce });
             if (outcome.kind === 'token') {
                 return finishSignIn(r.ephemeral, { provider: outcome.provider, idToken: outcome.idToken, nonce: outcome.nonce, sub: outcome.sub });
@@ -386,8 +392,8 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
     // ---------- the screens' actions ----------
 
     async function signIn(provider: JoinProvider) {
-        if (!eph) return;
-        const key = eph;
+        const key = ephRef.current;
+        if (!key) return;
         setBusy(true);
         setNotice(null);
         try {
@@ -429,9 +435,10 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
      * cleared in fetchNonce itself: there it would wipe why backToSignIns came back here (review 4109590845).
      */
     function retryNonce() {
-        if (!eph) return;
+        const key = ephRef.current;
+        if (!key) return;
         setNotice(null);
-        void fetchNonce(eph);
+        void fetchNonce(key);
     }
 
     /** From the start: a new throwaway key, so nothing of the last attempt (its hold, its session) is used again. */
@@ -443,7 +450,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setNonceHeld(null);
         setNotice(null);
         const key = makeEphemeralKey();
-        setEph(key);
+        ephRef.current = key;
         setScreen({ name: 'providers' });
         await fetchNonce(key);
     }

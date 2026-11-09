@@ -156,6 +156,37 @@ describe('from this community to the provider, with nothing typed', () => {
         expect(await loadIdentity()).toBeNull();
     });
 
+    it('under <StrictMode> (main.tsx), the arrival run twice: the nonce that goes to Google is the one issued to the key the restore keeps', async () => {
+        // The first run's throwaway key is let go, and its nonce answers last: it must not be the one used.
+        const issued = new Map<string, string>();
+        let asked = 0;
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
+        const fetchStub = globalThis.fetch as unknown as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+            if (String(input) !== '/api/recovery/find-nonce') return fetchStub(input, init);
+            const n = ++asked;
+            const key = (init.headers as Record<string, string>)['X-Public-Key'];
+            issued.set(`rn-${n}`, key);
+            if (n === 1) await new Promise((r) => setTimeout(r, 80));
+            return json(200, { nonce: `rn-${n}`, expiresInSeconds: 600, clientIds: { google: 'web-client' } });
+        }));
+        const navigate = vi.fn();
+        render(
+            <StrictMode>
+                <WebRestore onRestored={vi.fn(async () => true)} onHeld={vi.fn()} onExisting={vi.fn()} onBack={vi.fn()} onOtherWay={vi.fn()}
+                    community={COMMUNITY} navigate={navigate} origin={ORIGIN} authReturn={null} />
+            </StrictMode>,
+        );
+        await screen.findByTestId('restore-provider-google');
+        await waitFor(() => expect(asked).toBe(2));
+        await new Promise((r) => setTimeout(r, 120)); // the first run's late answer has come
+        fireEvent.click(screen.getByTestId('restore-provider-google'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+        const state = new URL(navigate.mock.calls[0][0]).searchParams.get('state')!;
+        const waiting = (await loadPendingRestore())!;
+        expect(issued.get(state)).toBe(waiting.ephemeral.publicKey);
+    });
+
     it('the sign-in just tried at the door is offered first', async () => {
         recoveryNode(() => copyOf(account, 'apple', 'a-sub'));
         renderRestore({ provider: 'apple' });

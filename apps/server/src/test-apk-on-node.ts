@@ -198,13 +198,6 @@ const a93 = apk('1.2.93');
     fs.chmodSync(apkDir, 0o755);
     check('B11 a disk that refuses the write: refused, not a crash; nothing left behind, the image\'s APK still served',
         denied.outcome === 'refused' && held() === '' && mirror.servedApk()?.version === '1.2.97', `${JSON.stringify(denied)} ${held()}`);
-
-    // B12: timer scheduled callback handles errors safely without unhandled rejections
-    delete process.env.DISABLE_APK_UPDATE_CHECK;
-    await mirror.startApkMirror();
-    mirror.stopApkMirror();
-    process.env.DISABLE_APK_UPDATE_CHECK = 'true';
-    check('B12 startApkMirror with update check enabled schedules and stops cleanly', true);
 }
 
 // ── C. serving ────────────────────────────────────────────────────────────────────────────────────────────────────

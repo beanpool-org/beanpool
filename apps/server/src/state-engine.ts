@@ -10748,7 +10748,7 @@ export function dispatchPushNotification(
         // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
         // for it. The role is looked up for that kind only.
         const alwaysTold = OWNER_SERVER_KINDS.has(kind)
-            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+            || ((kind === 'community.knock' || kind === 'community.knock-shared') && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);

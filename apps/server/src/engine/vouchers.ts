@@ -57,7 +57,7 @@ import { db } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
-import { keepNotice, keptNoticeDetails, type PushDetailsFor } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 import { ownCoreLockRow } from '../config/core-settings.js';
 
 // A refusal with values in it, in English as a template literal wrote it, marked for the way out (member-words.ts).
@@ -344,7 +344,7 @@ export type TellVoucher = (notice: VoucherNotice) => void;
 export interface VoucherNoticeHooks {
     broadcast: (event: any, recipients?: string[]) => unknown;
     dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'marketplace', kind: 'community.notice',
-        rehearsal?: boolean, detailsFor?: PushDetailsFor) => unknown;
+        rehearsal?: boolean, options?: KeptNoticePushOptions) => unknown;
 }
 
 /** Inside a committee writer's transaction: the voucher's kept copy (keepNotice never throws; its id null when not kept). */

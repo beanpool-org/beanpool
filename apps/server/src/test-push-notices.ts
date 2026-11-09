@@ -223,7 +223,7 @@ async function main() {
         // The table and the senders agree: every kind is sent by someone, and nobody sends a kind that isn't in the table.
         const srcDir = path.dirname(fileURLToPath(import.meta.url));
         const named = new Set<string>();
-        const KIND = String.raw`(?:chat|group|market|trade|review|event|community|account|owner|decision)\.[a-z-]+`;
+        const KIND = String.raw`(?:chat|group|market|trade|review|event|community|account|owner|decision|join)\.[a-z-]+`;
         const walk = (dir: string) => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);

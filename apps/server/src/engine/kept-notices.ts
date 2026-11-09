@@ -125,21 +125,25 @@ export function keepNotice(recipient: string, title: string, body: string, data:
     }
 }
 
-/** What one recipient's push notice carries beside its sender's data (state-engine.ts deliverPushNotices `detailsFor`). */
+/** What one recipient's push notice carries beside its sender's data (state-engine.ts deliverPushNotices `options.detailsFor`). */
 export type PushDetailsFor = (recipient: string) => Record<string, unknown> | undefined;
+/** The part of a push's options (state-engine.ts deliverPushNotices) a sender of kept notices passes. */
+export interface KeptNoticePushOptions { detailsFor?: PushDetailsFor }
 
 /**
- * For a push of notices just kept: each recipient's push notice names their own kept copy (`noticeId`), so acknowledging the
- * alert takes its row off the bell, and a tap on the row marks the alert (state-engine.ts markBellNoticesSeen). Every sender
- * that keeps a notice and pushes it passes this (web notifications W0, review of #3006). A copy that wasn't kept (null) names
- * nothing.
+ * A push's options for notices just kept: each recipient's push notice names their own kept copy (`noticeId`), so
+ * acknowledging the alert takes its row off the bell, and a tap on the row marks the alert (state-engine.ts
+ * markBellNoticesSeen). Every sender that keeps a notice and pushes it passes this (web notifications W0, review of #3006).
+ * A copy that wasn't kept (null) names nothing.
  */
-export function keptNoticeDetails(notices: readonly { to: string; id: string | null }[]): PushDetailsFor {
+export function keptNoticeDetails(notices: readonly { to: string; id: string | null }[]): { detailsFor: PushDetailsFor } {
     const ids = new Map<string, string>();
     for (const n of notices) if (n.id) ids.set(n.to, n.id);
-    return (recipient) => {
-        const noticeId = ids.get(recipient);
-        return noticeId ? { noticeId } : undefined;
+    return {
+        detailsFor: (recipient) => {
+            const noticeId = ids.get(recipient);
+            return noticeId ? { noticeId } : undefined;
+        },
     };
 }
 

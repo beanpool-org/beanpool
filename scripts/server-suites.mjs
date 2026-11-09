@@ -135,6 +135,7 @@ export const SUITES = [
     'test-home-asked-card-global',
     'test-asked-push',
     'test-knock',
+    'test-web-push',
     'test-knock-ceiling',
     'test-knock-notices',
     'test-knock-provenance',

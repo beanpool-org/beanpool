@@ -55,7 +55,7 @@ import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, word
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { keepNotice, keptNoticeDetails, type PushDetailsFor } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 import {
     attributeProjectEscrow, isClosedAccount, owedFromProjectEscrow, type StrandedPledgeLedger, type StrandedPledgeReturn, type StrandedProjectEscrow,
 } from './stranded-pledges.js';
@@ -70,7 +70,7 @@ export interface UnfundedPledgeHooks extends StrandedPledgeLedger {
     broadcast: (event: any, recipients?: string[]) => unknown;
     dispatchPushNotification: (
         targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>,
-        categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind, rehearsal?: boolean, detailsFor?: PushDetailsFor,
+        categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind, rehearsal?: boolean, options?: KeptNoticePushOptions,
     ) => unknown;
 }
 

@@ -1238,6 +1238,11 @@ async function main(): Promise<void> {
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
             'POST /api/join/knock/cancel': {},
+            // "Tell me when they answer" (web push W1), past the shape checks to who may subscribe: a browser's real keys.
+            'POST /api/web-push': { subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/sentinel',
+                keys: { p256dh: (() => { const e = crypto.createECDH('prime256v1'); e.generateKeys(); return e.getPublicKey().toString('base64url'); })(),
+                    auth: crypto.randomBytes(16).toString('base64url') } } },
+            'DELETE /api/web-push': { subId: '0'.repeat(64) },
             // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
             'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
                 signedFor: 'localhost', signature: 'AAAA' },
@@ -1343,6 +1348,7 @@ async function main(): Promise<void> {
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
+            'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
             'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',

@@ -69,6 +69,8 @@ import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere,
     keptNoticeIdsOf, type PushNoticeRow,
 } from './engine/push-notices.js';
+import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -10725,17 +10727,21 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  *
- * Answers how many phones Expo was asked to reach. {@link deliverPushNotices} also says how many members were told: a notice
- * kept for them is on their bell (web notifications W0), a phone or not.
+ * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
+ * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
+ * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ *
+ * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
+ * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
  */
 export function dispatchPushNotification(...args: Parameters<typeof deliverPushNotices>): number {
-    return deliverPushNotices(...args).phones;
+    return deliverPushNotices(...args).sent;
 }
 
 /**
- * {@link dispatchPushNotification}, answering both counts: `phones`, the phones Expo was asked to reach, and `told`, the
- * members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A sender
- * that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
+ * {@link dispatchPushNotification}, answering both counts: `sent`, the messages handed to Expo and to web push, and `told`,
+ * the members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A
+ * sender that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
  */
 export function deliverPushNotices(
     targetPubkeys: string[],
@@ -10751,10 +10757,13 @@ export function deliverPushNotices(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
-    /** What one recipient's details carry beside `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails): never in the push. */
-    detailsFor?: (recipient: string) => Record<string, unknown> | undefined,
-): { phones: number; told: number } {
-    const none = { phones: 0, told: 0 };
+    /**
+     * `ttlSeconds`: how long a browser's push may wait (web push W1). `detailsFor`: what one recipient's details carry beside
+     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push.
+     */
+    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor } = {},
+): { sent: number; told: number } {
+    const none = { sent: 0, told: 0 };
     if (getNodeRole() === 'backup') return none;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
     // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
@@ -10799,6 +10808,7 @@ export function deliverPushNotices(
     // is here only for the ticket's check, in memory, while this send lasts.
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    const webSends: WebPushSend[] = [];
     // The key read once for the whole send (an announcement reaches every member's phones).
     const open = pushTokenOpener();
 
@@ -10806,7 +10816,8 @@ export function deliverPushNotices(
         // Check user's notification preference for this category
         // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
         // for it. The role is looked up for that kind only.
-        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
+        // The applicant who tapped "Tell me when they answer" asked for exactly this one (web push W1), and has no switches.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind) || kind === 'join.answered'
             || ((kind === 'community.knock' || kind === 'community.knock-shared') && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
@@ -10818,13 +10829,14 @@ export function deliverPushNotices(
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
         // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
-        if (tokens.length === 0 && !passesReadGate(pk)) continue;
+        const browsers = webPushTargetsFor(pk, kind);
+        if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 
-        // One notice per recipient, the same on each of their phones.
+        // One notice per recipient, the same on each of their phones and browsers.
         const notice = newPushNotice(kind, pk, sentAt);
-        const extra = detailsFor?.(pk);
+        const extra = options.detailsFor?.(pk);
         notices.push({ id: notice.id, recipient: pk, kind, title, body, data: extra ? { ...data, ...extra } : data, sentAt });
-        if (tokens.length === 0) continue;
+        if (tokens.length === 0 && browsers.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
@@ -10854,6 +10866,14 @@ export function deliverPushNotices(
             allMessages.push(msg);
             phones.push({ publicKey: pk, tokenId, token });
         }
+
+        for (const { subId, lang, target } of browsers) {
+            const words = phoneWords(lang);
+            webSends.push({
+                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
+            });
+        }
     }
 
     if (rehearsal || notices.length === 0) return none;
@@ -10861,7 +10881,7 @@ export function deliverPushNotices(
     // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
     for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
     const told = notices.length;
-    if (allMessages.length === 0) return { phones: 0, told };
+    if (allMessages.length === 0 && webSends.length === 0) return { sent: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {
@@ -10880,7 +10900,8 @@ export function deliverPushNotices(
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
-    return { phones: allMessages.length, told };
+    sendWebPushes(webSends);
+    return { sent: allMessages.length + webSends.length, told };
 }
 
 /**

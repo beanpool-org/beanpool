@@ -12,14 +12,14 @@
 import { word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { reportKind } from '../services/report-kind.js';
-import { keepNotice, keptNoticeDetails, type PushDetailsFor } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 
 // English's own t(): a refusal with a value in it, which member-words.ts finds again by its catalog sentence.
 const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind,
-    rehearsal?: boolean, detailsFor?: PushDetailsFor) => void;
+    rehearsal?: boolean, options?: KeptNoticePushOptions) => void;
 
 export interface ModerationNoticeCallbacks {
     broadcast: BroadcastFn;

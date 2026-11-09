@@ -55,7 +55,7 @@ import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
 import { unmutedRecipients } from './engine/chat-mutes.js';
-import { keepNotice, keptNoticeDetails, type PushDetailsFor } from './engine/kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import {
     JURY_ANSWER_HOURS, JURY_LAST_DAY_AFTER_DAYS, JURY_LATE_SEAT_HOURS, JURY_REMINDER_HOURS, JURY_SERVE_AFTER_DAYS, PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE,
@@ -3837,7 +3837,7 @@ export type RemovalVotePush = (
     /** Never set here: a removal vote's pushes are real. */
     rehearsal?: boolean,
     /** A kept notice's push names its kept copy (keptNoticeDetails), so the bell's row and the alert clear together. */
-    detailsFor?: PushDetailsFor,
+    options?: KeptNoticePushOptions,
 ) => unknown;
 
 /**

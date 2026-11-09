@@ -56,6 +56,7 @@ import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
 import { forgetKnockMark, isEstablishedKey, isKnockKey, knockWaitingKey, waitWithRestoredKey } from '../lib/knock-key';
+import { handoffJoined } from '../lib/handoff';
 import { readKnockStatus } from '../lib/knock';
 import { thisCommunityOrigin } from '../components/AskHere';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -672,6 +673,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         }
         // A key a request to join made is a member now: never read as waiting again (lib/knock-key.ts).
         forgetKnockMark(member.publicKey);
+        // Handed over by the page that holds it in this browser (lib/handoff.ts, slice Y1): that page hears it joined, and
+        // the photo ticked at Join, if any, is the photo step's first pick (nothing copies across unasked).
+        const handedPhoto = handoffJoined(member.publicKey);
+        if (handedPhoto) setPendingAvatar(handedPhoto);
         setPendingIdentity(member);
         // Redeemed already, so the final step has nothing left to redeem.
         setInviteRedeemed(true);

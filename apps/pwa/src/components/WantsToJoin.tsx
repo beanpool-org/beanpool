@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { t, tn, word } from '@beanpool/core';
+import { PEEK_WORDS, t, tn, word } from '@beanpool/core';
 import { answerJoinRequest, getJoinRequests, getMyVouching, type JoinRequest, type MyVouching } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
 import { VouchPresetChoice } from './VouchPresetChoice';
@@ -127,6 +127,12 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
                             </div>
                         </div>
                         <p dir="auto" className="m-0 mt-2.5 text-sm leading-relaxed text-nature-800 dark:text-nature-100 break-words whitespace-pre-wrap">{req.message}</p>
+                        {req.via && (
+                            // Where it came from (shared-listing door A3): the listing shared outside and the member who shared it.
+                            <p dir="auto" className="m-0 mt-2 text-sm leading-snug text-nature-700 dark:text-nature-200 break-words" data-testid={`wants-to-join-via-${req.id}`}>
+                                {t(PEEK_WORDS.askedAfter, { title: req.via.title, sharer: req.via.sharer })}
+                            </p>
+                        )}
                         {myVouching?.voucher && (
                             <div className="mt-3">
                                 <VouchPresetChoice

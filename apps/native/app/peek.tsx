@@ -89,7 +89,7 @@ export default function PeekScreen() {
 
     const askDoor = peek && (
         <View style={styles.actions}>
-            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin))} accessibilityRole="button" testID="peek-ask">
+            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin, peek.ticket))} accessibilityRole="button" testID="peek-ask">
                 <Text style={styles.primaryText}>{t(COMMUNITY_CARD_WORDS.ask)}</Text>
             </Pressable>
         </View>

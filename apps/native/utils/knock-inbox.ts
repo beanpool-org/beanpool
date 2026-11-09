@@ -14,6 +14,7 @@
  * the section is simply not shown.
  */
 
+import { readKnockVia, type KnockVia } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
@@ -31,6 +32,8 @@ export interface JoinRequest {
     /** Where their app says it came from (`global.beanpool.org`); not checked by anyone. */
     fromNode: string | null;
     createdAt: string;
+    /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
+    via: KnockVia | null;
 }
 
 export type InboxResult =
@@ -60,6 +63,7 @@ function readRequest(raw: unknown): JoinRequest | null {
         avatar: typeof k.avatar === 'string' && k.avatar ? k.avatar : null,
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
+        via: readKnockVia(k.via),
     };
 }
 

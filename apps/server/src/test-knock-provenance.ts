@@ -278,6 +278,16 @@ async function main(): Promise<void> {
         && pushesTo('ExponentPushToken[Mo]').length === 0 && askedOn(link.id) === 2,
         `on an admins door Sarah gets her push and her count (${askedOn(link.id)}); members are not told`);
     db.prepare(`DELETE FROM node_config WHERE key = 'door'`).run();
+    // Sarah turned her listings' pushes off but asked to hear of requests to join: her own push doesn't go, so the plain one does.
+    db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_marketplace', 'false'), (?, 'notify_knocks', 'true')`).run(sarah.pk, sarah.pk);
+    freshAddress();
+    pushed.length = 0;
+    await knock(newId('Wren'), { peek: link.ticket });
+    await settle();
+    const wrenToSarah = pushesTo('ExponentPushToken[Sarah]');
+    assert(wrenToSarah.length === 1 && wrenToSarah[0].body === 'Someone asked to join your community.',
+        `a sharer whose own push is switched off still gets the plain one she asked for (${JSON.stringify(wrenToSarah.map(p => p.body))})`);
+    db.prepare(`DELETE FROM member_preferences WHERE public_key = ? AND pref_key IN ('notify_marketplace', 'notify_knocks')`).run(sarah.pk);
 
     // ── 6. the tidy-up and a prune clear both columns ──
     console.log('\n── 6. cleared once off the list ──');

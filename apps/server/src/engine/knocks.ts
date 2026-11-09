@@ -78,7 +78,8 @@
  * (peekProvenance) when the knock is taken, and the row keeps the post and the member who shared it (`via_post_id`,
  * `via_sharer_pubkey`), never the ticket. A ticket that opens nothing leaves the knock plain: it is never refused for one.
  * The members who answer read one line under the request, the post's title as it is now and the sharer's name (`via`,
- * Marty 9 Nov: both), and only while both still read: the post on the board here, the sharer a member here. The sharer
+ * Marty 9 Nov: both), and only while both still read: the post still this community's own for everyone here (not taken
+ * down, hidden by reports, a group's or a direct one), the sharer still a member here. The sharer
  * gets their own push instead of the plain one, with fixed words and no name, and their link's count goes up; the post's
  * author is told nothing. The applicant's status read, the card and the directory say nothing of it. It is cleared with
  * what the applicant sent, and a re-key moves the sharer's key with the rest of their rows.
@@ -626,15 +627,17 @@ export function notifyKnockReceived(_now = Date.now(), sharer: string | null = n
     const sharerKey = sharer
         && db.prepare(`SELECT 1 FROM members WHERE public_key = ? AND status = 'active' AND is_visitor = 0`).get(sharer.toLowerCase())
         ? sharer.toLowerCase() : null;
+    let sharerTold = false;
     if (sharerKey) {
         try {
-            dispatchPushNotification([sharerKey], 'SYSTEM', 'BeanPool', 'Someone asked to join after a listing you shared.',
-                { screen: 'shared-outside' }, 'marketplace', 'community.knock-shared');
+            sharerTold = dispatchPushNotification([sharerKey], 'SYSTEM', 'BeanPool', 'Someone asked to join after a listing you shared.',
+                { screen: 'shared-outside' }, 'marketplace', 'community.knock-shared') > 0;
         } catch { }
     }
 
-    // One push per person for one request: the sharer has theirs.
-    const recipients = Array.from(new Set([...adminPks, ...memberPks])).filter(pk => pk !== sharerKey);
+    // One push per person for one request: a sharer whose own push went has theirs. One whose didn't (their listings'
+    // switch off, or no phone) stays on the plain one if it is theirs to get, as for any member.
+    const recipients = Array.from(new Set([...adminPks, ...memberPks])).filter(pk => !(sharerTold && pk === sharerKey));
     if (recipients.length === 0) return;
 
     try {

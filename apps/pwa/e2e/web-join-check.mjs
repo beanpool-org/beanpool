@@ -582,7 +582,13 @@ async function throughOnboarding(page, view, { shots = false, signIn = null } = 
     await page.getByRole('button', { name: "Let's Begin! 🚀" }).waitFor();
     await noSideScroll(page, 'tour step');
     await page.getByRole('button', { name: "Let's Begin! 🚀" }).click();
-    await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 20_000 });
+    await intoMarket(page);
+}
+
+/** In the app: it opens on Home now, and the Market is one tap away (as app-csp-check.mjs reaches it), with its listings. */
+async function intoMarket(page, timeout = 20_000) {
+    await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click({ timeout });
+    await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout });
 }
 
 /** A yes, and, as the node does, the sign-in recovery copy the join carried stored and said so (G11-c). */
@@ -826,7 +832,7 @@ const SCENARIOS = [
 
             await toRestoreSignIns(page, origin, view, { shots: true });
             await page.getByTestId('restore-provider-google').click();
-            await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 30_000 });
+            await intoMarket(page, 30_000);
             if (page.url().includes('id_token')) throw new Failure(`the address bar still reads ${page.url()}`);
             const back = await storedIdentity(page);
             if (back?.publicKey !== key) throw new Failure(`restored ${back?.publicKey}, not the key the join made (${key})`);
@@ -849,7 +855,7 @@ const SCENARIOS = [
 
             await toRestoreSignIns(page, origin, view);
             await page.getByTestId('restore-provider-apple').click();
-            await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 30_000 });
+            await intoMarket(page, 30_000);
             if (page.url().includes('id_token')) throw new Failure(`the address bar still reads ${page.url()}`);
             if ((await storedIdentityKey(page)) !== key) throw new Failure('restored another key than the join made');
             checkRestore(seen, 'apple', key, 'restore with Apple');

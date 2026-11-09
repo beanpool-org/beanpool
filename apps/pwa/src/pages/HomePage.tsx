@@ -46,7 +46,7 @@ import {
     starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
@@ -2700,11 +2700,27 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             const cancelled = cancelledKnocks.has(k.url);
 
                             if (!cancelled && st?.ok && st.value.status === 'approved') {
-                                const approved = cardKnockLines([k], knockStatuses)[0];
+                                // The yes, and the two ways to use it that work from here (DESIGN-global-yes-join-fable.md
+                                // §2.2, slice Y0): the account's key lives at this address, and the community's page is
+                                // another, which this browser keeps apart. Its page, where the 12 words bring the account and
+                                // the yes is Join; or the phone app. No handoff yet (slice Y1).
+                                const address = k.url.replace(/^https:\/\//, '');
                                 return (
-                                    <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
-                                        {'🎉 ' + (approved?.text ?? '')}
-                                    </p>
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
+                                        <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.')}
+                                        </p>
+                                        <div className="mt-2">
+                                            <a href={`${k.url}/app?door=signin`} target="_blank" rel="noopener noreferrer" data-testid={`home-find-invited-open-${k.url}`}
+                                                className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                {t('Open {address}', { address })}
+                                            </a>
+                                        </div>
+                                        <p dir="auto" className="m-0 mt-2 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('Or on your phone: open the BeanPool app, restore your account, then Find a community → {name} → Join.', { name })}
+                                        </p>
+                                    </div>
                                 );
                             }
 

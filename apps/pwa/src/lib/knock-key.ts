@@ -20,11 +20,18 @@
 
 import {
     generateIdentity, importIdentity, loadIdentity, loadInviteSent, loadPendingJoin, wipeIdentity, type BeanPoolIdentity,
+    type SaveIdentityOptions,
 } from './identity';
 import { setAccountHint } from './community-card';
 
 /** localStorage: the public key of the key a knock made in this browser, whose community has not let it in yet. */
 export const KNOCK_KEY_STORE = 'beanpool_knock_key';
+/**
+ * localStorage: the public key of a waiting key that is an account already (DESIGN-global-yes-join-fable.md, slice Y0):
+ * restored here with its 12 words or a sign-in, after it asked this community from another one (global's Find card).
+ * Its words were that account's business where it was made, so the join after a yes doesn't show them again.
+ */
+export const ESTABLISHED_KEY_STORE = 'beanpool_knock_key_established';
 
 /** Thrown by {@link commitKnockKey} when this browser is in the middle of another join: nothing was written or sent. */
 export class KnockKeyHeldError extends Error {
@@ -48,6 +55,23 @@ function writeMark(publicKey: string | null): void {
         if (publicKey) localStorage.setItem(KNOCK_KEY_STORE, publicKey);
         else localStorage.removeItem(KNOCK_KEY_STORE);
     } catch { /* storage off: the waiting page can't come back after a reload, and nothing else changes */ }
+}
+
+function writeEstablished(publicKey: string | null): void {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        if (publicKey) localStorage.setItem(ESTABLISHED_KEY_STORE, publicKey);
+        else localStorage.removeItem(ESTABLISHED_KEY_STORE);
+    } catch { /* storage off: the join shows the 12 words once more, which only repeats them */ }
+}
+
+/** Whether `publicKey` is a waiting key that is an account already (restored here, slice Y0): its words aren't new. */
+export function isEstablishedKey(publicKey: string | null | undefined): boolean {
+    try {
+        return !!publicKey && typeof localStorage !== 'undefined' && localStorage.getItem(ESTABLISHED_KEY_STORE) === publicKey;
+    } catch {
+        return false;
+    }
 }
 
 /** Whether `identity` is the key a knock made here and no community has let in yet: the waiting page's, not a member's. */
@@ -90,9 +114,32 @@ export async function commitKnockKey(draft: BeanPoolIdentity, callsign: string):
     return identity;
 }
 
+/**
+ * A key restored here (12 words or a sign-in) that this community has as no member, with a request it asked from another
+ * community still open or answered yes here (DESIGN-global-yes-join-fable.md §3, slice Y0): kept as this browser's
+ * waiting key, so the root shows the waiting page, whose yes joins with it through the invite form's own path, as
+ * {@link commitKnockKey}'s does. Marked established: it is an account already, and its 12 words are not shown as new.
+ * The save is the ordinary guarded one (`options`, the welcome page's), so it refuses what every save here refuses.
+ */
+export async function waitWithRestoredKey(identity: BeanPoolIdentity, options: SaveIdentityOptions): Promise<BeanPoolIdentity> {
+    const before = readMark();
+    writeMark(identity.publicKey);
+    writeEstablished(identity.publicKey);
+    try {
+        await importIdentity(identity, options);
+    } catch (e) {
+        if (readMark() === identity.publicKey) writeMark(before);
+        if (isEstablishedKey(identity.publicKey)) writeEstablished(null);
+        throw e;
+    }
+    setAccountHint(true);
+    return identity;
+}
+
 /** The community has this key as a member now: it is never read as the knock's again. */
 export function forgetKnockMark(publicKey: string): void {
     if (readMark() === publicKey) writeMark(null);
+    if (isEstablishedKey(publicKey)) writeEstablished(null);
 }
 
 /**
@@ -104,6 +151,7 @@ export async function forgetKnockKey(publicKey: string): Promise<boolean> {
     if (!stored || stored.publicKey !== publicKey || !isKnockKey(stored) || inviteSent || pending) return false;
     await wipeIdentity();
     writeMark(null);
+    writeEstablished(null);
     setAccountHint(false);
     return true;
 }

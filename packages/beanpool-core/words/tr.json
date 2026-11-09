@@ -2297,7 +2297,7 @@
   "The standing deal's agreement doesn't match this listing. Close it and try again.": "Düzenli anlaşmadaki mutabakat bu ilanla uyuşmuyor. Kapat ve tekrar dene.",
   "The week under way is still paid. Nothing more is held after it.": "Süren hafta yine de ödenir. Ondan sonra artık fasulye tutulmaz.",
   "This community's server was away for too long, so the standing deal for {title} has ended. Nothing more will be held.": "Bu topluluğun sunucusu çok uzun süre kapalı kaldı, bu yüzden {title} için olan düzenli anlaşma sona erdi. Artık fasulye tutulmayacak.",
-  "This community's server was away, so {title} wasn't settled on time. Check with {name} and release this period's Beans, then it carries on.": "Bu topluluğun sunucusu bir süre kapalıydı, bu yüzden {title} zamanında hesaplaşılamadı. {name} ile görüş ve bu dönemin fasulyelerini bırak; sonra devam eder.",
+  "This community's server was away, so {title} wasn't settled on time. Check with {name} and release this period's Beans, then it carries on.": "Bu topluluğun sunucusu bir süre kapalıydı, bu yüzden {title} için zamanında hesaplaşma yapılamadı. {name} ile görüş ve bu dönemin fasulyelerini serbest bırak; sonra devam eder.",
   "This month's Beans go to them by themselves at the month's end. Hold it back first to settle it yourself.": "Bu ayın fasulyeleri ay sonunda kendiliğinden karşı tarafa geçer. Kendin hesaplaşmak için önce beklet.",
   "This month's {n} Beans are held · they go to {name} {date}": "Bu ayın {n} fasulyesi tutuluyor · {date} {name} tarafına geçer",
   "This standing deal isn't running by itself just now, so there is nothing to hold back.": "Bu düzenli anlaşma şu an kendiliğinden işlemiyor, bu yüzden bekletilecek bir şey yok.",

@@ -26,7 +26,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
@@ -34,6 +34,7 @@ import { invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
+import { InviteMadeCard, PendingInvites } from '../../components/InviteRows';
 import { offersNamesBoxes, inviteNotMadeWords } from '../../utils/invite-names';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -140,18 +141,9 @@ export default function PeopleScreen() {
         btnGenerate: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
-        qrCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
-        qrTitle: { color: theme === 'dark' ? colors.text.body : colors.brand.primary, fontSize: 14, fontWeight: '600', marginBottom: 16 },
-        qrBox: { backgroundColor: colors.surface.card, padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, marginBottom: 16 },
         btnCopyQR: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10 },
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },
 
-        pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
-        pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginBottom: 4 },
-        pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
-        btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
-        btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
 
         // Friend-specific styles
         friendChip: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
@@ -229,6 +221,12 @@ export default function PeopleScreen() {
     const [generating, setGenerating] = useState(false);
     const [intendedFor, setIntendedFor] = useState('');
     const [newCode, setNewCode] = useState('');
+    // What the invite just made is for and carries, for the card under Generate. The form folds behind "Make another invite" once
+    // an invite is made, so a second code is a deliberate tap (Marty, 10 Nov: a plain invite was made beside the bound one).
+    const [madeCard, setMadeCard] = useState<{ who: string | null; invite: InviteRowSource } | null>(null);
+    const [makeAnother, setMakeAnother] = useState(false);
+    // Pending is open with an invite bound to a names-list entry in it: the names list is opened to read that name.
+    const [needList, setNeedList] = useState(false);
     
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
@@ -323,7 +321,7 @@ export default function PeopleScreen() {
         anchorUrl, identity: identity ?? null, online: isOnline,
         offered: !invitesPreview && makesInvites && mayInvite && !isGuest && offersNamesBoxes(doorAdminsOnly ? inviteRole : openDoorRole, nodeProfile?.profile),
         here: view === 'invites',
-        committee: onCommittee, voucherBudget: vouchersData?.settings?.voucherBudget,
+        committee: onCommittee, voucherBudget: vouchersData?.settings?.voucherBudget, needList,
     });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
@@ -487,16 +485,10 @@ export default function PeopleScreen() {
                         const serverInvitesMap = new Map<string, any>(
                             serverInvites.map((si: any) => [si.code.toLowerCase(), si])
                         );
+                        // The node's row is the truth for a code it knows: used or not, and what the code is for and carries.
                         const updatedInvites = localInvites.map((localInv: any) => {
                             const match = serverInvitesMap.get(localInv.code.toLowerCase());
-                            if (match) {
-                                return {
-                                    ...localInv,
-                                    usedBy: match.usedBy,
-                                    usedAt: match.usedAt
-                                };
-                            }
-                            return localInv;
+                            return match ? { ...localInv, ...match } : localInv;
                         });
 
                         const updatedCodes = new Set<string>(
@@ -504,16 +496,7 @@ export default function PeopleScreen() {
                         );
 
                         serverInvites.forEach((si: any) => {
-                            if (!updatedCodes.has(si.code.toLowerCase())) {
-                                updatedInvites.push({
-                                    code: si.code,
-                                    createdBy: si.createdBy,
-                                    createdAt: si.createdAt,
-                                    intendedFor: si.intendedFor,
-                                    usedBy: si.usedBy,
-                                    usedAt: si.usedAt
-                                });
-                            }
+                            if (!updatedCodes.has(si.code.toLowerCase())) updatedInvites.push({ ...si });
                         });
 
                         setInvites(updatedInvites);
@@ -554,6 +537,9 @@ export default function PeopleScreen() {
      */
     const makeNamesInvite = async (chosenVouch: number | null, existingEntryId?: string) => {
         if (!identity) return;
+        // Read before the boxes start again: who it is for and the budget it promises, for the card.
+        const forName = existingEntryId ? inviteNames.entryNames.get(existingEntryId) ?? null : inviteNames.name.trim() || null;
+        const chosenLevel = inviteNames.voucherTicked && inviteNames.voucherWhy === null ? inviteNames.level : null;
         const r = await inviteNames.make(chosenVouch, existingEntryId);
         if (r.kind === 'entry_not_saved') {
             Alert.alert(t('Not added to the names list'), r.message);
@@ -571,12 +557,17 @@ export default function PeopleScreen() {
         setNewCode(r.code);
         setIntendedFor('');
         setVouchPreset(null);
-        const inviteObj = {
+        // An offline ticket never carries a vouch or a budget; it is bound to the entry, so it confirms them all the same.
+        const inviteObj: InviteRowSource & { createdBy: string } = {
             code: r.code,
             createdBy: identity.publicKey,
             createdAt: new Date().toISOString(),
-            ...(chosenVouch !== null && !r.offline ? { vouchAmount: chosenVouch } : {}),
+            namesEntryId: r.entryId,
+            vouchAmount: chosenVouch !== null && !r.offline ? chosenVouch : null,
+            voucherLevel: chosenLevel !== null && !r.offline ? chosenLevel : null,
         };
+        setMadeCard({ who: forName, invite: inviteObj });
+        setMakeAnother(false);
         const updated = [inviteObj, ...invites];
         setInvites(updated);
         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
@@ -631,13 +622,15 @@ export default function PeopleScreen() {
                         setIntendedFor('');
                         setVouchPreset(null);
                         
-                        const inviteObj = {
+                        const inviteObj: InviteRowSource & { createdBy: string } = {
                             code,
                             createdBy: identity.publicKey,
                             createdAt: new Date().toISOString(),
                             intendedFor: intendedFor || undefined,
                             ...(chosenVouch !== null ? { vouchAmount: chosenVouch } : {}),
                         };
+                        setMadeCard({ who: intendedFor.trim() || null, invite: inviteObj });
+                        setMakeAnother(false);
                         
                         const updated = [inviteObj, ...invites];
                         setInvites(updated);
@@ -713,12 +706,14 @@ export default function PeopleScreen() {
             setNewCode(code);
             setIntendedFor('');
 
-            const inviteObj = {
+            const inviteObj: InviteRowSource & { createdBy: string } = {
                 code,
                 createdBy: identity.publicKey,
                 createdAt: new Date().toISOString(),
                 intendedFor: ticketFor
             };
+            setMadeCard({ who: ticketFor?.trim() || null, invite: inviteObj });
+            setMakeAnother(false);
             
             const updated = [inviteObj, ...invites];
             setInvites(updated);
@@ -997,8 +992,9 @@ export default function PeopleScreen() {
         }
     };
 
-    const pendingInvites = invites.filter((i: any) => !i.usedBy);
-    const usedInvites = invites.filter((i: any) => i.usedBy);
+    // The form is folded away once an invite is made (a second code is a deliberate tap on "Make another invite"). Where invites are
+    // only previewed there is no form to fold.
+    const formOpen = invitesPreview || !newCode || makeAnother;
 
     return (
         <View style={styles.safeArea}>
@@ -1410,10 +1406,12 @@ export default function PeopleScreen() {
                             <Text style={styles.sectionHeader}>{t('📤 Invite Someone')}</Text>
                             <Text style={styles.sectionDesc}>{t('Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.')}</Text>
 
+                            {formOpen && (
+                            <>
                             {/* With the names box ticked, their real name is sealed in the list instead: this line goes to the node as written. */}
                             {!(inviteNames.offered && inviteNames.namesTicked) && (
                                 <TextInput
-                                    placeholder={t('Who is this invite for? (For your records)')}
+                                    placeholder={t("A note for you, kept on your community's server")}
                                     value={intendedFor}
                                     onChangeText={setIntendedFor}
                                     style={styles.input}
@@ -1445,98 +1443,52 @@ export default function PeopleScreen() {
                                     <Text style={styles.btnGenerateText}>{generating ? t('Generating...') : isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')}</Text>
                                 </Pressable>
                             )}
+                            </>
+                            )}
 
                             {newCode ? (
-                                <View style={styles.qrCard}>
-                                    <Text style={styles.qrTitle}>{t('Share this cryptographic code')}</Text>
-                                    <View style={styles.qrBox}>
-                                        <QRCode
-                                            value={invitesPreview ? newCode : `${anchorUrl}/?invite=${newCode}`}
-                                            size={180}
-                                        />
-                                    </View>
-                                    {invitesPreview ? (
-                                        <LocalCommunityMark variant="action" feature="invites" label={t('📤 Share Invite')} />
-                                    ) : (
-                                        <Pressable
-                                            accessibilityRole="button"
-                                            style={styles.btnCopyQR}
-                                            onPress={() => shareInvite(newCode)}
-                                        >
-                                            <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
-                                        </Pressable>
-                                    )}
-                                </View>
+                                madeCard && madeCard.invite.code === newCode ? (
+                                    <InviteMadeCard
+                                        who={madeCard.who}
+                                        invite={madeCard.invite}
+                                        now={Date.now()}
+                                        qrValue={invitesPreview ? newCode : `${anchorUrl}/?invite=${newCode}`}
+                                        shareSlot={invitesPreview ? (
+                                            <LocalCommunityMark variant="action" feature="invites" label={t('📤 Share Invite')} />
+                                        ) : (
+                                            <Pressable accessibilityRole="button" style={styles.btnCopyQR} onPress={() => shareInvite(newCode)}>
+                                                <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
+                                            </Pressable>
+                                        )}
+                                    />
+                                ) : null
                             ) : null}
 
-                            {pendingInvites.length > 0 && (
-                                <View style={{ marginTop: 24 }}>
-                                    <Text style={styles.pendingHeader}>{tn(pendingInvites.length, '⏳ PENDING ({n})', '⏳ PENDING ({n})')}</Text>
-                                    {pendingInvites.map((inv) => (
-                                        <View key={inv.code} style={[styles.pendingCard, invitesPreview && { flexDirection: 'column', alignItems: 'stretch' }]}>
-                                            <View style={{ flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <View style={{ flex: 1 }}>
-                                                    {inv.intendedFor ? (
-                                                        <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
-                                                    ) : null}
-                                                    <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
-                                                        {inv.code}
-                                                    </Text>
-                                                </View>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-                                                    {invitesPreview && (
-                                                        <Pressable
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel={t('Show QR code')}
-                                                            style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }]}
-                                                            onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
-                                                        >
-                                                            <Text style={styles.btnCopySmallText}>📱</Text>
-                                                        </Pressable>
-                                                    )}
-                                                    {!invitesPreview && (
-                                                        <Pressable
-                                                            accessibilityRole="button"
-                                                            style={[styles.btnCopySmall, { marginLeft: 0 }]}
-                                                            onPress={() => shareInvite(inv.code)}
-                                                        >
-                                                            <Text style={styles.btnCopySmallText}>{t('Share')}</Text>
-                                                        </Pressable>
-                                                    )}
-                                                </View>
-                                            </View>
-                                            {invitesPreview && (
-                                                <View style={{ marginTop: 10 }}>
-                                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
-                                                </View>
-                                            )}
-                                        </View>
-                                    ))}
-                                </View>
+                            {!formOpen && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={[styles.btnCopyQR, { alignItems: 'center', justifyContent: 'center', minHeight: 48, marginBottom: 24 }]}
+                                    onPress={() => setMakeAnother(true)}
+                                    testID="invite-make-another"
+                                >
+                                    <Text style={styles.btnCopyQRText}>{t('Make another invite')}</Text>
+                                </Pressable>
                             )}
 
-                            {invitesPreview && usedInvites.length > 0 && (
-                                <View style={{ marginTop: 24 }}>
-                                    <Text style={styles.pendingHeader}>{t('✅ REDEEMED ({count})', { count: usedInvites.length })}</Text>
-                                    {usedInvites.map((inv: any) => (
-                                        <View key={inv.code} style={[styles.pendingCard, { opacity: 0.7 }]}>
-                                            <View style={{ flex: 1 }}>
-                                                {inv.intendedFor ? (
-                                                    <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
-                                                ) : null}
-                                                <Text style={[styles.pendingCode, { textDecorationLine: 'line-through' }]} numberOfLines={1} ellipsizeMode="middle">
-                                                    {inv.code}
-                                                </Text>
-                                                {inv.usedAt ? (
-                                                    <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 4 }}>
-                                                        {t('Used {date}', { date: dateWords(inv.usedAt, 'day-month-year') })}
-                                                    </Text>
-                                                ) : null}
-                                            </View>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
+                            <PendingInvites
+                                invites={invites}
+                                now={Date.now()}
+                                names={inviteNames.entryNames}
+                                onNeedNames={setNeedList}
+                                qrValue={(code) => (invitesPreview ? code : `${anchorUrl}/?invite=${code}`)}
+                                shareSlot={(code) => (invitesPreview ? (
+                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
+                                ) : (
+                                    <Pressable accessibilityRole="button" style={[styles.btnCopyQR, { alignItems: 'center', minHeight: 48 }]} onPress={() => shareInvite(code)}>
+                                        <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
+                                    </Pressable>
+                                ))}
+                            />
 
                             {invitesPreview && tree.length > 0 && (
                                 <View style={{ marginTop: 24 }}>

@@ -1,3 +1,4 @@
+import { inviteFolds } from '@beanpool/core';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -40,6 +41,7 @@ const GLOBAL = info({ beans: false, openJoin: true, guestListingsOnly: true, dec
 const WORDS = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
 
 beforeEach(() => {
+    inviteFolds.clear();
     vi.clearAllMocks();
     vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never);
     localStorage.clear();
@@ -157,6 +159,7 @@ describe('the Invites page everywhere else: as before', () => {
             render(<InvitePage identity={IDENTITY} />);
             await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
             expect(await screen.findByRole('button', { name: /Generate New Invite/ })).toBeInTheDocument();
+            fireEvent.click(await screen.findByTestId('invites-pending-fold'));
             expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
             expect(screen.queryByText(/Bring someone here/)).toBeNull();

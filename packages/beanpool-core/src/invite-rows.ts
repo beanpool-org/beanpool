@@ -13,7 +13,7 @@
  * Nothing here reads the node or the names list: the caller passes the name it opened, if it opened one. A code made for a
  * request to join (`forKnock`) keeps the applicant's key in its note, so that note is never shown as a name.
  */
-import { t, tn, formatNumber, formatCount } from './words.js';
+import { t, tn, formatCount } from './words.js';
 
 /** How long an invite works. `checkInvite` (engine) refuses an older one, the hourly prune deletes it, and `expiresAt` is made from this. */
 export const INVITE_LIFE_DAYS = 30;
@@ -84,8 +84,8 @@ export function inviteWho(inv: InviteRowSource, o: InviteWhoOptions = {}): strin
 /** What the invite carries, in one line: "200 vouch · voucher budget 1,000 · confirms them as known". */
 export function inviteCarries(inv: InviteRowSource): string {
     const parts: string[] = [];
-    if (inv.vouchAmount) parts.push(t('{amount} vouch', { amount: formatNumber(inv.vouchAmount) }));
-    if (inv.voucherLevel) parts.push(t('voucher budget {amount}', { amount: formatNumber(inv.voucherLevel) }));
+    if (inv.vouchAmount) parts.push(t('{amount} vouch', { amount: formatCount(inv.vouchAmount) }));
+    if (inv.voucherLevel) parts.push(t('voucher budget {amount}', { amount: formatCount(inv.voucherLevel) }));
     if (inv.namesEntryId) parts.push(t('confirms them as known'));
     return parts.length ? parts.join(' · ') : t('Plain invite');
 }

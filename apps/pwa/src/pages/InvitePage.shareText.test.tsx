@@ -1,3 +1,4 @@
+import { inviteFolds } from '@beanpool/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
@@ -17,7 +18,7 @@ vi.mock('../lib/api', async (importOriginal) => {
             invite: { code: 'INV-TEST1234', createdBy: 'me', createdAt: new Date().toISOString(), usedBy: null, usedAt: null },
         })),
         getMyInvites: vi.fn(async () => ({
-            invites: [{ code: 'INV-ROWONE99', createdBy: 'me', createdAt: '2026-11-01T00:00:00.000Z', usedBy: null, usedAt: null }],
+            invites: [{ code: 'INV-ROWONE99', createdBy: 'me', createdAt: new Date().toISOString(), usedBy: null, usedAt: null }],
         })),
         getInviteTree: vi.fn(async () => []),
         getMyVouching: vi.fn(async () => ({ voucher: false, presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [] })),
@@ -79,7 +80,7 @@ async function newInvite() {
     return screen.getAllByRole('button', { name: 'Share invite link' })[0];
 }
 
-beforeEach(() => { localStorage.clear(); community.features = { invites: true, beans: true }; });
+beforeEach(() => { localStorage.clear(); inviteFolds.clear(); community.features = { invites: true, beans: true }; });
 afterEach(() => {
     cleanup();
     for (const key of ['share', 'canShare', 'clipboard']) delete (navigator as unknown as Record<string, unknown>)[key];
@@ -147,7 +148,10 @@ describe('Share on an invite already made', () => {
         const share = vi.fn(async (_data: ShareData) => {});
         setNavigator({ share, canShare: () => true });
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
-        await screen.findByText('INV-ROWONE99');
+        // Pending is folded until opened; the row opens the invite, and Share is on it.
+        fireEvent.click(await screen.findByTestId('invites-pending-fold'));
+        fireEvent.click(await screen.findByTestId('invite-pending-row'));
+        expect(screen.getByTestId('invite-sheet')).toHaveTextContent('INV-ROWONE99');
 
         fireEvent.click(screen.getByRole('button', { name: 'Share invite link' }));
         expect(share).toHaveBeenCalledTimes(1);

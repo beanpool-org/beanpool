@@ -21,7 +21,7 @@
  *
  * Run: node apps/pwa/e2e/global-yes-y1-check.mjs [--shots <dir>]
  */
-/* global document, window, indexedDB, localStorage, console, process, URL, setTimeout */
+/* global document, window, indexedDB, localStorage, console, process, URL, setTimeout, clearTimeout, MessageEvent */
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';

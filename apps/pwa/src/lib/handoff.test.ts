@@ -100,7 +100,8 @@ describe('the receiver takes one account, whole, from its opener only', () => {
         expect(await send({ ...handed(), publicKey: me.publicKey.toUpperCase() })).toBeNull();
         expect(await send({ ...handed(), privateKey: 'zz' })).toBeNull();
         // No words at all is an account that had none where it was made: taken, with none.
-        const { mnemonic: _words, ...noWords } = handed();
+        const noWords: Record<string, unknown> = { ...handed() };
+        delete noWords.mnemonic;
         expect((await send(noWords))?.account.mnemonic).toBeUndefined();
     });
 

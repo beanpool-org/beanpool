@@ -241,10 +241,11 @@ export function runHandoff(opts: {
     };
     opts.listenOn.addEventListener('message', onMessage as EventListener);
     timer = setTimeout(() => end('timeout'), opts.readyMs ?? HANDOFF_READY_MS);
+    const isClosed = () => {
+        try { return win.closed; } catch { return true; /* cut off from it: as closed */ }
+    };
     const poll = setInterval(() => {
-        let closed = false;
-        try { closed = win.closed; } catch { /* cut off from it: as closed */ closed = true; }
-        if (closed) end(state === 'sent' ? 'closed' : 'timeout');
+        if (isClosed()) end(state === 'sent' ? 'closed' : 'timeout');
     }, opts.pollMs ?? 1000);
     return { cancel: () => end(null) };
 }

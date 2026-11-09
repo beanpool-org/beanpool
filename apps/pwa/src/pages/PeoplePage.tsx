@@ -30,6 +30,8 @@ interface Props extends LocalCommunityWays {
     initialView?: SubView;
     navNonce?: number;
     onViewChange?: (view: SubView) => void;
+    /** Opened from the line "N people asked to join" (the Needs-you icon, Home): Invites says so if nobody is waiting now. */
+    fromNotice?: boolean;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     preview?: boolean;
@@ -83,10 +85,15 @@ function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; 
     );
 }
 
-export function PeoplePage({ identity, initialView = 'friends', navNonce, onViewChange, onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
+export function PeoplePage({ identity, initialView = 'friends', navNonce, onViewChange, fromNotice, onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
     const [view, setView] = useState<SubView>(initialView);
+    // Invites was opened from the line "N people asked to join" (App carries it across a remount; it ends here with the next
+    // pill the member picks, and in App with a tab-bar visit): WantsToJoin says so if nobody is waiting now.
+    const [askedNotice, setAskedNotice] = useState(!!fromNotice);
+    useEffect(() => { setAskedNotice(!!fromNotice); }, [fromNotice, navNonce]);
     const switchView = (v: SubView) => {
         setView(v);
+        setAskedNotice(false);
         onViewChange?.(v);
     };
     const [friends, setFriends] = useState<FriendEntry[]>([]);
@@ -654,7 +661,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
             <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
-                    {!preview && <WantsToJoin onCount={setKnockCount} canSee={canSee} />}
+                    {!preview && <WantsToJoin onCount={setKnockCount} canSee={canSee} fromNotice={askedNotice} />}
                     <InvitePage identity={identity} onNavigate={onNavigate} preview={preview} {...ways} />
                 </div>
             )}

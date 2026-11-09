@@ -19,6 +19,9 @@ import { t, tn, word } from '@beanpool/core';
 const KNOCK_WORDS = {
     help: word('People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than "no answer yet".'),
     unreachable: word("Couldn't reach your community. Check your connection and try again."),
+    // Said only when People was opened from the notice "someone asked to join" and nobody is waiting any more.
+    nobody: word('Nobody is waiting to join right now.'),
+    answeredAlready: word('Another owner or admin may have answered already.'),
 } as const;
 
 /**
@@ -39,9 +42,15 @@ const knockMessage = (message: string): string => (message === KNOCK_UNREACHABLE
 /**
  * "Wants to join (n)" (design §3.3): people asking to join this (local) community, for any member to answer. Hidden
  * where the community takes no requests. `onCount` tells People how many are waiting, for its Invites pill.
+ *
+ * `fromNotice`: People was opened by a notice that said someone asked to join. A notice must never land on nothing, so
+ * if nobody is waiting by now (another owner or admin answered, or the person withdrew) two plain lines say so in the
+ * section's place. Opened any other way, an empty list is no section at all, as before: Invites is first a page for
+ * making invites, and a line about an empty queue on every visit would be noise. It says nothing of its own answering:
+ * the owner who has just answered the last one sees the section go, as before.
  */
-export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
-    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void; canSee?: boolean;
+export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true, fromNotice = false }: {
+    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void; canSee?: boolean; fromNotice?: boolean;
 }) {
     const { colors } = useTheme();
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
@@ -55,6 +64,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
     // A refusal is said above the list, not under its row: the list read after it no longer has that row (answered,
     // lapsed, joined, key replaced, gone), or no section at all (admins only), and the words must outlive it.
     const [refusal, setRefusal] = useState<{ id: string; callsign: string; message: string } | null>(null);
+    // This member has answered here already: an empty list is then their own doing, not "another owner or admin".
+    const [answeredHere, setAnsweredHere] = useState(false);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         header: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
@@ -74,6 +85,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
         refusal: { fontSize: 14, color: colors.text.body, marginBottom: 12, lineHeight: 20 },
         refusalName: { fontWeight: '800' },
         error: { fontSize: 14, color: colors.feedback.warning.fg, marginBottom: 12, lineHeight: 20 },
+        nobody: { fontSize: 15, fontWeight: '700', color: colors.text.heading, lineHeight: 21 },
+        nobodyHint: { fontSize: 13, color: colors.text.secondary, marginTop: 4, lineHeight: 18 },
         divider: { height: 1, backgroundColor: colors.border.default, marginVertical: 24 },
     }));
 
@@ -105,6 +118,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
             ? await approveJoinRequest(anchorUrl, identity, req.id, chosenVouch)
             : await declineJoinRequest(anchorUrl, identity, req.id);
         setBusy(null);
+        setAnsweredHere(true);
         if (r.ok) {
             const left = (requests ?? []).filter(k => k.id !== req.id).length;
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
@@ -125,7 +139,17 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
     };
 
     if (!canSee) return null;
-    if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
+    const nobodyWaiting = hidden || (requests !== null && requests.length === 0 && !error && !done);
+    if (!refusal && nobodyWaiting) {
+        if (!fromNotice || answeredHere) return null;
+        return (
+            <View>
+                <Text style={styles.nobody} accessibilityLiveRegion="polite" testID="wants-to-join-nobody">{t(KNOCK_WORDS.nobody)}</Text>
+                <Text style={styles.nobodyHint} testID="wants-to-join-answered-already">{t(KNOCK_WORDS.answeredAlready)}</Text>
+                <View style={styles.divider} />
+            </View>
+        );
+    }
 
     return (
         <View>

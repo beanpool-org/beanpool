@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -112,5 +112,64 @@ describe('PeoplePage: requests to join gating (front doors S2)', () => {
 
         expect(await screen.findByTestId('wants-to-join-error')).toHaveTextContent('Server error');
         expect(screen.getByTestId('wants-to-join')).toBeInTheDocument();
+    });
+});
+
+/**
+ * A notice that someone asked to join must never land on nothing (9 Nov: an owner of Byron tapped it and found Invites with no
+ * list). App opens People → Invites with `fromNotice` from the line "N people asked to join"; WantsToJoin's own words are
+ * tested in components/WantsToJoin.test.tsx, and what is checked here is what People hands it, and when it stops.
+ */
+describe('PeoplePage: Invites opened from the line "N people asked to join"', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        localStorage.clear();
+        mockKnocksResponse = { ok: true, knocks: [], total: 0 };
+        mockCommunityInfo = info({ door: 'admins', knocks: true, invites: true });
+        mockAdminRole = 'owner';
+    });
+
+    it('an owner, nobody waiting: the section says so and that another owner or admin may have answered', async () => {
+        render(<PeoplePage identity={IDENTITY} initialView="invites" fromNotice />);
+        expect(await screen.findByTestId('wants-to-join-nobody')).toHaveTextContent('Nobody is waiting to join right now.');
+        expect(screen.getByTestId('wants-to-join-answered-already')).toHaveTextContent('Another owner or admin may have answered already.');
+    });
+
+    it('Invites opened any other way (the tab bar, "Invite friends"): the page stays quiet', async () => {
+        render(<PeoplePage identity={IDENTITY} initialView="invites" />);
+        await waitFor(() => expect(screen.getByText('Invite codes')).toBeInTheDocument());
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('wants-to-join-nobody')).toBeNull();
+        expect(screen.queryByTestId('wants-to-join-empty')).toBeNull();
+    });
+
+    it('a member who may not see requests (not an admin where only admins invite): no section, notice or not', async () => {
+        mockAdminRole = null;
+        render(<PeoplePage identity={IDENTITY} initialView="invites" fromNotice />);
+        await waitFor(() => expect(screen.getByText('Invite codes')).toBeInTheDocument());
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('wants-to-join-nobody')).toBeNull();
+        expect(screen.queryByTestId('wants-to-join-empty')).toBeNull();
+    });
+
+    it('picking another tab ends it: back on Invites, an ordinary visit, and App is told the view changed', async () => {
+        const onViewChange = vi.fn();
+        render(<PeoplePage identity={IDENTITY} initialView="invites" fromNotice onViewChange={onViewChange} />);
+        expect(await screen.findByTestId('wants-to-join-nobody')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: /Friends/ }));
+        expect(onViewChange).toHaveBeenLastCalledWith('friends');
+        fireEvent.click(screen.getByRole('tab', { name: /Invites/ }));
+        expect(onViewChange).toHaveBeenLastCalledWith('invites');
+        await waitFor(() => expect(screen.getByText('Invite codes')).toBeInTheDocument());
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('wants-to-join-nobody')).toBeNull();
+    });
+
+    it('opened by the line again (App raises it and the nav nonce): it is a notice\'s visit again', async () => {
+        const { rerender } = render(<PeoplePage identity={IDENTITY} initialView="invites" navNonce={1} />);
+        await waitFor(() => expect(screen.getByText('Invite codes')).toBeInTheDocument());
+        expect(screen.queryByTestId('wants-to-join-nobody')).toBeNull();
+        rerender(<PeoplePage identity={IDENTITY} initialView="invites" navNonce={2} fromNotice />);
+        expect(await screen.findByTestId('wants-to-join-nobody')).toBeInTheDocument();
     });
 });

@@ -211,6 +211,9 @@ export function App() {
     const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [peopleNavNonce, setPeopleNavNonce] = useState(0);
+    // People → Invites was opened from the line "N people asked to join" (the Needs-you icon, Home's line): WantsToJoin says
+    // so if they have all been answered by now, rather than showing nothing.
+    const [peopleFromNotice, setPeopleFromNotice] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
@@ -545,6 +548,7 @@ export function App() {
         // From Home's cards: People's community list or its invites, and Settings at the profile.
         if (tab === 'people-community' || tab === 'people-invites') {
             setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
+            setPeopleFromNotice(tab === 'people-invites' && contextId === 'asked');
             setPeopleNavNonce(n => n + 1);
             setActiveTab('people');
             return;
@@ -1122,7 +1126,7 @@ export function App() {
                                 key={tab.id}
                                 onClick={() => {
                                     if (tab.id === 'marketplace') setMarketClickCount(c => c + 1);
-                                    if (tab.id === 'people' && activeTab !== 'people') setPeopleSubView('friends');
+                                    if (tab.id === 'people' && activeTab !== 'people') { setPeopleSubView('friends'); setPeopleFromNotice(false); }
                                     setActiveTab(tab.id);
                                     setShowSettings(false);
                                     closePagesOver();
@@ -1386,7 +1390,8 @@ export function App() {
                                     identity={identity}
                                     initialView={peopleSubView}
                                     navNonce={peopleNavNonce}
-                                    onViewChange={setPeopleSubView}
+                                    onViewChange={(v) => { setPeopleSubView(v); setPeopleFromNotice(false); }}
+                                    fromNotice={peopleFromNotice}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     preview={invitesMode === 'preview'}
@@ -1501,6 +1506,7 @@ export function App() {
                                 if (tab === 'guide') { navigateToTab('guide', subView); return; }
                                 if (tab === 'people' && subView) {
                                     setPeopleSubView(subView as any);
+                                    setPeopleFromNotice(false);
                                 }
                                 setActiveTab(tab as any);
                                 setShowSettings(false);
@@ -1607,6 +1613,7 @@ export function App() {
                                 }
                                 if (tab.id === 'people' && activeTab !== 'people') {
                                     setPeopleSubView('friends');
+                                    setPeopleFromNotice(false);
                                 }
                                 setActiveTab(tab.id);
                                 setShowSettings(false);

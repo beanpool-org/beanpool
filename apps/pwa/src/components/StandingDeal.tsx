@@ -106,7 +106,8 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
     if (!p) return null;
     const ask = () => {
         const c = standingStopConfirm(p.unit);
-        if (window.confirm(`${c.title}\n\n${c.body}`)) onStop();
+        const question = [c.title, c.body].join('\n\n');
+        if (window.confirm(question)) onStop();
     };
     return (
         <div data-testid={`standing-panel-${tx.id}`} data-phase={p.phase} data-role={p.role}

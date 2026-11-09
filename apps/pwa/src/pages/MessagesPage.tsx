@@ -19,13 +19,15 @@ import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
+import { AboutCard, AboutChipBar } from '../components/ChatAbout';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
-import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { chatAboutDrafts, chatAboutOfLine, metadataWithAbout, sealChatAbout } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -1311,7 +1313,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // to the line it was written after.
             const seal: DmLineSeal = { messageId: line.id, after: lineAfter(conv.id).dm, replyToId: line.replyToId };
             const { ciphertext, nonce, lineSig } = await payloadFor(line.text, conv, seal);
-            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, lineMetadata(line.replyToId ?? undefined, lineSig), line.id);
+            let metadata = lineMetadata(line.replyToId ?? undefined, lineSig);
+            if (line.about) {
+                // The listing it is about is sealed as its own part of this line, to the same key and message id, and travels in
+                // the metadata as sealed bytes: the node reads nothing new (core chat-about.ts).
+                const ctx = dmKeyContext(conv, identity) ?? dmKeyContext(await freshConversation(conv), identity);
+                if (!ctx) throw new DmNotLockedError();
+                metadata = metadataWithAbout(metadata, sealChatAbout(line.about, ctx, { senderPubHex: identity.publicKey, messageId: line.id, replyToId: line.replyToId }));
+            }
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.id);
             ownLineTaken(conv.id);
             return 'taken';
         }
@@ -1543,10 +1553,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
 
         // A new line shows at once, and the composer is the member's again; what becomes of the line is the line's to say.
-        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null };
+        // The listing the member came from (Message on a Need or an Offer) goes with this line, and the chip is spent: the line
+        // itself holds it from here, so a Retry carries it too.
+        const about = activeConv.type === 'dm' ? chatAboutDrafts.get(activeConv.id) : null;
+        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null, ...(about ? { about } : {}) };
         setDraft('');
         setReplyToMessage(null);
         setChatRefusal(null);
+        if (about) chatAboutDrafts.drop(activeConv.id);
         sendChatLine(line, lineSender(line, activeConv));
     }
 
@@ -2747,6 +2761,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     userSelect: 'text',
                                     WebkitUserSelect: 'text',
                                 }}>
+                                    {(() => {
+                                        // The listing this line is about, opened from its own sealed part (core chat-about.ts): a card at the top.
+                                        const ctx = isDm && !groupLine ? dmCtxFor(activeConv) : null;
+                                        const about = ctx ? chatAboutOfLine({ myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex }, { conversationId: ctx.conversationId, senderPubHex: msg.authorPubkey, messageId: msg.id, metadata: msg.metadata }) : null;
+                                        return about ? <AboutCard about={about} onOpen={(postId) => onNavigate?.('marketplace', postId)} /> : null;
+                                    })()}
                                     {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
@@ -3145,6 +3165,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     wordBreak: 'break-word',
                                 }}>
+                                    {line.about && <AboutCard about={line.about} onOpen={(postId) => onNavigate?.('marketplace', postId)} />}
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
                                         <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} links={!inRequest} />
@@ -3216,6 +3237,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </button>
                     </div>
                 )}
+
+                {/* The listing this message is about (Message on a Need or an Offer): stays until sent or dropped. */}
+                {activeConv?.type === 'dm' && !editingMessage && <AboutChipBar conversationId={activeConv.id} />}
 
                 {/* Reply Preview */}
                 {replyToMessage && !editingMessage && (

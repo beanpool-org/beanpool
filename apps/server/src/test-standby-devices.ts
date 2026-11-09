@@ -183,6 +183,18 @@ async function child(): Promise<void> {
             await flushTakeoverChecks();
             return { code: made.code };
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -1032,7 +1044,8 @@ async function main(): Promise<void> {
         const sv = `https://localhost:${await standby.send('serve')}`;
         // Step 7c: S's admin calls go under an owner's key session S makes, so each refusal below is S's 409 standby, not a
         // refused credential.
-        const sOwner: Record<string, string> = await standby.send('owner-session');
+        await standby.send('standby-owner', { owner: gwen.pk });
+        const sOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const onS = (method: Method, route: string, who: Id | null, body: unknown = {}) => api(sv, method, route, who ? { as: who, body } : { admin: sOwner, body });
         const routes: [string, Promise<Answer>][] = [
             ['a phone registered', onS('POST', '/api/push-tokens', cy, { publicKey: cy.pk, token: token('on-standby'), registeredAt: 9_000_000 })],
@@ -1093,7 +1106,7 @@ async function main(): Promise<void> {
             conversationId: chatAC, authorPubkey: cy.pk, ...lockedDm(),
         } });
         const threadOnS = await api(sv, 'POST', `/api/treasury/${probe.publicKey}/thread/message`, { as: kip, body: { text: 'On a standby' } });
-        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: await standby.send('owner-session'), body: { title: 'On a standby', body: 'Never sent' } });
+        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: await standby.send('owner-session', { owner: gwen.pk }), body: { title: 'On a standby', body: 'Never sent' } });
         await sleep(200);
         const httpPushes = await standby.send('pushes');
         assert(httpPushes.length === 0, `a chat message, an enterprise thread post and an announcement over HTTPS push nothing from S (${chatOnS.status}, ${threadOnS.status}, ${announceOnS.status}; ${httpPushes.length} pushes)`);
@@ -1149,7 +1162,7 @@ async function main(): Promise<void> {
         await main.send('checkpoint');
         await main.kill('SIGKILL');
         // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
-        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];

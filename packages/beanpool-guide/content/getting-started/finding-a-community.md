@@ -58,6 +58,8 @@ You don't need an account, or the global community, to ask a community you know.
 - Type the community's address, such as riverside.example.org, or tap **Scan a code** and point the camera at its code. The camera is asked for only then. The list of communities near you shows once you have an account.
 - Tap **Ask to join**, check your name, write a few words about yourself, and tap **Send**.
 
+A community's card does the same: open its address, or a post a member shared with you, and tap **Ask to join** and the community's name.
+
 Sending makes your account on this phone: a key, with 12 words that bring it back. Nothing from the BeanPool project is needed, and the request goes only to that community. Your 12 words are shown to you when a community lets you in, as for any new account.
 
 Until a community answers, the app's first screen shows your requests: **Waiting for {name}: usually a few days.** From there:

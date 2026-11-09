@@ -1,7 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -72,39 +71,6 @@ export default defineConfig({
     plugins: [
         wordsDatesPerLanguage(),
         react(),
-        VitePWA({
-            registerType: 'autoUpdate',
-            selfDestroying: true, // Disable service worker until offline caching is properly configured
-            includeAssets: ['favicon.svg'],
-            manifest: {
-                name: 'BeanPool',
-                short_name: 'BeanPool',
-                description: 'Local-first independent community marketplace',
-                theme_color: '#0a0a0a',
-                background_color: '#0a0a0a',
-                display: 'standalone',
-                start_url: '/',
-                related_applications: [
-                    { platform: 'play', id: 'org.beanpool.pillar' },
-                    { platform: 'itunes', id: '6761870086' },
-                ],
-                prefer_related_applications: false,
-                icons: [
-                    {
-                        src: '/icon-192x192.png',
-                        sizes: '192x192',
-                        type: 'image/png',
-                        purpose: 'any',
-                    },
-                    {
-                        src: '/icon-512x512.png',
-                        sizes: '512x512',
-                        type: 'image/png',
-                        purpose: 'any maskable',
-                    },
-                ],
-            },
-        }),
     ],
     server: {
         host: true,

@@ -10,7 +10,11 @@
  *   - nothing open (lapsed, cancelled, refused): today's words, Ask again, and Forget this request, which wipes a key no
  *     community accepted;
  *   - always: I have an invite, Already a member, and 🌍 Look around the global community (with `?ask=<host>`, so a join
- *     there finds this community again), where the community names one.
+ *     there finds this community again), where the community names one;
+ *   - while waiting, on the community's own address: "Tell me when they answer" (web push W1, lib/web-push.ts), which asks
+ *     the browser only when tapped, and says plainly where it can't work. A click on its notification lands here with the
+ *     notice in the fragment: one this community signed for this key just reads the status again; a forgery opens nothing
+ *     and shows the phone's warning once.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { COMMUNITY_CARD_WORDS as CW, FIND_COMMUNITY_WORDS as FW, communityCardName, formatDate, t, type CommunityCard } from '@beanpool/core';
@@ -21,6 +25,11 @@ import { forgetKnockKey } from '../lib/knock-key';
 import { lookAroundUrl } from '../lib/community-card';
 import { AskHere, thisCommunityOrigin } from '../components/AskHere';
 import { LanguageSwitch } from '../components/LanguageSwitch';
+import {
+    TELL_ME_WORDS as TW, cannotLines, grantedLine, noticeInLocation, pushPlace, readWebPushPin, stopTellingMe,
+    tellMeWhenTheyAnswer, type PushPlace,
+} from '../lib/web-push';
+import { PEEK_WORDS, currentLanguage } from '@beanpool/core';
 
 /** How often the page reads the request's status while it is open. */
 export const KNOCK_STATUS_EVERY_MS = 5 * 60_000;
@@ -50,6 +59,15 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [askAgain, setAskAgain] = useState(false);
+
+    // A click on the notification brought a notice (public/sw.js): the community's own just reads again; a forgery opens
+    // nothing and is named once. The fragment goes at once, so a reload names nothing.
+    useEffect(() => {
+        if (!origin || !window.location.hash.includes('notice=')) return;
+        const seen = noticeInLocation(window.location.hash, identity.publicKey, readWebPushPin(origin, identity.publicKey)?.pushKey ?? null);
+        try { window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`); } catch { /* it stays */ }
+        if (seen === 'forged') setNote(t(TW.forged));
+    }, [origin, identity.publicKey]);
 
     useEffect(() => {
         let alive = true;
@@ -81,6 +99,8 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
 
     const forget = async () => {
         setBusy(true);
+        // The browser this request asked to be told on: let go while the key can still sign for it.
+        if (origin) await stopTellingMe(origin, identity).catch(() => {});
         const gone = await forgetKnockKey(identity.publicKey).catch(() => false);
         setBusy(false);
         if (gone) return true;
@@ -144,6 +164,7 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                         </>
                     )}
                     {note && <p role="alert" className="m-0 mb-3 text-sm text-bp-ink-danger break-words">{note}</p>}
+                    {pending && !cancelled && origin && origin === window.location.origin && <TellMeCard origin={origin} identity={identity} name={name} />}
 
                     <div className="grid gap-3">
                         {!approved && !closed && !cancelled && (
@@ -199,5 +220,54 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                 </section>
             </div>
         </main>
+    );
+}
+
+/**
+ * "Tell me when they answer" (DESIGN-web-notifications-fable.md §2.3, §2.4): the reason first, the browser asked only at the
+ * tap. Subscribed already (this browser keeps the pin and still has permission): the ✓ line. Where push can't work: the
+ * plain words, and on a phone the app's store link above them (Marty, 9 Nov, Decision 3).
+ */
+function TellMeCard({ origin, identity, name }: { origin: string; identity: BeanPoolIdentity; name: string }) {
+    const [state, setState] = useState<{ kind: 'idle' | 'asking' } | { kind: 'on' | 'off'; place: PushPlace; dismissed?: boolean }>(() => {
+        const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+        return readWebPushPin(origin, identity.publicKey) && granted ? { kind: 'on', place: pushPlace() } : { kind: 'idle' };
+    });
+    // Called straight from the tap, with nothing awaited first: a browser asks for permission only inside the gesture.
+    const tap = () => {
+        setState({ kind: 'asking' });
+        void tellMeWhenTheyAnswer(origin, identity, currentLanguage()).then(r => {
+            if (r.ok) setState({ kind: 'on', place: r.place });
+            else if (r.reason === 'dismissed') setState({ kind: 'idle' });
+            else setState({ kind: 'off', place: r.place, dismissed: r.reason === 'failed' });
+        });
+    };
+    const off = state.kind === 'off' ? (state.dismissed ? { lines: [t(TW.failed)], getApp: null } : cannotLines(state.place)) : null;
+    return (
+        <div data-testid="tell-me-card" className="mb-4 p-4 max-[359px]:p-3 rounded-xl border border-nature-200 dark:border-nature-800">
+            {state.kind === 'on' ? (
+                <div role="status">
+                    <p dir="auto" data-testid="tell-me-on" className="m-0 text-base font-bold break-words">{t(TW.granted, { name })}</p>
+                    {grantedLine(state.place) && <p dir="auto" className="m-0 mt-1 text-sm text-text-secondary break-words">{grantedLine(state.place)}</p>}
+                </div>
+            ) : (
+                <>
+                    <p dir="auto" className="m-0 mb-1 text-base font-bold break-words">{t(TW.title)}</p>
+                    <p dir="auto" className="m-0 mb-3 text-sm text-text-secondary break-words">{t(TW.line, { name })}</p>
+                    {off ? (
+                        <div role="status" data-testid="tell-me-off" className="grid gap-2">
+                            {off.getApp && (
+                                <a href={off.getApp} rel="noopener noreferrer" data-testid="tell-me-get-app" className={`${PRIMARY} no-underline`}>{t(PEEK_WORDS.getApp)}</a>
+                            )}
+                            {off.lines.map(line => <p key={line} dir="auto" className="m-0 text-sm break-words">{line}</p>)}
+                        </div>
+                    ) : (
+                        <button type="button" data-testid="tell-me" className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
+                            {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
+                        </button>
+                    )}
+                </>
+            )}
+        </div>
     );
 }

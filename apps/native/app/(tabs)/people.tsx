@@ -194,6 +194,10 @@ export default function PeopleScreen() {
     // from the route once and cleared from it, so it doesn't outlive this visit: it ends when the member picks another pill
     // or leaves the tab (WantsToJoin says "nobody is waiting" only for a visit a notice began).
     const [fromNotice, setFromNotice] = useState(params.from === 'notice');
+    // Which notice tap this is. People is a tab and stays mounted, and so does Wants to join while Invites is the last view, so
+    // it would show the list it read last time: "nobody is waiting" over an old, empty list while someone is. Each tap starts
+    // Wants to join over (it is keyed on this), from a fresh read, with nothing kept from the visit before (an answer given there).
+    const [noticeVisit, setNoticeVisit] = useState(0);
 
     useEffect(() => {
         if (isPeopleView(params.view)) setView(params.view);
@@ -202,6 +206,7 @@ export default function PeopleScreen() {
     useEffect(() => {
         if (params.from !== 'notice') return;
         setFromNotice(true);
+        setNoticeVisit(n => n + 1);
         router.setParams({ from: undefined });
     }, [params.from]);
     useFocusEffect(useCallback(() => () => setFromNotice(false), []));
@@ -1373,7 +1378,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
                             {identity && anchorUrl && takesKnocks && (
-                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} fromNotice={fromNotice} />
+                                <WantsToJoin key={noticeVisit} anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} fromNotice={fromNotice} />
                             )}
                             {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && doorAdminsOnly && mayInvite && (
                                 <InviteAsksToAnswer anchorUrl={anchorUrl} identity={identity} />

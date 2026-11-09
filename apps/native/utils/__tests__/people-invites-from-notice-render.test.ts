@@ -17,7 +17,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 // `focusCleanups`: what each useFocusEffect on the screen returned (it has more than one); `blur()` runs them all.
 const nav = vi.hoisted(() => ({
-    params: {} as Record<string, string | undefined>, setParams: [] as Array<Record<string, unknown>>,
+    params: {} as Record<string, string | undefined>, setParams: [] as Array<Record<string, unknown>>, wantsMounts: 0,
     focusCleanups: new Set<() => void>(), blur() { for (const off of [...this.focusCleanups]) off(); },
 }));
 
@@ -120,10 +120,17 @@ vi.mock('../node-post', () => ({
     signedGet: () => new Promise<never>(() => {}), signedPost: () => new Promise<never>(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-// Wants to join is a probe: what People hands it is what is checked here.
-vi.mock('../../components/WantsToJoin', () => ({
-    WantsToJoin: (p: { fromNotice?: boolean }) => createElement('span', { 'data-testid': 'wants-to-join-probe', 'data-from-notice': String(!!p.fromNotice) }),
-}));
+// Wants to join is a probe: what People hands it is what is checked here. `nav.wantsMounts` counts its instances: a new
+// instance is a fresh read, which every visit a notice begins must start from.
+vi.mock('../../components/WantsToJoin', async () => {
+    const { useEffect } = await import('react');
+    return {
+        WantsToJoin: (p: { fromNotice?: boolean }) => {
+            useEffect(() => { nav.wantsMounts++; }, []);
+            return createElement('span', { 'data-testid': 'wants-to-join-probe', 'data-from-notice': String(!!p.fromNotice) });
+        },
+    };
+});
 vi.mock('../../components/MyJoinRequests', () => ({ MyJoinRequests: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
@@ -145,6 +152,7 @@ beforeEach(() => {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
     nav.params = { view: 'invites' };
     nav.setParams.length = 0;
+    nav.wantsMounts = 0;
     nav.focusCleanups.clear();
     globalThis.fetch = vi.fn(async (url: unknown) => {
         const u = String(url);
@@ -157,6 +165,13 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settle = async () => { for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 const open = async () => { await act(async () => { root.render(createElement(PeopleScreen) as any); }); await settle(); };
+/** The screen drawn again with the route as it now is: a notice tapped while the People tab is already open (it stays mounted). */
+const tapNotice = async () => {
+    nav.params = { view: 'invites', from: 'notice' };
+    await open();
+    nav.params = { view: 'invites' }; // People took the flag off the route
+    await open();
+};
 /** What People told Wants to join about how Invites was reached; null while Wants to join is not on screen. */
 const probe = () => host.querySelector('[data-testid="wants-to-join-probe"]')?.getAttribute('data-from-notice') ?? null;
 const pill = (text: string) => {
@@ -197,5 +212,48 @@ describe('People → Invites opened by the notice "someone asked to join"', () =
         await act(async () => { nav.blur(); });
         await settle();
         expect(probe()).toBe('false');
+    });
+
+    // People is a tab and stays mounted, so Wants to join stays mounted with it: it reads the list when it mounts and no
+    // other time. A notice's visit has to start from a fresh read, or "nobody is waiting" is said over an old, empty list
+    // while someone is waiting (the review of 9 Nov). A new instance is that fresh read, and drops what the last visit held
+    // (an answer given there, the words after it).
+    it('the notice is tapped while People is already on Invites: Wants to join starts over, with the notice on', async () => {
+        await open();
+        expect(nav.wantsMounts).toBe(1);
+        expect(probe()).toBe('false');
+        await tapNotice();
+        expect(nav.wantsMounts).toBe(2);
+        expect(probe()).toBe('true');
+    });
+
+    it('the notice is tapped again with the first visit still open: it starts over again, each tap', async () => {
+        nav.params = { view: 'invites', from: 'notice' };
+        await open();
+        nav.params = { view: 'invites' };
+        await open();
+        expect(nav.wantsMounts).toBe(1);
+        await tapNotice();
+        expect(nav.wantsMounts).toBe(2);
+        await tapNotice();
+        expect(nav.wantsMounts).toBe(3);
+        expect(probe()).toBe('true');
+    });
+
+    it('People opened by the notice itself (a cold start): one Wants to join, so one read, not two', async () => {
+        nav.params = { view: 'invites', from: 'notice' };
+        await open();
+        expect(nav.wantsMounts).toBe(1);
+        // The same render on the next frame, the route not yet cleared: still no second instance.
+        await open();
+        expect(nav.wantsMounts).toBe(1);
+    });
+
+    it('leaving the tab starts nothing over: only a notice does', async () => {
+        nav.params = { view: 'invites', from: 'notice' };
+        await open();
+        await act(async () => { nav.blur(); });
+        await settle();
+        expect(nav.wantsMounts).toBe(1);
     });
 });

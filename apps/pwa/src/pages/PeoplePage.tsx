@@ -661,7 +661,10 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
             <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
-                    {!preview && <WantsToJoin onCount={setKnockCount} canSee={canSee} fromNotice={askedNotice} />}
+                    {/* Each visit the line begins is a new Wants to join: People stays mounted while the owner sits on Invites, so the
+                        list read when Invites opened may be old, and "nobody is waiting" is said only from a read this visit made
+                        (and an answer given in an earlier visit no longer counts). The nav nonce changes with every tap of the line. */}
+                    {!preview && <WantsToJoin key={askedNotice ? `asked-${navNonce ?? 0}` : 'ordinary'} onCount={setKnockCount} canSee={canSee} fromNotice={askedNotice} />}
                     <InvitePage identity={identity} onNavigate={onNavigate} preview={preview} {...ways} />
                 </div>
             )}

@@ -28,7 +28,7 @@ import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -567,12 +567,14 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             <span className="truncate max-w-[140px] inline-block align-bottom">{v.callsign}</span>
                                             {' · '}
                                             <span className="whitespace-normal">
-                                                {t('{left} of {total} left · {vouched} vouched · {below} below zero', {
-                                                    left: formatNumber(v.left),
-                                                    total: formatNumber(v.level),
-                                                    vouched: v.peopleVouched,
-                                                    below: v.belowZero,
-                                                })}
+                                                {v.noLimit
+                                                    ? t(VOUCH_PRESET_WORDS.vouchersRowTextNoLimit, { vouched: v.peopleVouched, below: v.belowZero })
+                                                    : t('{left} of {total} left · {vouched} vouched · {below} below zero', {
+                                                        left: formatNumber(v.left),
+                                                        total: formatNumber(v.level),
+                                                        vouched: v.peopleVouched,
+                                                        below: v.belowZero,
+                                                    })}
                                             </span>
                                         </div>
                                         <span className="text-nature-400 dark:text-nature-300 font-bold ml-2 self-start mt-0.5">›</span>
@@ -610,6 +612,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                             onChange={setVouchPreset}
                             budgetLeft={myVouching.budget?.left ?? 0}
                             budgetTotal={myVouching.budget?.level ?? 0}
+                            noLimit={myVouching.noLimit === true}
                         />
                     )}
 

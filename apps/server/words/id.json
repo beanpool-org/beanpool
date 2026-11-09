@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -957,11 +957,9 @@
   "@{name} has three vouches.": "@{name} memiliki tiga jaminan.",
   "@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.": "@{name} memiliki {held} kacang yang ditahan pada undangan yang belum terpakai, sehingga anggarannya tidak bisa lebih rendah dari itu.",
   "@{name} is a voucher already.": "@{name} sudah menjadi penjamin.",
-  "@{name} is an owner: only another owner can lower their budget.": "@{name} adalah pemilik: hanya pemilik lain yang dapat menurunkan anggarannya.",
   "@{name} is below zero: a credit-line gift or a Decision can help.": "@{name} berada di bawah nol: hadiah batas kredit atau Keputusan dapat membantu.",
   "@{name} isn’t a voucher.": "@{name} bukan penjamin.",
   "@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.": "@{name} menjamin sebagai pemilik atau admin selama memegang peran tersebut, sehingga anggarannya tidak dapat dihentikan. Anda dapat menurunkannya sebagai gantinya.",
-  "@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.": "@{name} menjamin sebagai pemilik selama memegang peran tersebut, sehingga anggarannya tidak dapat dihentikan, dan hanya pemilik lain yang dapat menurunkannya.",
   "@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.": "Akun @{name} dijeda, sehingga anggarannya tidak dapat dinaikkan selama masih dijeda. Anda masih dapat menurunkannya.",
   "@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.": "Batas kredit @{name} dibekukan, sehingga anggarannya tidak dapat dinaikkan hingga admin mencairkannya. Anda masih dapat menurunkannya.",
   "A budget is 100 to 2,000 Beans, in steps of 100.": "Anggaran adalah 100 hingga 2,000 kacang, dengan kelipatan 100.",
@@ -1010,5 +1008,10 @@
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Batas kredit yang diberikan seseorang kepada Anda berawal dari jaminan @{name}, jadi tidak ada bagian darinya yang dapat diberikan kepada orang tersebut.",
   "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Pemilik komunitas Anda mengubah cara kerjanya: anggaran untuk setiap penjamin kini {budget} kacang.",
   "Busy finding another account. Wait a minute, then sign in again.": "Sedang mencari akun lain. Tunggu semenit, lalu masuk lagi.",
-  "Sign in with your account's sign-in first.": "Masuk dulu dengan akun masuk yang tertaut ke akunmu."
+  "Sign in with your account's sign-in first.": "Masuk dulu dengan akun masuk yang tertaut ke akunmu.",
+  "An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.": "Jaminan pemilik adalah 25, 50, 75, 100, 200, atau 500 kacang.",
+  "Only an owner can vouch 200 or 500 Beans.": "Hanya pemilik yang dapat menjamin 200 atau 500 kacang.",
+  "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "@{name} sudah memiliki jaminan senilai {total} kacang, dan jaminan untuk satu orang paling banyak {max}.",
+  "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "@{name} menjamin sebagai pemilik selama memegang peran tersebut, tanpa batas, sehingga tidak ada anggaran untuk dihentikan atau ditetapkan.",
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} adalah pemilik: pemilik menjamin tanpa batas, sehingga tidak ada anggaran untuk ditetapkan."
 }

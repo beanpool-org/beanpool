@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -1006,8 +1006,6 @@
   "@{name} is a voucher already.": "@{name} پہلے سے ہی تصدیق کنندہ ہے۔",
   "@{name} isn’t a voucher.": "@{name} تصدیق کنندہ نہیں ہے۔",
   "@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.": "@{name} مالک یا ایڈمن کی حیثیت سے تصدیق کرتا ہے جب تک کہ اس کے پاس وہ کردار ہے، اس لیے اس کا بجٹ روکا نہیں جا سکتا۔ آپ اس کے بجائے اسے کم کر سکتے ہیں۔",
-  "@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.": "@{name} مالک کی حیثیت سے تصدیق کرتا ہے جب تک کہ اس کے پاس وہ کردار ہے، اس لیے اس کا بجٹ روکا نہیں جا سکتا، اور صرف کوئی دوسرا مالک ہی اسے کم کر سکتا ہے۔",
-  "@{name} is an owner: only another owner can lower their budget.": "@{name} ایک مالک ہے: صرف ایک اور مالک ہی ان کا بجٹ کم کر سکتا ہے۔",
   "@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.": "@{name} کے پاس غیر استعمال شدہ دعوت ناموں پر روکی گئی {held} پھلیاں ہیں، اس لیے اس کا بجٹ اس سے کم نہیں ہو سکتا۔",
   "A voucher has at most {max} Beans in hand, left and held together.": "ایک تصدیق کنندہ کے پاس باقی اور روکی گئی ملا کر زیادہ سے زیادہ {max} پھلیاں ہوتی ہیں۔",
   "@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.": "@{name} کا اکاؤنٹ معطل ہے، اس لیے اس کے جاری رہنے تک ان کا بجٹ نہیں بڑھایا جا سکتا۔ آپ پھر بھی اسے کم کر سکتے ہیں۔",
@@ -1019,5 +1017,10 @@
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "آپ کو کسی نے جو کریڈٹ لائن دی تھی وہ @{name} کی دی ہوئی تصدیق سے شروع ہوئی تھی، اس لیے اس میں سے کچھ بھی ان تک نہیں جا سکتا۔",
   "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدلا: ہر تصدیق کنندہ کا بجٹ اب {budget} پھلیاں ہے۔",
   "Busy finding another account. Wait a minute, then sign in again.": "ابھی کسی اور کا اکاؤنٹ تلاش کرنے میں مصروف ہیں۔ ایک منٹ رکیں، پھر دوبارہ سائن ان کریں۔",
-  "Sign in with your account's sign-in first.": "پہلے اپنے اکاؤنٹ کے سائن ان سے سائن ان کریں۔"
+  "Sign in with your account's sign-in first.": "پہلے اپنے اکاؤنٹ کے سائن ان سے سائن ان کریں۔",
+  "An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.": "مالک کی تصدیق 25، 50، 75، 100، 200 یا 500 پھلیاں ہوتی ہے۔",
+  "Only an owner can vouch 200 or 500 Beans.": "صرف مالک ہی 200 یا 500 پھلیوں کی تصدیق کر سکتا ہے۔",
+  "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "@{name} کے پاس پہلے سے {total} پھلیوں کی تصدیقیں ہیں، اور ایک شخص کی تصدیقیں زیادہ سے زیادہ {max} تک ہو سکتی ہیں۔",
+  "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "@{name} مالک کی حیثیت سے تصدیق کرتا ہے جب تک کہ اس کے پاس وہ کردار ہے، بغیر کسی حد کے، اس لیے روکنے یا طے کرنے کے لیے کوئی بجٹ نہیں ہے۔",
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} ایک مالک ہے: مالکان بغیر کسی حد کے تصدیق کرتے ہیں، اس لیے طے کرنے کے لیے کوئی بجٹ نہیں ہے۔"
 }

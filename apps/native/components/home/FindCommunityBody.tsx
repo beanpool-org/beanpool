@@ -241,11 +241,17 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} onAsked={onCircleAsked} onChange={card => setCircle({ ...card, id: circle.id })} />}
             {/* Always on the card, polite: a yes put into it is read out to a screen reader. */}
             <View accessibilityLiveRegion="polite" testID="home-find-yes-live">
-                {activeKnocks.filter(k => !cancelledRequests.has(requestKey(k)) && yesOf(statuses[requestKey(k)])).map(k => (
-                    <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
-                        {'🎉 ' + (cardKnockLines([k], { [k.url]: statuses[requestKey(k)] })[0]?.text ?? '')}
-                    </Text>
-                ))}
+                {activeKnocks.filter(k => !cancelledRequests.has(requestKey(k)) && yesOf(statuses[requestKey(k)])).map(k => {
+                    const approved = cardKnockLines([k], { [k.url]: statuses[requestKey(k)] })[0];
+                    // A yes already used (the account joined there, here or through the web's handoff) has no line: no row,
+                    // never a lone "🎉".
+                    if (!approved) return null;
+                    return (
+                        <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
+                            {'🎉 ' + approved.text}
+                        </Text>
+                    );
+                })}
             </View>
             {activeKnocks.map(k => {
                 const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
@@ -257,7 +263,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 const isCancelling = cancellingRequests.has(rk);
                 const cancelled = cancelledRequests.has(rk);
 
-                // A yes is drawn in the region above, not here.
+                // A yes is drawn in the region above, not here (a yes already used draws nothing in either).
                 if (!cancelled && yesOf(status)) return null;
 
                 // What the community now says, as MyJoinRequests reads it: only a waiting request arrived and can be taken

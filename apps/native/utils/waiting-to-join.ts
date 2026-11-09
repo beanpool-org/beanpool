@@ -106,6 +106,8 @@ export function waitingLines(
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
         const status = statuses[k.url];
         if (!status) return { kind: 'waiting', url: k.url, name, text: cardKnockLines([k], { [k.url]: { ok: true, value: { status: 'pending' } } })[0].text };
+        // A yes already used: the key is a member there now (global yes Y1). Nothing waits; the card says so.
+        if (status.ok && status.value.status === 'approved' && status.value.member) return { kind: 'closed', url: k.url, name, note: KNOCK_MESSAGES.member };
         if (status.ok && (status.value.status === 'pending' || status.value.status === 'approved')) {
             const line = cardKnockLines([k], { [k.url]: status })[0];
             return status.value.status === 'approved'

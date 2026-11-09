@@ -25,7 +25,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -643,7 +643,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         data-testid="ledger-budget-row"
                     >
                         <span className="text-sm font-extrabold text-nature-900 dark:text-white">
-                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                            {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
                         </span>
                         <span className="text-nature-400 font-bold ml-1">›</span>
                     </button>

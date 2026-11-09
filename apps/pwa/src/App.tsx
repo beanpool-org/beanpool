@@ -25,6 +25,8 @@ import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { PeekPage } from './pages/PeekPage';
 import { KnockWaitingPage } from './pages/KnockWaitingPage';
+import { HandoffPage } from './pages/HandoffPage';
+import { handoffAtLoad, takeHandoffParams } from './lib/handoff';
 import { isKnockKey } from './lib/knock-key';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
@@ -164,6 +166,13 @@ export function App() {
     const [waitingKey, setWaitingKey] = useState<BeanPoolIdentity | null>(null);
     const [knockYes, setKnockYes] = useState<{ invite: string; name: string } | null>(null);
     const [waitingDoor, setWaitingDoor] = useState<'invite' | null>(null);
+    /*
+     * `/app?door=handoff&n=<nonce>&from=<origin>` (DESIGN-global-yes-join-fable.md §2.1, slice Y1): the page that holds a
+     * member's account in this browser opened this one to hand it over (pages/HandoffPage.tsx). Read once, at load, and taken
+     * out of the address at once, so a reload or a later door never reads it again.
+     */
+    const [handoff, setHandoff] = useState(() => (typeof window !== 'undefined' ? handoffAtLoad(window.location.search, window.location.origin) : null));
+    useEffect(() => { if (handoff) takeHandoffParams(); }, []); // once, at load
     // The hint the node reads at its bare address (front doors S15, lib/community-card.ts): with an account here `/`
     // opens this app as before; without one it shows a stranger the community's card. Said once the identity has loaded.
     // A browser waiting to be let in keeps it too, so `/` opens the waiting page rather than the card again.
@@ -957,6 +966,33 @@ export function App() {
     // The mobile header's title (none on the map, which shows the community's name); MobileHeader sends the sync chip to its
     // dot alone where the title wouldn't fit beside the chip's words.
     const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
+
+    // The handoff's door, before anything else: it answers the page that opened it whether or not an account is held here.
+    if (handoff && !loading) {
+        return (
+            <div className="page-wallpaper" data-testid="welcome-wallpaper">
+                <HandoffPage
+                    handoff={handoff}
+                    onOpen={() => setHandoff(null)}
+                    onJoin={({ account, invite, name }) => {
+                        // Kept as the waiting key (established); the welcome page redeems the yes with it (WelcomePage handleCreate).
+                        setHandoff(null);
+                        setWaitingDoor(null);
+                        setKnockYes({ invite, name });
+                        setWaitingKey(account);
+                    }}
+                    onMember={(member) => {
+                        setHandoff(null);
+                        beginAccountEpoch();
+                        setWaitingKey(null);
+                        setKnockYes(null);
+                        setWaitingDoor(null);
+                        setIdentity(member);
+                    }}
+                />
+            </div>
+        );
+    }
 
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (

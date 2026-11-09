@@ -29,6 +29,8 @@ export interface MyVouching {
     };
     source?: 'role' | 'entry';
     history?: AllocationHistoryLine[];
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit", never left or level; 200 and 500 too. */
+    noLimit?: boolean;
     presets: number[];
     vouchMax: number;
     budgetMax: number;

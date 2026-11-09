@@ -660,7 +660,7 @@ function NeedsSheet({
                             <span className="flex-1 min-w-0">
                                 <span className="block text-sm font-bold text-text-primary line-clamp-2 break-words">{n.title || n.body}</span>
                                 {n.title && n.body && <span className="block text-sm text-text-primary line-clamp-3 break-words">{n.body}</span>}
-                                <span className="block text-xs text-text-muted">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
+                                <span className="block text-xs text-text-secondary">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
                             </span>
                         </button>
                     ))}

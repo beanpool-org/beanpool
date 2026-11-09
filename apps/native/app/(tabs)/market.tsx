@@ -678,6 +678,11 @@ export default function MarketScreen() {
     // For the distance on event cards. Read only when location is already allowed; the feed never prompts.
     const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
+    // "Post your first Offer", the activity list's create and the empty feed's "+ Post a Deal" open this screen's own chooser (the
+    // one the + and ADD POST open), not a chooser on the listing screen. That screen is a full-window transparentModal that
+    // drew nothing until its chooser opened, and on iOS a chooser asked for while it was still being presented was refused:
+    // the empty screen stayed on top and took every tap and scroll (Rob, 9 Nov). Each pick below opens the same form as before.
+    const openNewPostChooser = () => setShowNewPostTypePicker(true);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
 
     // In preview the pill counts none of the reader's own deals, even one read before the switch that lands after it.
@@ -1493,7 +1498,7 @@ export default function MarketScreen() {
                     </Text>
                     <Pressable
                         style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
-                        onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
+                        onPress={() => openNewPostChooser()}
                         accessibilityRole="button"
                     >
                         <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>{t('➕ Post your first Offer')}</Text>
@@ -2179,7 +2184,7 @@ export default function MarketScreen() {
                                 </Pressable>
                             </View>
                             {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
+                            <ActivityWaterfall onCreatePostPress={openNewPostChooser}
                                 viewerPubkey={identity?.publicKey}
                                 onOpenPost={(postId) => router.push(`/post/${postId}`)}
                                 onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey: publicKey, callsign: callsign || '' } })}
@@ -2204,7 +2209,7 @@ export default function MarketScreen() {
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                            onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
+                            onPress={() => openNewPostChooser()}
                         >
                             <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
                         </Pressable>

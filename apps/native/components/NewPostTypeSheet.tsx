@@ -10,32 +10,49 @@
  */
 
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
-import { NEW_POST_TYPES, composeOptionA11yLabel, type ComposePostType } from '../utils/compose-options';
+import { NEW_POST_TYPES, composeOptionA11yLabel, composeTargetFor, type ComposePostType } from '../utils/compose-options';
+import { useAfterDismiss } from '../utils/screen-presented';
 import { useIdentity } from '../app/IdentityContext';
 import { openLookDoor } from '../utils/look-door';
 
 interface NewPostTypeSheetProps {
     visible: boolean;
-    onClose: () => void;
-    /** The chooser closes itself before this runs, so the chosen form opens over a clear screen. */
+    /** The chooser is closing. `choosing` is true when a choice is behind the close (onSelect follows), so a screen that leaves when its chooser is cancelled can tell the two apart. */
+    onClose: (choosing?: boolean) => void;
+    /**
+     * A choice. The chooser has been asked to close first. A Poll or Event is a Modal of its own, and on iOS a Modal cannot
+     * open while another is still closing (UIKit drops it; React Native never retries): so there that choice arrives once the
+     * chooser has gone (its `onDismiss`, or after AFTER_DISMISS_FALLBACK_MS if that never comes). Everywhere else, and for an
+     * Offer or a Need (a view in the screen, whose alerts open in a window of their own), it arrives at once.
+     */
     onSelect: (type: ComposePostType) => void;
+    /** The Modal has actually been shown. On iOS a Modal asked for mid-presentation is refused and this never fires (utils/screen-presented.ts). */
+    onShow?: () => void;
 }
 
-export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeSheetProps) {
+export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPostTypeSheetProps) {
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
+    const afterClose = useAfterDismiss<ComposePostType>((type) => onSelect(type));
+    const pick = (type: ComposePostType) => {
+        onClose(true);
+        if (Platform.OS === 'ios' && composeTargetFor(type) !== 'offer-need-form') afterClose.hold(type);
+        else onSelect(type);
+    };
 
     return (
         <Modal
             visible={visible}
             transparent
             animationType="fade"
-            onRequestClose={onClose}
+            onRequestClose={() => onClose()}
+            onShow={onShow}
+            onDismiss={afterClose.release}
         >
-            <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel={t('Close create post sheet')} onPress={onClose}>
+            <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel={t('Close create post sheet')} onPress={() => onClose()}>
                 <Pressable style={styles.actionSheetContainer} onPress={(e) => e.stopPropagation()}>
                     <Text style={styles.actionSheetTitle}>{t('Create New Post')}</Text>
                     <Text style={styles.actionSheetSubtitle}>{identity ? t('What would you like to share with the village?') : t("You're looking around as a visitor. Nothing is saved until you join.")}</Text>
@@ -60,10 +77,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
                             style={[styles.actionSheetOption, i === NEW_POST_TYPES.length - 1 && { borderBottomWidth: 0 }]}
                             accessibilityRole="button"
                             accessibilityLabel={composeOptionA11yLabel(option)}
-                            onPress={() => {
-                                onClose();
-                                onSelect(option.id);
-                            }}
+                            onPress={() => pick(option.id)}
                         >
                             <Text style={styles.actionSheetEmoji}>{option.emoji}</Text>
                             <View style={{ flex: 1 }}>
@@ -77,7 +91,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
                         style={styles.actionSheetCancel}
                         accessibilityRole="button"
                         accessibilityLabel={t('Cancel')}
-                        onPress={onClose}
+                        onPress={() => onClose()}
                     >
                         <Text style={styles.actionSheetCancelText}>{t('Cancel')}</Text>
                     </Pressable>

@@ -10,6 +10,11 @@
  * ones the Market and Home open. "Drop a pin" shows a map here to tap: the form's map was the Map tab itself.
  *
  * Leaving it (✕, the chooser closed, a poll or event done, "Not now", Back) takes the member back to where they were.
+ *
+ * It draws nothing until its chooser or form opens, so it must never be left on top with nothing shown (Rob, iOS, 9 Nov: the
+ * Market stopped taking taps and scrolls). Two rules in utils/screen-presented.ts keep that true: nothing is presented on top
+ * of this screen until its own presentation has finished (iOS refuses a Modal asked for mid-presentation, and React Native
+ * never asks again), and a Modal that was asked for and never reports `onShow` sends the member back.
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
@@ -38,6 +43,7 @@ import { NewPostTypeSheet } from '../components/NewPostTypeSheet';
 import { TagPicker } from '../components/TagPicker';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType, clearDraftToolMarker, decideDraftOpen } from '../utils/compose-options';
 import { palette } from '../constants/colors';
+import { useScreenPresented, useModalShowGuard } from '../utils/screen-presented';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { darkMapStyle, mapSchemeKey } from '../utils/map-scheme';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../constants/categories';
@@ -351,8 +357,17 @@ export default function NewListingScreen() {
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)/map');
     };
-    /** The chooser calls onClose before onSelect: a close with a choice behind it is not a leave. */
-    const chooserLeave = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    /**
+     * The empty screen is the failure: a Modal this screen asked for (the chooser, a poll, an event) that the platform
+     * refused leaves nothing drawn and every tap swallowed. Each Modal reports `onShow` when it is up; one that has not
+     * within MODAL_SHOW_GUARD_MS sends the member back to where they were.
+     */
+    const chooserShown = useModalShowGuard(showNewPostTypePicker, leave);
+    const pollShown = useModalShowGuard(showNewPollModal, leave);
+    const eventShown = useModalShowGuard(showNewEventModal, leave);
+    /** True once the stack has finished presenting this screen: only then is a Modal asked for. */
+    const presented = useScreenPresented(navigation);
 
     /**
      * The pin map opens on the community, as the map tab does (its fetchNodeLocation): the node's service area and its
@@ -680,16 +695,28 @@ export default function NewListingScreen() {
     // before the first screen covered the window; expo-router's push always adds a route) goes at once and opens
     // nothing. The copy under it opened its chooser and stays the only one.
     const opened = useRef(false);
+    /** This copy is the one that opens what the link asked for (not a second tap's copy, which went at once). */
+    const isTheCopy = useRef(false);
     useEffect(() => {
         if (opened.current) return;
         opened.current = true;
         const routes = navigation.getState()?.routes ?? [];
         const at = routes.findIndex((r) => r.key === route.key);
         if (at > 0 && routes[at - 1].name === route.name) { left.current = true; removeThisCopy(); return; }
+        isTheCopy.current = true;
+    }, []);
+
+    // ...and it is asked for once the screen is up, not as it mounts: a Modal (the chooser, a poll, an event) asked for
+    // while this screen is still being presented is refused by iOS and never shown, which left this screen empty on top
+    // (see the header). The form is a view in this screen, and the alerts before it are windows of their own, so they wait too.
+    const asked = useRef(false);
+    useEffect(() => {
+        if (!presented || !isTheCopy.current || asked.current) return;
+        asked.current = true;
         const wanted = parseNewPostParam(params.newPost) ?? 'chooser';
         if (wanted === 'chooser') setShowNewPostTypePicker(true);
         else startCompose(wanted);
-    }, []);
+    }, [presented]);
 
     return (
         <View style={styles.container}>
@@ -1103,17 +1130,23 @@ export default function NewListingScreen() {
                 options in the same order, each opening the same form. */}
             <NewPostTypeSheet
                 visible={showNewPostTypePicker}
-                onClose={() => { setShowNewPostTypePicker(false); chooserLeave.current = setTimeout(leave, 0); }}
-                onSelect={(type) => { if (chooserLeave.current) clearTimeout(chooserLeave.current); startCompose(type); }}
+                onShow={chooserShown}
+                // A close with a choice behind it is not a leave (`choosing`): on iOS a Poll or Event choice arrives only once the
+                // chooser has gone, later than any timer here could wait (components/NewPostTypeSheet.tsx). A cancel leaves, a moment
+                // on so a close on its way to the look door is not taken for one.
+                onClose={(choosing) => { setShowNewPostTypePicker(false); if (!choosing) setTimeout(leave, 0); }}
+                onSelect={(type) => { startCompose(type); }}
             />
 
             <NewPollModal
                 visible={showNewPollModal}
+                onShow={pollShown}
                 onClose={() => { setShowNewPollModal(false); leave(); }}
             />
 
             <NewEventModal
                 visible={showNewEventModal}
+                onShow={eventShown}
                 initialPin={eventInitialPin}
                 onClose={() => { setShowNewEventModal(false); setEventInitialPin(null); leave(); }}
             />

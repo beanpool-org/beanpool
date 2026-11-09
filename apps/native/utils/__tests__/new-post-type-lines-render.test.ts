@@ -8,14 +8,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const sent = vi.hoisted(() => ({ identity: true, picked: [] as string[] }));
-vi.mock('react-native', () => {
+vi.mock('react-native', async () => {
+    // Modal and Platform are the shared harness's: iOS's dismissals are `modalControl`'s (profile-events-words-harness.ts).
+    const { modalStandIn, platformStandIn } = await import('./profile-events-words-harness');
     const el = (tag: string) => function Host(props: Record<string, any>) {
         const { children, onPress, accessibilityLabel, testID, numberOfLines } = props;
         const attrs: Record<string, unknown> = {};
@@ -26,7 +28,7 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     return {
-        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
+        Modal: modalStandIn, Platform: platformStandIn(),
         Pressable: el('button'), Text: el('span'), View: el('div'),
         StyleSheet: { create: (s: unknown) => s },
     };
@@ -40,11 +42,13 @@ vi.mock('../look-door', () => ({ openLookDoor: () => {} }));
 
 import { pseudoLocalise, setLanguage } from '@beanpool/core';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { AFTER_DISMISS_FALLBACK_MS } from '../screen-presented';
+import { modalControl } from './profile-events-words-harness';
 
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); sent.identity = true; sent.picked.length = 0; });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); modalControl.reset(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const show = async () => { await act(async () => { root.render(createElement(NewPostTypeSheet as any, { visible: true, onClose: () => {}, onSelect: (t: string) => { sent.picked.push(t); } }) as any); }); };
 /** The choice rows: the buttons whose screen-reader label is "Title: line" (not the backdrop, the sheet itself or Cancel). */
@@ -95,6 +99,103 @@ describe('the + chooser: one short line under each choice', () => {
         await show();
         expect(host.querySelector('[data-testid="new-post-join"]')).not.toBeNull();
         expect(host.textContent).not.toContain("Something you'll give");
+    });
+});
+
+/**
+ * The chooser as a screen holds it: open until it is asked to close (what Market, Map and Home do with `onClose`), so the Modal
+ * really goes and, on iOS, really spends time closing (`modalControl`). `closed` is what `onClose` was told: true when a choice
+ * is behind the close, false for a Cancel or a tap outside.
+ */
+function Screen({ closed }: { closed: boolean[] }) {
+    const [open, setOpen] = useState(true);
+    return createElement(NewPostTypeSheet as any, {
+        visible: open,
+        onClose: (choosing?: boolean) => { closed.push(choosing === true); setOpen(false); },
+        onSelect: (t: string) => { sent.picked.push(t); },
+    });
+}
+/** The screen opens its chooser; a different `visit` is a fresh screen (the chooser open again, as a member opens it a second time). */
+const ask = async (closed: boolean[], visit = 0) => { await act(async () => { root.render(createElement(Screen, { closed, key: visit }) as any); }); };
+const row = (label: string) => rows().find((b) => b.getAttribute('aria-label')?.startsWith(`${label}:`))!;
+const chooserIsUp = () => host.querySelector('[data-modal]') !== null;
+/** The chooser's close ending, as iOS reports it: each closed Modal's `onDismiss` fires. */
+const dismissalEnds = async () => { await act(async () => { modalControl.finishClosing(); }); };
+
+describe('choosing a row: the sequence each platform runs (round 3 of #2984)', () => {
+    describe('Android and the web: every kind arrives at once (a Dialog opens over a Dialog)', () => {
+        for (const [label, kind] of [['Offer', 'offer'], ['Need', 'need'], ['Community Poll', 'poll'], ['Event', 'event']] as const) {
+            it(`${label}: the chooser is asked to close with a choice behind it, and ${kind} arrives with no wait`, async () => {
+                const closed: boolean[] = [];
+                await ask(closed);
+                expect(chooserIsUp()).toBe(true);
+                await act(async () => { row(label).click(); });
+                expect(closed, 'asked to close, with a choice behind it').toEqual([true]);
+                expect(chooserIsUp(), 'the chooser has gone').toBe(false);
+                expect(sent.picked, 'no onDismiss was needed').toEqual([kind]);
+            });
+        }
+    });
+
+    describe('iOS: a view in the screen is not held, a Modal of its own waits for the chooser to go', () => {
+        for (const [label, kind] of [['Offer', 'offer'], ['Need', 'need']] as const) {
+            it(`${label}: arrives at once, while the chooser is still closing`, async () => {
+                modalControl.ios = true;
+                const closed: boolean[] = [];
+                await ask(closed);
+                await act(async () => { row(label).click(); });
+                expect(closed).toEqual([true]);
+                expect(sent.picked, 'before the dismissal has ended').toEqual([kind]);
+                await dismissalEnds();
+                expect(sent.picked, 'and the dismissal adds nothing').toEqual([kind]);
+            });
+        }
+
+        for (const [label, kind] of [['Community Poll', 'poll'], ['Event', 'event']] as const) {
+            it(`${label}: held while the chooser closes, then arrives once its onDismiss fires, and only once`, async () => {
+                modalControl.ios = true;
+                const closed: boolean[] = [];
+                await ask(closed);
+                await act(async () => { row(label).click(); });
+                expect(closed, 'asked to close, with a choice behind it').toEqual([true]);
+                expect(chooserIsUp(), 'the chooser has gone from the screen').toBe(false);
+                expect(sent.picked, 'UIKit would refuse a Modal now: not asked for yet').toEqual([]);
+                await dismissalEnds();
+                expect(sent.picked, 'the chooser has gone: now the form may open').toEqual([kind]);
+                await dismissalEnds();
+                expect(sent.picked, 'once').toEqual([kind]);
+            });
+
+            it(`${label}: if the dismissal event never comes, it arrives after the floor, not before, and not twice`, async () => {
+                modalControl.ios = true;
+                await ask([]);
+                vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+                act(() => { row(label).click(); });
+                act(() => { vi.advanceTimersByTime(AFTER_DISMISS_FALLBACK_MS - 1); });
+                expect(sent.picked, 'still inside the floor').toEqual([]);
+                act(() => { vi.advanceTimersByTime(1); });
+                expect(sent.picked, 'the floor ran it').toEqual([kind]);
+                await dismissalEnds();
+                expect(sent.picked, 'a late onDismiss runs nothing again').toEqual([kind]);
+            });
+        }
+
+        it('a Cancel, or a tap outside the sheet, picks nothing: not at once, not after the dismissal, not after the floor', async () => {
+            modalControl.ios = true;
+            // Fake timers from the start, so a pick wrongly held by either close would have its floor timer advanced below.
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            const closed: boolean[] = [];
+            await ask(closed);
+            await act(async () => { host.querySelector<HTMLElement>('[aria-label="Cancel"]')!.click(); });
+            await dismissalEnds();
+            await ask(closed, 1);
+            expect(chooserIsUp(), 'opened a second time').toBe(true);
+            await act(async () => { host.querySelector<HTMLElement>('[aria-label="Close create post sheet"]')!.click(); });
+            await dismissalEnds();
+            act(() => { vi.advanceTimersByTime(AFTER_DISMISS_FALLBACK_MS * 2); });
+            expect(sent.picked).toEqual([]);
+            expect(closed, 'told each time that no choice is behind the close').toEqual([false, false]);
+        });
     });
 });
 

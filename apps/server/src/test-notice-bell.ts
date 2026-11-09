@@ -19,6 +19,11 @@
  *   7. a standby answers the read and refuses the mark, 503 `standby`, writing nothing
  *   8. the bounds: at most 100, nothing older than 7 days, whatever the hourly tidy last did
  *   9. one request to join, one row for the member whose shared listing it came after, a phone or not (shared-listing door A3)
+ *  10. every sender that keeps a notice and pushes it (a voucher's budget, a credit gift, a standing deal, unfunded pledges
+ *      returned, a removal vote opened, a reply taken down, an owner's decision, an invite ask answered): its row names the
+ *      alert's kept copy, so acknowledging the alert takes the row off the bell, and a tap on the row marks the alert
+ *  11. a tap on a phone notification (its details read, GET /api/notices/push/:id: only that tap reads them) takes its row
+ *      off the bell, and a moderation notice's alert with it; another member's read marks nothing; a standby marks nothing
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-notice-bell)
  */
@@ -295,6 +300,123 @@ async function main() {
         assert(sidRows.length === 1 && sidRows[0].kind === 'community.knock-shared',
             `the sharer, an admin with no phone, has one row, the shared one, not the plain one as well (${show(sidRows.map(r => r.kind))})`);
         assert(rowsOf(owner).filter(r => r.kind === 'community.knock').length === ownerBefore + 1, 'the owner has the plain one');
+
+        // ── 10. Every kept notice that is pushed: its row and its alert clear together ─────────────────────────────
+        // Review of #3006: only moderation's tell() named the kept copy, so for every other sender acknowledging the alert
+        // left the row on the bell, and a tap on the row left the alert to show again at the next open. Each case below
+        // sends one through the sender's own code; every case checks the row names its kept copy, and each clears it one
+        // way (acknowledge the alert, or tap the row), so both ways are walked across the senders.
+        console.log('\n--- 10. Every sender that keeps a notice and pushes it: the row and the alert clear together ---');
+        const { keepNotice } = await import('./engine/kept-notices.js');
+        const vouchers = await import('./engine/vouchers.js');
+        const standing = await import('./engine/standing-deals.js');
+        const de = await import('./decisions-engine.js');
+        const { setDoor } = await import('./config/door.js');
+        const { createCrowdfundProject, pledgeToProject } = await import('./db/db.js');
+        const bea = member('Bea'); // the web app only: a voucher, a gift's recipient, a backer, an asker
+        const rex = member('Rex'); // the web app only: the member a removal vote is about
+        const hooks = { broadcast: se.broadcast, dispatchPushNotification: se.dispatchPushNotification };
+        const KEPT_KINDS = new Set(['community.notice', 'community.invite-ask', 'account.removal-vote', 'account.reply-taken-down']);
+        const keptOf = (id: Id) => attempt(() => db.prepare('SELECT id, seen_at FROM moderation_notices WHERE recipient = ? ORDER BY created_at, rowid').all(id.pk) as any[]) ?? [];
+        const clearsTogether = async (label: string, who: Id, way: 'acknowledge' | 'tap', send: () => unknown) => {
+            const rowsBefore = new Set(rowsOf(who).map(r => r.id));
+            const keptBefore = new Set(keptOf(who).map(k => k.id));
+            const outcome = await attempt(send);
+            await sleep(50);
+            const rows = rowsOf(who).filter(r => !rowsBefore.has(r.id) && KEPT_KINDS.has(r.kind));
+            const kept = keptOf(who).filter(k => !keptBefore.has(k.id));
+            const data = attempt(() => JSON.parse(rows[0]?.data ?? '{}')) ?? {};
+            assert(rows.length === 1 && kept.length === 1 && data.noticeId === kept[0].id,
+                `${label}: one row on the bell, naming the alert's kept copy (${show({ outcome, rows: rows.map(r => [r.kind, r.data]), kept: kept.map(k => k.id) })})`);
+            if (way === 'acknowledge') {
+                const ack = await call('POST', who, '/api/notices/seen', { ids: [kept[0]?.id] });
+                const row = rowsOf(who).find(r => r.id === rows[0]?.id);
+                assert(ack.status === 200 && !!row && row.seen_at !== null, `${label}: acknowledging the alert takes the row off the bell (${ack.status}, seen_at ${row?.seen_at})`);
+            } else {
+                const tap = await call('POST', who, '/api/notices/push/seen', { ids: [rows[0]?.id] });
+                const k = keptOf(who).find(x => x.id === kept[0]?.id);
+                assert(tap.status === 200 && typeof k?.seen_at === 'string', `${label}: a tap on the row marks the alert, which never shows again (${tap.status}, seen_at ${k?.seen_at})`);
+            }
+        };
+        const voucherNotice = (data: Record<string, unknown>, title: string, body: string) =>
+            vouchers.tellVoucherNotice({ to: bea.pk, title, body, data, id: keepNotice(bea.pk, title, body, data) }, hooks as any);
+        for (const way of ['acknowledge', 'tap'] as const) {
+            await clearsTogether(`a voucher's budget (${way})`, bea, way, () => voucherNotice({ kind: 'voucher_budget', change: 'made', level: 2 },
+                'Your vouching budget', 'You can now vouch for members you know, up to 100 Beans each.'));
+            // A credit gift's notice goes out the same way (routes/community.ts giveCreditLine's tell).
+            await clearsTogether(`a credit gift (${way})`, bea, way, () => voucherNotice({ kind: 'credit_gift', amount: 20, from: owner.pk },
+                'Credit given to you', 'Olive gave you 20 Beans of their credit line.'));
+            await clearsTogether(`a standing deal (${way})`, bea, way, () => {
+                const data = { kind: 'standing_started', standing: `sd-${way}`, postId: `p-sd-${way}` };
+                const title = 'Your standing deal';
+                const body = 'Olive took up your standing deal. The first period is held in trust.';
+                standing.tellStanding(hooks as any, [{ to: bea.pk, title, body, data, id: keepNotice(bea.pk, title, body, data) }]);
+            });
+        }
+        // Unfunded pledges, through the node's own return (state-engine.ts returnUnfundedProjectPledges, the minute tick's).
+        se.payFromCommons(bea.pk, 50, 'Beans to pledge', { allowDeficit: true } as any);
+        const project = crypto.randomUUID();
+        createCrowdfundProject(project, owner.pk, 'Seed Library', 'Seeds for the valley', [], 100, new Date(Date.now() + 5 * DAY).toISOString());
+        pledgeToProject(crypto.randomUUID(), project, bea.pk, 10, 'Project Pledge');
+        const over = new Date(Date.now() - 8 * DAY).toISOString();
+        db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(over, project);
+        db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(over, project);
+        await clearsTogether('unfunded pledges returned', bea, 'tap', () => se.returnUnfundedProjectPledges());
+        // An invite ask answered, over HTTP as both apps answer it.
+        setDoor('admins');
+        const ask = async () => {
+            const made = await call('POST', bea, '/api/invite/asks', { firstName: 'Joan', howKnown: 'From the garden club' });
+            const askId = attempt(() => (db.prepare('SELECT id FROM invite_asks WHERE asker_pubkey = ? ORDER BY asked_at DESC LIMIT 1').get(bea.pk) as any)?.id);
+            const no = await call('POST', owner, `/api/invite/asks/${askId}/no`, { reason: 'We are full this month' });
+            return { made: made.status, no: no.status };
+        };
+        await clearsTogether('an invite ask answered (acknowledge)', bea, 'acknowledge', ask);
+        await clearsTogether('an invite ask answered (tap)', bea, 'tap', ask);
+        // A removal vote, its reply taken down, and an owner's decision on it (decisions-engine.ts, with the node's push).
+        let vote: any;
+        await clearsTogether('a removal vote opened', rex, 'acknowledge', () => {
+            db.transaction(() => { vote = de.pauseMember(se.getMember(rex.pk)!, owner.pk, 'Sent threats in the market chat', { actor: owner.pk, how: 'suspended' }); })();
+            de.announcePause(vote);
+            return vote?.id;
+        });
+        const replied = attempt(() => de.replyToRemovalCase(vote?.id, rex.pk, 'I did not send threats. Please read the whole chat first.'));
+        assert(replied?.success === true, `(the member replies to the case: ${show(replied)})`);
+        await clearsTogether('a reply taken down', rex, 'tap', () => de.adminHideReply(vote?.id, owner.pk, 'It names another member and where they live'));
+        // An owner decides only a vote too few could vote on (fewer than 3 active in 30 days, decisions-engine.ts
+        // QUORUM_FLOOR): a community where nobody but the owner has been active of late, as this suite's signed requests
+        // made every member here.
+        db.prepare('UPDATE members SET last_active_at = NULL WHERE public_key != ?').run(owner.pk);
+        await clearsTogether("an owner's decision", rex, 'acknowledge', () => de.ownerDecideTooFew(vote?.id, owner.pk, 'Too few members could vote, so I decided it'));
+
+        // ── 11. A tap on a phone notification ──────────────────────────────────────────────────────────────────────
+        console.log('\n--- 11. A tap on a phone notification takes its row off the bell ---');
+        annSock.events.length = 0;
+        se.dispatchPushNotification([ann.pk], owner.pk, '🤝 Request', 'Olive asked for your honey', { postId: 'p-honey' }, 'marketplace', 'market.request');
+        await sleep(20);
+        const tapped = rowsOf(ann)[0];
+        const seenOf = (id: string | undefined) => rowsOf(ann).find(r => r.id === id)?.seen_at;
+        const byOther = await call('GET', web, `/api/notices/push/${tapped?.id}`);
+        assert(tapped?.kind === 'market.request' && byOther.status === 404 && seenOf(tapped?.id) === null, `another member's read of it is a 404 and marks nothing (${byOther.status})`);
+        se.setNodeRole('backup');
+        try {
+            await call('GET', ann, `/api/notices/push/${tapped?.id}`);
+        } finally {
+            se.setNodeRole('primary');
+        }
+        assert(seenOf(tapped?.id) === null, "a standby's read marks nothing (its copy follows the main server's)");
+        const opened = await call('GET', ann, `/api/notices/push/${tapped?.id}`);
+        assert(opened.status === 200 && opened.body?.id === tapped?.id && typeof seenOf(tapped?.id) === 'number',
+            `the tap reads its details (followTap), and its row leaves the bell (${opened.status}, seen_at ${seenOf(tapped?.id)})`);
+        await sleep(50);
+        assert(annSock.events.some(e => e.type === 'push_notices_seen' && Array.isArray(e.ids) && e.ids.includes(tapped?.id)),
+            `the member's open apps hear it, so the bell's count follows (${show(annSock.events.map(e => e.type))})`);
+        mod.tell(cb as any, [ann.pk], '🛡️ Your post was hidden', 'Your post "Honey" is hidden while the moderators look at it.', { kind: 'post_hidden', postId: 'p-3' });
+        const keptAnn = attempt(() => db.prepare("SELECT id FROM moderation_notices WHERE recipient = ? AND data LIKE '%p-3%'").get(ann.pk) as any)?.id;
+        const modRow = rowsOf(ann).find(r => r.kind === 'community.notice' && (attempt(() => JSON.parse(r.data)) ?? {}).postId === 'p-3');
+        await call('GET', ann, `/api/notices/push/${modRow?.id}`);
+        const keptAnnRow = attempt(() => db.prepare('SELECT seen_at FROM moderation_notices WHERE id = ?').get(keptAnn) as any);
+        assert(!!modRow && typeof seenOf(modRow.id) === 'number' && typeof keptAnnRow?.seen_at === 'string',
+            `a moderation notice tapped on the phone: its row off the bell and its alert marked (${show(keptAnnRow)})`);
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

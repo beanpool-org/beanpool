@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPublicIpv4, knockStillAnswerable, t, tn, word } from '@beanpool/core';
+import { isPeekTicket, isPublicIpv4, knockStillAnswerable, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 
@@ -49,6 +49,12 @@ export interface KnockRequest {
     callsign: string;
     /** A photo as a data URL, or a shipped `bundled://` picture. Left out when it isn't one of those. */
     avatar?: string | null;
+    /**
+     * The ticket of the link shared outside that the request comes after (shared-listing door A3): the community names
+     * the listing and the member who shared it to whoever answers. Left out unless it has a ticket's shape; the
+     * community never refuses a request for one that opens nothing.
+     */
+    peek?: string | null;
 }
 
 export type KnockStatus =
@@ -131,7 +137,7 @@ export function knockFromNode(): string | undefined {
  * The body a knock sends, as the phone's: no key in it, `fromNode`, never `from` (the node's signature check reads a
  * `from` field as the sender's key), and `toNode` naming the community it is for, inside what is signed.
  */
-export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
+export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
     const avatar = knockAvatar(req.avatar);
     const fromNode = knockFromNode();
     return {
@@ -140,6 +146,7 @@ export function knockBody(req: KnockRequest, toNode?: string): { message: string
         ...(fromNode ? { fromNode } : {}),
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
+        ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
     };
 }
 

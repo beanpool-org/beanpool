@@ -20,9 +20,12 @@ const SITE_HOSTS = new Set(['beanpool.org', 'www.beanpool.org']);
 /** `beanpool://community-card…` in the spellings a system hands over (as utils/global-link.ts reads `global`). */
 const APP_PATH = /^(?:beanpool:\/\/\/?|\/)?community-card\/?(?:\?([^#]*))?(?:#.*)?$/i;
 
-/** The card screen's route for a community's origin. */
-export function communityCardRoute(origin: string): string {
-    return `${COMMUNITY_CARD_ROUTE}?node=${encodeURIComponent(origin)}`;
+/**
+ * The card screen's route for a community's origin. `peek`: from a shared post's screen, its link's ticket, which the
+ * request to join then carries (shared-listing door A3); only an in-app route, never from a link a system hands over.
+ */
+export function communityCardRoute(origin: string, peek?: string): string {
+    return `${COMMUNITY_CARD_ROUTE}?node=${encodeURIComponent(origin)}${peek ? `&peek=${encodeURIComponent(peek)}` : ''}`;
 }
 
 /**

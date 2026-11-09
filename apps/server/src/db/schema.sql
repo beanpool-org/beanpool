@@ -1331,6 +1331,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- tidy-up's clearing included; its deletions as `join_requests` tombstones) and carried in file and sealed backups.
 -- A re-key moves a member's rows, as applicant and as `decided_by`, to the new key (stamped, so the move replicates).
 -- A prune or a self-deletion of the member the applicant became scrubs what they wrote and keeps the record.
+-- `via_post_id` and `via_sharer_pubkey` (shared-listing door A3, DESIGN-shared-listing-door-fable.md §2.2): the post and
+-- the member a knock came from, when it carried the ticket of a link a member shared outside (engine/peek-tickets.ts
+-- peekProvenance) and that ticket opened its post when the knock was taken; else both NULL (a ticket that opens nothing
+-- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
+-- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
+-- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1345,6 +1351,8 @@ CREATE TABLE IF NOT EXISTS join_requests (
     decided_at TEXT,
     ip_hash TEXT,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    via_post_id TEXT,
+    via_sharer_pubkey TEXT,
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -3308,7 +3316,10 @@ CREATE TABLE IF NOT EXISTS peek_tickets (
     -- Seven days after it was made (@beanpool/core PEEK_TICKET_DAYS); a row is deleted 30 days after this.
     expires_at    TEXT NOT NULL,
     -- Set when the member stops sharing it, or when the community turns outside sharing off: it opens nothing from then.
-    revoked_at    TEXT
+    revoked_at    TEXT,
+    -- How many requests to join came with this link's ticket while it opened its post (shared-listing door A3): the
+    -- sharer's "{n} asked to join from this link". A count only: who asked is on the request, for its answerers.
+    asked         INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)
 );
 -- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);

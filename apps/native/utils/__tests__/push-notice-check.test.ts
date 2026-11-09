@@ -615,6 +615,9 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('account.recovery-started', { screen: 'settings', kind: 'recovery_started' })).toBe('/(tabs)/settings');
         expect(noticeRoute('owner.standby', null)).toBe('/(tabs)/settings');
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
+        // Someone asked to join after a listing this member shared (A3): their Shared outside; without details, Settings.
+        expect(noticeRoute('community.knock-shared', { screen: 'shared-outside' })).toBe('/shared-outside');
+        expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
     });
 
     it("a deal's alert lands on the deal: its txId rides with the post when it is in the node's own shape (deals S4)", () => {

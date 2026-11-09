@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { PEEK_TICKET_DAYS, isPeekTicket, isPeekPostId, peekFromLink, peekLink, readPeekShares } from '../peek-ticket';
+import { PEEK_TICKET_DAYS, PEEK_WORDS, isPeekTicket, isPeekPostId, peekFromLink, peekLink, readKnockVia, readPeekShares } from '../peek-ticket';
+import { t } from '../words';
 
 const T = 'AbCdEfGhIjKlMnOpQrSt_-';
 
@@ -58,10 +59,32 @@ describe('the member\'s open links, as the apps read the node\'s list', () => {
             ],
         });
         expect(rows).toEqual([
-            { id: 'r1', postId: 'p-1', title: 'Ladder to lend', createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z' },
-            { id: 'r2', postId: 'p-2', title: null, createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z' },
+            { id: 'r1', postId: 'p-1', title: 'Ladder to lend', createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z', asked: 0 },
+            { id: 'r2', postId: 'p-2', title: null, createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z', asked: 0 },
         ]);
         expect(readPeekShares(null)).toEqual([]);
         expect(readPeekShares({ shares: 'x' })).toEqual([]);
+    });
+
+    it('reads how many asked to join with each link (A3): a whole count, 0 for anything else or a node from before it', () => {
+        const row = { id: 'r1', postId: 'p-1', title: 'Ladder', createdAt: 'c', expiresAt: 'e' };
+        const asked = (v: unknown) => readPeekShares({ shares: [{ ...row, asked: v }] })[0]?.asked;
+        expect(asked(2)).toBe(2);
+        for (const bad of [undefined, null, -1, 1.5, '3', Number.NaN, Infinity]) expect(asked(bad)).toBe(0);
+    });
+});
+
+describe('where a request to join came from, as its answerers read it (A3)', () => {
+    it('takes the title and the sharer, both or neither, trimmed and capped', () => {
+        expect(readKnockVia({ title: '  Short-term shelter available ', sharer: ' Sarah ' })).toEqual({ title: 'Short-term shelter available', sharer: 'Sarah' });
+        expect(readKnockVia({ title: 'x'.repeat(300), sharer: 'S' })?.title).toHaveLength(200);
+        for (const bad of [null, undefined, 'x', 42, {}, { title: 'T' }, { sharer: 'S' }, { title: ' ', sharer: 'S' }, { title: 'T', sharer: 7 }]) {
+            expect(readKnockVia(bad)).toBeNull();
+        }
+    });
+
+    it('reads as one line naming the listing and the member who shared it', () => {
+        expect(t(PEEK_WORDS.askedAfter, { title: 'Short-term shelter available', sharer: 'Sarah' }))
+            .toBe("After reading 'Short-term shelter available', which Sarah shared outside.");
     });
 });

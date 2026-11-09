@@ -499,8 +499,9 @@ async function main(): Promise<void> {
         // Version 23: invite_codes with voucher_level and voucher_outcome (a names-bound invite that makes a voucher, amend3 A1).
         // Version 24: a new table, standing_deals, and marketplace_transactions with standing_id and period_no (standing deals, S1).
         // Version 25: recovery_shares with sso_find_hash (a restore finds the account from the sign-in alone, S0).
-        assert(snap?.tableHashes?.v === 25 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
-            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'recovery_shares'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 26: join_requests with via_post_id and via_sharer_pubkey (where a request to join came from, door A3).
+        assert(snap?.tableHashes?.v === 26 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'recovery_shares', 'join_requests'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

@@ -113,6 +113,25 @@ export function peekPost(postId: unknown, ticket: unknown, now = Date.now()): Ma
     return visitorsPost(postId);
 }
 
+/**
+ * Where a request to join came from (shared-listing door A3, DESIGN-shared-listing-door-fable.md §2.2): the link's row,
+ * its post and the member who shared it, when `ticket` opens its post now, by every condition peekPost checks; else null.
+ * A knock's body carries the ticket (`peek`) of the link its stranger read; the knock keeps the post and the sharer,
+ * never the ticket. Null is the plain knock, never a refusal: forged, run out, stopped, another community's, a sharer
+ * gone, a post gone, sharing switched off, or no ticket at all, the knock is taken just the same.
+ */
+export function peekProvenance(ticket: unknown, now = Date.now()): { ticketId: string; postId: string; sharer: string } | null {
+    if (!isPeekTicket(ticket)) return null;
+    const row = db.prepare('SELECT id, post_id, sharer_pubkey FROM peek_tickets WHERE ticket_hash = ?').get(hashOf(ticket)) as Pick<TicketRow, 'id' | 'post_id' | 'sharer_pubkey'> | undefined;
+    if (!row || !peekPost(row.post_id, ticket, now)) return null;
+    return { ticketId: row.id, postId: row.post_id, sharer: row.sharer_pubkey };
+}
+
+/** One more request to join came with this link's ticket (peekProvenance): the sharer's "{n} asked to join from this link". */
+export function noteAskedFrom(ticketId: string): void {
+    db.prepare('UPDATE peek_tickets SET asked = asked + 1 WHERE id = ?').run(ticketId);
+}
+
 /** Whether a ticket opens this post now (the read gate's question): peekPost's answer, without keeping the post. */
 export function peekTicketOpens(postId: unknown, ticket: unknown, now = Date.now()): boolean {
     return peekPost(postId, ticket, now) !== null;
@@ -149,14 +168,17 @@ export function makePeekTicket(sharer: string, postId: unknown, now = Date.now()
     return { ticket, id, postId, expiresAt };
 }
 
-/** The member's own open links, newest first, each with its post's title as it is now (null where the post is gone). */
+/**
+ * The member's own open links, newest first, each with its post's title as it is now (null where the post is gone), and
+ * how many asked to join with it (noteAskedFrom): a count, on any door, whoever may read the requests themselves.
+ */
 export function listPeekTickets(sharer: string, now = Date.now()): PeekShare[] {
-    const rows = db.prepare(`SELECT t.id, t.post_id, t.created_at, t.expires_at, p.title
+    const rows = db.prepare(`SELECT t.id, t.post_id, t.created_at, t.expires_at, t.asked, p.title
                                FROM peek_tickets t LEFT JOIN posts p ON p.id = t.post_id
                               WHERE t.sharer_pubkey = ? AND t.revoked_at IS NULL AND t.expires_at > ?
                               ORDER BY t.created_at DESC LIMIT ?`)
-        .all(sharer, new Date(now).toISOString(), PEEK_TICKETS_LIVE_MAX) as Array<{ id: string; post_id: string; created_at: string; expires_at: string; title: string | null }>;
-    return rows.map(r => ({ id: r.id, postId: r.post_id, title: r.title ?? null, createdAt: r.created_at, expiresAt: r.expires_at }));
+        .all(sharer, new Date(now).toISOString(), PEEK_TICKETS_LIVE_MAX) as Array<{ id: string; post_id: string; created_at: string; expires_at: string; asked: number | null; title: string | null }>;
+    return rows.map(r => ({ id: r.id, postId: r.post_id, title: r.title ?? null, createdAt: r.created_at, expiresAt: r.expires_at, asked: r.asked ?? 0 }));
 }
 
 /** Stop one of the member's own links now. Another member's, one already stopped or run out, or none: PeekError 404. */

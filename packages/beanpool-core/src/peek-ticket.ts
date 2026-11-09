@@ -77,6 +77,11 @@ export interface PeekShare {
     title: string | null;
     createdAt: string;
     expiresAt: string;
+    /**
+     * How many asked to join with this link (shared-listing door A3): a count, never who. 0 for none, and from a node
+     * older than the count.
+     */
+    asked: number;
 }
 
 /** A node's list as the apps read it: each row checked, anything else dropped. */
@@ -92,9 +97,30 @@ export function readPeekShares(raw: unknown): PeekShare[] {
             id: o.id.slice(0, 64), postId: o.postId,
             title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 200) : null,
             createdAt: o.createdAt, expiresAt: o.expiresAt,
+            asked: typeof o.asked === 'number' && Number.isSafeInteger(o.asked) && o.asked > 0 ? o.asked : 0,
         });
     }
     return out;
+}
+
+/**
+ * Where a request to join came from, as its answerers read it (shared-listing door A3, DESIGN-shared-listing-door-fable.md
+ * §2.2; Marty, 9 Nov: the listing's title AND the sharer's name): the request carried the ticket of a link a member shared
+ * outside, and the node names the post's title as it is now and that member. Information only: it vouches for nobody and
+ * approves nothing. Each request in GET /api/join/knocks carries it as `via`, or null.
+ */
+export interface KnockVia {
+    title: string;
+    sharer: string;
+}
+
+/** A request's `via` as the apps read it: both names, trimmed and capped, or null for anything else. */
+export function readKnockVia(raw: unknown): KnockVia | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const title = typeof o.title === 'string' ? o.title.trim().slice(0, 200) : '';
+    const sharer = typeof o.sharer === 'string' ? o.sharer.trim().slice(0, 64) : '';
+    return title && sharer ? { title, sharer } : null;
 }
 
 /** The peek's words, marked here and shown with t() where each is drawn (the node's share page, both apps). */
@@ -137,6 +163,13 @@ export const PEEK_WORDS = {
     /** The community's rule (How this community works), in the owners' Settings. */
     rule: word('Members may share listings outside the community'),
     notShared: word('Not shared'),
+    /**
+     * Under a request to join that came with a shared link's ticket (shared-listing door A3), for the members who answer it:
+     * the listing's title as it is now and the member who shared it. Never shown to the stranger.
+     */
+    askedAfter: word("After reading '{title}', which {sharer} shared outside."),
+    /** On the sharer's Shared outside row, once anyone has asked with that link: a count, never who. */
+    askedFromLink: wordn('{n} asked to join from this link', '{n} asked to join from this link'),
     // What the post is, on the share page (the apps draw their own cards).
     kindOffer: word('Offer', 'a kind of post'),
     kindNeed: word('Need', 'a kind of post'),

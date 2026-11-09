@@ -422,10 +422,12 @@ describe("what a request from the card says it came from, as Find a community sa
 });
 
 describe('the card with no account on the phone', () => {
-    it('shows how to ask via global community, and old sentence is gone', async () => {
+    it('never sends a stranger to join the global community first (shared-listing door A1: the note is gone)', async () => {
         currentIdentity = null;
         await open();
-        expect(byTestId('community-card-needs-account')?.textContent).toBe('Look around global first, join there to get an account, then find Riverside in Find a community.');
+        expect(byTestId('community-card-needs-account')).toBeNull();
+        expect(host.textContent).not.toContain('Look around global first');
+        expect(byTestId('community-card-ask')).not.toBeNull();
         expect(host.textContent).not.toContain('Explore BeanPool worldwide');
         expect(host.textContent).not.toContain('To ask, you need a BeanPool account first');
         expect(host.textContent).not.toContain('You join the global community first');

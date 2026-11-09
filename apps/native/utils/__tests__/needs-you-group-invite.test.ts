@@ -30,7 +30,7 @@ vi.mock('react-native', async () => {
     };
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'),
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', null, children) : null),
         StyleSheet: { create: (s: unknown) => s },
         AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
@@ -206,6 +206,9 @@ async function renderHeader() {
     root = createRoot(host);
     await act(async () => { root!.render(createElement(NeedsYouIcons, { sheetTop: 80 }) as unknown as Parameters<Root['render']>[0]); });
     for (let i = 0; i < 10; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    // The bell took the icons' place (Marty, 9 Nov 2026): what needs the member is the top of its sheet, open here.
+    const bell = document.querySelector('[data-icon="bell-outline"]')?.closest('button') as HTMLElement | null;
+    await act(async () => { bell?.click(); });
 }
 
 const inviteIcon = () => document.querySelector('[data-icon="email-outline"]');

@@ -6838,8 +6838,6 @@
   "Community name or address": "コミュニティの名前またはアドレス",
   "Copy message": "メッセージをコピー",
   "Could not copy": "コピーできませんでした",
-  "Invite message copied. Paste it with the picture.": "招待メッセージをコピーしました。画像と一緒に貼り付けてください。",
-  "Join me on BeanPool": "BeanPoolで私とつながりましょう",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address}にはBeanPoolのコミュニティがありません。招待メッセージにあるコミュニティのアドレスを入力するか、招待リンクを開いてください。",
   "Type the community's address, like yourtown.beanpool.org.": "コミュニティのアドレスを入力してください（例：yourtown.beanpool.org）。",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address}は招待を使っていないため、このコードは使えません。招待メッセージにあるコミュニティのアドレスを入力するか、招待リンクを開いてください。",

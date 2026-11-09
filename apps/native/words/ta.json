@@ -7097,8 +7097,6 @@
   "Community name or address": "சமூகத்தின் பெயர் அல்லது முகவரி",
   "Copy message": "செய்தியை நகலெடு",
   "Could not copy": "நகலெடுக்க முடியவில்லை",
-  "Invite message copied. Paste it with the picture.": "அழைப்புச் செய்தி நகலெடுக்கப்பட்டது. படத்துடன் அதை ஒட்டுங்கள்.",
-  "Join me on BeanPool": "BeanPool-இல் என்னுடன் இணையுங்கள்",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address}-இல் BeanPool சமூகம் இல்லை. உங்கள் அழைப்புச் செய்தியில் உள்ள சமூக முகவரியை உள்ளிடுங்கள், அல்லது அழைப்பு இணைப்பைத் திறக்கவும்.",
   "Type the community's address, like yourtown.beanpool.org.": "சமூகத்தின் முகவரியை உள்ளிடுங்கள், எடுத்துக்காட்டாக yourtown.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} அழைப்புகளைப் பயன்படுத்துவதில்லை, எனவே இந்தக் குறியீடு அதற்கானது அல்ல. உங்கள் அழைப்புச் செய்தியில் உள்ள சமூக முகவரியை உள்ளிடுங்கள், அல்லது அழைப்பு இணைப்பைத் திறக்கவும்.",

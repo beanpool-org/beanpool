@@ -7102,8 +7102,6 @@
   "Community name or address": "کمیونٹی کا نام یا پتہ",
   "Copy message": "پیغام کاپی کریں",
   "Could not copy": "کاپی نہیں ہو سکا",
-  "Invite message copied. Paste it with the picture.": "دعوت کا پیغام کاپی ہو گیا۔ اسے تصویر کے ساتھ پیسٹ کریں۔",
-  "Join me on BeanPool": "BeanPool پر میرے ساتھ شامل ہوں",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "{address} پر کوئی BeanPool کمیونٹی نہیں ہے۔ اپنے دعوت کے پیغام سے کمیونٹی کا پتہ ٹائپ کریں، یا دعوت کا لنک کھولیں۔",
   "Type the community's address, like yourtown.beanpool.org.": "کمیونٹی کا پتہ ٹائپ کریں، جیسے yourtown.beanpool.org۔",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "{address} دعوتیں استعمال نہیں کرتا، اس لیے یہ کوڈ اس کے لیے نہیں ہے۔ اپنے دعوت کے پیغام سے کمیونٹی کا پتہ ٹائپ کریں، یا دعوت کا لنک کھولیں۔",

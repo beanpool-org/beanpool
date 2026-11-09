@@ -7097,8 +7097,6 @@
   "Community name or address": "Όνομα ή διεύθυνση κοινότητας",
   "Copy message": "Αντιγραφή μηνύματος",
   "Could not copy": "Δεν ήταν δυνατή η αντιγραφή",
-  "Invite message copied. Paste it with the picture.": "Το μήνυμα πρόσκλησης αντιγράφηκε. Επικόλλησέ το μαζί με την εικόνα.",
-  "Join me on BeanPool": "Μπες στο BeanPool μαζί μου",
   "There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.": "Δεν υπάρχει κοινότητα BeanPool στο {address}. Πληκτρολόγησε τη διεύθυνση της κοινότητας από το μήνυμα πρόσκλησής σου ή άνοιξε τον σύνδεσμο πρόσκλησης.",
   "Type the community's address, like yourtown.beanpool.org.": "Πληκτρολόγησε τη διεύθυνση της κοινότητας, π.χ. yourtown.beanpool.org.",
   "{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.": "Το {address} δεν χρησιμοποιεί προσκλήσεις, οπότε αυτός ο κωδικός δεν είναι για αυτό. Πληκτρολόγησε τη διεύθυνση της κοινότητας από το μήνυμα πρόσκλησής σου ή άνοιξε τον σύνδεσμο πρόσκλησης.",

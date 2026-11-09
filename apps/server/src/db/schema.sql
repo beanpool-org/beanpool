@@ -894,7 +894,8 @@ CREATE TABLE IF NOT EXISTS web_push_subscriptions (
     sub_box TEXT NOT NULL CHECK (length(sub_box) <= 4000),
     -- One of core's LANGS, so the push's sentence is in it; NULL: English.
     lang TEXT CHECK (lang IS NULL OR length(lang) <= 16),
-    kind TEXT NOT NULL CHECK (kind IN ('asker')),
+    -- 'member' is W2's (members' own browsers), allowed now so the table needs no rebuild then; W1 writes 'asker' only.
+    kind TEXT NOT NULL CHECK (kind IN ('member', 'asker')),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, sub_id)

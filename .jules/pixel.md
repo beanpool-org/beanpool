@@ -241,3 +241,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-03-06 - Add accessibilityState busy to treasury-post submit button
 **Learning:** In `apps/native/app/treasury-post.tsx`, the post submit button rendered an `ActivityIndicator` during async operations and had `disabled: submitting || photos.length === 0`, but lacked `busy: submitting` in its `accessibilityState`.
 **Action:** Supply `accessibilityState={{ disabled: submitting || photos.length === 0, busy: submitting }}` on action buttons that render an `ActivityIndicator` when busy.
+
+## 2027-03-13 - Add accessibilityState to join-open-door primary button
+**Learning:** In `apps/native/app/join-open-door.tsx`, the primary join action button conditionally rendered an `ActivityIndicator` and had `disabled={loading}`, but lacked `accessibilityState={{ disabled: loading, busy: loading }}`, leaving screen readers without state feedback during async door joins.
+**Action:** Supply `accessibilityState={{ disabled: loading, busy: loading }}` on open-door join action buttons that render an `ActivityIndicator` when busy.

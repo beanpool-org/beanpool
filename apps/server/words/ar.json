@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -1042,8 +1042,6 @@
   "@{name} is a voucher already.": "@{name} مزكٍّ بالفعل.",
   "@{name} isn’t a voucher.": "@{name} ليس مزكّيًا.",
   "@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.": "يزكّي @{name} كمالك أو مشرف أثناء توليه هذا الدور، لذا لا يمكن إيقاف ميزانيته. يمكنك خفضها بدلًا من ذلك.",
-  "@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.": "يزكّي @{name} كمالك أثناء توليه هذا الدور، لذا لا يمكن إيقاف ميزانيته، ولا يمكن إلا لمالك آخر خفضها.",
-  "@{name} is an owner: only another owner can lower their budget.": "@{name} مالك: لا يمكن إلا لمالك آخر خفض ميزانيته.",
   "@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.": "لدى @{name} {held} فاصوليا محجوزة على دعوات لم تُستخدم بعد، لذا لا يمكن أن تقل ميزانيته عن ذلك.",
   "A voucher has at most {max} Beans in hand, left and held together.": "يمتلك المزكّي ما لا يزيد عن {max} فاصوليا بين يديه، المتبقية والمحجوزة معًا.",
   "@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.": "حساب @{name} متوقف مؤقتًا، لذا لا يمكن زيادة ميزانيته طوال فترة التوقف. لا يزال بإمكانك خفضها.",
@@ -1055,5 +1053,10 @@
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "الخط الائتماني الذي منحه لك شخص بدأ كتزكية من @{name}، لذا لا يمكن أن يذهب أي جزء منه إليهم.",
   "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "غيّر مالكو مجتمعك طريقة عمله: ميزانية كل مزكٍّ هي الآن {budget} فاصوليا.",
   "Busy finding another account. Wait a minute, then sign in again.": "مشغول بالبحث عن حساب آخر. انتظر دقيقة، ثم سجّل الدخول مرة أخرى.",
-  "Sign in with your account's sign-in first.": "سجّل الدخول أولًا عبر حساب تسجيل الدخول المرتبط بحسابك."
+  "Sign in with your account's sign-in first.": "سجّل الدخول أولًا عبر حساب تسجيل الدخول المرتبط بحسابك.",
+  "An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.": "تكون تزكية المالك بمقدار 25 أو 50 أو 75 أو 100 أو 200 أو 500 فاصوليا.",
+  "Only an owner can vouch 200 or 500 Beans.": "لا يمكن إلا للمالك أن يزكّي بمقدار 200 أو 500 فاصوليا.",
+  "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "لدى @{name} تزكيات بمقدار {total} فاصوليا بالفعل، ومجموع تزكيات الشخص الواحد لا يتجاوز {max}.",
+  "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "يزكّي @{name} كمالك أثناء توليه هذا الدور، بلا حد، لذا لا توجد ميزانية لإيقافها أو تحديدها.",
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} مالك: يزكّي المالكون بلا حد، لذا لا توجد ميزانية لتحديدها."
 }

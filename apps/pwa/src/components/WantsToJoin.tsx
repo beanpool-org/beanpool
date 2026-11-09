@@ -160,6 +160,7 @@ export function WantsToJoin({ onCount, canSee = true, fromNotice = false }: { on
                                     onChange={(val) => setVouchPresets(prev => ({ ...prev, [req.id]: val }))}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
+                                    noLimit={myVouching.noLimit === true}
                                 />
                             </div>
                         )}

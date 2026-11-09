@@ -170,10 +170,15 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                 {/* Budget stats */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-1.5 text-xs text-nature-700 dark:text-nature-300">
                                     <div className="text-sm font-extrabold text-nature-950 dark:text-white pb-1 border-b border-nature-100 dark:border-nature-800">
-                                        {t('{left} of {total} left', { left: formatNumber(card.left), total: formatNumber(card.level) })}
+                                        {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
+                                        {card.noLimit
+                                            ? t(VOUCH_PRESET_WORDS.noLimit)
+                                            : t('{left} of {total} left', { left: formatNumber(card.left), total: formatNumber(card.level) })}
                                     </div>
                                     <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(card.vouched), people: tn(card.peopleVouched, '{n} person', '{n} people') })}</div>
-                                    <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
+                                    {!card.noLimit && (
+                                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
+                                    )}
                                     <div>{t('Invites sent with a vouch: {count}', { count: card.invitesWithVouch })}</div>
                                     <div>{t('{below} of {total} below zero · written off {off}', { below: card.belowZero, total: card.peopleVouched, off: formatNumber(card.writtenOff) })}</div>
                                     {card.trading && (
@@ -185,7 +190,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                 </div>
 
                                 {/* Set budget to control (§10) */}
-                                {card.canChange !== false && (
+                                {card.canChange !== false && !card.noLimit && (
                                     <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">

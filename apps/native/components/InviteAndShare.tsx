@@ -125,6 +125,7 @@ export function InviteAndSharePanel({ invite, onMake, held = false }: { invite: 
                         onChange={invite.setVouchPreset}
                         budgetLeft={invite.myVouching.budget?.left ?? 0}
                         budgetTotal={invite.myVouching.budget?.level ?? 0}
+                        noLimit={invite.myVouching.noLimit === true}
                     />
                 )}
                 <Pressable onPress={onMake} disabled={off} style={[styles.make, off && { opacity: 0.6 }]} accessibilityRole="button"

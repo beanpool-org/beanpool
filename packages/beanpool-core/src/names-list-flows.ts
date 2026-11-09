@@ -175,6 +175,8 @@ export interface VoucherSummaryRow {
     madeAt: string | null;
     stoppedAt: string | null;
     stopReason: string | null;
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit" and no set-to, never left or level. */
+    noLimit?: boolean;
     left: number;
     held: number;
     heldInvites: number;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, tn, formatNumber, formatDate, VOUCHER_BUDGET_MAX } from '@beanpool/core';
+import { t, tn, formatNumber, formatDate, VOUCHER_BUDGET_MAX, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchVoucherCard, setVoucherBudget, stopNamesVoucher,
@@ -278,15 +278,20 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                 {/* Their budget card */}
                 <View style={styles.box} testID="voucher-budget-card">
                     <Text style={styles.boxHeader}>{t('Their budget')}</Text>
+                    {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
                     <Text style={styles.boxLine}>
-                        {t('{left} of {budget} left', { left: formatNumber(card.left), budget: formatNumber(card.level) })}
+                        {card.noLimit
+                            ? t(VOUCH_PRESET_WORDS.noLimit)
+                            : t('{left} of {budget} left', { left: formatNumber(card.left), budget: formatNumber(card.level) })}
                     </Text>
                     <Text style={styles.boxLine}>
                         {tn(card.peopleVouched, 'Vouched {amount} to {n} person who joined', 'Vouched {amount} to {n} people who joined', { amount: formatNumber(card.vouched) })}
                     </Text>
-                    <Text style={styles.boxLine}>
-                        {tn(card.heldInvites, 'Held {amount} on {n} invite not used yet', 'Held {amount} on {n} invites not used yet', { amount: formatNumber(card.held) })}
-                    </Text>
+                    {!card.noLimit && (
+                        <Text style={styles.boxLine}>
+                            {tn(card.heldInvites, 'Held {amount} on {n} invite not used yet', 'Held {amount} on {n} invites not used yet', { amount: formatNumber(card.held) })}
+                        </Text>
+                    )}
                     <Text style={styles.boxLine}>
                         {tn(card.invitesWithVouch, 'Invites sent with a vouch: {n}', 'Invites sent with a vouch: {n}')}
                     </Text>
@@ -314,7 +319,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     </Text>
 
                     {/* Set budget to control (§10) */}
-                    {card.canChange && !card.stoppedAt && (
+                    {card.canChange && !card.stoppedAt && !card.noLimit && (
                         <View style={styles.controlSection} testID="set-budget-control">
                             <Text style={styles.controlTitle}>{t('Set budget to')}</Text>
                             <Text style={styles.controlHint}>

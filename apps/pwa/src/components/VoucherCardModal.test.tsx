@@ -104,6 +104,15 @@ describe('VoucherCardModal (slice V3, §5, §10)', () => {
         expect(closeBtn.className).toMatch(/min-h-\[44px\]/);
     });
 
+    it("an owner's card says No limit, with no held line and no Set budget to (Marty, 9 Nov)", async () => {
+        vi.mocked(api.getVoucherCard).mockResolvedValue({ ...SAMPLE_CARD, noLimit: true });
+        render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
+        await waitFor(() => expect(screen.getByText('No limit')).toBeInTheDocument());
+        expect(screen.queryByText('Set budget to')).toBeNull();
+        expect(screen.queryByText(/of 1,?000 left/)).toBeNull();
+        expect(screen.queryByText(/^Held /)).toBeNull();
+    });
+
     it('the quick budget levels (500 · 1,000 · 1,500 · 2,000) are at least 44 px tall, like the steppers (#2915 round 4)', async () => {
         render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
         await waitFor(() => expect(screen.getByText('Set budget to')).toBeInTheDocument());

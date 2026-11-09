@@ -185,6 +185,7 @@ function App() {
                 onChange={setPreset}
                 budgetLeft={550}
                 budgetTotal={1000}
+                noLimit={q.get('owner') === '1'}
             />
         </ScrollView>
     );
@@ -240,6 +241,9 @@ const browser = await chromium.launch();
 const cases = [
     { view: 'presets', scheme: 'light', name: 'native-presets-320dp-light.png' },
     { view: 'presets', scheme: 'dark', name: 'native-presets-320dp-dark.png' },
+    // An owner (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit".
+    { view: 'presets', scheme: 'light', owner: true, name: 'native-owner-presets-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', owner: true, name: 'native-owner-presets-320dp-dark.png' },
     { view: 'profile', scheme: 'light', name: 'native-profile-320dp-light.png' },
     { view: 'profile', scheme: 'dark', name: 'native-profile-320dp-dark.png' },
     { view: 'ledger', scheme: 'light', name: 'native-ledger-320dp-light.png' },
@@ -251,7 +255,7 @@ try {
         const context = await browser.newContext({ viewport: { width: WIDTH, height: 640 }, deviceScaleFactor: 2 });
         const page = await context.newPage();
         page.on("pageerror", (e) => console.log(`[${c.view}/${c.scheme}] page error: ${String(e.message).slice(0, 300)}`));
-        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}`);
+        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}${c.owner ? '&owner=1' : ''}`);
         await page.waitForTimeout(500);
         // #2915 round 4: the vouch card is below the fold inside the profile's ScrollView.
         if (c.view === "profile") { await page.evaluate(() => document.querySelector("[data-testid=\"profile-vouch\"]")?.scrollIntoView({ block: "start" })); await page.waitForTimeout(300); }

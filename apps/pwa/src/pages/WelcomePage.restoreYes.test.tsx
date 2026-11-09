@@ -182,6 +182,10 @@ describe('the yes, joined with a restored account (slice Y0)', () => {
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));
         expect(await screen.findByTitle('Green Bean')).toBeTruthy();
         expect(screen.queryByTestId('backup-words')).toBeNull();
+        // And Back again, to the name: still three steps (review of b9a4a876: it said "Step 1 of 4" with Safety Backup).
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        await screen.findByText('✏️ Your name');
+        expect(screen.getByTestId('onboarding-stepper').textContent).not.toContain('Safety Backup');
     });
 
     it('a yes the community refuses after the name is typed: our words and Back to my request, never the form again', async () => {

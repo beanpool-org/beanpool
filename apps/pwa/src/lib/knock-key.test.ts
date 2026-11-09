@@ -9,6 +9,7 @@ import {
 } from './identity';
 import {
     commitKnockKey, draftKnockKey, forgetKnockKey, forgetKnockMark, isKnockKey, knockWaitingKey, KnockKeyHeldError, KNOCK_KEY_STORE,
+    isEstablishedKey, waitWithRestoredKey,
 } from './knock-key';
 import { memoryIndexedDB } from './memory-indexeddb';
 
@@ -95,5 +96,18 @@ describe("the knock's key in a browser", () => {
         await markInviteSent(held, 'hash', Date.now());
         expect(await forgetKnockKey(held.publicKey)).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(held.publicKey);
+    });
+});
+
+describe('a restored key that waits here (slice Y0)', () => {
+    it("a refused save puts back the established mark of the account already waiting (review of b9a4a876)", async () => {
+        const a = await generateIdentity();
+        await waitWithRestoredKey(a, {});
+        expect(isEstablishedKey(a.publicKey)).toBe(true);
+        const b = await generateIdentity();
+        await expect(waitWithRestoredKey(b, {})).rejects.toBeInstanceOf(IdentityHeldError);
+        expect(isEstablishedKey(a.publicKey)).toBe(true);
+        expect(isEstablishedKey(b.publicKey)).toBe(false);
+        expect(isKnockKey(a)).toBe(true);
     });
 });

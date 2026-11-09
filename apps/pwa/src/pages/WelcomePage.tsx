@@ -1727,7 +1727,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                            The name alone: the invite is spent, and no way off leads to another account from here. Next
                            goes back to the photo, with the same name or a new one. */
                         <>
-                            <OnboardingStepper area={byArea} step={1} />
+                            <OnboardingStepper area={byArea} step={1} backup={!wordsKnown} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 {t('✏️ Your name')}
                             </h3>

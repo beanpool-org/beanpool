@@ -65,6 +65,14 @@ function writeEstablished(publicKey: string | null): void {
     } catch { /* storage off: the join shows the 12 words once more, which only repeats them */ }
 }
 
+function readEstablished(): string | null {
+    try {
+        return typeof localStorage === 'undefined' ? null : localStorage.getItem(ESTABLISHED_KEY_STORE);
+    } catch {
+        return null;
+    }
+}
+
 /** Whether `publicKey` is a waiting key that is an account already (restored here, slice Y0): its words aren't new. */
 export function isEstablishedKey(publicKey: string | null | undefined): boolean {
     try {
@@ -123,13 +131,15 @@ export async function commitKnockKey(draft: BeanPoolIdentity, callsign: string):
  */
 export async function waitWithRestoredKey(identity: BeanPoolIdentity, options: SaveIdentityOptions): Promise<BeanPoolIdentity> {
     const before = readMark();
+    const establishedBefore = readEstablished();
     writeMark(identity.publicKey);
     writeEstablished(identity.publicKey);
     try {
         await importIdentity(identity, options);
     } catch (e) {
+        // Refused: both marks go back to what they were, so an account already waiting here keeps its own.
         if (readMark() === identity.publicKey) writeMark(before);
-        if (isEstablishedKey(identity.publicKey)) writeEstablished(null);
+        if (isEstablishedKey(identity.publicKey)) writeEstablished(establishedBefore);
         throw e;
     }
     setAccountHint(true);

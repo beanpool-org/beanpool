@@ -77,6 +77,16 @@ describe('the list', () => {
         expect(await fetchJoinRequests(NODE, await member())).toMatchObject({ ok: false, kind: 'error' });
     });
 
+    it('keeps where a request came from: the listing and who shared it, trimmed; anything less reads null', async () => {
+        const shared = { ...knock, id: 'k3', via: { title: '  Short-term shelter  ', sharer: 'Sarah' } };
+        const half = { ...knock, id: 'k4', via: { title: 'Duck eggs' } };
+        answer = () => ({ status: 200, body: { knocks: [shared, half], total: 2 } });
+        expect(await fetchJoinRequests(NODE, await member())).toEqual({
+            ok: true, total: 2,
+            knocks: [{ ...shared, via: { title: 'Short-term shelter', sharer: 'Sarah' } }, { ...half, via: null }],
+        });
+    });
+
     it('drops a row that is not a request', async () => {
         answer = () => ({ status: 200, body: { knocks: [knock, { id: 'k2' }], total: 2 } });
         expect(await fetchJoinRequests(NODE, await member())).toEqual({ ok: true, knocks: [kept], total: 2 });

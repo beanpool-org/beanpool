@@ -76,7 +76,7 @@ describe('KnockWaitingPage: Tell me when they answer', () => {
         expect(readWebPushPin(window.location.origin, identity.publicKey)).toBeNull();
     });
 
-    it('cancelled: the pin goes with the request, so a later Ask again with this key shows Tell me', async () => {
+    it('cancelled: the pin goes with the request (the community deleted the subscription), and the card with it', async () => {
         pinned();
         vi.mocked(cancelKnock).mockResolvedValueOnce({ ok: true });
         page();

@@ -89,15 +89,15 @@ try {
     // The waiting page, which registers the worker at /app/ (as the Tell me tap does).
     const waiting = await context.newPage();
     await waiting.goto(`${ORIGIN}/app?door=ask`);
-    const workerSeen = context.waitForEvent('serviceworker');
-    const registrationId = await waiting.evaluate(async () => {
+    const workerSeen = context.waitForEvent('serviceworker').catch(() => null);
+    const scope = await waiting.evaluate(async () => {
         const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/app/' });
         const w = reg.installing ?? reg.waiting ?? reg.active;
         if (w.state !== 'activated') await new Promise(resolve => w.addEventListener('statechange', () => { if (w.state === 'activated') resolve(); }));
         return reg.scope;
     });
     const worker = context.serviceWorkers().find(w => w.url().endsWith('/sw.js')) ?? await workerSeen;
-    check(registrationId === `${ORIGIN}/app/`, 'the worker is registered at /app/', registrationId);
+    check(scope === `${ORIGIN}/app/`, 'the worker is registered at /app/', scope);
 
     // 1. The browser's own rules for the waiting page's tab.
     const controlled = await waiting.evaluate(() => !!navigator.serviceWorker.controller);

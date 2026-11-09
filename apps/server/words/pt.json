@@ -2,9 +2,9 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, store-badges: the two store-badge sentences, copied from the web app's catalog drafts of the same sentences)",
     "reviewed": false,
-    "updated": "2026-11-09",
+    "updated": "2026-11-10",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1022,5 +1022,7 @@
   "Only an owner can vouch 200 or 500 Beans.": "Apenas um dono pode recomendar com 200 ou 500 feijões.",
   "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "@{name} já tem recomendações de {total} feijões, e as recomendações de uma pessoa somam no máximo {max}.",
   "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "@{name} recomenda como dono enquanto tiver essa função, sem limite, portanto não há orçamento para interromper ou definir.",
-  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} é dono: os donos recomendam sem limite, portanto não há orçamento para definir."
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} é dono: os donos recomendam sem limite, portanto não há orçamento para definir.",
+  "Download on the App Store": "Baixe na App Store",
+  "Get it on Google Play": "Disponível no Google Play"
 }

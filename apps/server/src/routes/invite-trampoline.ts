@@ -25,11 +25,60 @@
 // origin from window.location.origin, so nothing user-controlled is interpolated
 // server-side (no injection surface) and the code is only ever written via
 // textContent / encodeURIComponent on the client.
+//
+// The store badges (Apple's "Download on the App Store" and Google's "Get it on Google Play", their own artwork, embedded
+// unmodified in store-badge-art.ts) are plain links in the page itself, so they work with no script at all and need
+// nothing from outside this node: both show, App Store first, and each links to its store. The script then points them at
+// this invite (Google Play's referrer, the copied link) and, on a phone, shows only that phone's own store. Their alt text
+// is the one thing written into the page by the server, in the visitor's language (`lang`, from the same ?lang= /
+// Accept-Language reading as the community card): a sentence of this node's catalogs, never a request value. The artwork
+// itself is English: the page around it is English too, and a badge in another language would be the only thing on the
+// page in one. The owners publish localized badges (Apple 50 localizations, Google a file per language), to be used with
+// the page's own words once it has them.
+//
+// What Apple and Google ask of the badges, and where this page keeps to it:
+//   - Never changed, recoloured, cropped or redrawn: store-badge-art.ts holds the owners' files byte for byte, with a hash.
+//   - At least 40 px tall on a screen (Apple) / 28 px (Google): BADGE_HEIGHT_PX, 48.
+//   - Clear space round a badge of a quarter of its height (both): BADGE_CLEAR_SPACE_PX, as the padding of the link, which
+//     is also its tap area. No other element sits in it.
+//   - Apple's badge first when badges stand together; Google's no smaller than the other badges: App Store first in the
+//     page, both the same height.
+//   - Apple's preferred black badge, and a plain background that the badge's own edge stands out from.
+
+import { word, type Lang } from '@beanpool/core';
+import { wordsIn } from '../member-words.js';
+import { RTL, escapeHtml } from './community-card.js';
+import { APP_STORE_BADGE_SVG, GOOGLE_PLAY_BADGE_SVG, svgDataUri } from './store-badge-art.js';
 
 const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
 const PLAY_BASE_URL = 'https://play.google.com/store/apps/details?id=org.beanpool.pillar';
 
-export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
+/** Both badges are this tall, in px (Apple asks 40 at least, Google 28; Google's must be no smaller than Apple's). */
+export const BADGE_HEIGHT_PX = 48;
+/** Clear space round a badge: a quarter of its height (Apple and Google both). */
+export const BADGE_CLEAR_SPACE_PX = BADGE_HEIGHT_PX / 4;
+/** The artwork's own shape (its viewBox), for the width the image holds before it loads. */
+const APP_STORE_ASPECT = 119.66407 / 40;
+const GOOGLE_PLAY_ASPECT = 238.96 / 70.87;
+
+/** The badges' alt text, which is what a screen reader says; the pictures themselves say it in English. */
+export const BADGE_WORDS = {
+    appStore: word('Download on the App Store'),
+    googlePlay: word('Get it on Google Play'),
+} as const;
+
+export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | null }): string {
+    const lang = opts.lang ?? null;
+    const english = wordsIn(null);
+    const words = wordsIn(lang);
+    // The alt text and the language it is in: a sentence the catalog does not have shows in English, and says so.
+    const alt = (key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS]) => {
+        const text = words.t(key);
+        const tag = lang && lang !== 'en' && text !== english.t(key) ? lang : null;
+        return `alt="${escapeHtml(text)}"${tag ? ` lang="${escapeHtml(tag)}"${RTL.has(tag) ? ' dir="rtl"' : ''}` : ''}`;
+    };
+    const badgeImg = (svg: string, aspect: number, key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS]) =>
+        `<img src="${svgDataUri(svg)}" ${alt(key)} width="${Math.round(BADGE_HEIGHT_PX * aspect)}" height="${BADGE_HEIGHT_PX}">`;
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -82,9 +131,11 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   .cta:active { transform:scale(0.99); }
   .cta.secondary { background:var(--card2); color:var(--ink); border:1px solid var(--line);
     font-weight:600; font-size:15px; }
-  .stores { display:none; gap:10px; }
-  .stores.show { display:flex; }
-  .stores .cta { margin-bottom:0; }
+  /* The store badges: Apple's and Google's own artwork, the same height, the clear space they ask for as the link's own padding. */
+  .badges { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; margin:0 0 8px; }
+  .badge { display:block; padding:${BADGE_CLEAR_SPACE_PX}px; line-height:0; border-radius:${BADGE_CLEAR_SPACE_PX}px; }
+  .badge img { display:block; height:${BADGE_HEIGHT_PX}px; width:auto; }
+  .badge:focus-visible { outline:3px solid var(--accent); outline-offset:-3px; }
 
   .desktop-note { display:none; text-align:center; color:var(--muted); font-size:14px;
     background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px;
@@ -129,12 +180,11 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
 
   <div id="installArea">
     <ol class="steps" id="steps"></ol>
-    <a class="cta" id="installBtn" href="#" rel="noopener">Get the app</a>
-    <div class="stores" id="stores">
-      <a class="cta secondary" id="iosStore" href="#" rel="noopener">App Store</a>
-      <a class="cta secondary" id="androidStore" href="#" rel="noopener">Google Play</a>
+    <a class="cta" id="installBtn" href="#" rel="noopener" style="display:none;">Get the app</a>
+    <div class="badges" id="badges">
+      <a class="badge" id="iosStore" href="${escapeHtml(APP_STORE_URL)}" rel="noopener">${badgeImg(APP_STORE_BADGE_SVG, APP_STORE_ASPECT, BADGE_WORDS.appStore)}</a>
+      <a class="badge" id="androidStore" href="${escapeHtml(PLAY_BASE_URL)}" rel="noopener">${badgeImg(GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_ASPECT, BADGE_WORDS.googlePlay)}</a>
     </div>
-    <a class="cta secondary" id="playBtn" href="#" rel="noopener" style="display:none;">Get BeanPool on Google Play</a>
     <a class="cta secondary" id="openAppBtn" href="#" style="margin-top:10px; display:none;">Already have the app? Open BeanPool →</a>
     <div class="desktop-note" id="desktopNote">Open this invite link on your phone to install the app.</div>
   </div>
@@ -226,34 +276,35 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
     li.appendChild(d); li.appendChild(t); stepsEl.appendChild(li);
   }
 
+  // The store badges are links in the page already (both, App Store first, each to its store: that is the page with no
+  // script). Here they are pointed at this invite, and a phone is shown only its own store.
+  var iosStore = document.getElementById('iosStore');
+  var androidStore = document.getElementById('androidStore');
+  iosStore.href = APP_STORE;
+  androidStore.href = playUrl();
+
   if (isAndroid) {
     // App first: with BeanPool installed the invite opens in it; without, Google Play opens to install it, referrer and all.
+    installBtn.style.display = 'block';
     installBtn.textContent = 'Open your invite in BeanPool';
     installBtn.href = androidAppUrl();
     installBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
-    // The plain store link, for a browser that can't open the app's link.
-    var playBtn = document.getElementById('playBtn');
-    playBtn.style.display = 'block';
-    playBtn.href = playUrl();
-    playBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
+    // The plain store link (the Google Play badge), for a browser that can't open the app's link.
+    iosStore.style.display = 'none';
+    androidStore.addEventListener('click', function(){ copyInvite().catch(function(){}); });
     step('1', 'Tap Open your invite in BeanPool', 'If the app isn\\u2019t on this phone yet, Google Play opens to install it.');
     step('2', 'Your invite comes across in the app', 'Nothing to type and nothing to scan again.');
     step('3', 'Choose a callsign and you\\u2019re in');
   } else if (isIOS) {
-    installBtn.textContent = 'Get BeanPool on the App Store';
-    installBtn.href = APP_STORE;
+    androidStore.style.display = 'none';
     // No install-referrer on iOS: copy the code so the app can offer paste after install.
-    installBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
+    iosStore.addEventListener('click', function(){ copyInvite().catch(function(){}); });
     step('1', 'Install BeanPool from the App Store', 'We\\u2019ve copied your code to the clipboard.');
     step('2', 'Open the app and paste your code', 'Or type the code shown above.');
     step('3', 'Choose a callsign and you\\u2019re in');
   } else {
-    // Desktop / unknown — show both stores + a nudge to use a phone.
-    installBtn.style.display = 'none';
-    document.getElementById('stores').classList.add('show');
+    // Desktop / unknown — both stores stay, plus a nudge to use a phone.
     document.getElementById('desktopNote').classList.add('show');
-    document.getElementById('iosStore').href = APP_STORE;
-    document.getElementById('androidStore').href = playUrl();
   }
 
   // Read-only preflight — greet with the community name and stop a dud code

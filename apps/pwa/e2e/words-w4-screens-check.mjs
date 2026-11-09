@@ -68,15 +68,10 @@ const SCREENS = [
     { name: 'join-limited', ready: '[data-testid="join-notice"]', join: (route) => route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ code: 'rate_limited' }) }) },
     { name: 'join-already', ready: '[data-testid="join-already-joined"]', join: (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: 'already_joined', error: 'x' }) }) },
     { name: 'join-unknown', ready: '[data-testid="join-unknown"][role="alert"]', join: (route) => route.abort() },
-    { name: 'restore-name', ready: '[data-testid="restore-callsign"]', act: async (page) => {
-        await page.locator('[data-testid="restore-callsign"]').fill('Zed');
-        await page.locator('[data-testid="restore-none"]').waitFor();
-    } },
-    { name: 'restore-sign-in', ready: '[data-testid="restore-callsign"]', act: async (page) => {
-        await page.locator('[data-testid="restore-callsign"]').fill('Alice');
-        await page.locator('[data-testid="restore-candidate"]').click();
-        await page.locator('[data-testid="restore-provider-google"]').waitFor();
-    } },
+    // Recovery S1: no name to type. The community and its sign-ins; a server from before the find; the pick of two.
+    { name: 'restore-sign-in', ready: '[data-testid="restore-provider-google"]' },
+    { name: 'restore-too-old', ready: '[data-testid="restore-too-old-server"]', findNonceMissing: true },
+    { name: 'restore-pick', ready: '[data-testid="restore-candidate"]' },
     { name: 'rekey-form', ready: '[data-testid="web-rekey-form"]', act: async (page, lang) => {
         await page.getByRole('button', { name: wordIn(lang, 'Continue'), exact: true }).click();
         await page.getByRole('alert').waitFor();
@@ -179,9 +174,10 @@ function answerFor(sc) {
         if (p === '/api/join/sso-nonce' || p === '/api/join/link/sso-nonce') return reply(200, NONCE);
         if (p === '/api/join/work') return reply(200, { work: null, turnstile: null });
         if (p.startsWith('/api/community/membership/')) return reply(200, { isMember: false, callsign: null });
-        if (p === '/api/recovery/lookup/Alice') return reply(200, [{ publicKey: 'a'.repeat(64), callsign: 'Alice', canRecoverBySso: true }]);
-        if (p.startsWith('/api/recovery/lookup/')) return reply(200, []);
-        if (p === '/api/recovery/collect/sso-nonce') return reply(200, { ...NONCE, nonce: 'rn-1' });
+        if (p === '/api/recovery/find-nonce') return sc.findNonceMissing ? reply(404, { error: 'Not Found' }) : reply(200, { ...NONCE, nonce: 'rn-1' });
+        if (p === '/api/recovery/find') return reply(200, { accounts: [
+            { publicKey: 'a'.repeat(64), callsign: 'Alexandrina-Wilhelmina' }, { publicKey: 'b'.repeat(64), callsign: 'Bartholomew-Maximilian' },
+        ] });
         if (p === '/api/recovery/collect/mine') return reply(200, { count: 2, collections: [{ collectionId: 'c-1', generation: 1, startedAt: new Date().toISOString() }] });
         if (p === '/api/recovery/collect') return reply(200, { collectionId: 'col-1', threshold: 1 });
         if (p === '/api/community/me') return reply(200, { publicKey: 'x', probation: { onProbation: true, keptPosts: 0, ageEndsAt: new Date(Date.now() + 86_400_000).toISOString(), rules: 'words' } });

@@ -83,8 +83,9 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } 
     const seen = {
         nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false,
         doorShut: false, probes: [], enrolled: new Map(),
-        // G11-d: key → the sign-in copy its join carried, with the sign-in's own sub; the recovery sessions and calls.
-        copies: new Map(), collections: new Map(), restoreNonces: [], restoreCalls: [],
+        // G11-d: key → the sign-in copy its join carried, with the sign-in's own sub; the recovery sessions and calls; and
+        // (recovery S1) each throwaway key's find held for its collect.
+        copies: new Map(), collections: new Map(), restoreNonces: [], restoreCalls: [], holds: new Map(),
         // The invite join: every redeem, each member's name, the key the one code went to, and whether the answer to
         // the redeem that takes it is lost (loseInviteAnswer) or something happens first (onInviteTaken). dropInvite:
         // the redeem never reaches the node (the connection drops on the way there).
@@ -194,44 +195,43 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } 
             const answer = nonceAnswer ? nonceAnswer(nonce) : null;
             return reply(200, answer ?? { nonce, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook'], clientIds: CLIENT_IDS });
         }
-        // The node's recovery routes (routes/recovery-collect.ts), for G11-d: a session bound to the key that opened it.
-        // The lookup as the global node answers it (routes/community.ts, guestListingsOnly): the whole name, case forgiven.
-        if (p.startsWith('/api/recovery/lookup/')) {
-            const typed = decodeURIComponent(p.split('/').pop()).toLowerCase();
-            return reply(200, [...seen.copies.entries()]
-                .filter(([, c]) => c.callsign.toLowerCase() === typed)
-                .map(([publicKey, c]) => ({ publicKey, callsign: c.callsign, joinedAt: 1, avatarUrl: null, canRecoverByGuardians: false, canRecoverBySso: true })));
-        }
         // The member's own view of recoveries against their account (the app asks once it is in): not a restore's call.
         if (p === '/api/recovery/collect/mine') return reply(200, { collections: [] });
-        if (p.startsWith('/api/recovery/collect')) {
+        // The node's find and recovery routes (routes/recovery-collect.ts), for G11-d with nothing typed (recovery S1): a
+        // find nonce bound to the key that asked; the find naming every account the verified sign-in protects, held for
+        // that key; the collect by that hold, which opens the session and releases the copy in the same request.
+        if (p === '/api/recovery/find-nonce' || p === '/api/recovery/find' || p.startsWith('/api/recovery/collect')) {
             const body = JSON.parse(req.postData() || '{}');
             seen.restoreCalls.push({ path: p, key, body });
-            if (p === '/api/recovery/collect') {
-                const owner = [...seen.copies.entries()].find(([, c]) => c.callsign.toLowerCase() === String(body.callsign).toLowerCase());
-                if (!owner) return reply(400, { error: 'That account has no recovery fragments to collect.' });
-                const id = `col-${seen.collections.size + 1}`;
-                seen.collections.set(id, { owner: owner[0], eph: key, released: false });
-                return reply(200, { collectionId: id, generation: 1, expiresAt: Date.now() + 3_600_000, threshold: 1, progress: null });
-            }
-            const col = seen.collections.get(body.collectionId);
-            if (!col || col.eph !== key) return reply(404, { error: 'No recovery session for this device.' });
-            const copy = seen.copies.get(col.owner);
-            if (p === '/api/recovery/collect/sso-nonce') {
+            if (p === '/api/recovery/find-nonce') {
                 const nonce = `restore-nonce-${seen.restoreNonces.length + 1}-${'y'.repeat(24)}`;
                 seen.restoreNonces.push({ nonce, key });
                 return reply(200, { nonce, expiresInSeconds: 600, clientIds: CLIENT_IDS });
             }
-            if (p === '/api/recovery/collect/sso') {
+            if (p === '/api/recovery/find') {
                 const issued = seen.restoreNonces.find((n) => n.nonce === body.nonce && n.key === key);
                 const claims = JSON.parse(Buffer.from(String(body.idToken).split('.')[1] || '', 'base64url').toString() || '{}');
                 const sub = issued && claims.nonce === body.nonce ? claims.sub : null;
                 if (issued) seen.restoreNonces = seen.restoreNonces.filter((n) => n !== issued);
                 if (!sub) return reply(401, { error: 'That sign-in could not be matched to this request.', code: 'sign_in' });
-                if (!copy || copy.provider !== body.provider || copy.sub !== sub) return reply(400, { error: 'That sign-in account is not the keeper for this recovery.' });
-                col.released = true;
-                return reply(200, { collected: 1, threshold: 1, enough: true });
+                const accounts = [...seen.copies.entries()].filter(([, c]) => c.provider === body.provider && c.sub === sub)
+                    .map(([publicKey, c]) => ({ publicKey, callsign: c.callsign }));
+                // A find that names nobody holds nothing, and ends this key's older hold too.
+                if (accounts.length) seen.holds.set(key, { provider: body.provider, sub, accounts });
+                else seen.holds.delete(key);
+                return reply(200, { accounts });
             }
+            if (p === '/api/recovery/collect') {
+                const hold = seen.holds.get(key);
+                if (!hold || !hold.accounts.some((a) => a.publicKey === body.candidatePublicKey)) return reply(400, { error: "Sign in with your account's sign-in first." });
+                seen.holds.delete(key);
+                const id = `col-${seen.collections.size + 1}`;
+                seen.collections.set(id, { owner: body.candidatePublicKey, eph: key, released: true });
+                return reply(200, { collectionId: id, generation: 1, expiresAt: Date.now() + 3_600_000, threshold: 1, progress: { collected: 1, threshold: 1, enough: true } });
+            }
+            const col = seen.collections.get(body.collectionId);
+            if (!col || col.eph !== key) return reply(404, { error: 'No recovery session for this device.' });
+            const copy = seen.copies.get(col.owner);
             if (p === '/api/recovery/collect/fragments') {
                 const s = copy?.share;
                 return reply(200, {
@@ -488,7 +488,8 @@ async function restoreScreenIs(page, name, where, timeout = 20_000) {
 
 /**
  * The restore the stub node saw: every recovery call signed by one throwaway key that is not the account's, the
- * provider's nonce issued to that key and sent back in the release, and the copy released to it.
+ * provider's nonce issued to that key and sent back in the find, the collect naming the account by its key alone (no
+ * name, no name route), and the copy released to it.
  */
 function checkRestore(seen, provider, accountKey, where) {
     const calls = seen.restoreCalls;
@@ -497,15 +498,17 @@ function checkRestore(seen, provider, accountKey, where) {
     if (!eph || eph === accountKey) throw new Failure(`${where}: the recovery calls were signed by ${eph === accountKey ? 'the account itself' : 'nobody'}`);
     const stray = calls.filter((c) => c.key !== eph);
     if (stray.length) throw new Failure(`${where}: ${stray.length} recovery calls signed by another key`);
-    const release = calls.filter((c) => c.path === '/api/recovery/collect/sso').at(-1);
-    if (!release || release.body.provider !== provider) throw new Failure(`${where}: released with ${release?.body.provider}`);
+    const found = calls.filter((c) => c.path === '/api/recovery/find').at(-1);
+    if (!found || found.body.provider !== provider) throw new Failure(`${where}: found with ${found?.body.provider}`);
     const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
-    if (!visit || visit.state !== visit.nonce || release.body.nonce !== visit.nonce) throw new Failure(`${where}: the release's nonce is not the one sent to ${provider}`);
+    if (!visit || visit.state !== visit.nonce || found.body.nonce !== visit.nonce) throw new Failure(`${where}: the find's nonce is not the one sent to ${provider}`);
     if (!visit.nonce.startsWith('restore-nonce-')) throw new Failure(`${where}: went to ${provider} with a join's nonce`);
+    const collect = calls.filter((c) => c.path === '/api/recovery/collect').at(-1);
+    if (!collect || collect.body.candidatePublicKey !== accountKey || 'callsign' in collect.body) throw new Failure(`${where}: the collect sent ${JSON.stringify(collect?.body)}`);
     if (![...seen.collections.values()].some((c) => c.released && c.eph === eph && c.owner === accountKey)) throw new Failure(`${where}: no copy was released`);
 }
 
-/** A browser that joined, cleared, and back at the lobby asking for its account with a sign-in: the name, then the sign-ins. */
+/** A browser that joined, cleared, and back at the lobby asking for its account with a sign-in: this community and its sign-ins, nothing typed. */
 async function toRestoreSignIns(page, origin, view, { shots = false } = {}) {
     await clearBrowser(page, origin);
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
@@ -516,20 +519,11 @@ async function toRestoreSignIns(page, origin, view, { shots = false } = {}) {
     await noSideScroll(page, 'restore choices');
     if (shots) await shot(page, view, 'restore-choices');
     await page.getByTestId('join-restore-signin').click();
-    await restoreScreenIs(page, 'name', 'Use my sign-in');
-    // Part of the name finds nothing on the global node, and the page says so without claiming no name starts so.
-    await page.getByTestId('restore-callsign').fill('Ali');
-    const none = page.getByTestId('restore-none');
-    await none.waitFor({ timeout: 10_000 });
-    if (!(await none.innerText()).includes("Check you've typed your whole name.")) throw new Failure(`a part-typed name said "${await none.innerText()}"`);
-    await noSideScroll(page, 'restore name, part-typed');
-    await page.getByTestId('restore-callsign').fill('alice');
-    await page.getByRole('button', { name: 'Alice', exact: true }).waitFor({ timeout: 10_000 });
-    await noSideScroll(page, 'restore name');
-    if (shots) await shot(page, view, 'restore-name');
-    await page.getByRole('button', { name: 'Alice', exact: true }).click();
-    await restoreScreenIs(page, 'providers', 'after picking Alice');
+    await restoreScreenIs(page, 'providers', 'Use my sign-in');
     await page.getByTestId('restore-provider-google').waitFor();
+    // Nothing to type (recovery S1): no field on the screen, and the community it looks in is named.
+    if (await page.locator('[data-testid="restore-screen-providers"] input').count()) throw new Failure('the restore asks for something to be typed');
+    if (!(await page.getByTestId('restore-community').innerText()).trim()) throw new Failure('the restore names no community');
     await noSideScroll(page, 'restore sign-ins');
     if (shots) await shot(page, view, 'restore-sign-ins');
 }
@@ -863,21 +857,21 @@ const SCENARIOS = [
         join: joinOk(),
     },
     {
-        name: "G11-d: a Google account that isn't the account's: said plainly, nothing saved",
+        name: "G11-d: a Google account that isn't the account's: no account here uses it, said plainly, nothing saved",
         async run(page, origin, view, seen) {
             await toSignIn(page, origin, view, 'Alice');
             await page.getByTestId('join-provider-apple').click();
             await throughOnboarding(page, view, { signIn: 'Apple' });
             await toRestoreSignIns(page, origin, view);
-            // Alice joined with Apple; Google is not her way back.
+            // Alice joined with Apple; Google is not her way back, so the community finds no account for it.
             await page.getByTestId('restore-provider-google').click();
-            const notice = page.getByTestId('join-notice');
-            await notice.waitFor({ timeout: 30_000 });
-            if (!(await notice.innerText()).includes("That Google account isn't a way back into Alice.")) throw new Failure(`the restore said "${await notice.innerText()}"`);
-            await restoreScreenIs(page, 'providers', 'refused sign-in');
+            await restoreScreenIs(page, 'none', 'a sign-in no account uses', 30_000);
+            const none = await page.getByTestId('restore-none').innerText();
+            if (!/^No account at .+ uses this Google account\. Try another community, or your 12 words\.$/.test(none.trim())) throw new Failure(`the restore said "${none}"`);
             await noSideScroll(page, 'refused sign-in');
             await shot(page, view, 'restore-refused');
             if ((await storedIdentityKey(page)) !== null) throw new Failure('an identity was saved');
+            if (seen.restoreCalls.some((c) => c.path === '/api/recovery/collect')) throw new Failure('a collect was sent');
             if ([...seen.collections.values()].some((c) => c.released)) throw new Failure('a copy was released');
         },
         join: joinOk(),

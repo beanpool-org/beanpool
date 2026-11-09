@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "आपके बजट में से: कोई सीमा नहीं",
   "No limit": "कोई सीमा नहीं",
   "Your budget: No limit": "आपका बजट: कोई सीमा नहीं",
-  "No limit · {vouched} vouched · {below} below zero": "कोई सीमा नहीं · {vouched} गारंटीकृत · {below} शून्य से नीचे"
+  "No limit · {vouched} vouched · {below} below zero": "कोई सीमा नहीं · {vouched} गारंटीकृत · {below} शून्य से नीचे",
+  "Clear all": "सभी साफ़ करें",
+  "Clear this notice": "यह सूचना साफ़ करें"
 }

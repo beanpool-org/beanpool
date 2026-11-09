@@ -2310,5 +2310,7 @@
   "From your budget: No limit": "Dari anggaran Anda: Tanpa batas",
   "No limit": "Tanpa batas",
   "Your budget: No limit": "Anggaran Anda: Tanpa batas",
-  "No limit · {vouched} vouched · {below} below zero": "Tanpa batas · {vouched} dijamin · {below} di bawah nol"
+  "No limit · {vouched} vouched · {below} below zero": "Tanpa batas · {vouched} dijamin · {below} di bawah nol",
+  "Clear all": "Hapus semua",
+  "Clear this notice": "Hapus pemberitahuan ini"
 }

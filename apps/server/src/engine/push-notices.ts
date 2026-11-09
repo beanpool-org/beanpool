@@ -182,7 +182,8 @@ export function readPushNotice(id: string, recipient: string, now: number = nowS
 //
 // The same rows, kept for every member a push is for, a phone or not (state-engine.ts dispatchPushNotification). A row is
 // on the bell until its member taps it or opens its thing (a chat they read: markPushNoticesSeenWhere); never by reading
-// the list, nor by time beyond the 7-day lifetime. No "Clear all" (Marty, 9 Nov 2026).
+// the list, nor by time beyond the 7-day lifetime. The member can also take one off with its ✕, or all of theirs with "Clear all"
+// (markAllPushNoticesSeen; Marty, 10 Nov 2026, replacing the 9 Nov rule that had none).
 
 /** A row on the bell: the details, and when the member took it off (whole seconds), null while it is on. */
 export interface BellNotice extends PushNoticeDetails {
@@ -207,6 +208,18 @@ export function listPushNotices(recipient: string, opts: { unseenOnly?: boolean 
 export function markPushNoticesSeen(recipient: string, ids: readonly string[], now: number = nowSeconds()): string[] {
     const mark = db.prepare('UPDATE push_notices SET seen_at = ? WHERE id = ? AND recipient = ? AND seen_at IS NULL');
     return db.transaction(() => [...new Set(ids)].filter(id => mark.run(now, id, recipient).changes > 0))();
+}
+
+/**
+ * "Clear all": marks every unseen notice of the member's own, within the lifetime. Only `recipient`'s rows are touched, so
+ * it can never clear anyone else's. Returns the ids it marked, each once.
+ */
+export function markAllPushNoticesSeen(recipient: string, now: number = nowSeconds()): string[] {
+    return db.transaction(() => {
+        const ids = db.prepare('SELECT id FROM push_notices WHERE recipient = ? AND seen_at IS NULL AND sent_at >= ?')
+            .all(recipient, now - PUSH_NOTICE_LIFETIME_SECONDS) as { id: string }[];
+        return markPushNoticesSeen(recipient, ids.map(r => r.id), now);
+    })();
 }
 
 /**

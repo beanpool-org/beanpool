@@ -2700,5 +2700,7 @@
   "From your budget: No limit": "من ميزانيتك: بلا حد",
   "No limit": "بلا حد",
   "Your budget: No limit": "ميزانيتك: بلا حد",
-  "No limit · {vouched} vouched · {below} below zero": "بلا حد · تمت تزكية {vouched} · {below} تحت الصفر"
+  "No limit · {vouched} vouched · {below} below zero": "بلا حد · تمت تزكية {vouched} · {below} تحت الصفر",
+  "Clear all": "مسح الكل",
+  "Clear this notice": "مسح هذا الإشعار"
 }

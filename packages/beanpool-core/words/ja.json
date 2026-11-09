@@ -2310,5 +2310,7 @@
   "From your budget: No limit": "あなたの予算から：上限なし",
   "No limit": "上限なし",
   "Your budget: No limit": "あなたの予算：上限なし",
-  "No limit · {vouched} vouched · {below} below zero": "上限なし · 保証済み {vouched} · マイナス {below}"
+  "No limit · {vouched} vouched · {below} below zero": "上限なし · 保証済み {vouched} · マイナス {below}",
+  "Clear all": "すべてクリア",
+  "Clear this notice": "この通知をクリア"
 }

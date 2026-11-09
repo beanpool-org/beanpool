@@ -18,7 +18,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import {
-    BELL_EVENTS, bellBadge, bellLabel, isOthersListingDoorbell, isPushNoticeKind, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
+    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, isOthersListingDoorbell, isPushNoticeKind, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
 } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
@@ -29,8 +29,10 @@ import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../
 // what a phone with no push still gets), an amber dot when nothing is new but something needs the member, and a sheet with
 // the open things at the top ("Needs you": what the icons were; what counts, the order, the accent and the wording live in
 // utils/needs-you.ts) and what happened under it, newest first, with the real words. A row leaves only when it is tapped
-// (it opens its thing, by the push tap's own route table, and is marked) or when its thing is opened (a chat read: the node
-// marks it and tells the sockets, `bell_activity` here); opening the sheet marks nothing, and there is no "Clear all".
+// (it opens its thing, by the push tap's own route table, and is marked), when its ✕ is pressed (marked, opens nothing), when
+// "Clear all" is pressed (every notice, one request: { all: true }) or when its thing is opened (a chat read: the node marks
+// it and tells the sockets, `bell_activity` here); opening the sheet marks nothing. "Needs you" is none of those: its rows
+// are the open things, and leave when they are done (Marty, 10 Nov 2026, replacing the 9 Nov rule that had no "Clear all").
 //
 // Home's answer (GET /api/home, utils/home-store.ts) carries the same lines (design §5.2 "The header reads Home's
 // answer"): while one is fresher than two minutes the node's part (admin work, votes, group lines) is drawn from it and
@@ -318,6 +320,33 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         router.push(noticeRoute(isPushNoticeKind(n.kind) ? n.kind : null, n.data) as never);
     };
 
+    // A notice's ✕: the same mark as a tap, and it opens nothing and leaves the sheet up. A failed mark reads the list again,
+    // so the row comes back.
+    const clearNotice = (n: BellNotice) => {
+        setNotices(list => withoutBellNotices(list, [n.id]));
+        const id = identityRef.current;
+        (async () => {
+            const url = await anchorUrl();
+            if (!url || !id) return;
+            const r = await signedPost(url, '/api/notices/push/seen', { ids: [n.id] }, id);
+            if (!r.ok) refreshBell();
+        })().catch(() => { refreshBell(); });
+    };
+
+    // "Clear all": every notice, one request (the node marks only this member's). Never "Needs you": those are `entries`, the
+    // open things, and they leave when they are done.
+    const clearAll = () => {
+        setNotices([]);
+        const id = identityRef.current;
+        (async () => {
+            const url = await anchorUrl();
+            if (!url || !id) return;
+            const r = await signedPost(url, '/api/notices/push/seen', { all: true }, id);
+            if (!r.ok) refreshBell();
+        })().catch(() => { refreshBell(); });
+    };
+
+    const clearWords = bellClearWords();
     const unseen = notices.length;
     const label = bellLabel(unseen, entries.length);
     const small = width < NEEDS_YOU_SLOT;
@@ -360,18 +389,32 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                             {entries.length === 0 && notices.length === 0 && (
                                 <Text style={[s.empty, { color: colors.text.secondary }]}>{t('Nothing new.')}</Text>
                             )}
+                            {notices.length > 0 && (
+                                <View style={s.clearAllRow}>
+                                    <Pressable style={({ pressed }) => [s.clearAll, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={clearAll} accessibilityRole="button" accessibilityLabel={clearWords.all}>
+                                        <Text style={[s.clearAllText, { color: colors.text.link }]}>{clearWords.all}</Text>
+                                    </Pressable>
+                                </View>
+                            )}
                             {notices.map(n => (
-                                <Pressable key={n.id} style={({ pressed }) => [s.sheetRow, s.noticeRow, pressed && { backgroundColor: colors.surface.subtle }]}
-                                    onPress={() => openNotice(n)} accessibilityRole="button" accessibilityLabel={[n.title, n.body].filter(Boolean).join('. ')}>
-                                    <View style={[s.unseenDot, { backgroundColor: colors.feedback.danger.solid }]} />
-                                    <View style={s.noticeWords}>
-                                        <Text style={[s.noticeTitle, { color: colors.text.heading }]} numberOfLines={2}>{n.title || n.body}</Text>
-                                        {!!n.title && !!n.body && (
-                                            <Text style={[s.noticeBody, { color: colors.text.body }]} numberOfLines={3}>{n.body}</Text>
-                                        )}
-                                        <Text style={[s.noticeWhen, { color: colors.text.muted }]}>{timeAgo(Math.max(0, now - n.sentAt * 1000))}</Text>
-                                    </View>
-                                </Pressable>
+                                <View key={n.id} style={s.noticeLine}>
+                                    <Pressable style={({ pressed }) => [s.sheetRow, s.noticeRow, s.noticeOpen, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={() => openNotice(n)} accessibilityRole="button" accessibilityLabel={[n.title, n.body].filter(Boolean).join('. ')}>
+                                        <View style={[s.unseenDot, { backgroundColor: colors.feedback.danger.solid }]} />
+                                        <View style={s.noticeWords}>
+                                            <Text style={[s.noticeTitle, { color: colors.text.heading }]} numberOfLines={2}>{n.title || n.body}</Text>
+                                            {!!n.title && !!n.body && (
+                                                <Text style={[s.noticeBody, { color: colors.text.body }]} numberOfLines={3}>{n.body}</Text>
+                                            )}
+                                            <Text style={[s.noticeWhen, { color: colors.text.muted }]}>{timeAgo(Math.max(0, now - n.sentAt * 1000))}</Text>
+                                        </View>
+                                    </Pressable>
+                                    <Pressable style={({ pressed }) => [s.clearOne, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={() => clearNotice(n)} accessibilityRole="button" accessibilityLabel={clearWords.one}>
+                                        <MaterialCommunityIcons name="close" size={20} color={colors.text.muted} />
+                                    </Pressable>
+                                </View>
                             ))}
                             <Text style={[s.lifetime, { color: colors.text.muted }]}>{t('Older notices are gone after 7 days.')}</Text>
                         </ScrollView>
@@ -404,6 +447,13 @@ const s = StyleSheet.create({
     divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 16, marginVertical: 4 },
     empty: { fontSize: 15, textAlign: 'center', paddingHorizontal: 16, paddingVertical: 16 },
     noticeRow: { alignItems: 'flex-start' },
+    // A notice and its ✕ side by side; the ✕ is 44 dp square (the touch floor) and "Clear all" 44 dp tall, at any font size.
+    noticeLine: { flexDirection: 'row', alignItems: 'flex-start' },
+    noticeOpen: { flex: 1, minWidth: 0, paddingRight: 4 },
+    clearOne: { width: 44, height: 44, marginRight: 8, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    clearAllRow: { alignItems: 'flex-end', paddingHorizontal: 8 },
+    clearAll: { minHeight: 44, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    clearAllText: { fontSize: 14, fontWeight: '700' },
     unseenDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
     noticeWords: { flex: 1, minWidth: 0 },
     noticeTitle: { fontSize: 15, fontWeight: '700' },

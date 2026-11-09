@@ -2310,5 +2310,7 @@
   "From your budget: No limit": "來自你的預算：無上限",
   "No limit": "無上限",
   "Your budget: No limit": "你的預算：無上限",
-  "No limit · {vouched} vouched · {below} below zero": "無上限 · 已擔保 {vouched} · {below} 為負"
+  "No limit · {vouched} vouched · {below} below zero": "無上限 · 已擔保 {vouched} · {below} 為負",
+  "Clear all": "全部清除",
+  "Clear this notice": "清除此通知"
 }

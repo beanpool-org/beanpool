@@ -6,8 +6,10 @@
  * in headless Chromium, as e2e/look-first-320.mjs draws its screens.
  *
  * What is drawn: the peek screen (app/peek.tsx) with the post as the community answers a ticket holder, and with a link
- * that opens nothing now; Settings → Shared outside (app/shared-outside.tsx) with two links, and with none; a listing's
- * Share with members / Share outside the community (components/SharePost.tsx).
+ * that opens nothing now; Settings → Shared outside (app/shared-outside.tsx) with two links (one that two asked to join
+ * from, shared-listing door A3), and with none; a listing's Share with members / Share outside the community
+ * (components/SharePost.tsx); and People's Wants to join (components/WantsToJoin.tsx) with a request that came after a
+ * listing a member shared outside, its line under the request (A3).
  *
  * Text at 1.3× is Android's font scale: every Text's fontSize and lineHeight times 1.3, layout in dp as is. Each state
  * fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under 48dp tall
@@ -90,13 +92,27 @@ const STUBS = {
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: { shareOutside: true }, checkedAt: '' });`,
     // The ask form (#2775) is opened by a tap these shots never make; stubbed as share-one-flow-320.mjs does.
     'InviteAsks': `export const AskSheet = () => null;`,
+    // Wants to join (A3): the community's list, as it answers a member who may invite; no vouching; a face's place.
+    'knock-inbox': `
+        export const KNOCK_UNREACHABLE_TEXT = "Couldn't reach your community. Check your connection and try again.";
+        export const fetchJoinRequests = async () => ({ ok: true, knocks: globalThis.__requests, total: globalThis.__requests.length });
+        export const approveJoinRequest = async () => ({ ok: true, status: 'approved' });
+        export const declineJoinRequest = async () => ({ ok: true, status: 'declined' });
+        export const joinRequestAge = (r) => Math.max(0, Math.floor((Date.now() - Date.parse(r.createdAt)) / 86400000));
+    `,
+    'vouchers': `export const askMyVouching = async () => null; export const rereadMyVouching = async () => null;`,
+    'MemberAvatar': `
+        import React from 'react';
+        import { View } from 'react-native-web';
+        export const MemberAvatar = ({ size }) => React.createElement(View, { style: { width: size, height: size, borderRadius: size / 2, backgroundColor: '#7a9a7e' } });
+    `,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
-    return ['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks'].includes(base) ? base : null;
+    return ['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks', 'knock-inbox', 'vouchers', 'MemberAvatar'].includes(base) ? base : null;
 };
 
 // ─── The page: each case renders the real screens for one state ─────────────────────────────────────────────────────
@@ -109,6 +125,7 @@ import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'cons
 import PeekScreen from ${JSON.stringify(path.join(NATIVE, 'app/peek'))};
 import SharedOutsideScreen from ${JSON.stringify(path.join(NATIVE, 'app/shared-outside'))};
 import { SharePostButtons } from ${JSON.stringify(path.join(NATIVE, 'components/SharePost'))};
+import { WantsToJoin } from ${JSON.stringify(path.join(NATIVE, 'components/WantsToJoin'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
@@ -122,13 +139,23 @@ globalThis.__peekPost = q.get('stopped') === '1' ? 'stopped' : {
     photos: [], status: 'active',
 };
 globalThis.__shares = q.get('none') === '1' ? [] : [
-    { id: 'r1', postId: POST_ID, title: 'Long ladder to lend for the weekend', createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z' },
-    { id: 'r2', postId: 'p2', title: null, createdAt: '2026-10-28T00:00:00Z', expiresAt: '2026-11-04T00:00:00Z' },
+    { id: 'r1', postId: POST_ID, title: 'Long ladder to lend for the weekend', createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z', asked: 2 },
+    { id: 'r2', postId: 'p2', title: null, createdAt: '2026-10-28T00:00:00Z', expiresAt: '2026-11-04T00:00:00Z', asked: 0 },
+];
+globalThis.__requests = [
+    { id: 'k1', pubkey: 'b'.repeat(64), callsign: 'Riverbend Joe', avatar: null, fromNode: null, createdAt: new Date().toISOString(),
+      message: 'I live by the river in Chewton and grow far too many tomatoes. Happy to help with the garden on weekends.',
+      via: { title: 'Short-term shelter available for a family of four through the winter', sharer: 'Ana Lucía' } },
 ];
 const c = q.get('case');
 const Page = () => {
     if (c === 'peek') return <PeekScreen />;
     if (c === 'shared') return <SharedOutsideScreen />;
+    if (c === 'requests') return (
+        <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
+            <WantsToJoin anchorUrl="https://castlemaine.beanpool.org" identity={{ publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana' } as any} />
+        </ScrollView>
+    );
     if (c === 'share') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
             <SharePostButtons post={{ id: POST_ID, title: 'Long ladder to lend', status: 'active', audience_scope: 'public' }} />
@@ -149,7 +176,8 @@ const result = await build({
     resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js', '.mjs', '.json'],
     nodePaths: [path.join(ROOT, 'node_modules'), path.join(NATIVE, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
-    banner: { js: 'globalThis.process = globalThis.process || { env: {} };' },
+    // Node's `global`, which a dependency reads at load ("global is not defined" before any screen drew).
+    banner: { js: 'globalThis.process = globalThis.process || { env: {} }; globalThis.global = globalThis.global || globalThis;' },
     logLevel: 'error',
     plugins: [{
         name: 'stubs',
@@ -249,7 +277,11 @@ try {
         await measure(`${scheme} · the peek: a link that opens nothing now`);
         await open(`case=shared&scheme=${scheme}`);
         await page.getByText('Long ladder to lend for the weekend').waitFor();
-        await measure(`${scheme} · Settings, Shared outside: two links`, { minButton: 43.5 });
+        await page.getByText('2 asked to join from this link').waitFor();
+        await measure(`${scheme} · Settings, Shared outside: two links, one with 2 asked to join`, { minButton: 43.5 });
+        await open(`case=requests&scheme=${scheme}`);
+        await page.getByText(/^After reading 'Short-term shelter available/).waitFor();
+        await measure(`${scheme} · Wants to join: the line under a request that came after a shared listing`, { minButton: 43.5 });
         await open(`case=shared&scheme=${scheme}&none=1`);
         await page.getByText('Nothing shared outside right now.').waitFor();
         await measure(`${scheme} · Settings, Shared outside: none`);

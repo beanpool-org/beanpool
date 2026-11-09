@@ -1,3 +1,4 @@
+import { communityAddressIn, inviteCodeIn } from '@beanpool/core';
 import { assertPlainNodeAddress } from './node-url';
 import { withNodeScheme } from './node-address-scheme';
 
@@ -17,6 +18,33 @@ export function extractNodeOrigin(raw: string): string | null {
     const origin = m[0].replace(/[.,;:!)'">]+$/, '');
     assertPlainNodeAddress(origin);
     return origin;
+}
+
+/**
+ * What a pasted invite holds, however much of the message was pasted (core invite-text.ts): the code alone, never the
+ * message's other words, and the community's address from its link, else from the message's last line ("Community
+ * address: byron.beanpool.org"), else null. A paste of the code alone names no community: the invite step asks for it.
+ * Throws UnsafeNodeAddressError, like {@link extractNodeOrigin}, for an address that isn't plain `host[:port]`.
+ */
+export function readInviteText(raw: string): { code: string | null; origin: string | null } {
+    const code = inviteCodeIn(raw);
+    const linked = extractNodeOrigin(raw);
+    if (linked) return { code, origin: linked };
+    const bare = communityAddressIn(raw);
+    if (!bare) return { code, origin: null };
+    const origin = withNodeScheme(bare);
+    assertPlainNodeAddress(origin);
+    return { code, origin };
+}
+
+/**
+ * Whether a paste or a scan is an invite for the invite step: a code anywhere in it (a link's `invite=`, an `INV-xxxx-xxxx`
+ * inside a message), or a short code in an older shape that the step normalises. A message with the code in it is one,
+ * whether or not its link was pasted too; before 9 Nov only a paste that started with the code or held a link was.
+ */
+export function holdsInvite(raw: string): boolean {
+    const content = String(raw ?? '').trim();
+    return content.startsWith('BP-') || content.startsWith('INV-') || inviteCodeIn(content) !== null;
 }
 
 /**

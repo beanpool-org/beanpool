@@ -186,14 +186,16 @@ async function main(): Promise<void> {
     assert(b1.status === 201 && b1.body?.invite?.namesEntryId === e1 && b1.body?.invite?.vouchAmount === 100, `1. a bound invite with vouchAmount 100: 201, bound and carrying the vouch (${show(b1)})`);
     const c1 = b1.body?.invite?.code as string;
     const owenAfterHold = budgetOf(owen.pk);
-    assert(codeRow(c1)?.vouch_amount === 100 && owenAfterHold.held === 100 && owenAfterHold.left === 900
-        && linesOf(owen.pk).some((l) => l.kind === 'hold' && l.amount === -100 && l.ref === c1),
-        `1. 100 is held from Owen's budget when the code is made (left ${owenAfterHold.left}, held ${owenAfterHold.held}, row ${codeRow(c1)?.vouch_amount})`);
+    // Owen is an owner: he vouches with no limit (Marty, 9 Nov; test-owner-vouch.ts), so the hold is recorded on his ledger as
+    // an owner's and drawn from no budget. Ada, an admin, holds from hers below (2.).
+    assert(codeRow(c1)?.vouch_amount === 100 && owenAfterHold.held === 0 && owenAfterHold.left === 1000
+        && linesOf(owen.pk).some((l) => l.kind === 'hold' && l.amount === -100 && l.ref === c1 && l.actor === 'role:owner'),
+        `1. 100 is recorded as an owner's hold on Owen's ledger when the code is made, his budget untouched (left ${owenAfterHold.left}, held ${owenAfterHold.held}, row ${codeRow(c1)?.vouch_amount})`);
     const jory = newId('Jory');
     const j1 = await redeem(jory, c1);
     assert(j1.status === 200 && j1.body?.vouch?.landed === 100 && liveConfirmation(jory.pk)?.entry_id === e1 && codeRow(c1)?.names_bind_outcome === 'confirmed',
         `1. the redeem confirms Jory against the entry and lands the vouch (${show(j1)})`);
-    assert(roomOf(jory.pk) === 100 && budgetOf(owen.pk).vouched === 100 && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === 900,
+    assert(roomOf(jory.pk) === 100 && budgetOf(owen.pk).vouched === 100 && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === 1000,
         `1. the vouch is room on Jory from Owen, and no longer held (${JSON.stringify(budgetOf(owen.pk))})`);
     // The measurement Marty asked for: how the vouch and the known floor combine on the joiner's floor.
     const jb = getBalance(jory.pk);
@@ -274,9 +276,11 @@ async function main(): Promise<void> {
     const b5 = await bind(owen, e4, { vouchAmount: 50, voucherLevel: 500 });
     require_(b5.status === 201, `Owen makes a bound invite with a vouch of 50 and a level of 500 (${show(b5)})`);
     const c5 = b5.body.invite.code as string;
-    const heldWithIt = budgetOf(owen.pk).held;
+    const withIt = budgetOf(owen.pk);
     db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(), c5);
-    assert(budgetOf(owen.pk).held === heldWithIt - 50, `5. once the code lapses its 50 is no longer held (${heldWithIt} → ${budgetOf(owen.pk).held})`);
+    // An owner's 50 was never held from a budget (Marty, 9 Nov), so its lapse moves none of it.
+    assert(withIt.held === 0 && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === withIt.left,
+        `5. once the code lapses nothing moves in the owner's budget, which never held its 50 (held ${withIt.held} → ${budgetOf(owen.pk).held}, left ${withIt.left} → ${budgetOf(owen.pk).left})`);
     returnLapsedHolds(owen.pk);
     assert(linesOf(owen.pk).some((l) => l.kind === 'return' && l.amount === 50 && l.ref === c5), '5. and the prune writes its return line');
     const late = newId('Late');
@@ -389,7 +393,9 @@ async function main(): Promise<void> {
 
     // ── 12. Replication ──────────────────────────────────────────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);
-    assert(cols.includes('voucher_level') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION === 23, `12. the manifest carries both columns as plain, hashes version 23 (${TABLE_HASHES_VERSION})`);
+    // 23 raised the version for these two columns; a later raise (24: standing deals) still hashes them. Which columns each
+    // version hashes is pinned exactly in test-replica-hashes (COLUMNS_OF_VERSION), as test-vouch-reset reads "21 or later".
+    assert(cols.includes('voucher_level') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION >= 23, `12. the manifest carries both columns as plain, hashes version 23 or later (${TABLE_HASHES_VERSION})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

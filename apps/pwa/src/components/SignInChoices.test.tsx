@@ -122,17 +122,13 @@ describe('the join: "Sign in with" offers Google, Apple and Facebook only', () =
 describe("the restore: the sign-ins offered are Google, Apple and Facebook only", () => {
     it('a node that gives an id for more still gets only the three, in their own order', async () => {
         stubNode({
-            '/api/recovery/lookup/': () => json(200, [{ publicKey: identity.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
-            '/api/recovery/collect/sso-nonce': () => json(200, {
+            '/api/recovery/find-nonce': () => json(200, {
                 nonce: 'rn-1', expiresInSeconds: 600, githubFlow: 'node',
                 clientIds: { github: 'Iv1.fixture', facebook: '818892721251369', google: 'web-client', apple: 'org.beanpool.web' },
             }),
-            '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
         });
         render(<WebRestore onRestored={vi.fn(async () => true)} onHeld={vi.fn()} onExisting={vi.fn()} onBack={vi.fn()} onOtherWay={vi.fn()}
-            navigate={vi.fn()} origin={ORIGIN} authReturn={null} />);
-        fireEvent.change(await screen.findByTestId('restore-callsign'), { target: { value: 'Alice' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+            community="Mullumbimby" navigate={vi.fn()} origin={ORIGIN} authReturn={null} />);
         await screen.findByTestId('restore-provider-facebook');
         expect(buttonsNamed('restore-provider-')).toEqual(OFFERED);
         expectNoGithubAnywhere();
@@ -141,8 +137,7 @@ describe("the restore: the sign-ins offered are Google, Apple and Facebook only"
     it('a pending restore an older build left naming GitHub is dropped, as anything else in that slot that is not one', async () => {
         const now = Date.now();
         const restore: PendingRestore = {
-            kind: 'restore', ephemeral: makeEphemeralKey(), account: { publicKey: identity.publicKey, callsign: 'Alice' },
-            collectionId: 'col-1', provider: NOT_OFFERED, nonce: 'rn-9', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS,
+            kind: 'restore', ephemeral: makeEphemeralKey(), provider: NOT_OFFERED, nonce: 'rn-9', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS,
         };
         await savePendingRestore(restore);
         expect(await loadPendingRestore()).toBeNull();

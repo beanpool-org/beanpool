@@ -37,6 +37,16 @@
  * A released copy is handed over only while its session is live (finding 4), and sealed to the session's throwaway key
  * when the device asks (finding 2, `seal` in `/collect/fragments`; @beanpool/core sealReleaseToDevice), so the bytes in
  * transit or in a log are nothing without that key.
+ *
+ * ## Finding the account from the sign-in alone (design DESIGN-recovery-no-callsign-fable.md §3, slice S0)
+ *
+ * `POST /api/recovery/find-nonce` and `POST /api/recovery/find` take a sign-in and answer the accounts it protects here, by
+ * name and key (engine/recovery-find.ts): only the holder of that sign-in gets a match, so an empty list tells the caller
+ * only that their own sign-in has no account here. The find holds the verified sign-in for 5 minutes, keyed by the
+ * restore's throwaway key, and `POST /api/recovery/collect {candidatePublicKey}` with no name opens the session for the
+ * account picked and releases its copy in the same request, through the same per-row proof `/collect/sso` runs: the find's
+ * index is never the proof. The name routes (the lookup, `callsign` here, `/collect/sso-nonce`, `/collect/sso`) stay
+ * until the phone that no longer uses them ships (S3, in the same release as S2: Marty, 9 Nov).
  */
 
 import Router from '@koa/router';
@@ -47,6 +57,7 @@ import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice, word } from '
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
     openCollection,
+    discardUnreleasedCollection,
     collectionState,
     collectionProgress,
     releasedShareIds,
@@ -73,6 +84,8 @@ import {
     type SsoProvider,
 } from '../sso.js';
 import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recovery-seal-key.js';
+import { assertPlainTablesWritable, StandbyLedgerError } from '../config/node-role.js';
+import { FindBusy, findAccountsBySignIn, holdFind, isRestorableMember, takeFindHold } from '../engine/recovery-find.js';
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
@@ -133,6 +146,18 @@ function fail(ctx: any, e: unknown): void {
     if (e instanceof SsoVerificationError) return signInFailure(ctx, e);
     // A server that cannot open the copy (its recovery-seal key is missing, or the copy is another key's): 503, the sentence.
     if (recoverySealFailure(ctx, e)) return;
+    // A standby makes no release (config/node-role.ts): 409 `standby`, as its gate answers (routes/standby-ledger-gate.ts).
+    if (e instanceof StandbyLedgerError) {
+        ctx.status = 409;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
+    // One scan at a time for copies made before the find hash (engine/recovery-find.ts): 503 `find_busy`, sign in again in a minute.
+    if (e instanceof FindBusy) {
+        ctx.status = 503;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
     if (e instanceof RecoveryReleaseError) {
         ctx.status = 400;
         ctx.body = { error: (e as Error).message };
@@ -189,10 +214,12 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
-        if (!callsign) { ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return; }
-
         // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
         const sentKey = (ctx as any).requestBody?.candidatePublicKey;
+        // No name: the account a find named, released by the find's own sign-in (collectByHold).
+        if (!callsign && typeof sentKey === 'string' && sentKey) return collectByHold(ctx, requester, sentKey);
+        if (!callsign) { ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return; }
+
         if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
             ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return;
         }
@@ -230,6 +257,111 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             threshold,
             progress,
         };
+    });
+
+    /**
+     * A collect with no name (design §3): `publicKey` must be one the find this throwaway key signed named, inside its
+     * 5-minute hold. Then the session opens and, in the same request, the hold's sign-in releases the copy through the
+     * release's own per-row scrypt proof (releaseSsoFragmentForIdentity), never the find's index; the owner is told once,
+     * and the hold is spent. The answer is the one a collect by name gives, with the copy already released.
+     *
+     * A standby, or a server without its key, refuses before the hold is touched, so the member's is kept for when the
+     * main server, or the key, answers. A release that does not happen leaves no session behind.
+     */
+    async function collectByHold(ctx: any, requester: string, publicKey: string): Promise<void> {
+        let collection: Collection | null = null;
+        try {
+            assertPlainTablesWritable();
+            requireRecoverySealKey();
+            // The hold first: without one, every key gets this one answer, so no caller learns whether a key is a member's.
+            const hold = takeFindHold(requester, publicKey);
+            if (!hold) {
+                ctx.status = 400;
+                ctx.body = { error: word("Sign in with your account's sign-in first.") };
+                return;
+            }
+            // Still one a restore may bring back (the find asked the same): not pruned, migrated or made a visitor since.
+            if (!isRestorableMember(publicKey)) {
+                ctx.status = 400;
+                ctx.body = { error: word('That account has no recovery fragments to collect.') };
+                return;
+            }
+            collection = openCollection(publicKey, requester);
+            await releaseSsoFragmentForIdentity(collection.id, hold.provider, hold.sub);
+            // A session opened by this request: its release is its first, so the owner hears it once.
+            notifySeedReleased(collection, hold.provider);
+        } catch (e) {
+            if (collection) discardUnreleasedCollection(collection.id);
+            return fail(ctx, e);
+        }
+        const progress = collectionProgress(collection.id);
+        ctx.status = 200;
+        ctx.body = {
+            collectionId: collection.id,
+            generation: collection.generation,
+            expiresAt: collection.expiresAt,
+            threshold: progress?.threshold ?? 1,
+            progress,
+        };
+    }
+
+    /**
+     * A sign-in nonce for finding the account (design §3): bound to the restore's throwaway key, as `/collect/sso-nonce`
+     * binds one to a session's key, with no session yet: the find comes first now. A standby refuses it (its gate), before
+     * the provider's sheet opens.
+     */
+    router.post('/api/recovery/find-nonce', async (ctx) => {
+        const requester = ctx.state?.actor as string | undefined;
+        if (!requester) {
+            ctx.status = 401;
+            ctx.body = { error: 'A recovery session must be signed by the device requesting it.' };
+            return;
+        }
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        ctx.status = 200;
+        ctx.body = {
+            nonce: issueNonce(requester),
+            expiresInSeconds: 600,
+            // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
+            clientIds: webClientIds(),
+        };
+    });
+
+    /**
+     * The accounts a verified sign-in protects here, by name and key (engine/recovery-find.ts): `{ accounts }`, empty when
+     * there are none, which tells the caller only about their own sign-in. Several when one sign-in protects several
+     * accounts; the member picks, and nothing is released for the others. The verified sign-in is held for the collect
+     * (holdFind). A server without its key refuses before the sign-in is checked, so the device keeps its nonce.
+     */
+    router.post('/api/recovery/find', async (ctx) => {
+        const requester = ctx.state?.actor as string | undefined;
+        if (!requester) {
+            ctx.status = 401;
+            ctx.body = { error: 'A recovery session must be signed by the device requesting it.' };
+            return;
+        }
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        const body = (ctx as any).requestBody || {};
+        if (!isSsoProvider(body.provider)) {
+            ctx.status = 400;
+            // As /collect/sso refuses it: at most 40 characters of what was sent.
+            ctx.body = { error: `'${String(body.provider).slice(0, 40)}' is not a sign-in provider this node can verify.` };
+            return;
+        }
+        try {
+            requireRecoverySealKey();
+            const identity = await verifySignIn(
+                body.provider,
+                signInCredentialFrom(body),
+                getConfiguredAudiences(body.provider),
+                typeof body.nonce === 'string' ? body.nonce : '',
+                requester,
+            );
+            const accounts = await findAccountsBySignIn(identity.provider, identity.sub);
+            holdFind(requester, identity.provider, identity.sub, accounts);
+            ctx.status = 200;
+            ctx.body = { accounts };
+        } catch (e) { return fail(ctx, e); }
     });
 
     /** How far along, and when the hub becomes available. Never includes the fragments. */

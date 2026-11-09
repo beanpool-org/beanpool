@@ -31,6 +31,8 @@ import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
+import { endStandingDealsOnRemovedListing, standingPeriodSettled, stopStandingDealsOnListing, tellStanding, type StandingNotice } from './standing-deals.js';
+import type { KeptNoticePushOptions } from './kept-notices.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -230,6 +232,8 @@ type PushFn = (
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
     kind: PushNoticeKind,
+    rehearsal?: boolean,
+    options?: KeptNoticePushOptions,
 ) => void;
 
 export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
@@ -951,11 +955,14 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     // prune, and a pending re-key leaves them on the old key.
     if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
-    const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
+    // A standing deal's period held doesn't stop its author removing the listing (DESIGN-standing-deals-fable §1.5): the
+    // standing deal stops after its current period, which is still paid at its end, and the listing hides at once.
+    const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' AND standing_id IS NULL`).get(id) as any;
     const dealSides = openDealSides(id);
     if (pendingTx && pendingTx.c > 0) throw new Error(word('This post has a deal in escrow — complete or cancel the deal before deleting it'));
 
     let removed = false;
+    let standingTold: StandingNotice[] = [];
     db.transaction(() => {
         const shopId = (db.prepare('SELECT shop_id FROM posts WHERE id = ?').get(id) as { shop_id: string | null } | undefined)?.shop_id;
         const result = db.prepare(`
@@ -975,6 +982,9 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
+        // Its standing deals stop after their current period (engine/standing-deals.ts), at once where nothing is held; the
+        // other side of each is told.
+        standingTold = stopStandingDealsOnListing(id, callerPublicKey);
         // Ended while its shop is closed for now: the shop's pause no longer holds it.
         if (shopId) forgetPausedPost(shopId, id);
         cancelPostFollowOns(id);
@@ -982,7 +992,18 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!removed) return false;
     bumpPostsVersion();
     announcePostCancelled(broadcast, postRow, dealSides, push, callerPublicKey);
+    tellStanding(standingHooksOf(broadcast, push), standingTold);
     return true;
+}
+
+/** The two things tellStanding sends a standing deal's notices with, from a removal's own: no push where none was given. */
+function standingHooksOf(broadcast: BroadcastFn, push: PushFn | undefined): Parameters<typeof tellStanding>[0] {
+    return {
+        broadcast: (event, recipients) => broadcast(event, recipients),
+        // Every argument through: a standing deal's notice names its kept copy for the bell (options.detailsFor).
+        dispatchPushNotification: (to, actor, title, body, data, category, kind, rehearsal, options) =>
+            push?.(to, actor, title, body, data, category, kind, rehearsal, options),
+    };
 }
 
 /** What a cancelled post takes with it, in the caller's transaction (removePost; a group's close, cancelClosedGroupPosts). */
@@ -1059,8 +1080,10 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     const creditsChange = updates.credits !== undefined && Number(updates.credits) !== Number(existingPost.credits);
     const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
     if (!creditsChange && !unitChange) return;
+    // A standing deal's periods don't freeze it (DESIGN-standing-deals-fable §2.4): the standing deal keeps the price per
+    // period its payer signed for (standing_deals.beans_per_period), whatever the listing says after.
     const open = db.prepare(
-        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') AND standing_id IS NULL LIMIT 1"
     ).get(id);
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
@@ -2328,7 +2351,11 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
     const dealSides = openDealSides(postId);
     const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    // A standing deal's notices, kept in the transaction and sent after it (engine/standing-deals.ts).
+    let standingTold: StandingNotice[] = [];
     runTx(() => {
+        standingTold = [];
+        const at = new Date().toISOString();
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
             for (const tx of pending) {
@@ -2365,6 +2392,10 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                     });
                 }
                 db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(tx.id);
+                // A standing deal's period refunded ends the standing deal with it, in this transaction, as a Cancel hold does
+                // (engine/standing-deals.ts standingPeriodSettled). Left alone, the tick found its period's row cancelled at
+                // the period's end and held it back for a person to settle, which nobody could (the deciding review of #2980).
+                if (tx.standing_id) standingTold.push(...standingPeriodSettled(tx, 'refunded', at));
             }
         }
         db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'").run(postId);
@@ -2373,8 +2404,11 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
             deleted = true;
             db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
             if (eventRow) db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(postId);
+            // Every standing deal still running on it ends now: between its periods, short, or with nothing held here.
+            standingTold.push(...endStandingDealsOnRemovedListing(postId, at));
         }
     });
+    tellStanding(standingHooksOf(broadcast, push), standingTold);
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId, audienceScope: audienceRow?.audience_scope ?? 'public' }, audienceRow?.audience_scope === 'direct'
         ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))

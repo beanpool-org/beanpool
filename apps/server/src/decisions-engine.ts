@@ -55,7 +55,7 @@ import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
 import { unmutedRecipients } from './engine/chat-mutes.js';
-import { keepNotice } from './engine/kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import {
     JURY_ANSWER_HOURS, JURY_LAST_DAY_AFTER_DAYS, JURY_LATE_SEAT_HOURS, JURY_REMINDER_HOURS, JURY_SERVE_AFTER_DAYS, PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE,
@@ -3834,6 +3834,10 @@ function removalVoters(decision: Decision): string[] {
 export type RemovalVotePush = (
     targets: string[], actor: string, title: string, body: string, data: Record<string, any>,
     category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote' | 'account.reply-taken-down' | JuryPushKind,
+    /** Never set here: a removal vote's pushes are real. */
+    rehearsal?: boolean,
+    /** A kept notice's push names its kept copy (keptNoticeDetails), so the bell's row and the alert clear together. */
+    options?: KeptNoticePushOptions,
 ) => unknown;
 
 /**
@@ -3887,9 +3891,11 @@ export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePus
     }
     const body = removalVoteNoticeBody(decision.closesAt);
     // Each account it names is told, a branch's every one (removalSubjects).
+    const kept: { to: string; id: string | null }[] = [];
     for (const member of subjects) {
         try {
             const noticeId = keepNotice(member, REMOVAL_VOTE_NOTICE_TITLE, body, { kind: 'removal_vote', screen: 'decide' });
+            kept.push({ to: member, id: noticeId });
             broadcast({ type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body, severity: 'info', kind: 'removal_vote', ...(noticeId ? { noticeId } : {}) },
                 [member]);
         } catch (err) {
@@ -3897,7 +3903,7 @@ export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePus
         }
     }
     try {
-        push(subjects, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, body, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+        push(subjects, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, body, { screen: 'decide' }, 'recovery', 'account.removal-vote', false, keptNoticeDetails(kept));
     } catch (err) {
         console.warn('[Decisions] the removal vote push to its member failed:', err);
     }
@@ -3916,8 +3922,9 @@ export const REPLY_TAKEN_DOWN_NOTICE_BODY = 'An admin took down your reply to th
  * the takedown is written; a notice that fails never undoes it.
  */
 function noticeReplyTakenDown(member: string, push: RemovalVotePush): void {
+    let noticeId: string | null = null;
     try {
-        const noticeId = keepNotice(member, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { kind: 'reply_taken_down', screen: 'decide' });
+        noticeId = keepNotice(member, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { kind: 'reply_taken_down', screen: 'decide' });
         broadcast({
             type: 'system_announcement', title: REPLY_TAKEN_DOWN_NOTICE_TITLE, body: REPLY_TAKEN_DOWN_NOTICE_BODY, severity: 'info', kind: 'reply_taken_down',
             ...(noticeId ? { noticeId } : {}),
@@ -3926,7 +3933,8 @@ function noticeReplyTakenDown(member: string, push: RemovalVotePush): void {
         console.warn('[Decisions] the notice of a reply taken down failed:', err);
     }
     try {
-        push([member], SYSTEM_AUTHOR, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.reply-taken-down');
+        push([member], SYSTEM_AUTHOR, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.reply-taken-down',
+            false, keptNoticeDetails([{ to: member, id: noticeId }]));
     } catch (err) {
         console.warn('[Decisions] the push of a reply taken down failed:', err);
     }
@@ -4029,9 +4037,11 @@ function noticeOwnerDecided(decision: Decision, push: RemovalVotePush): void {
     // Each account the vote names: a branch's every one (removalSubjects).
     const members = removalSubjects(decision);
     if (!members.length) return;
+    const kept: { to: string; id: string | null }[] = [];
     for (const member of members) {
         try {
             const noticeId = keepNotice(member, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
+            kept.push({ to: member, id: noticeId });
             broadcast({
                 type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
                 ...(noticeId ? { noticeId } : {}),
@@ -4041,7 +4051,8 @@ function noticeOwnerDecided(decision: Decision, push: RemovalVotePush): void {
         }
     }
     try {
-        push(members, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+        push(members, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote',
+            false, keptNoticeDetails(kept));
     } catch (err) {
         console.warn('[Decisions] the push of an owner deciding a removal vote failed:', err);
     }

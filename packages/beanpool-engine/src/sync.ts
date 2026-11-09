@@ -205,6 +205,9 @@ export interface SyncMarketplaceTransaction {
     disputeResolution?: string | null;
     disputeResolvedAt?: string | null;
     disputeResolvedBy?: string | null;
+    /** The standing deal this deal is a period of, and which period (schema.sql standing_deals). */
+    standingId?: string | null;
+    periodNo?: number | null;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
 }
@@ -256,6 +259,8 @@ export interface SyncRecoveryShare {
     ephemeralPubkey: string | null;
     ssoLookupHash: string | null;
     ssoLookupSalt: string | null;
+    /** The keyed find hash a restore by sign-in finds the copy by (server engine/recovery-find.ts); absent from a main server before it. */
+    ssoFindHash?: string | null;
     kdfParams: string | null;
     generation: number;
     createdAt: string;
@@ -435,6 +440,12 @@ export interface SyncJoinRequest {
     inviteCode: string | null;
     decidedAt: string | null;
     updatedAt: string;
+    /**
+     * The post and the member whose link shared outside the knock came with (shared-listing door A3), or null; cleared
+     * with what the applicant sent. Absent from a main server older than them.
+     */
+    viaPostId?: string | null;
+    viaSharerPubkey?: string | null;
 }
 
 /**
@@ -1215,6 +1226,8 @@ function marketplaceTransactionOfRow(row: any, ratingTxKeys: ReadonlySet<string>
         disputeResolution: row.dispute_resolution ?? null,
         disputeResolvedAt: row.dispute_resolved_at ?? null,
         disputeResolvedBy: row.dispute_resolved_by ?? null,
+        standingId: row.standing_id ?? null,
+        periodNo: row.period_no ?? null,
         ratedByBuyer: ratingTxKeys.has(`${row.id}|${row.buyer_pubkey}`),
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     };
@@ -1352,6 +1365,7 @@ function recoveryShareOfRow(row: any): SyncRecoveryShare {
         ephemeralPubkey: row.ephemeral_pubkey ?? null,
         ssoLookupHash: row.sso_lookup_hash ?? null,
         ssoLookupSalt: row.sso_lookup_salt ?? null,
+        ssoFindHash: row.sso_find_hash ?? null,
         kdfParams: row.kdf_params ?? null,
         generation: row.generation,
         createdAt: row.created_at,
@@ -1512,6 +1526,8 @@ function joinRequestOfRow(r: any): SyncJoinRequest {
         inviteCode: r.invite_code ?? null,
         decidedAt: r.decided_at ?? null,
         updatedAt: r.updated_at,
+        viaPostId: r.via_post_id ?? null,
+        viaSharerPubkey: r.via_sharer_pubkey ?? null,
     };
 }
 

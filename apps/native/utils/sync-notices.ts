@@ -259,8 +259,9 @@ export async function postKnockStatusNoticesFromSync(deps: SyncNoticeDeps): Prom
         })));
         let posted = 0;
         for (const { url, body } of said) {
-            const answer = body as { status?: unknown; invite?: unknown } | null;
-            if (answer?.status !== 'approved') continue;
+            const answer = body as { status?: unknown; invite?: unknown; member?: unknown } | null;
+            // A yes already used (the key is a member there now, global yes Y1) is no news.
+            if (answer?.status !== 'approved' || answer.member === true) continue;
             const id = `knock-answer:${url}:${typeof answer.invite === 'string' ? answer.invite : 'approved'}`;
             if ((await claim([id], deps.storage, now)).length === 0) continue;
             try {

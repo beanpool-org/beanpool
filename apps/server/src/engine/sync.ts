@@ -179,7 +179,7 @@ const IMPORT_CATEGORIES = {
  */
 export const LEDGER_SET: ReadonlySet<string> = new Set([
     'members', 'accounts', 'transactions', 'marketplace_transactions', 'settlements', 'treasury_operators',
-    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims',
+    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims', 'standing_deals',
 ]);
 
 /**
@@ -2482,8 +2482,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
                 // stamp is the main server's, which phones' deltas read after a take-over.
                 const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at,
-                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by, standing_id, period_no)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     post_id = excluded.post_id,
                                     buyer_pubkey = excluded.buyer_pubkey,
@@ -2497,7 +2497,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     last_reminded_at = excluded.last_reminded_at,
                                     dispute_resolution = excluded.dispute_resolution,
                                     dispute_resolved_at = excluded.dispute_resolved_at,
-                                    dispute_resolved_by = excluded.dispute_resolved_by`);
+                                    dispute_resolved_by = excluded.dispute_resolved_by,
+                                    standing_id = excluded.standing_id,
+                                    period_no = excluded.period_no`);
                 for (const mt of remote.marketplaceTransactions) {
                     const createdAt = mt.createdAt ?? mt.created_at ?? new Date().toISOString();
                     const completedAt = mt.completedAt ?? mt.completed_at ?? null;
@@ -2516,6 +2518,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         mt.disputeResolution ?? null,
                         mt.disputeResolvedAt ?? null,
                         mt.disputeResolvedBy ?? null,
+                        typeof mt.standingId === 'string' && mt.standingId ? mt.standingId : null,
+                        Number.isInteger(mt.periodNo) ? mt.periodNo : null,
                     );
                     if (res.changes > 0) marketplaceTxns++;
                 }
@@ -2791,11 +2795,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // the live-replication gap: without it, a promoted backup node has an empty recovery_shares table.
             if (remote.recoveryShares) {
                 const dropOlder = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?`);
+                // The find hash as the main server holds it (engine/recovery-find.ts); NULL from a main server before it, which
+                // holds none. A standby never works one out: it has no key, and refuses finds (routes/standby-ledger-gate.ts).
                 const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
                     (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
                      share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
-                     kdf_params, generation, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                     kdf_params, generation, created_at, updated_at, sso_find_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const rs of remote.recoveryShares) {
                     dropOlder.run(rs.ownerPubkey, rs.generation);
                     const res = insertShare.run(
@@ -2803,7 +2809,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rs.encryptedShare, rs.shareIv, rs.shareTag,
                         rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
                         rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
-                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
+                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt, rs.ssoFindHash ?? null,
                     );
                     if (res.changes > 0) recoverySharesImported++;
                 }

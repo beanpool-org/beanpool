@@ -63,6 +63,7 @@ import { rememberDmConversations } from '../lib/dm-guard';
 import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
 import { nearRead } from '../lib/listings-near';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { handedOverHere, markHandedOver } from '../lib/handoff';
 import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
 import { chooseAndShowLanguage, resetLanguageForTests } from '../lib/language';
 import { useLanguage } from '../lib/useLanguage';
@@ -550,7 +551,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(within(needs).getByTestId('home-needs-knock')).toHaveTextContent('2 people asked to join');
         expect(within(needs).queryByRole('link', { name: /asked to join/ })).toBeNull();
         fireEvent.click(within(needs).getByRole('button', { name: '2 people asked to join. Waiting on you.' }));
+        expect(nav).toHaveBeenCalledWith('people-invites', 'asked');
+    });
+
+    it('an ask-for-an-invite line lands on the same page, but as an ordinary visit: it is not a notice about requests to join', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'ask', count: 1, accent: true, label: '1 person asked for an invite', target: { to: 'people' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs).getByTestId('home-needs-ask').closest('button')!);
         expect(nav).toHaveBeenCalledWith('people-invites');
+        expect(nav).not.toHaveBeenCalledWith('people-invites', 'asked');
     });
 
     it("a group's vote line lands on the group (DESIGN-group-decisions S3), not Messages and not Commons → Decide", async () => {
@@ -5103,6 +5118,55 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             await screen.findByTestId('home-card-market');
             expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+        });
+
+        // Global yes Y1 (DESIGN-global-yes-join-fable.md §2.2): on a phone's browser, after the account was handed over from
+        // global's page and joined here, Home offers the phone app once (the guide's own advice), then the usual rule.
+        const dayOneMember = () => answer({
+            profile: 'local',
+            me: { joinedAt: new Date(Date.now() - 60_000).toISOString(), isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
+        });
+        const phoneBrowser = () => {
+            window.matchMedia = ((q: string) => ({ matches: q.includes('reduce') || q.includes('pointer: coarse'), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
+        };
+
+        it('handed over and joined, on a phone: offered on the first Home at once, and on that visit only', async () => {
+            phoneBrowser();
+            markHandedOver(ME.publicKey);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(dayOneMember()));
+            const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            expect(handedOverHere(ME.publicKey)).toBe(false);
+            unmount();
+            // Once: the next Home is the usual rule's (a member of a minute with no post: not yet).
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+        });
+
+        it('handed over and joined on a computer, another key handed over, or the card dismissed: not offered early', async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(dayOneMember()));
+            markHandedOver(ME.publicKey);
+            const computer = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            // Taken all the same: a computer never offers it later from this mark.
+            expect(handedOverHere(ME.publicKey)).toBe(false);
+            computer.unmount();
+
+            phoneBrowser();
+            markHandedOver('9'.repeat(64));
+            const other = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            other.unmount();
+
+            localStorage.setItem(`beanpool_use_phone_app_dismissed_${ME.publicKey}`, '1');
+            markHandedOver(ME.publicKey);
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
         });
     });
 

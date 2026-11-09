@@ -15,8 +15,10 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, holdBackStandingDeal,
 } from '../../utils/db';
+import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
+import { standingOfRow } from '../../utils/standing-row';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
 import { usePinRole } from '../../utils/use-pin-role';
 import { PinSheet } from '../../components/PinSheet';
@@ -50,7 +52,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitForListing, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -517,8 +519,10 @@ export default function PostDetailModal() {
     }, []);
     const { identity } = useIdentity();
     const [activeTx, setActiveTx] = useState<any>(null);
-    // The status of the deal a door named (an alert's txId) when that deal is over: said in one line, never the live deal.
-    const [pinnedOver, setPinnedOver] = useState<string | null>(null);
+    // The deal a door named (an alert's txId) when its Beans are not held: its status, and its standing deal's phase on the
+    // phone's copy (a short one's row is the period last settled, but the deal runs on). Said in one line when it is over,
+    // never the live deal (core listingDealLines.finished).
+    const [pinnedOver, setPinnedOver] = useState<Parameters<typeof listingDealLines.finished>[0] | null>(null);
     const [post, setPost] = useState<any>(null);
     // True only once the post is confirmed absent (local miss + the server-side
     // check has had time to land). Until then a local miss renders as loading,
@@ -584,6 +588,8 @@ export default function PostDetailModal() {
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
     const [acceptHours, setAcceptHours] = useState('1');
+    // The request on a standing Need whose author is agreeing to pay for it (DESIGN-standing-deals-fable §4): its payer screen shows.
+    const [approvingStanding, setApprovingStanding] = useState<string | null>(null);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
     const [completeHours, setCompleteHours] = useState('');
     const [showRatingForm, setShowRatingForm] = useState(false);
@@ -789,7 +795,7 @@ export default function PostDetailModal() {
                         WHERE t.id = ? AND t.post_id = ?
                     `, [singleTxId, singleId]).catch(() => null) : null;   // a deal shows only on ITS listing (a hand-made link pairs any)
                     const pinHeld = pinned?.status === 'pending';
-                    setPinnedOver(pinned && !pinHeld ? String(pinned.status) : null);
+                    setPinnedOver(pinned && !pinHeld ? { status: String(pinned.status), ...standingOfRow(pinned) } : null);
                     if (pinHeld) {
                         updateActiveTx(pinned);
                     } else if (activeIdentity) {
@@ -1053,11 +1059,21 @@ export default function PostDetailModal() {
     const isLoan = isOffer && Boolean(post.lendable);
     const emoji = categoryEmoji(post.category);
     const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown');
-    const priceLabel = isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
+    // A listing priced at 0 reads Free (core listing-price.ts, as on every card): a Need says "Free help wanted", and its label is
+    // "Price", not "Willing to pay" over a figure that pays nothing. The words are the figure: no Beans icon, no unit.
+    const freeWords = freePriceWords(post.credits, post.type, 'box');
+    const freeLabel = freePriceLabel(post.credits, post.type);
+    const priceLabel = freeLabel ? upperCase(freeLabel) : isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
-    const needQuantity = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+    // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
+    // week or per month is taken up as one, its payer signing the authorisation. A standing Need's helper offers one period.
+    // A free one (0 Beans: nothing to hold each period) stays a one-off deal, by core's one rule, as on the web.
+    const standingUnit = standingUnitForListing(post.price_type, post.credits);
+    const standingOffer = !!standingUnit && post.type === 'offer' && !post.lendable;
+    const standingNeed = !!standingUnit && post.type === 'need';
+    const needQuantity = post.price_type !== 'fixed' ? parseAmount(standingNeed ? '1' : acceptHours, undefined, ANY_DECIMALS) : null;
     // A quantity of 0 is no usable quantity (as the web's acceptHoursValue > 0): it would read "for free" on a priced Need.
     const needTotal = needQuantity === null ? Number(post.credits) : needQuantity.ok && needQuantity.value > 0 ? Number(post.credits) * needQuantity.value : null;
     const needAnswerWords = !isOffer && needTotal !== null ? needAnswerLine(needTotal, post.author_callsign) : null;
@@ -1078,6 +1094,53 @@ export default function PostDetailModal() {
     }, me, operatedTreasuries);
     const toAnswer = requests.filter(r => !requestMoves(r)?.withdraw);
     const afterDealStep = () => { DeviceEventEmitter.emit('sync_data_updated'); };
+    // While a standing deal runs by itself its period is no deal to release (the node releases it at the period's end): its
+    // panel shows instead of the held one. One held back is a plain held deal again, and shows both.
+    const standingRunning = deals.standing.some(m => m.tx.standingPhase !== 'held_back');
+    const standingStep = async (step: () => Promise<unknown>) => {
+        setAccepting(true);
+        try {
+            await step();
+            requestSync().catch(console.error);
+            afterDealStep();
+        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
+    };
+    // Agree (§2.2, §6): the payer's phone signs the authorisation (core builds the text and its bytes) and sends it with the
+    // accept (an Offer) or the approval (a Need's author, paying the helper the request names).
+    const takeUpStanding = async (choice: StandingChoice, payee: string, approveTxId?: string) => {
+        if (!identity || !standingUnit || accepting) return;
+        setAccepting(true);
+        try {
+            const standing = await signStandingStart(standingFieldsFor({
+                listingId: post.id, payee, beansPerPeriod: Number(post.credits), unit: standingUnit, maxPeriods: choice.periods, startsAt: choice.startsAt,
+            }));
+            if (approveTxId) await approveMarketplaceRequest(approveTxId, identity.publicKey, standing);
+            else await acceptMarketplacePost(post.id, identity.publicKey, undefined, standing);
+            hapticSuccess();
+            setShowAcceptConfirm(false);
+            setApprovingStanding(null);
+            if (approveTxId) setRequests(prev => prev.filter(r => r.id !== approveTxId));
+            requestSync().catch(console.error);
+            afterDealStep();
+            // Then the chat with the one paid, as the phone's accept and approval of a one-off deal open it.
+            try {
+                const conv = await createConversationApi('dm', [payee, identity.publicKey], identity.publicKey, undefined, post.id);
+                if (conv) router.replace(`/chat/${conv.id}`);
+            } catch (chatError) {
+                console.error('Failed to start chat after a standing deal began', chatError);
+            }
+        } catch (e: any) {
+            hapticWarning();
+            if (changedElsewhere(e, 'deal_open')) {
+                Alert.alert(t('Already under way'), t('You already have a deal under way on this. Finish or cancel it first.'));
+                requestSync().catch(console.error);
+                setShowAcceptConfirm(false);
+            } else {
+                const x = explainTradeError(e);
+                Alert.alert(x.title, x.message);
+            }
+        } finally { setAccepting(false); }
+    };
     // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
     const releaseRow = async (m: DealMoves) => {
         if (!identity) return;
@@ -1125,7 +1188,7 @@ export default function PostDetailModal() {
         if (!identity) return;
         try {
             const conv = await createConversationApi('dm', [peer, identity.publicKey], identity.publicKey, undefined, post.id);
-            if (conv) router.push(`/chat/${conv.id}`);
+            if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
         } catch (e: any) {
             Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
         }
@@ -1601,9 +1664,11 @@ export default function PostDetailModal() {
                     <View style={[shell.pageBox, styles.termsBox]} testID="price-terms">
                         <Text style={[shell.boxLabel, styles.termsLabel]}>{priceLabel}</Text>
                         <View style={styles.priceRow}>
+                            {freeWords ? <Text style={styles.priceValue} testID="price-free">{freeWords}</Text> : <>
                             <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
                             {/* The unit, a space after the amount: " / Hr". */}
                             <Text style={styles.priceUnit}>{priceUnitWords(post.price_type) ? ` ${priceUnitWords(post.price_type)}` : ''}</Text>
+                            </>}
                         </View>
                     </View>
                 )}
@@ -1622,8 +1687,21 @@ export default function PostDetailModal() {
                     </Text>
                 )}
 
+                {/* A standing deal running on it, one panel for each the reader stands on (§2.2): Hold back, Stop and Message. */}
+                {deals.standing.map(m => {
+                    const other = m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerPublicKey : m.tx.buyerPublicKey;
+                    const otherName = (m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerCallsign : m.tx.buyerCallsign) || t('Peer');
+                    return (
+                        <StandingPanel key={m.tx.id} tx={m.tx as any} actingAs={m.actingAs} busy={accepting}
+                            onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
+                            onHoldBack={() => standingStep(() => holdBackStandingDeal(m.tx.standingId!))}
+                            onMessage={m.asKeeper ? undefined : () => messageRow(other)}
+                            messageLabel={t('Message {name}', { name: otherName })} />
+                    );
+                })}
+
                 {/* 1. Pending Escrow State (Applies to both Payer and Payee) */}
-                {ownRows.length === 0 && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
+                {ownRows.length === 0 && !standingRunning && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
@@ -1729,7 +1807,7 @@ export default function PostDetailModal() {
                                     if (!identity) return;
                                     try {
                                         const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                        if (conv) router.push(`/chat/${conv.id}`);
+                                        if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                                     } catch (e: any) {
                                         Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                                     }
@@ -2035,9 +2113,16 @@ export default function PostDetailModal() {
                             {t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </Text>
                     </View>
-                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
+                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (myRequest || deals.canTakeUp) && (
+                    // Accept only where core's canTakeUp says (as the web): not while the reader's own deal on it is open,
+                    // a standing one short or between its periods included (its row is no held one, so isAcceptedByMe misses it).
                     <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
-                        {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm ? (
+                        {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm && standingOffer && standingUnit ? (
+                            // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
+                            <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={post.author_callsign || t('Peer')}
+                                busy={accepting} onCancel={() => setShowAcceptConfirm(false)}
+                                onAgree={(choice) => takeUpStanding(choice, post.author_pubkey)} />
+                        ) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
                                 <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}</Text>
 
@@ -2062,7 +2147,8 @@ export default function PostDetailModal() {
                                     // deal itself, the request card and the Payee's line, not here.
                                     <Text testID="need-answer-line" style={styles.needAnswerLine}>{needAnswerWords}</Text>
                                 )}
-                                {post.price_type !== 'fixed' && (
+                                {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
+                                {post.price_type !== 'fixed' && !standingNeed && (
                                     <View style={{ marginBottom: 12 }}>
                                         <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
                                         <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={post.price_type !== 'fixed'} />
@@ -2077,7 +2163,7 @@ export default function PostDetailModal() {
                                         if (accepting) return;
                                         if (!identity || !post.id) return;
                                         // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
-                                        const hoursRead = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+                                        const hoursRead = post.price_type !== 'fixed' ? needQuantity : null;
                                         if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
                                         setAccepting(true);
                                         try {
@@ -2212,7 +2298,7 @@ export default function PostDetailModal() {
                                                 if (!identity || !reqPubkey) return;
                                                 try {
                                                     const conv = await createConversationApi('dm', [reqPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                                    if (conv) router.push(`/chat/${conv.id}`);
+                                                    if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                                                 } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
                                             }}
                                         >
@@ -2228,10 +2314,17 @@ export default function PostDetailModal() {
                                         <Pressable accessibilityRole="button" style={[styles.rejectBtn, accepting && {opacity: 0.5}, { flex: 1, alignItems: 'center' }]} disabled={accepting} onPress={() => handleReject(req.id)}>
                                             <Text style={styles.rejectBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Deny')}</Text>
                                         </Pressable>
-                                        <Pressable accessibilityRole="button" style={[styles.approveBtn, accepting && {opacity: 0.5}, { flex: 2, alignItems: 'center' }]} disabled={accepting} onPress={() => handleApprove(req.id)}>
+                                        <Pressable accessibilityRole="button" style={[styles.approveBtn, accepting && {opacity: 0.5}, { flex: 2, alignItems: 'center' }]} disabled={accepting}
+                                            onPress={() => (standingNeed && !isOperatorOfAuthor ? setApprovingStanding(req.id) : handleApprove(req.id))}>
                                             <Text style={styles.approveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Approve & Commit')}</Text>
                                         </Pressable>
                                     </View>
+                                    {/* A standing Need: its author pays, and agrees to the run on the payer's screen first (§4). */}
+                                    {approvingStanding === req.id && standingUnit && (
+                                        <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={reqCallsign}
+                                            busy={accepting} onCancel={() => setApprovingStanding(null)}
+                                            onAgree={(choice) => takeUpStanding(choice, req.seller_pubkey, req.id)} />
+                                    )}
                                 </View>
                             );
                         })}
@@ -2316,7 +2409,7 @@ export default function PostDetailModal() {
                             if (!identity) return;
                             try {
                                 const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                if (conv) router.push(`/chat/${conv.id}`);
+                                if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                             } catch (e: any) {
                                 Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                             }

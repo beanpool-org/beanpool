@@ -25,6 +25,7 @@ import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { globalEntryLine } from '../utils/global-entry-line';
 import { useGlobalGuestVisit } from '../utils/use-global-guest-visit';
 import { useIdentity } from './IdentityContext';
+import { SetUpServerRow } from '../components/SetUpServerRow';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE, t, tn, word, type WordKey } from '@beanpool/core';
 
@@ -112,6 +113,8 @@ export default function BeanPoolSheet() {
         rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text.heading },
         rowSub: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
         chevron: { flexShrink: 0 },
+        // components/SetUpServerRow.tsx in this list: the side padding and height of the rows above it.
+        setUpServer: { paddingHorizontal: 14, paddingVertical: 12 },
         statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
         dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
         // Capped, its word shrinking to fit, so a longer language's "Share" leaves the website's line room at 320 dp.
@@ -444,6 +447,9 @@ export default function BeanPoolSheet() {
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
                     </Pressable>
+                    {/* The claim screen for someone who has just installed BeanPool on a server, on every phone, always
+                        (DESIGN-new-operator-path-fable.md, decision 2): from a local community it was the camera or nothing. */}
+                    <SetUpServerRow divider style={styles.setUpServer} />
                 </View>
 
                 <View style={[styles.searchBox, { marginTop: 20 }]}>

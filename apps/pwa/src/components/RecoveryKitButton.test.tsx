@@ -148,7 +148,9 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
     });
 
     it('the global community: its address opens the lobby, whose "Already have BeanPool?" opens the ways back', () => {
-        expect(app).toMatch(/visitorsSeeListings\(info\) && !inFlight \? \{ kind: 'lobby'/);
+        expect(app).toMatch(/visitorsSeeListings\(info\) && !inFlight && !askDoor \? \{ kind: 'lobby'/);
+        // Only a community's own Ask to join (`/app?door=ask`) skips the lobby; the address the kit names opens it as before.
+        expect(app).toMatch(/const askDoor = new URLSearchParams\(window\.location\.search\)\.get\('door'\) === 'ask';/);
         const have = between(lobby, 'data-testid="lobby-have-account"', '</button>');
         expect(have).toContain("openJoin('restore')");
         expect(have).toContain('Already have BeanPool?');

@@ -20,11 +20,12 @@
  * reads it as a stranger and checks.
  *
  * The doors on it:
- *   - **Ask to join**, where it takes requests: on an Android phone the BeanPool app's card screen
- *     (`beanpool://community-card?node=…`, as an intent link that falls back to the next door when the app isn't there);
- *     elsewhere the global community's lobby with this community first (`{globalCommunityUrl}/?ask=<host>`), only where
- *     the node names a global community AND is listed in the directory, which the lobby's list is (a community the lobby
- *     doesn't list would be a door to nowhere). Neither: "Ask to join from the BeanPool app", and no link.
+ *   - **Ask to join**, where it takes requests: this community's own web app, `/app?door=ask` (the JSON's `askUrl`,
+ *     `https://<host>/app?door=ask`), where a stranger asks it directly and the browser makes the key
+ *     (DESIGN-shared-listing-door-fable.md §2.1, decided 9 Nov). On an Android phone the BeanPool app's card screen
+ *     (`beanpool://community-card?node=…`, as an intent link that falls back to that same page when the app isn't
+ *     there). Nobody else is in the path: a node that names no global community, or isn't listed, has the same door.
+ *     The line under it says what it does ("Makes your account here and sends your request to {name}…").
  *   - **I have an invite**: the web app's invite form (`/app?door=invite`).
  *   - **Already a member**: the web app's sign-in (`/app?door=signin`).
  *   - **Look around the global community**: the node's global community, where it names one.
@@ -37,7 +38,7 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 import {
-    brandCssVariableMap, communityCardFacts, communityCardName, normaliseLang, COMMUNITY_CARD_WORDS, WEB_INK_GROUNDS,
+    brandCssVariableMap, communityAskUrl, communityCardFacts, communityCardName, normaliseLang, COMMUNITY_CARD_WORDS, WEB_INK_GROUNDS,
     type CommunityCard, type Lang,
 } from '@beanpool/core';
 import { getLocalConfig } from '../config/local-config.js';
@@ -47,7 +48,7 @@ import { placeShownTo } from '../config/community-place.js';
 import { acceptingKnocks } from '../engine/directory-promise.js';
 import { getDoor } from '../config/door.js';
 import { getGlobalCommunityUrl } from '../config/global-community.js';
-import { directoryHeldBack, isDefaultOrEmptyCommunityName } from '../services/directory-publisher.js';
+import { isDefaultOrEmptyCommunityName } from '../services/directory-publisher.js';
 import { wordsIn } from '../member-words.js';
 import { useAppDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
@@ -62,24 +63,8 @@ export const ACCOUNT_HINT_COOKIE = 'bp_account_here';
 /** The Android app's package, for the intent link that opens its card screen. */
 const ANDROID_PACKAGE = 'org.beanpool.pillar';
 
-/** Whether the global community's list holds this community: listed, not held back, and told at least once. */
-function listedInDirectory(): boolean {
-    return getProfileSwitches().publishToDirectory && directoryHeldBack() === null && !!getNodeConfig().lastDirectoryPush;
-}
-
-/**
- * The lobby with this community first: the global community's address with `?ask=<host>`, built through URL, since the
- * operator's address is kept as typed (config/start-community.ts): a trailing `/`, a query or a fragment of theirs would
- * otherwise give `//?ask=` or `?a=b/?ask=`. Its path stays, as the address's root.
- */
-function lobbyAskUrl(global: string, host: string): string {
-    const url = new URL(global);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
-    url.search = '';
-    url.hash = '';
-    url.searchParams.set('ask', host);
-    return url.toString();
-}
+/** Ask to join on the card's own page: the web app's ask door, at this address (relative, so it works by any name). */
+const ASK_PATH = '/app?door=ask';
 
 /** The card as a stranger reads it now. */
 export function communityCard(): CommunityCard {
@@ -99,7 +84,7 @@ export function communityCard(): CommunityCard {
             ? { name: config.areaName, radiusKm: typeof config.serviceRadius?.radiusKm === 'number' ? config.serviceRadius.radiusKm : null }
             : null,
         joining,
-        askUrl: global && host && joining === 'requests' && listedInDirectory() ? lobbyAskUrl(global, host) : null,
+        askUrl: joining === 'requests' ? communityAskUrl(host) : null,
         globalUrl: global,
     };
 }
@@ -187,13 +172,9 @@ export function renderCommunityCard(card: CommunityCard, opts: { lang: Lang | nu
 
     const doors: string[] = [];
     if (card.joining === 'requests') {
-        const href = opts.android && card.host ? androidCardLink(card.host, card.askUrl) : card.askUrl;
-        if (href) {
-            doors.push(`<a class="door primary" data-door="ask" href="${e(href)}">${e(w.t(W.ask))}</a>`);
-            if (!opts.android) doors.push(`<p class="note">${e(w.t(W.askViaGlobal, { name }))}</p>`);
-        } else {
-            doors.push(`<p class="note" data-door="ask-app">${e(w.t(W.askInApp))}</p>`);
-        }
+        const href = opts.android && card.host ? androidCardLink(card.host, card.askUrl) : card.askUrl ?? ASK_PATH;
+        doors.push(`<a class="door primary" data-door="ask" href="${e(href)}">${e(w.t(W.ask))}</a>`);
+        doors.push(`<p class="note" data-door="ask-note">${e(w.t(W.askNote, { name }))}</p>`);
     }
     if (card.joining === 'open') doors.push(`<a class="door primary" data-door="join" href="/app">${e(w.t(W.join))}</a>`);
     else doors.push(`<a class="door ${card.joining === 'requests' ? 'secondary' : 'primary'}" data-door="invite" href="/app?door=invite">${e(w.t(W.haveInvite))}</a>`);

@@ -134,7 +134,29 @@ export interface TableHashes {
  * on an invite nobody has used yet (after a takeover from such a copy that person still joins, confirmed, and the committee
  * can make them a voucher from the list), and the outcome line on a used one.
  */
-export const TABLE_HASHES_VERSION = 23;
+/**
+ * 24: standing deals (engine/standing-deals.ts, DESIGN-standing-deals-fable.md slice S1): a new plain table, standing_deals,
+ * and marketplace_transactions gains standing_id and period_no. Raised for the same reason as 4: a standby updated before its
+ * main server hashes `marketplace_transactions` over two more columns, and the new table too. REPLICA_FORMAT stays, as for
+ * 22: each side's import writes only the columns and tables its own database has. What an older importer drops (a main
+ * server updated first may hold standing deals its standby doesn't keep yet) is the arrangement: after a takeover from such
+ * a copy each period still held is a plain held deal its two members settle, and nothing more is held, since no hold is made
+ * without the signed authorisation the dropped row keeps.
+ */
+/**
+ * 25: recovery_shares gains sso_find_hash (a restore finds the account from the sign-in alone, DESIGN-recovery-no-callsign-
+ * fable.md §3, slice S0). Raised for the same reason as 8: a standby updated before its main server hashes
+ * `recovery_shares` over one more column. REPLICA_FORMAT stays: what an older importer drops is an index, not a copy;
+ * after a take-over from such a copy each member's copy is found by the scan of copies with no find hash, and made
+ * findable, at their first restore (engine/recovery-find.ts).
+ */
+/**
+ * 26: join_requests gains via_post_id and via_sharer_pubkey (where a request to join came from, shared-listing door A3,
+ * DESIGN-shared-listing-door-fable.md §2.2). Raised for the same reason as 8: a standby updated before its main server hashes
+ * `join_requests` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the provenance line answerers
+ * read; the request itself is copied whole, and after a take-over from such a copy it simply shows no "After reading" line.
+ */
+export const TABLE_HASHES_VERSION = 26;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

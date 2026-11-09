@@ -10,7 +10,7 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
-import { askHost, t, tn, word } from '@beanpool/core';
+import { askHost, FREE_PRICE_WORDS, t, tn, word } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
 /** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
@@ -51,7 +51,7 @@ export function beansOn(info: CommunityInfo | null | undefined): boolean {
 /** A listing's terms on a visitor's card: no Beans figure where there are no Beans. */
 export function visitorPriceText(post: Pick<MarketplacePost, 'credits' | 'priceType'>, beans: boolean): string {
     if (!beans) return t(VISITOR_WORDS.noBeansTerms);
-    if (!post.credits) return t('Free', undefined, 'price');
+    if (!post.credits) return t(FREE_PRICE_WORDS.short);
     // One English form for both ("1 Beans"), as the lobby always wrote it: the other languages get theirs.
     const n = post.credits;
     switch (post.priceType) {

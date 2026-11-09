@@ -10,7 +10,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, VOUCH_MAX, VOUCH_PRESET_WORDS, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, VOUCH_PRESET_WORDS, type QuizResult } from '@beanpool/core';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
@@ -21,7 +21,7 @@ import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, freePriceWords } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 
@@ -245,7 +245,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     }, [myVouching, pubkey]);
     const effectivePriorVouch = nodePriorVouch ?? myPriorVouch;
     const isRaise = effectivePriorVouch > 0;
-    const atMax = effectivePriorVouch >= VOUCH_MAX;
+    // One voucher's vouches for one person: 100, or 500 for an owner (core vouchMaxFor; the node's noLimit, Marty 9 Nov).
+    const pairMax = vouchMaxFor(myVouching?.noLimit === true);
+    const atMax = effectivePriorVouch >= pairMax;
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -445,7 +447,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
                                             prior: effectivePriorVouch,
                                             name: profile?.callsign || '',
-                                            max: VOUCH_MAX,
+                                            max: pairMax,
                                         })}
                                     </p>
                                 )}
@@ -457,6 +459,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     }}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
+                                    noLimit={myVouching.noLimit === true}
                                     priorVouch={effectivePriorVouch}
                                     personName={profile?.callsign || ''}
                                 />
@@ -547,7 +550,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         const prior = typeof err?.prior === 'number' && err.prior > 0 ? err.prior : null;
                                         if (prior !== null) setNodePriorVouch(prior);
                                         if (!isRaise && err?.code === 'already_vouched' && prior !== null) {
-                                            if (prior + profileVouchPreset <= VOUCH_MAX) {
+                                            if (prior + profileVouchPreset <= pairMax) {
                                                 setRaisePrompt({ prior, newTotal: prior + profileVouchPreset, amount: profileVouchPreset });
                                                 return;
                                             }
@@ -1017,8 +1020,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     {/* A price is Beans: none where Beans are marked (the line above says where they live). */}
                                                                     {!beansMarked && (
                                                                         <div className="flex items-center gap-1" data-testid="profile-listing-price">
+                                                                            {/* Priced at 0 it reads Free, with no Beans mark: core listing-price.ts, as on every card. */}
+                                                                            {freePriceWords(p.credits, p.type) ? <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{freePriceWords(p.credits, p.type)}</span> : <>
                                                                             <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
                                                                             <span className="text-[10px]">🫘</span>
+                                                                            </>}
                                                                         </div>
                                                                     )}
                                                                 </div>

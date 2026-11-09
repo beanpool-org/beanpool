@@ -41,7 +41,7 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
-vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), ErrorBoundary: () => null }));
+vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), useFocusEffect: () => {}, ErrorBoundary: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => undefined) }));
@@ -116,9 +116,11 @@ async function render(): Promise<HTMLElement> {
     const host = document.createElement('div');
     document.body.appendChild(host);
     await act(async () => { createRoot(host).render(createElement(FindCommunityScreen as any) as unknown as Parameters<Root['render']>[0]); });
-    // The typed town, then the list read from it.
+    // The typed town, then the list read from it. Two bare flushes were not always enough on a loaded CI runner (the far
+    // line read null, merge queue run 42529007387), so a few real ticks follow, as the quiet-community case below does.
     await act(async () => {});
     await act(async () => {});
+    for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 1)); });
     return host;
 }
 const line = (host: HTMLElement, id: string) => host.querySelector(`[data-testid="${id}"]`)?.textContent ?? null;

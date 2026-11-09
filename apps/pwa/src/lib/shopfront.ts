@@ -14,7 +14,7 @@
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
 import {
-    SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word,
+    SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word,
     type ShopCategory, type TierName, type WordKey,
 } from '@beanpool/core';
 import { getMarketplacePosts, signedFetch } from './api';
@@ -128,12 +128,14 @@ export function shopSectionsOf(listings: readonly ShopfrontListing[]): ShopSecti
 /** Its price in words, or null where the community shows no Beans. */
 export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): string | null {
     if (!showsBeans) return null;
+    // Priced at 0 it is Free whatever its unit (core listing-price.ts): "Free", never "0 🫘 an hour".
+    const free = freePriceWords(l.credits, l.type);
+    if (free) return free;
     const amount = formatNumber(l.credits);
     if (l.priceType === 'hourly') return t('{amount} 🫘 an hour', { amount });
     if (l.priceType === 'daily') return t('{amount} 🫘 a day', { amount });
     if (l.priceType === 'weekly') return t('{amount} 🫘 a week', { amount });
     if (l.priceType === 'monthly') return t('{amount} 🫘 a month', { amount });
-    if (l.credits === 0) return t('Free', undefined, 'a listing with no price');
     return t('{amount} 🫘', { amount });
 }
 

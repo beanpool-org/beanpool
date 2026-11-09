@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -35,6 +35,8 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { ChatAboutBanner, ChatAboutCard } from '../../components/chat/ChatAbout';
+import { useAboutListings } from '../../utils/about-listings';
 import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
@@ -43,7 +45,6 @@ import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, requestDecisionFailureWords, requestIsGone, type ChatViewer,
 } from '../../utils/chat-actions';
-import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
 // db.ts and the DM line checks never reach the words layer: the sentences they write are translated where shown.
 import { chatLineWords } from '../../utils/chat-line-words';
@@ -56,7 +57,7 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
-// the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
+// the composer all moved to utils/chat-actions, components/chat/* and core's chat-links (chat parity,
 // 2026-09-23), so a group chat behaves the same way rather than nearly the same way.
 
 // History window (WhatsApp-style): open with the newest page, grow by a page each
@@ -777,7 +778,11 @@ function ChatScreen({ id }: { id: string }) {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
+                // The listing the member came from (Message on a Need or an Offer) goes with this line, sealed beside its words; the
+                // chip is spent once the line is written, and the line itself holds it from there, so a Resend carries it too.
+                const about = chatAboutDrafts.get(String(id));
+                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata, undefined, about), 15_000, t('Sending is taking too long — please try again.'));
+                if (about) chatAboutDrafts.drop(String(id));
                 setReplyToMessage(null);
                 // Written here and on its way: the chat waits only once the node has taken it (the effect above).
                 if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
@@ -1121,6 +1126,8 @@ function ChatScreen({ id }: { id: string }) {
     // Day pills interleaved, then reversed for the inverted list. Shared with every chat so a group's
     // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
+    // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
+    const aboutListings = useAboutListings(React.useMemo(() => messages.filter((m) => m.about).map((m) => m.about.postId as string), [messages]));
 
     // Who this member is in this chat. The one place the action rules are asked, so a DM and a group chat
     // can never disagree about what tapping a bubble offers.
@@ -1399,6 +1406,9 @@ function ChatScreen({ id }: { id: string }) {
                 onPressUrl={requestMode === 'none' ? openUrl : undefined}
                 editing={editingMessage?.id === item.id}
                 quote={quote}
+                about={item.about ? (
+                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
+                ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
                     // (design §4.6, as the web; PR #2540 review 4393642129). Its caption is words, and reads.
@@ -1573,9 +1583,10 @@ function ChatScreen({ id }: { id: string }) {
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {/* English writes one form for both; a language with more forms has them. */}
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.priceType === 'hourly'
+                            {/* Priced at 0 it reads Free (core listing-price.ts), as on every card, whatever the unit. */}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.credits, null) ?? (postContext.priceType === 'hourly'
                                 ? tn(Number(postContext.credits) || 0, '{n} Beans / hr', '{n} Beans / hr')
-                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans')}</Text>}
+                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans'))}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,
@@ -1684,6 +1695,8 @@ function ChatScreen({ id }: { id: string }) {
                         onCancel={() => { setEditingMessage(null); composerRef.current?.reset(); }}
                     />
                 )}
+
+                {!editingMessage && <ChatAboutBanner conversationId={String(id)} />}
 
                 {replyToMessage && !editingMessage && (() => {
                     // What is being answered, as the thread judged it (dmQuoteFor).

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1006,8 +1006,6 @@
   "@{name} is a voucher already.": "@{name} tayari ni mdhamini.",
   "@{name} isn’t a voucher.": "@{name} si mdhamini.",
   "@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.": "@{name} anadhamini kama mmiliki au msimamizi wakati anashikilia wadhifa huo, kwa hivyo bajeti yake haiwezi kusitishwa. Unaweza kuipunguza badala yake.",
-  "@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.": "@{name} anadhamini kama mmiliki wakati anashikilia wadhifa huo, kwa hivyo bajeti yake haiwezi kusitishwa, na ni mmiliki mwingine pekee anayeweza kuipunguza.",
-  "@{name} is an owner: only another owner can lower their budget.": "@{name} ni mmiliki: ni mmiliki mwingine pekee anayeweza kupunguza bajeti yake.",
   "@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.": "@{name} ana maharagwe {held} yaliyoshikiliwa kwenye mialiko ambayo haijatumiwa bado, kwa hivyo bajeti yake haiwezi kwenda chini ya hapo.",
   "A voucher has at most {max} Beans in hand, left and held together.": "Mdhamini ana kisichozidi maharagwe {max} mkononi, yaliyosalia na yaliyoshikiliwa pamoja.",
   "@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.": "Akaunti ya @{name} imesitishwa, kwa hivyo bajeti yake haiwezi kuongezwa ikiwa bado inaendelea. Bado unaweza kuipunguza.",
@@ -1017,5 +1015,12 @@
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Bajeti yako ya kudhamini ilipunguzwa hadi maharagwe {level}. Umebakiwa na {left} yake ya kudhamini.",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Sehemu ya kikomo cha mkopo ulichopewa na mtu ilianza kama dhamana ya @{name} na haiwezi kwenda kwake, kwa hivyo unaweza kumpa maharagwe {most} kwa kiwango cha juu.",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Kikomo cha mkopo ulichopewa na mtu kilianza kama dhamana ya @{name}, kwa hivyo hakuna sehemu yake inayoweza kwenda kwake.",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: bajeti ya kila mdhamini sasa ni maharagwe {budget}."
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: bajeti ya kila mdhamini sasa ni maharagwe {budget}.",
+  "Busy finding another account. Wait a minute, then sign in again.": "Kuna shughuli nyingi za kutafuta akaunti nyingine. Subiri dakika moja, kisha ingia tena.",
+  "Sign in with your account's sign-in first.": "Ingia kwanza kwa njia ya kuingia iliyounganishwa na akaunti yako.",
+  "An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.": "Dhamana ya mmiliki ni maharagwe 25, 50, 75, 100, 200 au 500.",
+  "Only an owner can vouch 200 or 500 Beans.": "Ni mmiliki pekee anayeweza kudhamini maharagwe 200 au 500.",
+  "@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.": "@{name} tayari ana dhamana za maharagwe {total}, na dhamana za mtu mmoja hazizidi {max}.",
+  "@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.": "@{name} anadhamini kama mmiliki wakati anashikilia wadhifa huo, bila kikomo, kwa hivyo hakuna bajeti ya kusitisha au kuweka.",
+  "@{name} is an owner: owners vouch with no limit, so there is no budget to set.": "@{name} ni mmiliki: wamiliki hudhamini bila kikomo, kwa hivyo hakuna bajeti ya kuweka."
 }

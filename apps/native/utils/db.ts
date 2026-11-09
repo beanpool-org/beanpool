@@ -37,6 +37,9 @@ import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
+import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
+import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -655,6 +658,11 @@ ${TOOL_DOCS_TABLE}
 
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
+        // A period of a standing deal (DESIGN-standing-deals-fable §2.1): which one and its number, and on its current period's
+        // row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing TEXT;`); } catch (e) {}
 
         // Add audience scoping columns to posts table
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
@@ -2495,6 +2503,26 @@ export async function fetchEventDetail(postId: string): Promise<any | null> {
     const identity = await loadIdentity();
     if (identity?.publicKey) await persistEventView(post, identity.publicKey);
     return post;
+}
+
+/**
+ * The listing a chat message is about, as THIS member may read it (core chat-about.ts): the post once found; null when the
+ * node holds none for them (gone, or hidden from them: the same answer, so a chat learns nothing about a listing it can't
+ * see); undefined when the node could not be asked, so the card keeps what the sender wrote rather than saying "gone".
+ * Signed, as the node decides what a member may see from who asks. Nothing is written to the local cache.
+ */
+export async function lookupAboutListing(postId: string): Promise<AboutPostLike | null | undefined> {
+    try {
+        const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`);
+        if (!res.ok) return undefined;
+        const data = await res.json();
+        if (!Array.isArray(data)) return undefined;
+        const post = data.find((p: any) => p && p.id === postId);
+        if (!post) return null;
+        return { id: post.id, type: post.type, title: post.title, credits: post.credits, priceType: post.priceType ?? post.price_type, status: post.status };
+    } catch {
+        return undefined;
+    }
 }
 
 /** What a node older than a route answers. Carried on the error so a screen can hide a feature quietly. */
@@ -4541,7 +4569,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 }
 
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         tx.id ?? null,
                         tx.postId ?? tx.post_id ?? null,
@@ -4555,7 +4583,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                         tx.coverImage ?? tx.cover_image ?? null,
                         tx.ratedByBuyer ? 1 : 0,
                         tx.ratedBySeller ? 1 : 0,
-                        tx.postTitle ?? tx.post_title ?? null
+                        tx.postTitle ?? tx.post_title ?? null,
+                        // The node's read carries the standing deal on its current period's row (S2): a short one's row is
+                        // the period last settled, so its phase is kept on that row, not on a pending one.
+                        tx.standingId ?? null,
+                        tx.periodNo ?? null,
+                        standingJsonOf(tx),
                     ]
                 );
 
@@ -6910,6 +6943,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             type: row.type || 'text',
             systemType: row.system_type,
             metadata: parsedMeta,
+            // The listing this line is about, opened from its own sealed part (core chat-about.ts); null for every other line.
+            about: view && view.format != null && dmCtx
+                ? chatAboutOfLine({ myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex }, { conversationId, senderPubHex: row.author_pubkey, messageId: row.id, metadata: row.metadata })
+                : null,
             // 'sending' | 'failed' | undefined — optimistic-send delivery state
             sendState,
             outgoing,
@@ -6939,7 +6976,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
 // prefixed rows from before client-generated ids) fall back to a fresh id.
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
+export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null) {
     const database = await getDb();
 
     // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
@@ -6961,6 +6998,13 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
         metadata = JSON.stringify({ ...m, ...locked.metadata });
+    }
+    // The listing this line is about (Message on a listing; core chat-about.ts): its own sealed part of the line, to the same
+    // key and the same message id, carried in the metadata as sealed bytes. The node reads nothing new. A resend keeps the
+    // one its failed row already holds (same id, same sender, same conversation, so it still opens).
+    if (about) {
+        const ctx = await requireDmKeyContext(conversationId);
+        metadata = metadataWithAbout(metadata, sealChatAbout(about, ctx, { senderPubHex: authorPubkey, messageId: tempId, replyToId: replyToIdOf(metadata) }));
     }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -7426,8 +7470,12 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
+    /**
+     * `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). The phone's
+     * own two (inviteCheckMiss), never a node's: `invites_off`, the address takes no invites (the global community);
+     * `not_a_community`, nothing at the address answers as a BeanPool community (the website, a name nobody runs).
+     */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only' | 'invites_off' | 'not_a_community';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }
@@ -7438,6 +7486,27 @@ export interface InviteCheck {
 // callers must fail OPEN and let redeemInvite give the definitive answer later.
 // An offline ticket goes with its `BP-`: the node reads a code as a ticket only by
 // it (engine/members.ts checkInvite). The redeem is the one that sends it without.
+/**
+ * A check that found no invite step at the address, so nothing is made or sent there (9 Nov: a code typed with the
+ * address beanpool.org, which the invite message names as where to install from, or with the global community's, went on
+ * to a redeem that could only fail, in words about a node): the global community, whose invites are off (404
+ * `feature_off`), or an address where nothing answers as a BeanPool community does (a 404 or 405 that is a web page, not a
+ * node's JSON). Anything else (busy, down, no answer in time, a node's own JSON) is null, and the redeem decides, as before.
+ */
+export function inviteCheckMiss(status: number, body: string): InviteCheck | null {
+    if (status !== 404 && status !== 405) return null;
+    let answer: unknown = null;
+    try {
+        answer = JSON.parse(body);
+    } catch {
+        return { valid: false, reason: 'not_a_community' };
+    }
+    if (answer && typeof answer === 'object') {
+        return (answer as { code?: unknown }).code === 'feature_off' ? { valid: false, reason: 'invites_off' } : null;
+    }
+    return { valid: false, reason: 'not_a_community' };
+}
+
 export async function checkInvite(code: string, nodeUrl: string): Promise<InviteCheck | null> {
     try {
         const controller = new AbortController();
@@ -7448,7 +7517,7 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal,
             });
-            if (!res.ok) return null;
+            if (!res.ok) return inviteCheckMiss(res.status, await res.text().catch(() => ''));
             const data = await res.json();
             if (typeof data?.valid !== 'boolean') return null;
             return data;
@@ -8102,8 +8171,12 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
     return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
-export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
-    const res = await _signedRequest('/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` is the payer's signed authorisation (utils/member-statements.ts signStandingStatement), and no hours go.
+ */
+export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
 
     // Await the local write: callers navigate into the chat as soon as this resolves,
     // and the chat screen reads the pending tx from local SQLite. The write itself is
@@ -8128,8 +8201,8 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
                 );
             }
 
@@ -8241,8 +8314,9 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
     return res;
 }
 
-export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string) {
-    const res = await _signedRequest('/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+/** Approve a request. On a Need priced per week or per month its author pays: `standing` is their signed authorisation (§4). */
+export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
     try {
         const database = await getDb();
         // The transaction becomes pending, and the post becomes pending unless repeatable.
@@ -8251,8 +8325,36 @@ export async function approveMarketplaceRequest(transactionId: string, authorPub
             await database.runAsync("UPDATE posts SET status = 'pending', pending_transaction_id = ? WHERE id = (SELECT post_id FROM marketplace_transactions WHERE id = ?)", [transactionId, transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'pending' WHERE id = ?", [transactionId]);
+        const tx = res?.transaction;
+        if (tx?.standingId) {
+            await database.runAsync('UPDATE marketplace_transactions SET credits = ?, standing_id = ?, period_no = ?, standing = ? WHERE id = ?',
+                [tx.credits ?? 0, tx.standingId, tx.periodNo ?? null, standingJsonOf(tx), transactionId]);
+        }
     } catch(e) {}
     return res;
+}
+
+/**
+ * The payer's standing authorisation for the community this phone is on (§6), as the web makes it: core's builder, through
+ * utils/member-statements.ts signStandingStatement, for the address every request here goes to.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    const { signStandingStatement } = await import('./member-statements');
+    return signStandingStatement(anchorUrl, fields, identity.privateKey);
+}
+
+/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+export async function stopStandingDeal(standingId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
+export async function holdBackStandingDeal(standingId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {
@@ -8635,6 +8737,17 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /** A period of a standing deal, and on its current period's row the standing deal itself (standingOfRow; core StandingDealRow). */
+    standingId?: string | null;
+    periodNo?: number | null;
+    standingPhase?: StandingPhase | null;
+    standingBeans?: number | null;
+    standingUnit?: StandingPeriodUnit | null;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string | null;
+    standingStartsAt?: string | null;
+    standingShortSince?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {
@@ -8695,6 +8808,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             postAuthorPublicKey: r.postAuthorPublicKey || undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+            ...standingOfRow(r),
         };
     });
 }

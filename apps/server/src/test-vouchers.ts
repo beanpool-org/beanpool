@@ -32,7 +32,7 @@
  *     committee, to a committee admin and to an owner, the block, a set-to's and a stop's answers, the voucher's own read.
  *     Each history line says what it was for instead: held for an invite, vouched on whom, back (expired, stopped).
  * 20. An owner's or admin's budget made from their entry falls back to the role on a step-back or a revoke (same left and
- *     held, one log line); Stop vouching refuses an owner's or admin's whatever its source; only an owner lowers an owner's.
+ *     held, one log line); Stop vouching refuses an owner's or admin's whatever its source; nobody sets an owner's (no limit).
  * 21. The committee flag clears when an admin is made owner, logged, and stays off when they are made admin again.
  * 22. The card's Trading line: per person, completed trades with someone outside the voucher's own, only inside, or none.
  */
@@ -196,7 +196,8 @@ async function main(): Promise<void> {
     const melMe = await call(mel, 'GET', '/api/vouchers/me');
     const owenMe = await call(owen, 'GET', '/api/vouchers/me');
     assert(melMe.status === 200 && melMe.body?.voucher === false && owenMe.body?.voucher === true && owenMe.body?.budget?.left === 1000
-        && JSON.stringify(owenMe.body?.presets) === '[25,50,75,100]', `1. /api/vouchers/me: a member is no voucher, the owner is, with 1,000 left (${show(owenMe)})`);
+        && JSON.stringify(owenMe.body?.presets) === '[25,50,75,100,200,500]' && JSON.stringify(melMe.body?.presets) === '[25,50,75,100]',
+        `1. /api/vouchers/me: a member is no voucher, the owner is, with 1,000 left and an owner's six presets (Marty, 9 Nov) (${show(owenMe)})`);
     const owenInvite = await generate(owen, 100);
     const kaiId = newId('Kai2');
     const owenRedeem = await redeem(kaiId, owenInvite.body?.invite?.code);
@@ -212,8 +213,8 @@ async function main(): Promise<void> {
     const onCommittee = await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: true });
     const adaBlock2 = await call(ada, 'GET', '/api/names/vouchers');
     assert(onCommittee.status === 200 && onCommittee.body?.committee === true && adaBlock2.status === 200
-        && adaBlock2.body?.vouchers?.some((v: any) => v.memberPubkey === owen.pk && v.left === 900 && v.vouched === 100),
-        `2. an owner puts Ada on the committee, and she reads the block: Owen 900 left, 100 vouched (${show(adaBlock2)})`);
+        && adaBlock2.body?.vouchers?.some((v: any) => v.memberPubkey === owen.pk && v.noLimit === true && v.left === 1000 && v.vouched === 100),
+        `2. an owner puts Ada on the committee, and she reads the block: Owen vouches with no limit (Marty, 9 Nov), his 100 vouched drawn from no budget (${show(adaBlock2)})`);
     const adaPutsDan = await call(ada, 'POST', '/api/names/committee', { memberPubkey: dan.pk, on: true });
     assert(adaPutsDan.status === 403 && adaPutsDan.body?.code === 'owner_only', `2. only an owner puts admins on the committee (${show(adaPutsDan)})`);
 
@@ -875,21 +876,21 @@ async function main(): Promise<void> {
     const owenEntry = confirm(owen, ada);
     const owenFlip = await call(ada, 'POST', '/api/names/vouchers', { entryId: owenEntry });
     require_(owenFlip.status === 201 && owenFlip.body?.source === 'entry', `Ada makes Owen a voucher from his entry: nothing new, the source moves (${owenFlip.status})`);
-    require_((await setLevel(ora, owen, 2000)).status === 200 && budgetOf(owen.pk).level === 2000, 'Ora, an owner, sets Owen’s budget to 2,000');
-    const owenSet = await setLevel(ora, owen, 1000);
-    assert(owenSet.status === 200 && owenSet.body?.changed === true && lines(owen.pk).at(-1)?.kind === 'lower' && lines(owen.pk).at(-1)?.amount === -1000 && budgetOf(owen.pk).level === 1000,
-        `20. (c) an owner may lower another owner's budget: Ora sets Owen's from 2,000 to 1,000, one lower line (${owenSet.status} ${JSON.stringify(lines(owen.pk).at(-1)?.kind)})`);
+    // An owner vouches with no limit (Marty, 9 Nov; test-owner-vouch.ts): before that, another owner could set an owner's
+    // budget and a committee admin raise it. Now nobody sets it while they hold the role (409 no_limit), whatever its source.
     const owenLinesBefore = lines(owen.pk).length;
+    const oraSetsOwen = await setLevel(ora, owen, 2000);
     const adaStopsOwen = await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`);
     const adaLowersOwen = await setLevel(ada, owen, 500);
-    const linesAfterRefusals = lines(owen.pk).length;
     const adaRaisesOwen = await setLevel(ada, owen, 1100);
     const oraStopsOwen = await call(ora, 'DELETE', `/api/names/vouchers/${owen.pk}`);
+    const linesAfterRefusals = lines(owen.pk).length;
     const owenRow = db.prepare('SELECT stopped_at FROM vouchers WHERE member_pubkey = ?').get(owen.pk) as { stopped_at: string | null };
-    assert(adaStopsOwen.status === 409 && adaStopsOwen.body?.code === 'role_voucher' && /only another owner can lower it/.test(adaStopsOwen.body?.error ?? '')
-        && adaLowersOwen.status === 403 && adaLowersOwen.body?.code === 'owner_only' && linesAfterRefusals === owenLinesBefore
-        && adaRaisesOwen.status === 200 && budgetOf(owen.pk).level === 1100 && oraStopsOwen.status === 409 && oraStopsOwen.body?.code === 'role_voucher' && owenRow.stopped_at === null,
-        `20. (c) with Owen's budget moved to his entry, a committee admin can't stop it or lower it (nothing written), may still raise it, and no owner stops it either (${[adaStopsOwen, adaLowersOwen, adaRaisesOwen, oraStopsOwen].map((r) => `${r.status} ${r.body?.code ?? ''}`).join(' | ')}: "${adaStopsOwen.body?.error ?? ''}")`);
+    assert(adaStopsOwen.status === 409 && adaStopsOwen.body?.code === 'role_voucher' && /with no limit, so there is no budget to stop or set/.test(adaStopsOwen.body?.error ?? '')
+        && oraSetsOwen.status === 409 && oraSetsOwen.body?.code === 'no_limit' && adaLowersOwen.status === 409 && adaLowersOwen.body?.code === 'no_limit'
+        && adaRaisesOwen.status === 409 && adaRaisesOwen.body?.code === 'no_limit' && linesAfterRefusals === owenLinesBefore
+        && oraStopsOwen.status === 409 && oraStopsOwen.body?.code === 'role_voucher' && owenRow.stopped_at === null,
+        `20. (c) with Owen's budget moved to his entry, nobody sets it, another owner or a committee admin, nor stops it, nothing written (${[oraSetsOwen, adaStopsOwen, adaLowersOwen, adaRaisesOwen, oraStopsOwen].map((r) => `${r.status} ${r.body?.code ?? ''}`).join(' | ')}: "${adaStopsOwen.body?.error ?? ''}")`);
 
     // Who acts is the signer: an automation token acts for the owner who made it (admin-auth.ts), and the owner-only rules on
     // the admin routes are asked through adminActionNeedsOwner for that reason (memory owner-only-rules-need-

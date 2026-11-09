@@ -16,6 +16,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+/** React Native's AppState, a switch the test turns (foreground / background), with the screens listening to it. */
+const appState = vi.hoisted(() => ({ now: 'active', listeners: new Set<(s: string) => void>() }));
 const alerts = vi.hoisted(() => ({ said: [] as Array<{ title: string; body?: string; buttons?: Array<{ text: string; style?: string; onPress?: () => unknown }> }> }));
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
@@ -25,9 +27,17 @@ vi.mock('react-native', () => {
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (testID) attrs['data-testid'] = testID;
+        if (props.accessibilityLiveRegion) attrs['aria-live'] = props.accessibilityLiveRegion;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     return {
+        AppState: {
+            get currentState() { return appState.now; },
+            addEventListener: (_type: string, cb: (s: string) => void) => {
+                appState.listeners.add(cb);
+                return { remove() { appState.listeners.delete(cb); } };
+            },
+        },
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
@@ -43,7 +53,7 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
-vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), ErrorBoundary: () => null }));
+vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), useFocusEffect: () => {}, ErrorBoundary: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => undefined) }));
@@ -90,6 +100,7 @@ vi.mock('../typed-place', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => null) }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
+vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
 
 import { getPublicKey } from '@noble/ed25519';
 import { bytesToHex } from '../crypto';
@@ -101,6 +112,8 @@ interface Sent { url: string; method: string }
 let sent: Sent[] = [];
 /** The community: its answer to a status read, and whether a cancel finds anything open. */
 let open = true;
+/** The invite the community has made for this key: a member said yes. */
+let invite: string | null = null;
 
 beforeEach(async () => {
     document.body.innerHTML = '';
@@ -108,12 +121,16 @@ beforeEach(async () => {
     alerts.said = [];
     sent = [];
     open = true;
+    invite = null;
+    appState.now = 'active'; appState.listeners.clear();
     const seed = new Uint8Array(randomBytes(32));
     who.identity = { publicKey: bytesToHex(await getPublicKey(seed)), privateKey: bytesToHex(seed), callsign: 'Robin' };
     (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
         sent.push({ url, method: init?.method ?? 'GET' });
         const json = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body });
-        if (url === `${COMMUNITY}/api/join/knock/status`) return json(200, { status: open ? 'pending' : 'none' });
+        if (url === `${COMMUNITY}/api/join/knock/status`) return json(200, invite ? { status: 'approved', invite, expiresAt: null } : { status: open ? 'pending' : 'none' });
+        // A new request: the community has it open now (a yes comes later, when a test sets `invite`).
+        if (url === `${COMMUNITY}/api/join/knock`) { open = true; return json(201, { knock: { status: 'pending' } }); }
         if (url === `${COMMUNITY}/api/join/knock/cancel`) {
             if (!open) return json(404, { error: 'There’s no open request to join to cancel.', code: 'not_found' });
             open = false;
@@ -180,5 +197,87 @@ describe('"Cancel my request" where the asker sees a request waiting', () => {
         await cancelVia(byTestId(host, 'my-requests-cancel')!);
         expect(host.textContent).toContain('There’s no open request to join to cancel.');
         expect((await rememberedKnocks(who.identity!.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
+    });
+});
+
+describe('a yes shows itself on Find a community (Damo, 9 Nov 2026: it only showed after a manual refresh)', () => {
+    const statusReads = () => sent.filter(s => s.url === `${COMMUNITY}/api/join/knock/status`).length;
+    const goTo = async (state: 'active' | 'background') => {
+        appState.now = state;
+        await act(async () => { for (const cb of [...appState.listeners]) cb(state); });
+        for (let i = 0; i < 4; i++) await act(async () => {});
+    };
+
+    it('asks once as the screen opens; the yes comes in on its own when the app is next in front: Join, in a polite line, nothing pressed (fails before: one read)', async () => {
+        const host = await draw(createElement(FindCommunityScreen as any));
+        expect(statusReads()).toBe(1);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.waiting);
+        const line = Array.from(host.querySelectorAll('[aria-live="polite"]')).find(n => n.textContent === KNOCK_MESSAGES.waiting);
+        expect(line, 'the waiting line is a polite live region').toBeTruthy();
+
+        invite = 'BP-MULL-0001';
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBe(2);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.invited);
+        // The same line, its words changed: a screen reader says it.
+        expect(line!.textContent).toBe(KNOCK_MESSAGES.invited);
+        expect(Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('aria-label') ?? b.textContent)).toContain('Join Mullumbimby');
+        // Nothing joined by itself.
+        expect(sent.filter(s => s.method === 'POST')).toEqual([]);
+        expect(byTestId(host, 'find-cancel-request')).toBeNull();
+    });
+
+    it('in the background it asks nothing; with a yes in it asks no more', async () => {
+        await draw(createElement(FindCommunityScreen as any));
+        await goTo('background');
+        await act(async () => { await new Promise(r => setTimeout(r, 40)); });
+        expect(statusReads()).toBe(1);
+        invite = 'BP-MULL-0001';
+        await goTo('active');
+        expect(statusReads()).toBe(2);
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBe(2);
+    });
+
+    it('Ask to join again to a community whose earlier request has nothing open: the new request is watched, and its yes shows by itself (round 2 of #3009; fails before: read once, then never)', async () => {
+        open = false; // the earlier request has nothing open: the card offers Ask to join
+        const host = await draw(createElement(FindCommunityScreen as any));
+        expect(statusReads()).toBe(1);
+        const press = async (name: string) => {
+            const b = Array.from(host.querySelectorAll('button')).find(x => (x.getAttribute('aria-label') ?? x.textContent) === name);
+            expect(b, `a button "${name}"`).toBeTruthy();
+            await act(async () => { b!.click(); });
+            for (let i = 0; i < 4; i++) await act(async () => {});
+        };
+        await press('Ask to join Mullumbimby');
+        const words = host.querySelector('input[aria-label="A few words about yourself"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(words, 'I grow beans by the river.');
+            words.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // The new request is stamped after the earlier one (the clock has moved on).
+        await act(async () => { await new Promise(r => setTimeout(r, 5)); });
+        await press('Send');
+        expect(sent.filter(s => s.method === 'POST')).toEqual([{ url: `${COMMUNITY}/api/join/knock`, method: 'POST' }]);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.waiting);
+        const afterSend = statusReads();
+
+        invite = 'BP-MULL-0001';
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBeGreaterThan(afterSend);
+        expect(host.textContent).toContain(KNOCK_MESSAGES.invited);
+        expect(Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('aria-label') ?? b.textContent)).toContain('Join Mullumbimby');
+    });
+
+    it('control: a request with its answer, nothing sent again, is not asked again', async () => {
+        open = false;
+        await draw(createElement(FindCommunityScreen as any));
+        expect(statusReads()).toBe(1);
+        await goTo('background');
+        await goTo('active');
+        expect(statusReads()).toBe(1);
     });
 });

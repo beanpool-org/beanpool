@@ -462,14 +462,27 @@ export function openRecoveryFields(stored: RecoverySealFields, aad: Uint8Array):
     return openRecoveryFieldsUnder(stored, aad, true);
 }
 
-function openRecoveryFieldsUnder(stored: RecoverySealFields, aad: Uint8Array, withRetired: boolean): RecoverySealFields {
+/**
+ * {@link openRecoveryFields}, and whether only a key a carried one replaced opened it: a copy locked while that key was
+ * live, which the next start locks again with the live key ({@link rewrapRowsFromRetiredKeys}).
+ */
+export function openRecoveryFieldsNotingRetired(stored: RecoverySealFields, aad: Uint8Array): { fields: RecoverySealFields; retired: boolean } {
+    const noted = { retired: false };
+    const fields = openRecoveryFieldsUnder(stored, aad, true, noted);
+    return { fields, retired: noted.retired };
+}
+
+function openRecoveryFieldsUnder(stored: RecoverySealFields, aad: Uint8Array, withRetired: boolean, noted?: { retired: boolean }): RecoverySealFields {
     if (!isNodeWrapped(stored.kdfParams)) return stored;
     const key = requireKey();
     let plaintext = openWith(key, stored, aad);
     if (!plaintext && withRetired) {
         for (const k of retiredKeys()) {
             plaintext = openWith(k, stored, aad);
-            if (plaintext) break;
+            if (plaintext) {
+                if (noted) noted.retired = true;
+                break;
+            }
         }
     }
     if (!plaintext) throw new RecoverySealUnopenable();
@@ -496,10 +509,11 @@ const releaseFields = (r: ReleaseRow): RecoverySealFields =>
 /**
  * Rewrite every row one way, in one transaction, with secure_delete on so the old bytes are zeroed where they lay, then
  * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form), and so are
- * releases, by their touch trigger (a plain table, db.ts stampPlainTables).
+ * releases, by their touch trigger (a plain table, db.ts stampPlainTables). `clearFindHash`: each stored copy rewritten
+ * loses its find hash in the same write ({@link rewrapRowsFromRetiredKeys}).
  */
-function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields | null):
-    { shares: number; releases: number } {
+function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields | null,
+    opts: { clearFindHash?: boolean } = {}): { shares: number; releases: number } {
     const shares = (db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, encrypted_share, share_iv, share_tag, kdf_params
         FROM recovery_shares`).all() as ShareRow[]).filter(r => which(r.kdf_params));
     // A release whose copy is gone holds nothing to lock (releasedCopyGoneKdf).
@@ -518,8 +532,11 @@ function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySe
     const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
     db.pragma('secure_delete = ON');
     try {
-        const updShare = db.prepare(`UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`);
+        const updShare = db.prepare(opts.clearFindHash
+            ? `UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?, sso_find_hash = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
+            : `UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`);
         const updRelease = db.prepare(`UPDATE recovery_releases SET payload = ?, payload_iv = ?, payload_tag = ?, kdf_params = ?
             WHERE id = ?`);
         db.transaction(() => {
@@ -544,6 +561,13 @@ export function wrapRecoveryRows(): { shares: number; releases: number } {
  * copies this server took under its own key before a take-over or a restore brought the community's. Stamped, so a
  * standby is sent them in the live key's lock, and zeroed where they lay. A row no key here opens is left as it is.
  * Idempotent; the retired key files stay. Throws {@link RecoverySealKeyMissing}.
+ *
+ * A sign-in copy's find hash (engine/recovery-find.ts) is cleared in the same write. It was made under the retired key,
+ * beside the lock, and no take-over carries that key (the bundle holds the live one only): kept, it would leave the copy
+ * unfindable on the next server, by the index and by the scan alike, and out of the boot count. It can't be made again
+ * without the member's sign-in, so the scan finds the copy at its member's next restore, here or on the next server, and
+ * the boot count shows it until then. (One a find has already written again under the live key, before this start, is
+ * cleared too: that costs its member one scan.)
  */
 export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number } {
     const live = requireKey();
@@ -556,7 +580,7 @@ export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number 
         } catch {
             return null;
         }
-    });
+    }, { clearFindHash: true });
 }
 
 /**

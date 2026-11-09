@@ -7,8 +7,8 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
-import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
+import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -18,6 +18,11 @@ import {
     ed25519Signer,
     type Signer,
     signReEnroll,
+    signStandingAuthorisation,
+    type StandingAuthorisationFields,
+    type StandingPeriodUnit,
+    type StandingPhase,
+    type StandingStartBody,
     audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
@@ -545,6 +550,17 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
+/** The bell: the signer's own push notices not yet opened, newest first (GET /api/notices/push?unseen=1). */
+export async function getBellNotices(): Promise<BellNotice[]> {
+    return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
+}
+
+/** Takes these of the signer's own notices off the bell (a tap on the row); the node ignores an id that is not theirs. */
+export async function markBellNoticesSeen(ids: string[]): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
+}
+
 /**
  * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
  * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
@@ -592,7 +608,10 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
     try {
         const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(code)}`);
         return typeof data?.valid === 'boolean' ? (data as InviteCheck) : null;
-    } catch {
+    } catch (e) {
+        // A community whose invites are off (the global one, 404 `feature_off`): the code is some other community's, and the
+        // join box says so (WelcomePage handleCreate) instead of sending a redeem this community can only refuse.
+        if ((e as { code?: unknown })?.code === 'feature_off') return { valid: false, reason: 'invites_off' };
         return null;
     }
 }
@@ -669,16 +688,17 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
 
 /**
  * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
- * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
- * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts) and the browser it asked
+ * to be told on (lib/web-push.ts). Signed for that host only. The caller keeps its own timeout and reads the Response; a
+ * POST or DELETE carries `bodyString` as JSON.
  */
 export async function signedFetchAt(
-    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+    method: 'GET' | 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
 ): Promise<Response> {
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
-    return fetch(`${community}${path}`, method === 'POST'
-        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
-        : { method, headers: signed, cache: 'no-cache' });
+    return fetch(`${community}${path}`, method === 'GET'
+        ? { method, headers: signed, cache: 'no-cache' }
+        : { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString });
 }
 
 /**
@@ -740,6 +760,8 @@ export interface JoinRequest {
     /** Where their app says it came from (`global.beanpool.org`); not checked by anyone. */
     fromNode: string | null;
     createdAt: string;
+    /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
+    via: KnockVia | null;
 }
 
 export type JoinRequestsResult =
@@ -766,6 +788,7 @@ function readJoinRequest(raw: unknown): JoinRequest | null {
         avatar: typeof k.avatar === 'string' && k.avatar ? k.avatar : null,
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
+        via: readKnockVia(k.via),
     };
 }
 
@@ -818,6 +841,8 @@ export interface MyVouching {
     };
     source?: 'role' | 'entry';
     history?: VoucherHistoryLine[];
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit", never left or level; 200 and 500 too. */
+    noLimit?: boolean;
     presets: number[];
     vouchMax: number;
     budgetMax: number;
@@ -847,6 +872,8 @@ export interface VoucherSummary {
     madeAt: string | null;
     stoppedAt: string | null;
     stopReason: string | null;
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit" and no set-to, never left or level. */
+    noLimit?: boolean;
     left: number;
     held: number;
     heldInvites: number;
@@ -1670,6 +1697,21 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /**
+     * A period of a standing deal (DESIGN-standing-deals-fable §2.3; the node's read, @beanpool/engine escrow.ts): which one
+     * and its number; on its CURRENT period's row only, its phase, Beans per period, unit, count (null: until stopped), when
+     * the node next acts, its start, since when it is short, and whether either side has tapped Stop.
+     */
+    standingId?: string;
+    periodNo?: number;
+    standingPhase?: StandingPhase;
+    standingBeans?: number;
+    standingUnit?: StandingPeriodUnit;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string;
+    standingStartsAt?: string;
+    standingShortSince?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplacePosts(filter?: {
@@ -2218,10 +2260,34 @@ export async function getEventZones(): Promise<{ zones: EventZone[] }> {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` carries the payer's signed authorisation (signStandingStart) and no hours.
+ */
 export async function acceptMarketplacePost(
-    postId: string, buyerPublicKey: string, hours?: number
+    postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+    return request('POST', '/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
+}
+
+/**
+ * The payer's standing authorisation for the community this web app talks to (§6), signed by core's builder: the host is
+ * the one every request here is signed for, and the bytes are 0xFF and the text, as every member statement's.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const identity = await loadIdentity();
+    if (!identity?.privateKey) throw new Error('Cannot sign a standing deal: this browser holds no key');
+    return signStandingAuthorisation(nodeAddress(), fields, memberSigner(identity.privateKey));
+}
+
+/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
+export async function holdBackStandingDeal(standingId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function requestMarketplacePost(
@@ -2244,10 +2310,11 @@ export function openDealIn(e: unknown): { transactionId?: string } | null {
     return typeof err.transactionId === 'string' ? { transactionId: err.transactionId } : {};
 }
 
+/** Approve a request. On a Need priced per week or per month the author pays: `standing` is their signed authorisation (§4). */
 export async function approveMarketplaceRequest(
-    transactionId: string, authorPublicKey: string
+    transactionId: string, authorPublicKey: string, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+    return request('POST', '/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
 }
 
 export async function rejectMarketplaceRequest(

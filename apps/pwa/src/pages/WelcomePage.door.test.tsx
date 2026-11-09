@@ -57,6 +57,40 @@ afterEach(() => {
     resetCapturedAuthReturn();
 });
 
+describe('the open door joins a named community (join names N1, §2.5)', () => {
+    const CARD = { name: 'Hall Community', host: 'hall.example.org', members: 12, area: null, joining: 'open', askUrl: null, globalUrl: null };
+    const heading = async () => (await screen.findByTestId('join-screen-lobby')).querySelector('h3')!;
+
+    it("at the app's global community: \"Join the global community\", with no card read", async () => {
+        const calls = stubNode({ ...GLOBAL_OPEN, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        expect(await heading()).toHaveTextContent('Join the global community');
+        expect(calls.map((c) => c.path)).not.toContain('/api/community/card');
+    });
+
+    it("at a self-hoster's open community (global profile, its own address): \"Join {its name}\" from its card", async () => {
+        stubNode({ ...GLOBAL_OPEN, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' }, { '/api/community/card': () => json(200, CARD) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await waitFor(async () => expect(await heading()).toHaveTextContent('Join Hall Community'));
+        expect(screen.queryByText(/global community/i)).toBeNull();
+    });
+
+    it("a self-hoster's community that takes new members by invite: its invite form is headed with its name too", async () => {
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: false }, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' }, { '/api/community/card': () => json(200, CARD) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        expect(await screen.findByRole('heading', { name: 'Join Hall Community with an invite' })).toBeTruthy();
+        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+    });
+
+    it('a card that does not answer: "Join {its address}", never "Join BeanPool"', async () => {
+        stubNode({ ...GLOBAL_OPEN, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' }, { '/api/community/card': () => json(404, { error: 'Not Found' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        const h = await heading();
+        expect(h).toHaveTextContent(/^Join \S+$/);
+        expect(h).not.toHaveTextContent('Join BeanPool');
+    });
+});
+
 describe('which welcome a visitor gets', () => {
     it('the open door: the join lobby, and never the invite form', async () => {
         stubNode(GLOBAL_OPEN);

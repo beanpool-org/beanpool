@@ -1,5 +1,5 @@
 /**
- * The needs-you icons in App's own header row and side bar, for e2e/header-alerts-shots.mjs: the real MobileHeader and
+ * The bell (in the needs-you icons' place) in App's own header row and side bar, for e2e/header-alerts-shots.mjs: the real MobileHeader and
  * SidebarStatus (components/AppHeader.tsx, which App.tsx draws), the real SyncStatus, the real stylesheet, inside App's
  * own wrappers (its root row, the side bar and its footer). Mounted once: `window.harness.set({ tab, needs, settings })`
  * changes the tab, the needs (as Home's read landing, which the header draws from on any tab) and whether Settings is open

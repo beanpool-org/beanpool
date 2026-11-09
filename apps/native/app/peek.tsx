@@ -29,7 +29,7 @@ const PEEK_SCREEN_WORDS = {
  * (`beanpool://peek?node=…`): utils/peek-link.ts. The post is read from that community as a visitor reads it (unsigned:
  * the ticket lets it through; the node sends it through guestPost, so nobody is in it and its place is its area only),
  * under "A member of {community} shared this with you", with Ask to join, which opens the community's own card screen
- * (app/community-card.tsx: the request to join, I have an invite, or the first screen for a phone with no account).
+ * (app/community-card.tsx: the request to join, sent from there with or without an account, and I have an invite).
  * A member of that community on this phone sees the post itself, as before. Nothing is signed or sent from here.
  */
 export default function PeekScreen() {
@@ -89,7 +89,7 @@ export default function PeekScreen() {
 
     const askDoor = peek && (
         <View style={styles.actions}>
-            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin))} accessibilityRole="button" testID="peek-ask">
+            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin, peek.ticket))} accessibilityRole="button" testID="peek-ask">
                 <Text style={styles.primaryText}>{t(COMMUNITY_CARD_WORDS.ask)}</Text>
             </Pressable>
         </View>

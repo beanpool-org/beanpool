@@ -25,6 +25,7 @@ import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
+import { holdInvite } from '../utils/held-invite';
 import { forgetKnockKey } from '../utils/knock-key';
 import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { listenForScannedInvites } from '../utils/scanned-invite';
@@ -449,6 +450,9 @@ function RootLayoutNav() {
 
         const routeToWelcomeWithInvite = () => {
             if (!isComponentMounted.current) return;
+            // Kept on the phone until it is redeemed (utils/held-invite.ts): a warm start's link opens a NEW welcome with no
+            // params, after this has set them on the old one, and the code was lost (Damo, 9 Nov).
+            void holdInvite(AsyncStorage, { invite: parsedCode, server: extractedNodeOrigin, post: linkPostId });
             const rootSegment = (segments as string[])[0];
             if (rootSegment === 'welcome') {
                 router.setParams({

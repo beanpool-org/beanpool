@@ -10,7 +10,7 @@ import { buildSignedHeaders } from '../../utils/crypto';
 import { makeOfflineTicket } from '../../utils/member-statements';
 import { fetchMembership } from '../../utils/membership-probe';
 import QRCode from 'react-native-qrcode-svg';
-import { TextInput, ScrollView, Share, Keyboard } from 'react-native';
+import { TextInput, ScrollView, Share, Keyboard, ToastAndroid } from 'react-native';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTabRetapScrollTop } from '../../components/PageTitle';
@@ -29,6 +29,8 @@ import { sampleInvites, sampleInviteTree } from '../../components/showcase/sampl
 import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
+import { nameInvitePicture, shareInviteWithPicture } from '../../utils/invite-picture-share';
+import { InvitePictureShot } from '../../components/InvitePictureShot';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
@@ -185,13 +187,29 @@ export default function PeopleScreen() {
         },
     }));
 
-    const params = useLocalSearchParams<{ view?: string }>();
+    const params = useLocalSearchParams<{ view?: string; from?: string }>();
     const [view, setView] = useState<SubView>(initialPeopleView(params.view));
     const [keyboardHeight, setKeyboardHeight] = useState(0);
+    // A notice ("someone asked to join": the push, or the app's own copy of it) opened this screen. Taken
+    // from the route once and cleared from it, so it doesn't outlive this visit: it ends when the member picks another pill
+    // or leaves the tab (WantsToJoin says "nobody is waiting" only for a visit a notice began).
+    const [fromNotice, setFromNotice] = useState(params.from === 'notice');
+    // Which notice tap this is. People is a tab and stays mounted, and so does Wants to join while Invites is the last view, so
+    // it would show the list it read last time: "nobody is waiting" over an old, empty list while someone is. Each tap starts
+    // Wants to join over (it is keyed on this), from a fresh read, with nothing kept from the visit before (an answer given there).
+    const [noticeVisit, setNoticeVisit] = useState(0);
 
     useEffect(() => {
         if (isPeopleView(params.view)) setView(params.view);
     }, [params.view]);
+
+    useEffect(() => {
+        if (params.from !== 'notice') return;
+        setFromNotice(true);
+        setNoticeVisit(n => n + 1);
+        router.setParams({ from: undefined });
+    }, [params.from]);
+    useFocusEffect(useCallback(() => () => setFromNotice(false), []));
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('set_people_view', (data) => {
@@ -213,7 +231,10 @@ export default function PeopleScreen() {
     const [generating, setGenerating] = useState(false);
     const [intendedFor, setIntendedFor] = useState('');
     const [newCode, setNewCode] = useState('');
-    
+    // The QR picture Share sends with an invite (utils/invite-picture-share.ts) is drawn out of sight while it is made.
+    const [pictureJob, setPictureJob] = useState<{ code: string; value: string; done: (uri: string | null) => void } | null>(null);
+    const sharingInvite = useRef(false);
+
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
     const [redeeming, setRedeeming] = useState(false);
@@ -714,18 +735,43 @@ export default function PeopleScreen() {
         }
     };
 
+    /** Draws the QR picture out of sight and captures it to a file; null when it could not be made in time (the message goes alone). */
+    const makeInvitePicture = (code: string, value: string) => new Promise<string | null>((resolve) => {
+        const finish = (uri: string | null) => { clearTimeout(giveUp); setPictureJob(null); resolve(uri); };
+        const giveUp = setTimeout(() => finish(null), 4000);
+        setPictureJob({ code, value, done: finish });
+    });
+
     const shareInvite = async (codeToShare: string) => {
         if (invitesPreview) return;
-        const magicLink = `${anchorUrl}/?invite=${codeToShare}`;
-        
-        // One message, whole, in the member's language: the person they invite most likely reads it too. Plain words for a
-        // friend (no "node", no "URL"; front doors S10, core inviteShareText), naming the community as its card does.
-        // The card is waited for two seconds at most (utils/invite-share-name.ts): offline, the address names the community.
-        const address = shareAddress(anchorUrl);
-        const name = await shareCommunityName(address, () => fetchPeekCommunityName(anchorUrl));
-        const message = inviteShareText({ name, link: magicLink, code: codeToShare, address });
+        // One share at a time: a second tap while the picture is being made would take the first one's picture away.
+        if (sharingInvite.current) return;
+        sharingInvite.current = true;
+        try {
+            const magicLink = `${anchorUrl}/?invite=${codeToShare}`;
 
-        await Share.share({ message });
+            // One message, whole, in the member's language: the person they invite most likely reads it too. Plain words for a
+            // friend (no "node", no "URL"; front doors S10, core inviteShareText), naming the community as its card does.
+            // The card is waited for two seconds at most (utils/invite-share-name.ts): offline, the address names the community.
+            // The QR picture is made meanwhile and goes with it (utils/invite-picture-share.ts says what each phone can carry).
+            const address = shareAddress(anchorUrl);
+            const [name, captured] = await Promise.all([
+                shareCommunityName(address, () => fetchPeekCommunityName(anchorUrl)),
+                makeInvitePicture(codeToShare, magicLink),
+            ]);
+            const message = inviteShareText({ name, link: magicLink, code: codeToShare, address });
+            const picture = captured ? await nameInvitePicture(captured, codeToShare, () => import('expo-file-system/legacy')) : null;
+
+            await shareInviteWithPicture(message, picture, {
+                platform: Platform.OS,
+                Share,
+                sharing: () => import('expo-sharing'),
+                Clipboard,
+                toast: (text) => ToastAndroid.show(text, ToastAndroid.LONG),
+            });
+        } finally {
+            sharingInvite.current = false;
+        }
     };
 
     // A node with no invites: its plain address, which opens its front door. No code rides along.
@@ -994,7 +1040,7 @@ export default function PeopleScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: isActive }}
                             style={[styles.pill, isActive && styles.pillActive]}
-                            onPress={() => { setView(v); router.setParams({ view: v }); }}
+                            onPress={() => { setView(v); setFromNotice(false); router.setParams({ view: v }); }}
                         >
                             {/* One line each: a name too long for the row in another language shrinks, all three together. It never
                                 wraps (the emoji would sit alone on the first line) and never breaks a word. */}
@@ -1324,6 +1370,7 @@ export default function PeopleScreen() {
                         </View>
                     ) : (
                         <>
+                            {pictureJob && <InvitePictureShot key={pictureJob.code} code={pictureJob.code} value={pictureJob.value} onCaptured={pictureJob.done} />}
                             {invitesPreview && (
                                 <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 16 }}>
                                     <LocalCommunityMark variant="strip" feature="invites" />
@@ -1331,7 +1378,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
                             {identity && anchorUrl && takesKnocks && (
-                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} />
+                                <WantsToJoin key={noticeVisit} anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} fromNotice={fromNotice} />
                             )}
                             {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && doorAdminsOnly && mayInvite && (
                                 <InviteAsksToAnswer anchorUrl={anchorUrl} identity={identity} />
@@ -1409,6 +1456,7 @@ export default function PeopleScreen() {
                                     onChange={setVouchPreset}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
+                                    noLimit={myVouching.noLimit === true}
                                 />
                             )}
 

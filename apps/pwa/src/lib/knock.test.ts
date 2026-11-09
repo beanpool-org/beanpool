@@ -26,6 +26,16 @@ describe('communityOrigin on web', () => {
     });
 });
 
+describe("the knock body carries the shared link's ticket (shared-listing door A3)", () => {
+    const T = 'AbCdEfGhIjKlMnOpQrSt_-';
+    it("in a ticket's shape only, inside what is signed", () => {
+        expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: T }, 'byron.beanpool.org')).toMatchObject({ peek: T, toNode: 'byron.beanpool.org' });
+        for (const bad of [undefined, null, '', 'not-a-ticket', `${T}A`]) {
+            expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: bad as any })).not.toHaveProperty('peek');
+        }
+    });
+});
+
 describe('readStatus', () => {
     it('parses status payloads correctly', () => {
         expect(readStatus({ status: 'none' })).toEqual({ status: 'none' });
@@ -184,6 +194,18 @@ describe('the status read and the cancel are signed for the community they name'
         expect(headers['X-Timestamp']).toMatch(/^\d+$/);
         expect(headers['X-Nonce']).toMatch(/\S/);
         expect(headers['X-Signed-For']).toBe('s.example.org');
+    });
+
+    it('a 429 carries its Retry-After to the page, so the page waits as long as it was told', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Slow down.' }), { status: 429, headers: { 'Retry-After': '90' } }));
+        expect(await readKnockStatus('https://s.example.org', IDENTITY)).toEqual({ ok: false, kind: 'refused', status: 429, code: null, message: 'Slow down.', retryAfterSeconds: 90 });
+    });
+
+    it('a refusal with no Retry-After says nothing of one', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'No.' }), { status: 403 }));
+        const res = await readKnockStatus('https://s.example.org', IDENTITY);
+        expect(res).toEqual({ ok: false, kind: 'refused', status: 403, code: null, message: 'No.' });
+        expect('retryAfterSeconds' in res).toBe(false);
     });
 
     it('a cancel is a signed POST of {} to that community\'s cancel path', async () => {

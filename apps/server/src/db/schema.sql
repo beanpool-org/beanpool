@@ -574,7 +574,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- Escrow dispute arbitration (§5 item 2, §6 correction 2): resolution type, timestamp and acting admin
     dispute_resolution TEXT,
     dispute_resolved_at DATETIME,
-    dispute_resolved_by TEXT
+    dispute_resolved_by TEXT,
+    -- A period of a standing deal (standing_deals below; DESIGN-standing-deals-fable.md §2.1): which one, and its number
+    -- from 1. NULL on a one-off deal.
+    standing_id TEXT REFERENCES standing_deals(id),
+    period_no INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -590,6 +594,49 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON
 -- A listing's open or held deals: both sides of its open deals hear its pushes on a node that reads by area, and a
 -- removal or hide asks whether it holds one. Without this each read searched every open deal on the node (#1769).
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status);
+-- At most one deal row per period of a standing deal: the node's second hold of a period is refused here, whatever the
+-- tick's own compare-and-swap missed (engine/standing-deals.ts).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_transactions_standing_period
+    ON marketplace_transactions(standing_id, period_no) WHERE standing_id IS NOT NULL;
+
+-- 5b. Standing deals (DESIGN-standing-deals-fable.md §2.1; Marty's decisions, 9 Nov 2026): a listing priced per week or per
+-- month, taken up, pays one period at a time. One period's Beans are held at a time, each period an ordinary deal row
+-- (marketplace_transactions.standing_id); this row is the arrangement and the payer's signed authorisation that bounds every
+-- hold the node makes for it (auth_*: the text, its signature, its signer). engine/standing-deals.ts runs it.
+CREATE TABLE IF NOT EXISTS standing_deals (
+    id TEXT PRIMARY KEY,
+    post_id TEXT NOT NULL REFERENCES posts(id),
+    payer_pubkey TEXT NOT NULL,
+    payee_pubkey TEXT NOT NULL,
+    beans_per_period REAL NOT NULL,
+    period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
+    -- Period n runs [starts_at + (n-1) units, starts_at + n units), UTC, months clamped (@beanpool/core periodEnd).
+    starts_at TEXT NOT NULL,
+    -- NULL: until one of them stops it.
+    max_periods INTEGER,
+    phase TEXT NOT NULL CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended')),
+    periods_done INTEGER NOT NULL DEFAULT 0,
+    current_tx_id TEXT REFERENCES marketplace_transactions(id),
+    next_due_at TEXT NOT NULL,
+    short_since TEXT,
+    -- payer | node_held | listing_hidden | cant_run (@beanpool/core StandingHeldBackReason), while phase is held_back.
+    held_back_reason TEXT,
+    stopped_by TEXT,
+    stopped_at TEXT,
+    ended_at TEXT,
+    -- stopped | count_reached | short | cancelled | listing_gone | account_closed | node_held | cant_run
+    ended_reason TEXT,
+    auth_signer TEXT NOT NULL,
+    auth_signature TEXT NOT NULL,
+    auth_payload TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_due ON standing_deals(phase, next_due_at);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payer ON standing_deals(payer_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -834,6 +881,27 @@ CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves
 -- STRANGER_PUSH_RULES): a search on this too.
 CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
 
+-- 11b2. Browsers that take this server's web pushes (engine/web-push-subscriptions.ts, services/web-push.ts;
+-- DESIGN-web-notifications-fable.md §2.2, slice W1). `kind` 'asker': a key with an open request to join here tapped "Tell me
+-- when they answer" on the waiting page; one row per key; no reference to members (it is no member yet); deleted when the
+-- request lapses, is cancelled or declined, kept when the key joins. Locked at rest as push_tokens are: `sub_id` is the
+-- endpoint's HMAC and `sub_box` the endpoint, the browser's keys and this server's address as the browser reached it,
+-- sealed, both under keys from data/recovery-seal.key (info beanpool-web-push/v1), which the database never holds. This
+-- server's own (engine/replication-manifest.ts, local).
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+    public_key TEXT NOT NULL,
+    sub_id TEXT NOT NULL CHECK (length(sub_id) = 64),
+    sub_box TEXT NOT NULL CHECK (length(sub_box) <= 4000),
+    -- One of core's LANGS, so the push's sentence is in it; NULL: English.
+    lang TEXT CHECK (lang IS NULL OR length(lang) <= 16),
+    -- 'member' is W2's (members' own browsers), allowed now so the table needs no rebuild then; W1 writes 'asker' only.
+    kind TEXT NOT NULL CHECK (kind IN ('member', 'asker')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, sub_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_one_asker ON web_push_subscriptions(public_key) WHERE kind = 'asker';
+
 -- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
 -- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
 -- report without a member's key (db/pricing-guide-db.ts PRICE_REPORT_RULES). What one address, and every address
@@ -1010,6 +1078,10 @@ CREATE TABLE IF NOT EXISTS recovery_shares (
     -- move together by construction. The column exists so the table can join the delta set
     -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- For 'sso' holders: HMAC-SHA-256 of `provider|sub` under a key derived from data/recovery-seal.key, never stored in
+    -- this database, so a restore finds the account from the verified sign-in alone (engine/recovery-find.ts). An index,
+    -- never a proof: a release still checks sso_lookup_hash. NULL on a copy made before it, until its first restore.
+    sso_find_hash TEXT,
     -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
     -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
     -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
@@ -1024,6 +1096,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
     ON recovery_shares(sso_lookup_hash)
     WHERE sso_lookup_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
+-- Plain, not unique: one sign-in may protect two accounts (Settings' Connect checks no other owner), and a restore names
+-- them all. It also answers the scan's `sso_find_hash IS NULL` for copies made before the column.
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_find ON recovery_shares(sso_find_hash);
 
 -- 14b. Recovery collection — one attempt to gather enough fragments to rebuild a phrase.
 --
@@ -1277,6 +1352,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- tidy-up's clearing included; its deletions as `join_requests` tombstones) and carried in file and sealed backups.
 -- A re-key moves a member's rows, as applicant and as `decided_by`, to the new key (stamped, so the move replicates).
 -- A prune or a self-deletion of the member the applicant became scrubs what they wrote and keeps the record.
+-- `via_post_id` and `via_sharer_pubkey` (shared-listing door A3, DESIGN-shared-listing-door-fable.md §2.2): the post and
+-- the member a knock came from, when it carried the ticket of a link a member shared outside (engine/peek-tickets.ts
+-- peekProvenance) and that ticket opened its post when the knock was taken; else both NULL (a ticket that opens nothing
+-- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
+-- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
+-- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1291,6 +1372,8 @@ CREATE TABLE IF NOT EXISTS join_requests (
     decided_at TEXT,
     ip_hash TEXT,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    via_post_id TEXT,
+    via_sharer_pubkey TEXT,
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -1358,6 +1441,8 @@ CREATE INDEX IF NOT EXISTS idx_member_blocks_updated_at ON member_blocks(updated
 -- it (GET /api/notices/push/:id, the signer's own). `sent_at` is the notice's time in whole seconds. Bounded: 7 days, and
 -- a member's newest 100 (the hourly hygiene job); the CHECKs cap a row's size. This server's own: never copied to a
 -- standby, which sends no push. Goes with the member on a prune, a self-deletion or a re-key.
+-- Kept for every member the push is for, a phone or not: it is the list both apps' bell reads (GET /api/notices/push).
+-- `seen_at` (whole seconds): when the member tapped the row or opened its thing; NULL while it is on the bell.
 CREATE TABLE IF NOT EXISTS push_notices (
     id TEXT PRIMARY KEY CHECK (length(id) = 32),
     recipient TEXT NOT NULL,
@@ -1365,7 +1450,8 @@ CREATE TABLE IF NOT EXISTS push_notices (
     title TEXT NOT NULL CHECK (length(title) <= 200),
     body TEXT NOT NULL CHECK (length(body) <= 4000),
     data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 1000),
-    sent_at INTEGER NOT NULL
+    sent_at INTEGER NOT NULL,
+    seen_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
 CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);
@@ -1526,6 +1612,14 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE marketplace_transactions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS standing_deals_touch_updated_at
+AFTER UPDATE ON standing_deals
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at
@@ -3243,7 +3337,10 @@ CREATE TABLE IF NOT EXISTS peek_tickets (
     -- Seven days after it was made (@beanpool/core PEEK_TICKET_DAYS); a row is deleted 30 days after this.
     expires_at    TEXT NOT NULL,
     -- Set when the member stops sharing it, or when the community turns outside sharing off: it opens nothing from then.
-    revoked_at    TEXT
+    revoked_at    TEXT,
+    -- How many requests to join came with this link's ticket while it opened its post (shared-listing door A3): the
+    -- sharer's "{n} asked to join from this link". A count only: who asked is on the request, for its answerers.
+    asked         INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)
 );
 -- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);

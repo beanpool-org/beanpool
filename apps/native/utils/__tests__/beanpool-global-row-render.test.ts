@@ -278,8 +278,11 @@ async function tap(): Promise<void> {
 function communityRows(scope: ParentNode = host): string[] {
     const label = Array.from(scope.querySelectorAll('span')).find((s) => s.textContent === 'YOUR COMMUNITIES')!;
     const group = label.nextElementSibling!;
-    return Array.from(group.children).map((c) => c.getAttribute('aria-label') ?? '');
+    // A row without a label of its own (Set up a new community server: TalkBack reads its words) by its title.
+    return Array.from(group.children).map((c) => c.getAttribute('aria-label') ?? c.querySelector('span')?.textContent ?? '');
 }
+/** The list's last two rows, on every phone (DESIGN-new-operator-path-fable.md, decision 2). */
+const LIST_END = ['Add a community', 'Set up a new community server'];
 
 describe('one row for the global community, whatever it answers (the phone does not have it saved)', () => {
     it('offline: the row is there, says it can\'t reach it, and a tap asks again (fails on origin/main: no row)', async () => {
@@ -383,7 +386,7 @@ describe('one row for the global community, whatever it answers (the phone does 
         expect(communityRows()).toEqual([
             'Riverside, Connected. You are a member here., in use',
             "Global community, Can't reach it right now. Tap to try again. Your own community isn't affected.",
-            'Add a community',
+            ...LIST_END,
         ]);
     });
 
@@ -411,7 +414,7 @@ describe('one row for the global community, whatever it answers (the phone does 
         list.active = null;
         scene.door = 'offline';
         await open();
-        expect(communityRows()).toEqual(["Global community, Can't reach it right now. Tap to try again.", 'Add a community']);
+        expect(communityRows()).toEqual(["Global community, Can't reach it right now. Tap to try again.", ...LIST_END]);
     });
 });
 
@@ -511,7 +514,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press for its options.');
         await tap();
         expect(list.switched).toEqual([GLOBAL]);
-        expect(communityRows()).toHaveLength(3);
+        expect(communityRows()).toHaveLength(4);
     });
 
     it('in the list but a stranger there (Damo\'s list after a wrong Reconnect): not "member"; the Guest mark stays, and a tap visits it as a guest, marked first (fails on origin/main: the door)', async () => {
@@ -660,7 +663,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         keptMember();
         await open();
         expect(globalRows()).toHaveLength(0);
-        expect(communityRows()).toEqual(['Add a community']);
+        expect(communityRows()).toEqual(LIST_END);
         // The list arrives: global is saved, so its row is the saved one, under its saved name, after Riverside.
         list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
         list.active = GLOBAL;
@@ -670,7 +673,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(line()).toBe('global.beanpool.org');
         const group = row().parentElement!;
         expect(Array.from(group.children).indexOf(row())).toBe(1);
-        expect(group.children).toHaveLength(3);
+        expect(group.children).toHaveLength(4);
     });
 
     for (const inUse of [GLOBAL, LOCAL]) {
@@ -682,8 +685,8 @@ describe('the phone has it saved: the saved row is the global row, never a secon
             await open();
             expect(line()).toBe('global.beanpool.org');
             expect(communityRows()).toEqual(inUse === GLOBAL
-                ? ["Riverside, Can't reach it right now", "BeanPool Global, Can't reach it right now, in use", 'Add a community']
-                : ["Riverside, Can't reach it right now, in use", "BeanPool Global, Can't reach it right now", 'Add a community']);
+                ? ["Riverside, Can't reach it right now", "BeanPool Global, Can't reach it right now, in use", ...LIST_END]
+                : ["Riverside, Can't reach it right now, in use", "BeanPool Global, Can't reach it right now", ...LIST_END]);
         });
     }
 

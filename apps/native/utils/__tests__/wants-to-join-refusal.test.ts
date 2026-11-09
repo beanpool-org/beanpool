@@ -80,9 +80,9 @@ async function settle() {
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
 
-async function draw(onCount?: (n: number) => void, canSee?: boolean) {
+async function draw(onCount?: (n: number) => void, canSee?: boolean, fromNotice?: boolean) {
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount, canSee }) as any); });
+    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount, canSee, fromNotice }) as any); });
     await settle();
 }
 
@@ -215,5 +215,62 @@ describe('Wants to join on the phone', () => {
             act(() => root?.unmount());
             root = null;
         }
+    });
+
+    /**
+     * A notice that someone asked to join must never land on nothing (9 Nov: an owner of Byron tapped it and found Invites
+     * with no list; another owner had answered). Opened from the notice with nobody waiting, two plain lines say so; opened
+     * any other way, an empty list is no section, as before. The web's twin is apps/pwa/src/components/WantsToJoin.test.tsx.
+     */
+    describe('landing from the notice "someone asked to join" with nobody waiting', () => {
+        const NOBODY = 'Nobody is waiting to join right now.';
+        const ANSWERED = 'Another owner or admin may have answered already.';
+
+        it('an owner or admin: the section says nobody is waiting, and that another owner or admin may have answered', async () => {
+            serveReads([json(200, { knocks: [], total: 0 })]);
+            const onCount = vi.fn();
+            await draw(onCount, true, true);
+            expect(byTestId('wants-to-join-nobody')?.textContent).toBe(NOBODY);
+            expect(byTestId('wants-to-join-answered-already')?.textContent).toBe(ANSWERED);
+            // No "Wants to join (0)" heading and no help paragraph over an empty list.
+            expect(heading()).toBeNull();
+            expect(onCount).toHaveBeenLastCalledWith(0);
+        });
+
+        it('the node says the community takes no requests now (404): still the lines, not nothing', async () => {
+            serveReads([json(404, { error: 'No such page', code: 'not_found' })]);
+            await draw(undefined, true, true);
+            expect(byTestId('wants-to-join-nobody')?.textContent).toBe(NOBODY);
+        });
+
+        it('Invites opened any other way with nobody waiting: no section at all (a quiet page)', async () => {
+            serveReads([json(200, { knocks: [], total: 0 })]);
+            await draw(undefined, true, false);
+            expect(host.innerHTML).toBe('');
+            expect(byTestId('wants-to-join-nobody')).toBeNull();
+        });
+
+        it('a member who can\'t see requests: no section and no read, notice or not', async () => {
+            const reads = serveReads([json(200, { knocks: [], total: 0 })]);
+            await draw(undefined, false, true);
+            expect(host.innerHTML).toBe('');
+            expect(reads()).toBe(0);
+        });
+
+        it('people waiting: the list, with none of these lines', async () => {
+            serveReads([json(200, { knocks: [RIVER], total: 1 })]);
+            await draw(undefined, true, true);
+            expect(heading()).toBe('🚪 Wants to join (1)');
+            expect(byTestId('wants-to-join-nobody')).toBeNull();
+            expect(byTestId('wants-to-join-answered-already')).toBeNull();
+        });
+
+        it('the member answers the last one themselves: the section goes, never "another owner may have answered"', async () => {
+            post.answer = () => json(200, { knock: { id: 'k2', status: 'declined' } });
+            serveReads([json(200, { knocks: [SKY], total: 1 }), json(200, { knocks: [], total: 0 })]);
+            await draw(undefined, true, true);
+            await tap('Not now, Sky');
+            expect(host.innerHTML).toBe('');
+        });
     });
 });

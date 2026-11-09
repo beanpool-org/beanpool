@@ -47,12 +47,13 @@ async function member(pkcs8 = false): Promise<BeanPoolIdentity> {
 
 interface Sent { url: string; method: string; headers: Record<string, string>; body: string }
 let sent: Sent[] = [];
-let answer: (req: Sent) => { status: number; body?: unknown } = () => ({ status: 500 });
+let answer: (req: Sent) => { status: number; body?: unknown; headers?: Record<string, string> } = () => ({ status: 500 });
 
-function reply(status: number, body?: unknown) {
+function reply(status: number, body?: unknown, headers: Record<string, string> = {}) {
     return {
         ok: status >= 200 && status < 300,
         status,
+        headers: { get: (name: string) => headers[name] ?? null },
         json: async () => { if (body === undefined) throw new Error('no body'); return body; },
     };
 }
@@ -64,7 +65,7 @@ beforeEach(() => {
         const req = { url, method: init?.method ?? 'GET', headers: init?.headers ?? {}, body: init?.body ?? '' };
         sent.push(req);
         const a = answer(req);
-        return reply(a.status, a.body);
+        return reply(a.status, a.body, a.headers);
     });
 });
 
@@ -213,10 +214,30 @@ describe('the knock’s status, read from the community', () => {
         expect(readStatus({ status: 'approved' })).toEqual({ status: 'pending' });
     });
 
+    it('a yes the key has used says so: `member: true` beside approved (global yes Y1), and nothing else reads as one', () => {
+        expect(readStatus({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true }))
+            .toEqual({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true });
+        expect(readStatus({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: 'yes' }))
+            .toEqual({ status: 'approved', invite: 'ABCD2345', expiresAt: null });
+        expect(readStatus({ status: 'pending', member: true })).toEqual({ status: 'pending' });
+    });
+
     it('a refusal (a replaced key, knocks switched off) comes back in the community’s words', async () => {
         const words = 'This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.';
         answer = () => ({ status: 403, body: { error: words, code: 'key_invalidated' } });
         expect(await readKnockStatus(COMMUNITY, await member())).toEqual({ ok: false, kind: 'refused', status: 403, code: 'key_invalidated', message: words });
+    });
+
+    it('a 429 carries its Retry-After, so the screen waits as long as it was told (Damo, 9 Nov 2026: the yes shows itself)', async () => {
+        answer = () => ({ status: 429, body: { error: 'Slow down.' }, headers: { 'Retry-After': '90' } });
+        expect(await readKnockStatus(COMMUNITY, await member())).toEqual({ ok: false, kind: 'refused', status: 429, code: null, message: 'Slow down.', retryAfterSeconds: 90 });
+    });
+
+    it('a refusal with no Retry-After says nothing of one', async () => {
+        answer = () => ({ status: 403, body: { error: 'No.' } });
+        const r = await readKnockStatus(COMMUNITY, await member());
+        expect(r).toEqual({ ok: false, kind: 'refused', status: 403, code: null, message: 'No.' });
+        expect('retryAfterSeconds' in r).toBe(false);
     });
 
     it('is never read from the global node', async () => {
@@ -262,6 +283,17 @@ describe('what a community’s card shows', () => {
             .toEqual({ kind: 'member', note: 'You are already a member of this community.' });
     });
 
+    it('a yes already used (the key joined, here or on another device): the card says member, never Join (global yes Y1)', () => {
+        expect(knockCardState(true, true, ok({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true })))
+            .toEqual({ kind: 'member', note: KNOCK_MESSAGES.member });
+        expect(KNOCK_MESSAGES.member).toBe('You are already a member of this community.');
+    });
+
+    it('the landing card has no line for a yes already used', () => {
+        const asked = [{ url: 'https://b.example.org', name: 'Beta', key: 'b', sentAt: '2026-09-21T00:00:00Z' }];
+        expect(cardKnockLines(asked, { 'https://b.example.org': ok({ status: 'approved', invite: 'X', expiresAt: null, member: true }) })).toEqual([]);
+    });
+
     it('the landing card lists only what is waiting or said yes', () => {
         const asked = [
             { url: 'https://a.example.org', name: 'Alpha', key: 'a', sentAt: '2026-09-20T00:00:00Z' },
@@ -296,6 +328,14 @@ describe('the form', () => {
         expect(knockAvatar('https://mullum.beanpool.org/api/avatar/abc')).toBeUndefined();
         expect(knockAvatar(`data:image/png;base64,${'A'.repeat(150_001)}`)).toBeUndefined();
         expect(knockBody({ callsign: 'Robin', message: 'Hi', avatar: '/api/avatar/x' })).not.toHaveProperty('avatar');
+    });
+
+    it("carries the shared link's ticket only in a ticket's shape (shared-listing door A3)", () => {
+        const T = 'AbCdEfGhIjKlMnOpQrSt_-';
+        expect(knockBody({ callsign: 'Robin', message: 'Hi', peek: T }, 'mullum.beanpool.org', null)).toEqual({ callsign: 'Robin', message: 'Hi', toNode: 'mullum.beanpool.org', peek: T });
+        for (const bad of [undefined, null, '', 'not-a-ticket', `${T}A`]) {
+            expect(knockBody({ callsign: 'Robin', message: 'Hi', peek: bad as any })).not.toHaveProperty('peek');
+        }
     });
 });
 

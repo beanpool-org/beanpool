@@ -47,9 +47,11 @@ interface NewPollModalProps {
     visible: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    /** The Modal has actually been shown (utils/screen-presented.ts: a refused one never fires it). */
+    onShow?: () => void;
 }
 
-export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps) {
+export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollModalProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -177,6 +179,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             animationType="slide"
             presentationStyle="pageSheet"
             onRequestClose={onClose}
+            onShow={onShow}
         >
             <KeyboardAvoidingView
                 style={{ flex: 1 }}

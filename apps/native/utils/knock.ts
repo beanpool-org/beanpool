@@ -33,7 +33,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, t, word } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, t, word, retryAfterSecondsOf } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -73,6 +73,8 @@ export const KNOCK_MESSAGES = {
     none: word('This request is no longer open. You can ask again.'),
     cancelled: word('You cancelled your request. You can ask again after 24 hours.'),
     invited: word('A member invited you. Join now to become a member.'),
+    /** The yes has been used: this key is a member there now (`member: true` beside the yes, global yes Y1). */
+    member: word('You are already a member of this community.'),
 } as const;
 
 export type KnockSendResult =
@@ -90,11 +92,13 @@ export type KnockSendResult =
 export type KnockStatus =
     | { status: 'none' }
     | { status: 'pending' }
-    | { status: 'approved'; invite: string; expiresAt: string | null };
+    /** `member`: the yes has been used, and the key is a member there now (the node says so beside the yes, global yes Y1). */
+    | { status: 'approved'; invite: string; expiresAt: string | null; member?: true };
 
 export type KnockStatusResult =
     | { ok: true; value: KnockStatus }
-    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string }
+    /** `retryAfterSeconds`: a 429's Retry-After, when it named a wait (the screen waits that long before asking again). */
+    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string; retryAfterSeconds?: number }
     | { ok: false; kind: 'no_address' | 'unreachable'; message: string };
 
 export interface KnockRequest {
@@ -102,6 +106,12 @@ export interface KnockRequest {
     callsign: string;
     /** A photo as a data URL, or a shipped `bundled://` picture. Left out when it isn't one of those. */
     avatar?: string | null;
+    /**
+     * The ticket of the link shared outside that the request comes after (shared-listing door A3): the community names
+     * the listing and the member who shared it to whoever answers. Left out unless it has a ticket's shape; the
+     * community never refuses a request for one that opens nothing.
+     */
+    peek?: string | null;
 }
 
 // ── The form ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -137,7 +147,7 @@ export function knockAvatar(value: string | null | undefined): string | undefine
  */
 export function knockBody(
     req: KnockRequest, toNode?: string, fromNode: string | null = KNOCK_FROM_NODE,
-): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
+): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
     const avatar = knockAvatar(req.avatar);
     return {
         message: req.message.trim(),
@@ -145,6 +155,7 @@ export function knockBody(
         ...(fromNode ? { fromNode } : {}),
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
+        ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
     };
 }
 
@@ -204,7 +215,8 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     }
     if (!res.ok) {
         const { message, code } = await readError(res);
-        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? KNOCK_MESSAGES.unreadable };
+        const wait = retryAfterSecondsOf(res.headers?.get?.('Retry-After'));
+        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? KNOCK_MESSAGES.unreadable, ...(wait !== null ? { retryAfterSeconds: wait } : {}) };
     }
     const body = await res.json().catch(() => null) as Record<string, unknown> | null;
     const status = readStatus(body);
@@ -246,7 +258,10 @@ export function readStatus(body: unknown): KnockStatus | null {
     if (typeof b.status !== 'string') return null;
     if (b.status === 'none') return { status: 'none' };
     if (b.status === 'approved' && typeof b.invite === 'string' && b.invite.trim()) {
-        return { status: 'approved', invite: b.invite.trim(), expiresAt: typeof b.expiresAt === 'string' ? b.expiresAt : null };
+        return {
+            status: 'approved', invite: b.invite.trim(), expiresAt: typeof b.expiresAt === 'string' ? b.expiresAt : null,
+            ...(b.member === true ? { member: true as const } : {}),
+        };
     }
     return { status: 'pending' };
 }
@@ -381,7 +396,10 @@ export function knockCardState(
     }
     switch (status.value.status) {
         case 'pending': return { kind: 'waiting', note: KNOCK_MESSAGES.waiting };
-        case 'approved': return { kind: 'invited', invite: status.value.invite, note: KNOCK_MESSAGES.invited };
+        // A yes already used (the key joined, on this phone or another device): a member, never Join again.
+        case 'approved': return status.value.member
+            ? { kind: 'member', note: KNOCK_MESSAGES.member }
+            : { kind: 'invited', invite: status.value.invite, note: KNOCK_MESSAGES.invited };
         default: return { kind: 'ask', note: KNOCK_MESSAGES.none };
     }
 }
@@ -399,6 +417,8 @@ export function cardKnockLines(
         const s = statuses[k.url];
         if (!s || !s.ok) continue;
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        // A yes already used is no news: the key is a member there (global yes Y1).
+        if (s.value.status === 'approved' && s.value.member) continue;
         if (s.value.status === 'approved') lines.push({ url: k.url, text: t('{name} said yes. Join now.', { name }), invited: true });
         else if (s.value.status === 'pending') lines.push({ url: k.url, text: t('Waiting for {name}: usually a few days.', { name }), invited: false });
     }

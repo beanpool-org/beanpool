@@ -4,14 +4,18 @@
  *
  * The applicant, signed with their own key (the same key on every node), not a member here (a key a re-key replaced
  * gets 403 `key_invalidated` from both):
- *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode? }  → 201 { knock: { status: 'pending' } }
- *                                   (400 `wrong_community` for a knock whose `toNode` names another community; see below)
- *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
+ *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode?, peek? }  → 201 { knock: { status: 'pending' } }
+ *                                   (400 `wrong_community` for a knock whose `toNode` names another community; see below.
+ *                                   `peek`: the ticket of the link shared outside that the stranger read, engine/knocks.ts
+ *                                   "Where it came from": kept as its post and sharer when it opens its post now, and
+ *                                   otherwise left out; never a refusal, and the answer is the same either way)
+ *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt, member? }
  *   POST /api/join/knock/cancel   → 200 { knock: { status: 'cancelled' } } | 404 `not_found` ("Cancel my request"; the key
  *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
  * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,
  * and anyone else is answered 403 `admins_only`:
- *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt }], total, limit, offset }
+ *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt, via }], total, limit, offset }
+ *                                               (`via`: { title, sharer } of the listing shared outside it came after, or null)
  *   POST /api/join/knocks/:id/approve           { vouchAmount?, namesEntry?, namesEntryId? }
  *                                               → { knock: { id, status: 'approved' }, invite: { code, expiresAt, vouchAmount? } }
  *                                               (a vouch from the answerer's own budget, engine/vouchers.ts: its refusals)
@@ -77,6 +81,7 @@ import {
     type KnockRefusal, type AnswerRefusal,
 } from '../engine/knocks.js';
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
+import { noteAskedFrom, peekProvenance } from '../engine/peek-tickets.js';
 import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
 import { NamesListError } from '../engine/names-list.js';
 import { VoucherError } from '../engine/vouchers.js';
@@ -294,6 +299,11 @@ export function createKnockRoutes(deps: RouteDeps): Router {
             }
         }
 
+        // The shared link it came with, if any, and only while its ticket opens its post: a ticket that opens nothing (or
+        // isn't one) leaves the knock plain, never refused, and the stranger is answered the same either way.
+        let via: ReturnType<typeof peekProvenance> = null;
+        try { via = peekProvenance(body.peek); } catch { via = null; }
+
         let outcome;
         try {
             outcome = submitKnock({
@@ -303,13 +313,17 @@ export function createKnockRoutes(deps: RouteDeps): Router {
                 avatar: avatar.value,
                 fromNode: fromNode.value,
                 address: clientLimiterKey(ctx),
+                via: via ? { postId: via.postId, sharer: via.sharer } : null,
             });
         } catch (e) {
             if (respondProfileRefusal(ctx, e)) return;
             throw e;
         }
         if (!outcome.ok) return refuseKnock(ctx, outcome.reason);
-        notifyKnockReceived();
+        if (via) {
+            try { noteAskedFrom(via.ticketId); } catch { /* a count only: the knock is taken */ }
+        }
+        notifyKnockReceived(Date.now(), via?.sharer ?? null);
         ctx.status = 201;
         ctx.body = { knock: { status: 'pending' } };
     });

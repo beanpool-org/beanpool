@@ -39,6 +39,15 @@ describe('sendKnock: a signed POST to the community it asks', () => {
         expect(body).not.toHaveProperty('pubkey');
     });
 
+    it("from global's web app (the CJ case, DESIGN-global-yes-join-fable.md, slice Y0): fromNode names global, as the phone's knock does", async () => {
+        localStorage.setItem('bp_node_url', 'https://global.beanpool.org');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(201, { knock: { status: 'pending' } }));
+        await knockLib.sendKnock('https://byron.beanpool.org', IDENTITY, REQ);
+        const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+        expect(body.fromNode).toBe('global.beanpool.org');
+        expect(body.toNode).toBe('byron.beanpool.org');
+    });
+
     it('a web app served same-origin says its own host, never a fixed name of ours', () => {
         localStorage.removeItem('bp_node_url');
         expect(knockLib.knockFromNode()).toBe(window.location.host.toLowerCase() || undefined);

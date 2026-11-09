@@ -24,6 +24,7 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
+import { StandingPanel, StandingTakeUp, type StandingChoice } from '../components/StandingDeal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
@@ -33,7 +34,8 @@ import {
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
-    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine,
+    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel,
+    standingFieldsFor, standingUnitForListing,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -61,7 +63,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { TRANSACTION_FEE_RATE, eventCopyOf } from '@beanpool/core';
+import { TRANSACTION_FEE_RATE, eventCopyOf, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -72,6 +74,7 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     treasuryApprove, treasuryReject, treasuryComplete,
+    signStandingStart, stopStandingDeal, holdBackStandingDeal,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -869,6 +872,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Accept & Complete Inline Forms
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
+    // The request on a standing Need whose author is agreeing to pay for it (DESIGN-standing-deals-fable §4): its payer screen shows.
+    const [approvingStanding, setApprovingStanding] = useState<string | null>(null);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [keeperOf, setKeeperOf] = useState<string[]>([]);
@@ -1365,6 +1370,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     undefined,
                     selectedPost.id
                 );
+                // The chat opens with this listing above the composer; the next message carries it (core chat-about.ts).
+                chatAboutDrafts.set(result.conversation.id, aboutOfPost(selectedPost));
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
@@ -1732,8 +1739,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
             && t.status === 'pending') : undefined;
         // A finished one: the page says what became of it, as the phone does for an alert's deal (listingDealLines.finished).
+        // A short standing deal's row is the period last settled, but the deal runs on: core says nothing of it (its panel does).
         const pinnedDone = !pinnedTx && selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id) : undefined;
-        const pinnedOver = pinnedDone ? listingDealLines.finished(pinnedDone.status) : null;
+        const pinnedOver = pinnedDone ? listingDealLines.finished(pinnedDone) : null;
         const activeTx = pinnedTx
             ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
@@ -1818,11 +1826,63 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setMessaging(true);
             try {
                 const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey, undefined, selectedPost.id);
+                chatAboutDrafts.set(result.conversation.id, aboutOfPost(selectedPost));
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             } catch (e: any) {
                 setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
             } finally {
                 setMessaging(false);
+            }
+        };
+        // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
+        // week or per month is taken up as one, the payer signing its authorisation. Hourly, daily and fixed stay one-off, and so
+        // does a free one (0 Beans: nothing to hold each period), by core's one rule, as on the phone.
+        const standingUnit = standingUnitForListing(selectedPost.priceType, selectedPost.credits);
+        const standingOffer = !!standingUnit && selectedPost.type === 'offer' && !selectedPost.lendable;
+        const standingNeed = !!standingUnit && selectedPost.type === 'need';
+        // While one runs by itself its period is no deal to release (the node releases it at the period's end): its panel shows
+        // instead of the held one. One held back is a plain held deal again, and shows both.
+        const standingRunning = deals.standing.some(m => m.tx.standingPhase !== 'held_back');
+        const standingStep = async (step: () => Promise<unknown>) => {
+            setAccepting(true);
+            try {
+                await step();
+                afterDealStep();
+            } catch (e: any) {
+                setError(nodeRefusal(e)?.message ?? (e.message || t('Try again')));
+            } finally {
+                setAccepting(false);
+            }
+        };
+        // Agree (§2.2, §6): the payer's app signs the authorisation (core builds the text and its bytes) and sends it with the
+        // accept (an Offer) or the approval (a Need's author, paying the helper the request names).
+        const takeUpStanding = async (choice: StandingChoice, payee: string, approveTxId?: string) => {
+            if (!identity || !standingUnit) return;
+            setAccepting(true);
+            try {
+                const standing = await signStandingStart(standingFieldsFor({
+                    listingId: selectedPost.id, payee, beansPerPeriod: selectedPost.credits, unit: standingUnit,
+                    maxPeriods: choice.periods, startsAt: choice.startsAt,
+                }));
+                if (approveTxId) await approveMarketplaceRequest(approveTxId, identity.publicKey, standing);
+                else await acceptMarketplacePost(selectedPost.id, identity.publicKey, undefined, standing);
+                setShowAcceptConfirm(false);
+                setApprovingStanding(null);
+                if (approveTxId) setRequests(prev => prev.filter(r => r.id !== approveTxId));
+                else handleMessageAuthor();
+                afterDealStep();
+            } catch (err) {
+                const open = openDealIn(err);
+                if (open) {
+                    alert(t('You already have a deal under way on this. Finish or cancel it first.'));
+                    setShowAcceptConfirm(false);
+                    if (open.transactionId) setSelectedTxId(open.transactionId);
+                    afterDealStep();
+                } else {
+                    alert(explainTradeError(err));
+                }
+            } finally {
+                setAccepting(false);
             }
         };
         const renderOwnDeal = (m: DealMoves<MarketplaceTransaction>) => {
@@ -2061,15 +2121,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
                         {!isPulsePost && !priceMarked && (
                             <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-price">
+                                {/* A listing priced at 0 reads Free (core listing-price.ts, as on every card): a Need says "Free help wanted", and
+                                    its label is "Price", not "Willing to pay" over a figure that pays nothing. The words are the figure: no Beans
+                                    sign, no unit, and a screen reader reads "Free", not "0 B". */}
                                 <p className={BOX_LABEL.muted}>
-                                    {selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay')}
+                                    {freePriceLabel(selectedPost.credits, selectedPost.type) ?? (selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay'))}
                                 </p>
                                 <div className={`flex flex-row flex-wrap items-center gap-x-1 min-w-0 ${PAGE_TYPE.price} text-nature-950 dark:text-white`}>
-                                    <span>{formatNumber(selectedPost.credits)}</span>
-                                    <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
-                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                        {priceUnit(selectedPost.priceType)}
-                                    </span>
+                                    {freePriceWords(selectedPost.credits, selectedPost.type, 'box') ?? (<>
+                                        <span>{formatNumber(selectedPost.credits)}</span>
+                                        <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
+                                            <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                            {priceUnit(selectedPost.priceType)}
+                                        </span>
+                                    </>)}
                                 </div>
                                 {selectedPost.credits > 0 && (
                                     <p className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
@@ -2094,8 +2159,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      <p data-testid="pinned-deal-over" className="mt-4 text-sm font-semibold text-center text-nature-600 dark:text-nature-400">{pinnedOver}</p>
                  )}
 
+                 {/* A standing deal running on it, one panel for each the reader stands on (§2.2): Hold back, Stop and Message. */}
+                 {deals.standing.map(m => {
+                     const other = m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerPublicKey : m.tx.buyerPublicKey;
+                     const otherName = (m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerCallsign : m.tx.buyerCallsign) || t('Peer');
+                     return (
+                         <StandingPanel key={m.tx.id} tx={m.tx} actingAs={m.actingAs} busy={accepting}
+                             onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
+                             onHoldBack={() => standingStep(() => holdBackStandingDeal(m.tx.standingId!))}
+                             onMessage={m.asKeeper ? undefined : () => messageRow(other)}
+                             messageLabel={t('Message {name}', { name: otherName })} />
+                     );
+                 })}
+
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
-                 {ownRows.length === 0 && (selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
+                 {ownRows.length === 0 && !standingRunning && (selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
@@ -2357,6 +2435,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <button
                                             onClick={async () => {
                                                 if (!identity) return;
+                                                // A standing Need: its author pays, and agrees to the run on the payer's screen first (§4).
+                                                if (standingNeed && !keptAuthor) { setApprovingStanding(req.id); return; }
                                                 setAccepting(true);
                                                 try {
                                                     if (keptAuthor) await treasuryApprove(keptAuthor, req.id);
@@ -2378,6 +2458,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             {t('Approve & Hold in Trust')}
                                         </button>
                                     </div>
+                                    {approvingStanding === req.id && standingUnit && (
+                                        <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={requesterCallsign}
+                                            busy={accepting} onCancel={() => setApprovingStanding(null)}
+                                            onAgree={(choice) => takeUpStanding(choice, req.sellerPublicKey, req.id)} />
+                                    )}
                                 </div>
                                 );
                             })}
@@ -2487,13 +2572,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 // carries the 🏘️ (as the phone's post/[id].tsx).
                                 return <LocalCommunityAction feature="escrow" label={t(LOCAL_COMMUNITY_LINES.dealAction).replace(LOCAL_COMMUNITY_EMOJI, '').trim()} className="w-full py-3.5 text-[15px]" {...markWays} />;
                             }
-                            return showAcceptConfirm ? (
+                            // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
+                            return showAcceptConfirm && standingOffer && standingUnit ? (
+                                <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={selectedPost.authorCallsign}
+                                    busy={accepting || isRemotePost || !!authorEnterpriseInactive} onCancel={() => setShowAcceptConfirm(false)}
+                                    onAgree={(choice) => takeUpStanding(choice, selectedPost.authorPublicKey)} />
+                            ) : showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
                                     {isLoan ? t('Ask to borrow this?') : selectedPost.type === 'offer' ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}
                                 </p>
 
-                                {selectedPost.priceType !== 'fixed' && (
+                                {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
+                                {selectedPost.priceType !== 'fixed' && !standingNeed && (
                                     <div className="mb-3">
                                         <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 mb-1 uppercase tracking-wider">
                                             {estimatedLabel(selectedPost.priceType)}
@@ -2514,12 +2605,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* A Need with no usable quantity yet has no sentence: no empty box either (as the phone). An ambiguous
                                     quantity still shows its refusal words in the box. */}
-                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)
+                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)
                                     && (acceptHoursRead.ok || !isAmbiguousAmount(acceptHoursRead.refusal))) && (
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
-                                        if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
-                                        const hrs = acceptHoursValue || 0;
+                                        if (selectedPost.priceType !== 'fixed' && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
+                                        const hrs = standingNeed ? 1 : (acceptHoursValue || 0);
                                         const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
                                         // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
                                         // not free (as the phone's post/[id].tsx).
@@ -2528,7 +2619,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         // total and the name the Need shows. No usable quantity yet: no sentence, and never an amount that isn't one.
                                         // The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
                                         if (selectedPost.type === 'need') {
-                                            if (selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)) return null;
+                                            if (selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)) return null;
                                             return needAnswerLine(tot, selectedPost.authorCallsign);
                                         }
                                         if (!isLoan && tot === 0) return t('This is a free listing (0 B). No credits transferred.');
@@ -2588,7 +2679,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setAccepting(true);
                                             try {
                                                 const isVariable = selectedPost.priceType !== 'fixed';
-                                                const estimatedHours = isVariable ? acceptHoursValue : undefined;
+                                                const estimatedHours = isVariable ? (standingNeed ? 1 : acceptHoursValue) : undefined;
                                                 const totalCredits = isVariable ? selectedPost.credits * (estimatedHours || 0) : selectedPost.credits;
 
                                                 const remoteNode = (selectedPost as any)._remoteNode;
@@ -2636,7 +2727,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || !(acceptHoursValue > 0)))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && !standingNeed && (!acceptHours || !(acceptHoursValue > 0)))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                             accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-bp-commit-fill cursor-not-allowed opacity-60'

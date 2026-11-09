@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Linkin
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -23,11 +23,13 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
 import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-invite';
 import type { JoinKey } from '../utils/door-key';
-import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
+import { claimProbeOrigin } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult, PLACE_CIRCLE_WORDS } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, combineKnockTicks, findCommunityState, knockTickOf, t, type AddressResult, type KnockWatchTick, PLACE_CIRCLE_WORDS } from '@beanpool/core';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
+import { NoOwnerCard, type OwnerlessServer } from '../components/NoOwnerCard';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { copiesAtFor } from '../utils/copies-rule';
@@ -201,7 +203,7 @@ export default function FindCommunityScreen() {
     // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
     // community with an owner never shows it.
     // The name is the server's, cleaned (node-claim.ts cleanClaimName), or the address's host when it gave none.
-    const [claimable, setClaimable] = useState<{ origin: string; name: string; codeId: string } | null>(null);
+    const [claimable, setClaimable] = useState<OwnerlessServer | null>(null);
     useEffect(() => {
         const origin = claimProbeOrigin(query);
         setClaimable(null);
@@ -232,15 +234,40 @@ export default function FindCommunityScreen() {
     useEffect(() => {
         if (!pubkey) return;
         let alive = true;
-        rememberedKnocks(pubkey).then(list => {
-            if (!alive) return;
-            setAsked(list);
-            // Only the communities this key asked: a signed read shows a community who is asking.
-            list.forEach(k => { readStatus(k.url); });
-        });
+        rememberedKnocks(pubkey).then(list => { if (alive) setAsked(list); });
         cancelledKnocks(pubkey).then(c => { if (alive) setCancelled(c); });
         return () => { alive = false; };
-    }, [pubkey, readStatus]);
+    }, [pubkey]);
+
+    // Only the communities this key asked (a signed read shows a community who is asking): each when the list is here, then by
+    // itself while this screen is in front (Damo, 9 Nov 2026: the yes showed only after a manual refresh), on
+    // utils/use-knock-status-watch.ts's schedule. One that has its answer is not asked again; Check again still reads one.
+    const [shown, setShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setShown(true);
+        return () => setShown(false);
+    }, []));
+    const statusesRef = useRef(statuses);
+    statusesRef.current = statuses;
+    const askedRef = useRef(asked);
+    askedRef.current = asked;
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const readRound = async (): Promise<KnockWatchTick> => {
+        const me = identityRef.current;
+        if (!me) return { kind: 'settled' };
+        const ticks = await Promise.all(askedRef.current.map(async (k): Promise<KnockWatchTick> => {
+            const held = statusesRef.current[k.url];
+            if (held && knockTickOf(held).kind === 'settled') return { kind: 'settled' };
+            const r = await readKnockStatus(k.url, me);
+            setStatuses(s => ({ ...s, [k.url]: r }));
+            return knockTickOf(r);
+        }));
+        return combineKnockTicks(ticks);
+    };
+    // Keyed on each request (its address and when it was sent), not on the addresses: Ask to join again to a community whose
+    // earlier request has its answer is a new request there, and the watcher begins again for it (round 2 of #3009).
+    useKnockStatusWatch(readRound, !!pubkey && asked.length > 0, `${pubkey ?? ''}|${asked.map(a => `${a.url} ${a.sentAt}`).join(' ')}`, shown);
 
     // ── Watches ─────────────────────────────────────────────────────────────────────────────────────────
     const [watches, setWatches] = useState<PlaceWatch[] | null>(null);
@@ -472,7 +499,8 @@ export default function FindCommunityScreen() {
             const label = name ?? url.replace(/^https:\/\//, '');
             return (
                 <View>
-                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    {/* Polite: the yes that replaces this line is read out (the same Text, its words changed). */}
+                    <Text style={styles.note} accessibilityLiveRegion="polite">{findLineWords(state.note)}</Text>
                     {!!cancelNotes[url] && <Text style={styles.refusal}>{findLineWords(cancelNotes[url])}</Text>}
                     <View style={styles.actions}>
                         <Pressable
@@ -510,7 +538,7 @@ export default function FindCommunityScreen() {
         if (state.kind === 'invited') {
             return (
                 <View>
-                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    <Text style={styles.note} accessibilityLiveRegion="polite">{findLineWords(state.note)}</Text>
                     {/* The rule, where this community confirms its members: the sentence its join screen says (Marty, 3 Nov). */}
                     <DoorRuleLine url={url} testID="find-join-rule" />
                     <View style={styles.actions}>
@@ -692,7 +720,7 @@ export default function FindCommunityScreen() {
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder={pubkey ? t('Community name') : t('Its address, like riverside.example.org')}
+                        placeholder={pubkey ? t('Community name or address') : t('Its address, like riverside.example.org')}
                         placeholderTextColor={colors.text.muted}
                         returnKeyType={pubkey ? 'search' : 'done'}
                         autoCorrect={false}
@@ -712,22 +740,7 @@ export default function FindCommunityScreen() {
                         {renderKnock(typedCommunity.url, typedCommunity.name, typedCommunity)}
                     </View>
                 )}
-                {claimable && (
-                    <View style={[styles.card, { marginTop: 10 }]}>
-                        <Text style={styles.name}>{t('{name} has no owner yet', { name: claimable.name })}</Text>
-                        <Text style={styles.facts} selectable>{claimable.origin}</Text>
-                        <Text style={styles.note}>{t('If you installed it, claim it with the one-time code on the server.')}</Text>
-                        <View style={styles.actions}>
-                            <Pressable
-                                style={styles.primary}
-                                onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.primaryText}>{t('Claim {name}', { name: claimable.name })}</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                )}
+                {claimable && <NoOwnerCard server={claimable} style={{ marginTop: 10 }} testID="find-no-owner" />}
 
                 {!!pubkey && <View style={{ marginTop: 12 }}>
                     {loading && communities === null ? (

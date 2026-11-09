@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, freePriceWords, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -571,7 +571,9 @@ export default function PublicProfileScreen() {
     }, [myVouching, pubKeyStr]);
     const effectivePriorVouch = nodePriorVouch ?? myPriorVouch;
     const isRaise = effectivePriorVouch > 0;
-    const atMax = effectivePriorVouch >= VOUCH_MAX;
+    // One voucher's vouches for one person: 100, or 500 for an owner (core vouchMaxFor; the node's noLimit, Marty 9 Nov).
+    const pairMax = vouchMaxFor(myVouching?.noLimit === true);
+    const atMax = effectivePriorVouch >= pairMax;
     // Your own name and picture are this community's row (utils/use-own-profile.ts), once read: never the name the door
     // passed, nor the phone-wide one, which can be another community's (DESIGN-per-community-profile-fable.md §2). For
     // your own key the door's name is ignored altogether (Profile S2), so a name passed from a screen that read it
@@ -1455,7 +1457,7 @@ export default function PublicProfileScreen() {
                                                     {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
                                                         prior: effectivePriorVouch,
                                                         name: profile?.callsign || callsignStr || '',
-                                                        max: VOUCH_MAX,
+                                                        max: pairMax,
                                                     })}
                                                 </Text>
                                             )}
@@ -1464,6 +1466,7 @@ export default function PublicProfileScreen() {
                                                 onChange={setProfileVouchPreset}
                                                 budgetLeft={myVouching.budget?.left ?? 0}
                                                 budgetTotal={myVouching.budget?.level ?? 0}
+                                                noLimit={myVouching.noLimit === true}
                                                 priorVouch={effectivePriorVouch}
                                                 personName={profile?.callsign || callsignStr || ''}
                                             />
@@ -1501,7 +1504,7 @@ export default function PublicProfileScreen() {
                                                     // `over_max`). Without it nothing is guessed: the node's own sentence is shown.
                                                     const prior = !res.ok && typeof res.prior === 'number' && res.prior > 0 ? res.prior : null;
                                                     if (prior !== null) setNodePriorVouch(prior);
-                                                    if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null && prior + profileVouchPreset <= VOUCH_MAX) {
+                                                    if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null && prior + profileVouchPreset <= pairMax) {
                                                         const newTotal = prior + profileVouchPreset;
                                                         Alert.alert(
                                                             t(VOUCH_PRESET_WORDS.raiseTitle),
@@ -1841,8 +1844,11 @@ export default function PublicProfileScreen() {
                                                                 </View>
                                                                 {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                                    {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). */}
+                                                                    {freePriceWords(p.credits, p.type) ? <Text style={styles.creditAmount}>{freePriceWords(p.credits, p.type)}</Text> : <>
                                                                     <Text style={styles.creditAmount}>{p.credits ?? '?'}</Text>
                                                                     <Image accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" source={require('../assets/images/bean.png')} style={styles.beanIcon} />
+                                                                    </>}
                                                                 </View>
                                                                 )}
                                                             </View>

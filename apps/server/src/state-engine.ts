@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -27,6 +27,7 @@ import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { noteUnfindableSignInCopiesAtBoot } from './engine/recovery-find.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
@@ -62,9 +63,14 @@ import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notify
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
-import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import {
+    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere,
+    keptNoticeIdsOf, type PushNoticeRow,
+} from './engine/push-notices.js';
+import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -85,6 +91,10 @@ import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
+import {
+    tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
+    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart, type StandingHooks,
+} from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine, onHold,
@@ -791,6 +801,9 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // How many sign-in copies a restore can't find from the sign-in yet (engine/recovery-find.ts): one line on a main
+    // server, 0 included. Never throws.
+    noteUnfindableSignInCopiesAtBoot({ standby: getNodeRole() === 'backup' });
     // Members' push tokens are locked with a key from the same file (services/push-token-seal.ts): a main server locks
     // the rows stored in the clear before and checks every row opens; a standby drops those rows (it has no key). Never
     // throws.
@@ -1173,7 +1186,20 @@ function armMainServerTimers(): void {
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
+        // Standing deals (engine/standing-deals.ts): each period's Beans to the payee at its end and the next period held,
+        // short payers tried again, and warned ahead. Main server only, like the rest; Beans off moves nothing.
+        try { runStandingDeals(); } catch (e) { console.warn('[Standing] Standing deals tick failed:', e); }
     }), 60 * 1000);
+}
+
+/**
+ * Run the standing deals that are due (engine/standing-deals.ts tickStandingDeals) with this node's escrow callbacks. The main
+ * server's minute tick calls it; on a standby it does nothing. Never throws.
+ */
+export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => StandingHooks): ReturnType<typeof tickStandingDeals> {
+    const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+    // `wrap`: a suite's way to watch or fail the node's own primitives (a crash in the middle of a step).
+    return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
@@ -1447,6 +1473,9 @@ export function runMarketplaceHygiene(): void {
         WHERE t.status='pending'
           AND t.created_at < datetime('now', ?)
           AND (t.last_reminded_at IS NULL OR t.last_reminded_at < datetime('now', ?))
+          -- A standing deal's period running by itself is released by the node at its end (engine/standing-deals.ts):
+          -- nobody is asked to release it. One held back is a plain held deal again, and is nudged like any.
+          AND NOT EXISTS (SELECT 1 FROM standing_deals sd WHERE sd.id = t.standing_id AND sd.current_tx_id = t.id AND sd.phase = 'held')
     `).all(`-${ESCROW_NUDGE_DAYS} days`, `-${ESCROW_NUDGE_DAYS} days`) as any[];
     for (const row of lingering) {
         // A loan (a lendable Offer, S3) is asked about the thing, not the Beans: the borrower is the one who says it's back.
@@ -6830,7 +6859,7 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction | null {
     assertLedgerWritable();
     return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
@@ -6845,7 +6874,7 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction {
     assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
@@ -6862,6 +6891,23 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
     assertLedgerWritable();
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
+}
+
+// A standing deal's Stop, Hold back and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
+// holds, so each refuses on a standby first, as every step of a trade does.
+export function stopStandingDeal(id: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return stopStandingDealEngine(getEscrowCb(), id, actor);
+}
+
+export function holdBackStandingDeal(id: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return holdBackStandingDealEngine(getEscrowCb(), id, actor);
+}
+
+export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {
+    assertLedgerWritable();
+    return extendStandingDealEngine(getEscrowCb(), id, actor, standing);
 }
 
 export type { EscrowDisputeAction };
@@ -7255,7 +7301,48 @@ export function getConversation(id: string): Conversation | undefined {
 }
 
 export function markConversationRead(pubkey: string, conversationId: string): void {
-    return markConversationReadEngine(pubkey, conversationId);
+    markConversationReadEngine(pubkey, conversationId);
+    // Opening a chat takes its notices off the bell, on every app the member has open.
+    markBellNoticesSeenWhere(pubkey, 'conversationId', [conversationId]);
+}
+
+/**
+ * One of the bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS) to the member's own sockets, found by the
+ * socket index's key (an announcement to every member is one lookup each, never every socket per member), and only those
+ * whose app said it reads them (`bell=1` on its connect, https-server.ts `_bell`): an app from before them takes any event
+ * it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's socket. Never throws.
+ */
+function tellBell(pubkey: string, event: { type: string } & Record<string, unknown>): void {
+    try {
+        const msg = JSON.stringify(event);
+        for (const ws of wsClients.reachable([pubkey], null, 0)) {
+            if (!ws._bell || ws._visitor || ws._memberPubkey !== pubkey) continue;
+            try { ws.send(msg); } catch { wsClients.delete(ws); }
+        }
+    } catch { /* the app's next read catches up */ }
+}
+
+/** The bell's marks told to the member's own sockets, so every open app's count follows. */
+function toldBellSeen(pubkey: string, ids: string[]): string[] {
+    if (ids.length > 0) tellBell(pubkey, { type: 'push_notices_seen', ids });
+    return ids;
+}
+
+/**
+ * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen; a tap on its phone
+ * notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
+ * keptNoticeDetails), so the web app never shows that alert after.
+ */
+export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
+    const marked = markPushNoticesSeen(pubkey, ids);
+    const kept = keptNoticeIdsOf(pubkey, marked);
+    if (kept.length > 0) markKeptNoticesSeen(pubkey, kept);
+    return toldBellSeen(pubkey, marked);
+}
+
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
+    return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 
 export function getUnreadCounts(pubkey: string): Record<string, number> {
@@ -8963,6 +9050,9 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
     // next persistCommonsBalance() would make the wrong figure durable. Reachable, not theoretical —
     // adminPruneBranch drives this recursively over a whole invite subtree.
     conservingTransaction(() => {
+        // Their standing deals end at once (engine/standing-deals.ts): nothing more is held for or from them. A period still
+        // held stays for the other side to close, as every open deal of a removed member does.
+        endStandingDealsOf(publicKey);
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
@@ -9149,6 +9239,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     const repliesErased: string[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
+        // Their standing deals end (engine/standing-deals.ts): the guard above already refused while a period is held.
+        endStandingDealsOf(publicKey);
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
@@ -10547,9 +10639,12 @@ export function isOnHoliday(publicKey: string): boolean {
 // Holiday mode may only be switched ON when this is zero: going away mid-deal would strand a
 // counterparty's escrow or an open request.
 export function countOpenTrades(publicKey: string): number {
+    // A standing deal's period where this member is the payee doesn't count (DESIGN-standing-deals-fable §2.5): a payee may
+    // go on holiday while their standing deals run. The payer is held back by setHolidayMode's own standing-deal check.
     const row = db.prepare(
-        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')`
-    ).get(publicKey, publicKey) as any;
+        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')
+           AND NOT (standing_id IS NOT NULL AND seller_pubkey = ?)`
+    ).get(publicKey, publicKey, publicKey) as any;
     return row?.n || 0;
 }
 
@@ -10569,6 +10664,14 @@ export function assertNotOnHoliday(publicKey: string): void {
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
     if (!getActingMember(publicKey)) throw new Error(word('Member not found'));
+    // A payer with a standing deal still running (between its periods too) stops it first (DESIGN-standing-deals-fable §2.5).
+    const standingTitle = enabled ? standingDealBlockingHoliday(publicKey) : null;
+    if (standingTitle !== null) {
+        const err: any = new Error(standingLines.holidayPayer(standingTitle));
+        err.openTrades = Math.max(1, countOpenTrades(publicKey));
+        err.code = 'standing_deal_running';
+        throw err;
+    }
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(trn(open, 'You have {n} active trade in progress. Complete or cancel it before switching on holiday mode.',
@@ -10623,8 +10726,24 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
  * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
+ *
+ * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
+ * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
+ * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ *
+ * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
+ * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
  */
-export function dispatchPushNotification(
+export function dispatchPushNotification(...args: Parameters<typeof deliverPushNotices>): number {
+    return deliverPushNotices(...args).sent;
+}
+
+/**
+ * {@link dispatchPushNotification}, answering both counts: `sent`, the messages handed to Expo and to web push, and `told`,
+ * the members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A
+ * sender that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
+ */
+export function deliverPushNotices(
     targetPubkeys: string[],
     actorPubkey: string,
     title: string,
@@ -10638,8 +10757,14 @@ export function dispatchPushNotification(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
-): number {
-    if (getNodeRole() === 'backup') return 0;
+    /**
+     * `ttlSeconds`: how long a browser's push may wait (web push W1). `detailsFor`: what one recipient's details carry beside
+     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push.
+     */
+    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor } = {},
+): { sent: number; told: number } {
+    const none = { sent: 0, told: 0 };
+    if (getNodeRole() === 'backup') return none;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
     // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
     // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
@@ -10648,7 +10773,7 @@ export function dispatchPushNotification(
     // every other notice still go, whoever caused them (#1403 review).
     const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
-    if (recipients.length === 0) return 0;
+    if (recipients.length === 0) return none;
 
     const prefKey = `notify_${categoryId}`;
     
@@ -10683,6 +10808,7 @@ export function dispatchPushNotification(
     // is here only for the ticket's check, in memory, while this send lasts.
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    const webSends: WebPushSend[] = [];
     // The key read once for the whole send (an announcement reaches every member's phones).
     const open = pushTokenOpener();
 
@@ -10690,23 +10816,30 @@ export function dispatchPushNotification(
         // Check user's notification preference for this category
         // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
         // for it. The role is looked up for that kind only.
-        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
-            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+        // The applicant who tapped "Tell me when they answer" asked for exactly this one (web push W1), and has no switches.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind) || kind === 'join.answered'
+            || ((kind === 'community.knock' || kind === 'community.knock-shared') && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;
         }
 
+        // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
+        // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
-        if (tokens.length === 0) continue;
+        const browsers = webPushTargetsFor(pk, kind);
+        if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
+
+        // One notice per recipient, the same on each of their phones and browsers.
+        const notice = newPushNotice(kind, pk, sentAt);
+        const extra = options.detailsFor?.(pk);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data: extra ? { ...data, ...extra } : data, sentAt });
+        if (tokens.length === 0 && browsers.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
-
-        // One notice per recipient, the same on each of their phones.
-        const notice = newPushNotice(kind, pk, sentAt);
-        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
         for (const { tokenId, token, platform, lang } of tokens) {
             const words = phoneWords(lang);
@@ -10733,11 +10866,22 @@ export function dispatchPushNotification(
             allMessages.push(msg);
             phones.push({ publicKey: pk, tokenId, token });
         }
+
+        for (const { subId, lang, target } of browsers) {
+            const words = phoneWords(lang);
+            webSends.push({
+                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
+            });
+        }
     }
 
-    if (allMessages.length === 0) return 0;
-    if (rehearsal) return 0;
+    if (rehearsal || notices.length === 0) return none;
     keepPushNotices(notices);
+    // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
+    for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
+    const told = notices.length;
+    if (allMessages.length === 0 && webSends.length === 0) return { sent: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {
@@ -10756,7 +10900,8 @@ export function dispatchPushNotification(
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
-    return allMessages.length;
+    sendWebPushes(webSends);
+    return { sent: allMessages.length + webSends.length, told };
 }
 
 /**

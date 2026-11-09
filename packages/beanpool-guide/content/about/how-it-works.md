@@ -15,9 +15,11 @@ A rough guide: 40 beans is about one hour of someone's time. You and the other p
 
 ## Offers and Needs
 
-An **Offer** is something you can do or give: bread, a lift, an hour of gardening, a repair.
+An **Offer** is something you'll give or do for others: bread, a lift, an hour of gardening, a repair.
 
-A **Need** is something you are looking for.
+A **Need** is something you're looking for.
+
+Either can be free. Free is a price of 0, not a third kind of post, so it reads **Free** wherever the price is shown.
 
 In a community with Beans, before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something. Where there are no Beans, as on the global community, your first post can be a Need.
 
@@ -42,7 +44,7 @@ You can also send beans to someone as a gift, with no trade.
 
 You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later.
 
-Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget.
+Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget. An owner can also vouch 200 or 500 beans, and has no budget limit. Once an owner has vouched for you, your vouches can add up to 500 beans in all (300 otherwise).
 
 Your credit line grows with your **trust**:
 

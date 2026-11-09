@@ -1702,6 +1702,9 @@ export function initSchema() {
 
     // Step 7: recovery share replication audit column
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    // The find hash a restore by sign-in finds a copy by (engine/recovery-find.ts). Before schema.sql, which indexes it.
+    // NULL on every existing copy until its member's first restore heals it.
+    try { db.prepare(`ALTER TABLE recovery_shares ADD COLUMN sso_find_hash TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by)`).run(); } catch { }
@@ -2025,6 +2028,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_by TEXT`).run(); } catch { }
+    // A period of a standing deal (schema.sql standing_deals; engine/standing-deals.ts).
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT REFERENCES standing_deals(id)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER`).run(); } catch { }
 
     // activity_feed: ensure check constraint allows 'dispute_resolved'
     try {
@@ -2212,6 +2218,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
     // Their cancel of that request of their own (engine/dm-requests.ts cancelReachOut).
     try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reach_out_withdrawn_at TEXT`).run(); } catch { }
+    // The bell (engine/push-notices.ts): when the member took a notice off it. No table yet on a database from before
+    // push notices: schema.sql makes it with the column.
+    try { db.prepare(`ALTER TABLE push_notices ADD COLUMN seen_at INTEGER`).run(); } catch { }
     // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
     try {
         const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;
@@ -2251,6 +2260,13 @@ export function initSchema() {
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate join_requests table for cancelled status:', err?.message || err);
     }
+    // Where a request to join came from (shared-listing door A3, engine/peek-tickets.ts peekProvenance), after the
+    // migration above, which copies the table's thirteen columns as they were. No table yet on a database from before
+    // requests to join: schema.sql makes it with these.
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_post_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_sharer_pubkey TEXT`).run(); } catch { }
+    // How many asked to join from each link shared outside (the sharer's Shared outside row).
+    try { db.prepare(`ALTER TABLE peek_tickets ADD COLUMN asked INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)`).run(); } catch { }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).

@@ -227,6 +227,9 @@ async function child(): Promise<void> {
             doorKey: fs.existsSync(path.join(dataDir, 'open-join.key')) ? sha(fs.readFileSync(path.join(dataDir, 'open-join.key'))) : null,
             doorKeyMode: fs.existsSync(path.join(dataDir, 'open-join.key'))
                 ? (fs.statSync(path.join(dataDir, 'open-join.key')).mode & 0o777).toString(8) : null,
+            vapidKey: fs.existsSync(path.join(dataDir, 'vapid.key')) ? sha(fs.readFileSync(path.join(dataDir, 'vapid.key'))) : null,
+            vapidKeyMode: fs.existsSync(path.join(dataDir, 'vapid.key'))
+                ? (fs.statSync(path.join(dataDir, 'vapid.key')).mode & 0o777).toString(8) : null,
         },
     }));
     process.exit(0);
@@ -303,6 +306,9 @@ async function main(): Promise<void> {
     // C12: the open door's key (services/open-join-key.ts), made at its first use, travels the same way.
     (await import('./engine/open-join.js')).openJoinAddressHash('198.51.100.9');
     const mainDoorKeyBytes = fs.readFileSync(path.join(dataDir!, 'open-join.key'));
+    // Web push W1: the node's own web push key (services/web-push.ts), made at its first need, travels the same way.
+    (await import('./services/web-push.js')).ensureVapidKey();
+    const mainVapidKeyBytes = fs.readFileSync(path.join(dataDir!, 'vapid.key'));
     const main = {
         key: sha(nodeKeyBytes),
         communityKey: sha(fs.readFileSync(path.join(dataDir!, 'community.key'))),
@@ -337,6 +343,8 @@ async function main(): Promise<void> {
             "S2: the sealed backup's take-over bundle carries data/recovery-seal.key, byte for byte");
         assert(JSON.parse(bundleText).files['open-join.key'] === mainDoorKeyBytes.toString('base64'),
             "C12: and data/open-join.key, byte for byte");
+        assert(JSON.parse(bundleText).files['vapid.key'] === mainVapidKeyBytes.toString('base64'),
+            'W1: and data/vapid.key, the web push key browsers subscribed to, byte for byte');
     }
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
@@ -378,6 +386,8 @@ async function main(): Promise<void> {
         "1. S2: the restore installs the community's recovery-seal key, byte for byte, 0600 (the fresh server had made its own)");
     assert(rt.after.doorKey === sha(mainDoorKeyBytes) && rt.after.doorKeyMode === '600',
         "1. C12: the restore installs the community's open-door key too, byte for byte, 0600");
+    assert(rt.after.vapidKey === sha(mainVapidKeyBytes) && rt.after.vapidKeyMode === '600',
+        "1. W1: and the community's web push key, byte for byte, 0600, so its browsers' subscriptions still work");
     const keptOwn = Object.values(rt.after.retired as Record<string, { sha: string; mode: string }>);
     assert(keptOwn.length === 1 && keptOwn[0].sha === rt.before.sealKey && keptOwn[0].mode === '600',
         "1. S2: …and keeps the fresh server's own key beside it, never lost");

@@ -21,7 +21,9 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
-    bundledAvatarForPubkey, joinRuleLines, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold, type KnownRule,
+    bundledAvatarForPubkey, combineKnockTicks, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold,
+    type KnockWatchTick, type KnownRule,
+    shareAddress,
 } from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
@@ -97,10 +99,17 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { returnToApp } from '../utils/sso-signin';
 
 
-import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } from '../utils/invite-parser';
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { StepFooter } from '../components/welcome/StepFooter';
+import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
+
+/** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
+ *  'unknown_inviter': the node says it of an inviter paused "for now" too (engine members.ts), so that code stays held until
+ *  it lapses. */
+const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -122,6 +131,7 @@ import { useManageNode } from '../components/useManageNode';
 import { Sentence } from '../components/Sentence';
 import { WaitingToJoin } from '../components/welcome/WaitingToJoin';
 import { forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { forgetKnockKey, knockKeyIsNew } from '../utils/knock-key';
 import { phoneIsWaiting, readWaitingFacts, takeKnockYes, waitingLines, type KnockYes, type WaitingLine } from '../utils/waiting-to-join';
 
@@ -142,8 +152,14 @@ export default function WelcomeScreen() {
     // Friendly Step-1 rejection copy for a dud invite. Reasons come from
     // /api/invite/check; anything unrecognised falls back to the generic line.
     // In the screen, not above it: its sentences are the screen's t()'s.
-    function inviteProblemMessage(reason?: string): string {
+    function inviteProblemMessage(reason?: string, nodeUrl?: string): string {
+        // The address as the member typed or pasted it, with no scheme (core shareAddress), for the two answers about it.
+        const address = shareAddress(nodeUrl ?? '');
         switch (reason) {
+            case 'invites_off':
+                return t('{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.', { address });
+            case 'not_a_community':
+                return t('There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.', { address });
             case 'used':
                 return t('This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).');
             case 'expired':
@@ -387,6 +403,10 @@ export default function WelcomeScreen() {
     const pendingWordsAreNew = !!pendingIdentity && pendingNewKey === pendingIdentity.publicKey;
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
+    /** The join steps' footer's measured height (components/welcome/StepFooter.tsx): the invite step's fields stay clear of it. */
+    const [stepFooterHeight, setStepFooterHeight] = useState(0);
+    // Next is in the footer now, and its answer's words are in the step, a few lines above its end: shown when they arrive.
+    const inviteStepScroll = useRef<React.ElementRef<typeof KeyboardAwareScrollView>>(null);
     // The listing the invite was sent from (invite-and-share), with the invite it came with: kept from the link, the params or the
     // install referrer until the join, then held for the landing (utils/post-after-join.ts). Not shown, not read, not asked for.
     const [landingPost, setLandingPost] = useState<{ code: string; id: string } | null>(null);
@@ -421,6 +441,8 @@ export default function WelcomeScreen() {
     const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+    /** The community address `inviteCommunityName` was read at (join names N1): the step's heading names it only while the fields still point there. */
+    const [inviteNamedAt, setInviteNamedAt] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
 
@@ -554,16 +576,68 @@ export default function WelcomeScreen() {
     /** A community's yes being joined: the invite step's Next, run once its fields hold this invite (the effect below). */
     const [knockJoin, setKnockJoin] = useState<KnockYes | null>(null);
     const waitTurn = useRef(0);
+    /** This screen is the one shown (not covered by another): the waiting mode asks its communities nothing while it is not. */
+    const [waitShown, setWaitShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setWaitShown(true);
+        return () => setWaitShown(false);
+    }, []));
+    const waitStatusesRef = useRef(waitStatuses);
+    waitStatusesRef.current = waitStatuses;
+    /** Check again reads every request again, one that has its answer too (a yes can have expired); a round of the watcher's does not. */
+    const waitReadAll = useRef(false);
 
-    /** What each community this key asked says now: read from those communities only, signed by the key that asked. */
-    const readWaitStatuses = useCallback(async (knocks: readonly RememberedKnock[], identity: BeanPoolIdentity) => {
+    /**
+     * What each community this key asked says now: read from those communities only, signed by the key that asked. A round
+     * of the watcher's (`quiet`) shows no spinner and leaves a request that has its answer alone; it says what it heard,
+     * for the schedule (utils/use-knock-status-watch.ts).
+     */
+    const readWaitStatuses = useCallback(async (knocks: readonly RememberedKnock[], identity: BeanPoolIdentity, quiet = false): Promise<KnockWatchTick> => {
         const turn = ++waitTurn.current;
-        setWaitChecking(true);
-        const read = await Promise.all(knocks.map(async (k) => [k.url, await readKnockStatus(k.url, identity)] as const));
-        if (turn !== waitTurn.current) return;
-        setWaitStatuses(Object.fromEntries(read));
-        setWaitChecking(false);
+        const all = waitReadAll.current || !quiet;
+        waitReadAll.current = false;
+        if (!quiet) setWaitChecking(true);
+        const held = waitStatusesRef.current;
+        const read = await Promise.all(knocks.map(async (k) => {
+            const was = held[k.url];
+            const answered = !all && !!was && knockTickOf(was).kind === 'settled';
+            return [k.url, answered ? was : await readKnockStatus(k.url, identity)] as const;
+        }));
+        if (turn === waitTurn.current) {
+            setWaitStatuses(Object.fromEntries(read));
+            setWaitChecking(false);
+        }
+        return combineKnockTicks(read.map(([, r]) => (r ? knockTickOf(r) : { kind: 'failed' } as KnockWatchTick)));
     }, []);
+    const waitKnocksRef = useRef(waitKnocks);
+    waitKnocksRef.current = waitKnocks;
+    const waitAccountRef = useRef(accountOnPhone);
+    waitAccountRef.current = accountOnPhone;
+    // Asked as the waiting mode opens, then by itself while this screen is in front (Damo, 9 Nov 2026: the yes showed only
+    // after a manual refresh): about every 20 s for 10 minutes, every 60 s to the hour, every 5 minutes after; never while the
+    // app is in the background or another screen covers this one; at once when it is back.
+    const waitWatch = useKnockStatusWatch(
+        () => (waitAccountRef.current ? readWaitStatuses(waitKnocksRef.current, waitAccountRef.current, true) : Promise.resolve({ kind: 'settled' } as KnockWatchTick)),
+        mode === 'home' && waitingToJoin && !!accountOnPhone && waitKnocks.length > 0,
+        // Keyed on each request (its address and when it was sent): a request sent again to the same community is a new one.
+        `${accountOnPhone?.publicKey ?? ''}|${waitKnocks.map((k) => `${k.url} ${k.sentAt}`).join(' ')}`,
+        waitShown,
+    );
+
+    /**
+     * The requests this phone holds now. An answer belongs to the request it was read for: one whose request was sent again
+     * (a newer `sentAt`) or is gone (Got it) is dropped, and so is any round still reading it, so an old "no longer open" is
+     * never taken for the new request's answer; the watcher, begun again for the new request, reads it as its first round.
+     */
+    const holdWaitKnocks = (knocks: RememberedKnock[]) => {
+        const stale = new Set(waitKnocksRef.current.filter((was) => !knocks.some((k) => k.url === was.url && k.sentAt === was.sentAt)).map((was) => was.url));
+        if (stale.size) {
+            waitTurn.current += 1;
+            setWaitChecking(false);
+            setWaitStatuses((held) => Object.fromEntries(Object.entries(held).filter(([url]) => !stale.has(url))));
+        }
+        setWaitKnocks(knocks);
+    };
 
     useFocusEffect(useCallback(() => {
         if (mode !== 'home' || !accountOnPhone) {
@@ -585,8 +659,8 @@ export default function WelcomeScreen() {
             }
             const knocks = await rememberedKnocks(me.publicKey);
             if (!alive) return;
-            setWaitKnocks(knocks);
-            await readWaitStatuses(knocks, me);
+            // The watcher reads them as soon as they are here (above), once.
+            holdWaitKnocks(knocks);
         }).catch(() => {});
         return () => { alive = false; };
     }, [mode, accountOnPhone?.publicKey]));
@@ -623,7 +697,7 @@ export default function WelcomeScreen() {
     const forgetWaitLine = async (line: WaitingLine) => {
         if (!accountOnPhone) return;
         await forgetKnock(accountOnPhone.publicKey, line.url);
-        setWaitKnocks(await rememberedKnocks(accountOnPhone.publicKey));
+        holdWaitKnocks(await rememberedKnocks(accountOnPhone.publicKey));
     };
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
@@ -805,9 +879,7 @@ export default function WelcomeScreen() {
     // clipboard programmatically.
     async function applyInviteContent(raw: string, source: 'home' | 'join') {
         const content = raw?.trim() || '';
-        const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
-            (content.includes('http') && content.includes('invite='));
-        if (looksLikeInvite) {
+        if (holdsInvite(content)) {
             await processFullUrl(content);
             return;
         }
@@ -843,12 +915,13 @@ export default function WelcomeScreen() {
     }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
-        // extractNodeOrigin copes with the URL being buried in a shared message
-        // ("Join my BeanPool community node: https://…") — an anchored match doesn't. It refuses an address that
-        // isn't plain host[:port] (utils/node-url.ts), and so does this: the invite isn't used.
-        let origin: string | null;
+        // readInviteText (utils/invite-parser.ts) copes with the link being buried in a shared message, or missing from the
+        // part of it that was pasted: the code alone goes in the code box, never the message's words after the link (9 Nov:
+        // they all did), and the community from the link, else from the message's "Community address" line. It refuses an
+        // address that isn't plain host[:port] (utils/node-url.ts), and so does this: the invite isn't used.
+        let read: { code: string | null; origin: string | null };
         try {
-            origin = extractNodeOrigin(fullUrl);
+            read = readInviteText(fullUrl);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
                 Alert.alert(t('Invite not used'), welcomeLineWords(e.message));
@@ -856,15 +929,15 @@ export default function WelcomeScreen() {
             }
             throw e;
         }
-        if (origin) {
-            setCreateAnchorUrl(origin);
+        if (read.origin) {
+            setCreateAnchorUrl(read.origin);
         }
-        const inviteMatch = fullUrl.match(/[?&]invite=([^&]+)/);
-        if (inviteMatch) {
-            setInviteCode(decodeURIComponent(inviteMatch[1]));
-            noteLandingPost(decodeURIComponent(inviteMatch[1]), postIdFromInviteLink(fullUrl));
-        } else if (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-'))) {
-            setInviteCode(fullUrl);
+        const code = read.code ?? (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-')) ? fullUrl : null);
+        if (code) {
+            setInviteCode(code);
+            // The listing an invite-and-share link was sent from rides on its link only: a code pasted alone leaves the one
+            // an earlier link noted as it was, as before.
+            if (/[?&]invite=/.test(fullUrl)) noteLandingPost(code, postIdFromInviteLink(fullUrl));
         }
         setMode('create');
     }, [t]);
@@ -993,15 +1066,61 @@ export default function WelcomeScreen() {
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
 
+    // The invite a link brought, held on the phone until it is redeemed (utils/held-invite.ts): applied when this copy of
+    // welcome opens with no other invite, and whenever a newer link is held while it is open. A warm start's link lands on a
+    // new welcome with no params; before, it opened on the first screen with no code (Damo, 9 Nov). Only on the first screen
+    // or the invite step: a recovery or the steps after the join are never switched to it.
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const inviteCodeRef = useRef(inviteCode);
+    inviteCodeRef.current = inviteCode;
+    const accountRef = useRef(accountOnPhone);
+    accountRef.current = accountOnPhone;
+    const applyHeldInvite = useCallback((held: HeldInvite) => {
+        const key = heldInviteKey(held);
+        if (appliedInvites.current.has(key)) return;
+        if (modeRef.current !== 'home' && modeRef.current !== 'create') return;
+        appliedInvites.current.add(key);
+        setInviteCode(held.invite);
+        noteLandingPost(held.invite, held.post);
+        if (held.server) setCreateAnchorUrl(held.server);
+        setMode('create');
+    }, []);
+    useEffect(() => {
+        let live = true;
+        const off = onHeldInvite((held) => { if (live) applyHeldInvite(held); });
+        void readHeldInvite(AsyncStorage).then((held) => {
+            // A link or params this screen opened with are that same tap, or newer: they have filled the step already. A phone
+            // with an account passes through welcome on every switch of community: never sent to the invite step by it.
+            if (!live || !held || appliedInvites.current.size > 0 || accountRef.current) return;
+            applyHeldInvite(held);
+        });
+        return () => { live = false; off(); };
+    }, [applyHeldInvite]);
+    /** "Join with an invite": the step opens filled from a held invite, never asking to scan a code the phone has. */
+    const openInviteStep = useCallback(() => {
+        void readHeldInvite(AsyncStorage).then((held) => {
+            if (held && !inviteCodeRef.current) {
+                setInviteCode(held.invite);
+                noteLandingPost(held.invite, held.post);
+                if (held.server) setCreateAnchorUrl(held.server);
+            }
+        }).catch(() => {});
+        setMode('create');
+    }, []);
+
+    useEffect(() => {
+        if (mode !== 'create' || !error) return;
+        const id = setTimeout(() => inviteStepScroll.current?.scrollToEnd({ animated: true }), 50);
+        return () => clearTimeout(id);
+    }, [mode, error]);
+
     // --- The global community's link (utils/global-link.ts): `/welcome?door=global&at=…` from app/+native-intent.ts, once
     // per arrival, and the install referrer's `global=1` above. Read through refs: the answer about a half-done wizard
     // comes back after the screen may have moved on, and what it is doing then is what counts. ---
     const screenMountedRef = useRef(true);
     useEffect(() => () => { screenMountedRef.current = false; }, []);
-    const modeRef = useRef(mode);
-    modeRef.current = mode;
-    const inviteCodeRef = useRef(inviteCode);
-    inviteCodeRef.current = inviteCode;
+    // modeRef and inviteCodeRef: declared above, with the held invite.
     const appliedDoorLinks = useRef(new Set<string>());
 
     /** The door, held for the member's first tap, unless the screen is doing something a link mustn't interrupt. */
@@ -1247,6 +1366,10 @@ export default function WelcomeScreen() {
                 undoCommunity = !!storedIdentity && !(await AsyncStorage.getItem('beanpool_anchor_url'));
 
                 const check = await checkInvite(parsedCode, nodeUrl);
+                // Which community this code is for, said in the step's heading from here on (join names N1), whatever the node
+                // thinks of the code: a refused one is still a code for that community. Kept with the address it was read at.
+                setInviteCommunityName(check?.communityName || null);
+                setInviteNamedAt(nodeUrl);
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
@@ -1268,7 +1391,11 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        setError(inviteProblemMessage(check.reason));
+                        // A dead code (used by someone else, expired, not recognised): a link's held invite is never offered
+                        // again, or every launch would reopen this step on it. A good code at the wrong address, or at a community
+                        // whose invites are off for now, stays held. A newer one held meanwhile stays too.
+                        if (check.reason && DEAD_INVITE_REASONS.has(check.reason)) void forgetHeldInvite(AsyncStorage, parsedCode);
+                        setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
                     // This join's own key, in already: the member has never been shown its words. On to the photo and
@@ -1276,7 +1403,6 @@ export default function WelcomeScreen() {
                     inAlready = true;
                 }
                 setInviterName(check?.inviterCallsign || null);
-                setInviteCommunityName(check?.communityName || null);
 
                 // Per-node callsign uniqueness: check against the target node BEFORE we
                 // create the identity or register, so a brand-new member picks a name
@@ -1345,6 +1471,8 @@ export default function WelcomeScreen() {
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
                 undoCommunity = false;
+                // Used: a link's held invite is never offered again (utils/held-invite.ts).
+                void forgetHeldInvite(AsyncStorage, parsedCode);
 
                 // Sent from a listing (invite-and-share): it opens when this member lands on Home, and this is the join. Only an id,
                 // and only for this invite; the pasted link itself may carry it too.
@@ -1382,6 +1510,11 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
+                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, a dead held invite is forgotten
+                // as at the check above. No answer, or a good code: it stays held.
+                const heldCode = normaliseInviteCode(rawInvite);
+                const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
+                if (again && !again.valid && again.reason && DEAD_INVITE_REASONS.has(again.reason)) void forgetHeldInvite(AsyncStorage, heldCode);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
                 setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);
@@ -2407,19 +2540,6 @@ export default function WelcomeScreen() {
                             <Text style={styles.subtitle} testID="photo-step-note">{photoStepNote(joinBeansOn)}</Text>
                         )}
 
-                        <Pressable
-                            style={styles.primaryBtn}
-                            disabled={loading}
-                            onPress={handleCompleteProfile}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                            )}
-                        </Pressable>
-
                         {/* A global join or a claim is done by this step (the node has the member), so there is
                             nothing to go back to: the door would only say "already a member", the claim "already owned". */}
                         {joinFlow === 'invite' && (
@@ -2438,6 +2558,21 @@ export default function WelcomeScreen() {
                         )}
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-profile">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn]}
+                        disabled={loading}
+                        onPress={handleCompleteProfile}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
                 
                 <AvatarPickerSheet
                     visible={showAvatarPicker}
@@ -2691,19 +2826,6 @@ export default function WelcomeScreen() {
                         {error && <Text style={styles.error}>{error}</Text>}
 
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={() => {
-                                recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
-                                setMode('onboardingGuide');
-                            }}
-                            accessibilityRole="button"
-                        >
-                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={handleSeedBackPress}
                             disabled={loading}
@@ -2714,6 +2836,21 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-words">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={() => {
+                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                            updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
+                            setMode('onboardingGuide');
+                        }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
@@ -2938,23 +3075,6 @@ export default function WelcomeScreen() {
 
                         {/* A claim's last step is the owner's card, after these: its own Let's Begin. */}
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={joinFlow === 'claim' ? () => {
-                                updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
-                                setMode('ownerCard');
-                                setError(null);
-                            } : handleConfirmSeed}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
-                            )}
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={() => {
                                 updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
@@ -2968,6 +3088,25 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-guide">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={joinFlow === 'claim' ? () => {
+                            updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
+                            setMode('ownerCard');
+                            setError(null);
+                        } : handleConfirmSeed}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
@@ -3009,19 +3148,6 @@ export default function WelcomeScreen() {
                         {error && <Text style={styles.error}>{error}</Text>}
 
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={handleConfirmSeed}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
-                            )}
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={() => {
                                 updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
@@ -3036,19 +3162,43 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-owner">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={handleConfirmSeed}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
 
     // --- CREATE NEW IDENTITY ---
     if (mode === 'create') {
+        // "Join with an invite", then "Join {name}" once the node has checked the code and said whose community it is (join
+        // names N1): only while the code and address fields still name the community it was checked at, as Next reads them.
+        let createStepName: string | null = null;
+        if (inviteCommunityName && inviteNamedAt) {
+            try {
+                const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
+                if (at && at === inviteNamedAt) createStepName = inviteCommunityName;
+            } catch { /* an address that is not plain host[:port]: Next says so; no name is claimed for it */ }
+        }
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>{t('🎟️ Join BeanPool')}</Text>
+                        <Text style={styles.title} accessibilityRole="header">{createStepName ? t('Join {name}', { name: createStepName }) : t('🎟️ Join with an invite')}</Text>
 
                         {clipboardMayHaveInvite && !inviteCode && (
                             <View style={styles.pasteCard}>
@@ -3176,17 +3326,6 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        <Pressable
-                            style={styles.primaryBtn}
-                            onPress={handleCreate}
-                            disabled={loading}
-                            accessibilityRole="button"
-                            accessibilityLabel={loading ? t('Joining network...') : t('Next')}
-                            accessibilityState={{ disabled: loading, busy: loading }}
-                        >
-                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
-                        </Pressable>
-
                         {/* Restore Existing Identity CTA for returning members (#98). This and Back to Home wait while
                             Next is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                         <View style={styles.restorePromptBox}>
@@ -3223,6 +3362,19 @@ export default function WelcomeScreen() {
                         </Text>
                     </View>
                 </KeyboardAwareScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-invite" onHeight={setStepFooterHeight}>
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn]}
+                        onPress={handleCreate}
+                        disabled={loading}
+                        accessibilityRole="button"
+                        accessibilityLabel={loading ? t('Joining network...') : t('Next')}
+                        accessibilityState={{ disabled: loading, busy: loading }}
+                    >
+                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
+                    </Pressable>
+                </StepFooter>
                 {Scanner && (
                     <Scanner
                         hint={t('Point the camera at the QR code on your invite.')}
@@ -3258,7 +3410,7 @@ export default function WelcomeScreen() {
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
@@ -4074,7 +4226,7 @@ export default function WelcomeScreen() {
                             lines={waitingLines(waitKnocks, waitStatuses)}
                             checking={waitChecking}
                             joining={waitJoining}
-                            onCheckAgain={() => { void readWaitStatuses(waitKnocks, accountOnPhone); }}
+                            onCheckAgain={() => { waitReadAll.current = true; setWaitChecking(true); void waitWatch.readNow(); }}
                             onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
                             onGotIt={(line) => { void forgetWaitLine(line); }}
                             onAskAnother={() => router.push('/find-community')}
@@ -4107,7 +4259,7 @@ export default function WelcomeScreen() {
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
-                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
+                    <WelcomeDoors door={globalDoor} joinWithInvite={openInviteStep} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
@@ -4285,6 +4437,8 @@ const styles = StyleSheet.create({
 
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
+    // In a step's footer (components/welcome/StepFooter.tsx): the footer's own padding spaces it.
+    footerBtn: { marginTop: 0 },
     disabledBtn: { backgroundColor: dark ? palette.neutral700 : palette.slate300 },
     // Identity-overwrite guard (confirm-replace screen)
     emphasis: { fontWeight: '700', color: colors.text.heading },

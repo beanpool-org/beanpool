@@ -267,7 +267,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     marketplace_transactions: {
         kind: 'replicated', payload: 'marketplaceTransactions', watermark: 'updated_at',
-        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at updated_at last_reminded_at dispute_resolution dispute_resolved_at dispute_resolved_by'),
+        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at updated_at last_reminded_at dispute_resolution dispute_resolved_at dispute_resolved_by standing_id period_no'),
     },
     friends: {
         kind: 'replicated-except', payload: 'friends', watermark: 'updated_at',
@@ -314,7 +314,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     recovery_shares: {
         kind: 'replicated-except', payload: 'recoveryShares', watermark: 'updated_at',
-        columns: cols('owner_pubkey holder_type holder_ref share_index encrypted_share share_iv share_tag ephemeral_pubkey sso_lookup_hash sso_lookup_salt kdf_params generation created_at updated_at'),
+        columns: cols('owner_pubkey holder_type holder_ref share_index encrypted_share share_iv share_tag ephemeral_pubkey sso_lookup_hash sso_lookup_salt kdf_params generation created_at updated_at sso_find_hash'),
         key: ['owner_pubkey', 'generation', 'holder_type', 'holder_ref'],
         except: { id: { reason: 'a local row id: rows are matched by owner, generation and holder' } },
     },
@@ -375,7 +375,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
-        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at'),
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey'),
         except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
     },
     moderation_notices: {
@@ -408,6 +408,9 @@ export const TABLES: Record<string, TableEntry> = {
     // ── In-flight money and governance, on the generic path (design G3; PLAIN_TABLES_PAYLOAD) ──
     // A keeper's wage owed and not yet paid: paid once after a take-over, since one the main server paid arrives paid.
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
+    // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
+    // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
+    standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since held_back_reason stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
@@ -570,6 +573,7 @@ export const TABLES: Record<string, TableEntry> = {
     agent_made: { kind: 'local', reason: "the groups, enterprises, shops and Pulse links this server's AI assistants made, by grant (agent/owner-seeds.ts): the grants are this server's own, as agent_suggestions are" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
+    web_push_subscriptions: { kind: 'local', reason: "the browsers that asked this server to say when their request to join is answered (engine/web-push-subscriptions.ts), sealed with its key: after a take-over the waiting page's own check and the 30-day invite still carry the yes" },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
     peek_tickets: { kind: 'local', reason: "the links members shared outside, each opening one post for seven days (engine/peek-tickets.ts): a promoted server starts with none, so each reads as stopped, never as open, and its member shares again" },

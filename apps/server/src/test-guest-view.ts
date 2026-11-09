@@ -1190,6 +1190,8 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A find with a provider it verifies: past the provider check to the sign-in, which names the accounts it protects.
+            'POST /api/recovery/find': { provider: 'google', idToken: 'sentinel', nonce: 'sentinel' },
             // An assistant's call for the reports, which name members, and the owner switch turned off.
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
@@ -1236,6 +1238,11 @@ async function main(): Promise<void> {
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
             'POST /api/join/knock/cancel': {},
+            // "Tell me when they answer" (web push W1), past the shape checks to who may subscribe: a browser's real keys.
+            'POST /api/web-push': { subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/sentinel',
+                keys: { p256dh: (() => { const e = crypto.createECDH('prime256v1'); e.generateKeys(); return e.getPublicKey().toString('base64url'); })(),
+                    auth: crypto.randomBytes(16).toString('base64url') } } },
+            'DELETE /api/web-push': { subId: '0'.repeat(64) },
             // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
             'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
                 signedFor: 'localhost', signature: 'AAAA' },
@@ -1341,6 +1348,7 @@ async function main(): Promise<void> {
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
+            'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
             'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
@@ -1437,6 +1445,7 @@ async function main(): Promise<void> {
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
             'POST /api/marketplace/transactions/cancel', 'POST /api/marketplace/transactions/cancel-request',
             'POST /api/marketplace/transactions/complete', 'POST /api/marketplace/transactions/reject',
+            'POST /api/marketplace/standing/:id/stop', 'POST /api/marketplace/standing/:id/hold-back', 'POST /api/marketplace/standing/:id/extend',
             'POST /api/member/channels', 'POST /api/member/channels/:id', 'POST /api/member/channels/:id/delete',
             'POST /api/member/channels/:id/disconnect-oauth', 'POST /api/member/channels/:id/verify-oauth',
             'POST /api/member/pulse/channels/:id/dismiss-nudge', 'POST /api/member/pulse/items/:id/delete', 'POST /api/member/pulse/items/:id/mute',
@@ -1462,7 +1471,7 @@ async function main(): Promise<void> {
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',
-            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
+            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push', 'GET /api/notices/push/:id', 'POST /api/notices/push/seen', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/init', 'POST /api/pair/offer', 'GET /api/pair/poll',
             'POST /api/pair/saved', 'POST /api/pair/send', 'POST /api/pair/transfer',
             'POST /api/peek', 'GET /api/peek/mine', 'POST /api/peek/stop',
@@ -1481,6 +1490,8 @@ async function main(): Promise<void> {
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
             'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
+            // A restore that finds the account from the sign-in alone (routes/recovery-collect.ts, design S0).
+            'POST /api/recovery/find-nonce', 'POST /api/recovery/find',
             'POST /api/reports',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',

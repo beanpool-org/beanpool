@@ -6,7 +6,7 @@ import path from 'node:path';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
-import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage } from '@beanpool/core';
+import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage, chatAboutDrafts } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab } from '../lib/another-tab';
@@ -1397,6 +1397,19 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
         await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
         expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+        // The chat opens with this listing above its composer (core chat-about.ts).
+        expect(chatAboutDrafts.get('conv-1')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer' });
+    });
+
+    it("Message on a listing leaves its title and price in the chat's chip, for the next message", async () => {
+        chatAboutDrafts.clear();
+        vi.spyOn(api, 'createConversationApi').mockResolvedValue({ conversation: { id: 'conv-9' } } as any);
+        const onNavigate = vi.fn();
+        await open(listing({ title: 'Pottery course', credits: 45 }), [], { onNavigate });
+        fireEvent.click(await screen.findByRole('button', { name: /💬/ }));
+        await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-9'));
+        expect(chatAboutDrafts.get('conv-9')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer', price: '45 Beans' });
+        chatAboutDrafts.clear();
     });
 
     // R1 (engine/request-limits.ts): reports cleared the member's message requests; every screen that starts a chat words the refusal.
@@ -1781,6 +1794,41 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             expect(after(takeUp, screen.getByText('Posted by'))).toBe(true);
             expect(after(takeUp, screen.getByTestId('share-button'))).toBe(true);
             expect(screen.getByTestId('listing-type-chip').textContent).toBe('NEED');
+        });
+
+        // A listing priced at 0 reads Free (core listing-price.ts; Marty, 9 Nov: "WILLING TO PAY 0 ... is it free? its confusing?").
+        it('a Need at 0: "Free help wanted" under the label Price, never "Willing to Pay" over a 0, with no Beans sign', async () => {
+            await open(listing({ type: 'need', title: 'Invites to harvest any sort of spray free food', credits: 0 }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^PriceFree help wanted$/i);
+            expect(screen.queryByText('Willing to Pay')).toBeNull();
+            // No Beans icon and no figure: a screen reader reads "Free help wanted", not "0 B".
+            expect(box.querySelector('img')).toBeNull();
+            expect(box.textContent).not.toMatch(/0|B\b|hrs/);
+        });
+
+        it('an Offer at 0 says Free, under the label it always had, with no Beans sign and no hours line', async () => {
+            await open(listing({ credits: 0 }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking PriceFree$/i);
+            expect(box.querySelector('img')).toBeNull();
+        });
+
+        it.each(['hourly', 'daily', 'weekly', 'monthly'])('a price %s at 0 is Free too, never "Free /hr"', async (priceType) => {
+            await open(listing({ credits: 0, priceType }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking PriceFree$/i);
+            expect(box.textContent).not.toMatch(/\/|Hr|Dy|Wk|Mo/);
+        });
+
+        it('a Need with a price keeps its label, its figure, its Beans sign and its unit', async () => {
+            await open(listing({ type: 'need', credits: 20, priceType: 'hourly' }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/Willing to Pay/i);
+            expect(box).toHaveTextContent('20');
+            expect(box.querySelector('img')).not.toBeNull();
+            expect(box).toHaveTextContent('/Hr');
+            expect(box.textContent).not.toContain('Free');
         });
 
         it('places the photo left from md up, spanning the three rows, and the head, the action and the rest right, by the grid', async () => {

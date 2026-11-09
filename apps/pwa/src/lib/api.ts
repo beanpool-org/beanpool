@@ -960,6 +960,15 @@ export async function getTrustProfile(targetPubkey: string): Promise<any> {
     return request('POST', '/api/trust/profile', { targetPubkey });
 }
 
+/** Your "Show who invited me to other members" (I3; server members.inviter_shown), yours alone. */
+export async function getProfilePrivacy(): Promise<{ inviterShown: boolean }> {
+    return request('GET', '/api/profile/privacy');
+}
+
+export async function setProfilePrivacy(inviterShown: boolean): Promise<{ success: boolean; inviterShown: boolean }> {
+    return request('PUT', '/api/profile/privacy', { inviterShown });
+}
+
 // ===================== PROFILES =====================
 
 export interface MemberProfile {

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1008,5 +1008,7 @@
   "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "Bạn không còn hạn mức tín dụng nào để tặng: chỉ hạn mức tín dụng được người khác tặng mới có thể chuyển tiếp. Mức sàn đã biết và khoản tín dụng bạn đã tích lũy vẫn thuộc về bạn.",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Một phần hạn mức tín dụng mà ai đó đã tặng bạn bắt nguồn từ khoản bảo lãnh của @{name} và không thể tặng cho họ, nên bạn chỉ có thể tặng họ tối đa {most} đậu.",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Hạn mức tín dụng mà ai đó đã tặng bạn bắt nguồn từ khoản bảo lãnh của @{name}, nên không phần nào trong đó có thể tặng cho họ.",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Chủ sở hữu cộng đồng của bạn đã thay đổi cách cộng đồng hoạt động: ngân sách của mỗi người bảo lãnh giờ là {budget} đậu."
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Chủ sở hữu cộng đồng của bạn đã thay đổi cách cộng đồng hoạt động: ngân sách của mỗi người bảo lãnh giờ là {budget} đậu.",
+  "Busy finding another account. Wait a minute, then sign in again.": "Hệ thống đang bận tìm tài khoản khác. Hãy đợi một phút rồi đăng nhập lại.",
+  "Sign in with your account's sign-in first.": "Trước tiên hãy đăng nhập bằng phương thức đăng nhập của tài khoản bạn."
 }

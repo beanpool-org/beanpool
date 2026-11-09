@@ -2,9 +2,9 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1017,5 +1017,7 @@
   "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "Você não tem linha de crédito restante para doar: apenas a linha de crédito que alguém lhe deu pode ser repassada. Seu piso conhecido e o crédito que você ganhou continuam sendo seus.",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Parte da linha de crédito que alguém lhe deu começou como a recomendação de @{name} e não pode ir para essa pessoa, então você pode doar a essa pessoa, no máximo, {most} feijões.",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "A linha de crédito que alguém lhe deu começou como a recomendação de @{name}, então nenhuma parte dela pode ir para essa pessoa.",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Os donos da sua comunidade mudaram como ela funciona: o orçamento de cada recomendador agora é de {budget} feijões."
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Os donos da sua comunidade mudaram como ela funciona: o orçamento de cada recomendador agora é de {budget} feijões.",
+  "Busy finding another account. Wait a minute, then sign in again.": "Estamos ocupados procurando outra conta. Aguarde um minuto e entre de novo.",
+  "Sign in with your account's sign-in first.": "Primeiro, entre com o login da sua conta."
 }

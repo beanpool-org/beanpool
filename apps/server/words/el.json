@@ -2,9 +2,9 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1017,5 +1017,7 @@
   "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "Δεν σας έχει απομείνει πιστωτικό όριο για παραχώρηση: μόνο πιστωτικό όριο που σας έδωσε κάποιος μπορεί να μεταβιβαστεί. Το γνωστό σας όριο και η πίστωση που κερδίσατε παραμένουν δικά σας.",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Μέρος του πιστωτικού ορίου που σας δόθηκε ξεκίνησε ως εγγύηση του μέλους @{name} και δεν μπορεί να μεταβιβαστεί σε αυτό, επομένως μπορείτε να του δώσετε το πολύ {most} φασόλια.",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Το πιστωτικό όριο που σας δόθηκε ξεκίνησε ως εγγύηση του μέλους @{name}, επομένως τίποτα από αυτό δεν μπορεί να μεταβιβαστεί σε αυτό το μέλος.",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Οι ιδιοκτήτες της κοινότητάς σας άλλαξαν τον τρόπο λειτουργίας της: ο προϋπολογισμός κάθε εγγυητή είναι πλέον {budget} φασόλια."
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Οι ιδιοκτήτες της κοινότητάς σας άλλαξαν τον τρόπο λειτουργίας της: ο προϋπολογισμός κάθε εγγυητή είναι πλέον {budget} φασόλια.",
+  "Busy finding another account. Wait a minute, then sign in again.": "Είναι απασχολημένο με την εύρεση άλλου λογαριασμού. Περίμενε ένα λεπτό και μετά συνδέσου ξανά.",
+  "Sign in with your account's sign-in first.": "Συνδέσου πρώτα με τον τρόπο σύνδεσης του λογαριασμού σου."
 }

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-06",
+    "updated": "2026-11-09",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -1017,5 +1017,7 @@
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "تصدیق کے لیے آپ کا بجٹ کم کر کے {level} پھلیاں کر دیا گیا تھا۔ تصدیق کرنے کے لیے آپ کے پاس اس میں سے {left} باقی ہے۔",
   "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "آپ کو کسی نے جو کریڈٹ لائن دی تھی اس کا ایک حصہ @{name} کی دی ہوئی تصدیق سے شروع ہوا تھا اور ان تک نہیں جا سکتا، اس لیے آپ انہیں زیادہ سے زیادہ {most} پھلیاں دے سکتے ہیں۔",
   "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "آپ کو کسی نے جو کریڈٹ لائن دی تھی وہ @{name} کی دی ہوئی تصدیق سے شروع ہوئی تھی، اس لیے اس میں سے کچھ بھی ان تک نہیں جا سکتا۔",
-  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدلا: ہر تصدیق کنندہ کا بجٹ اب {budget} پھلیاں ہے۔"
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدلا: ہر تصدیق کنندہ کا بجٹ اب {budget} پھلیاں ہے۔",
+  "Busy finding another account. Wait a minute, then sign in again.": "ابھی کسی اور کا اکاؤنٹ تلاش کرنے میں مصروف ہیں۔ ایک منٹ رکیں، پھر دوبارہ سائن ان کریں۔",
+  "Sign in with your account's sign-in first.": "پہلے اپنے اکاؤنٹ کے سائن ان سے سائن ان کریں۔"
 }

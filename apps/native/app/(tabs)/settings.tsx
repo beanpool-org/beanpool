@@ -17,7 +17,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest, signedGet, signedRequestWithMethod, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../../utils/event-extras';
@@ -69,13 +69,13 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn, effectiveFeatures, shareOutsideOn } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures, invitesOn, shareOutsideOn } from '../../utils/node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
@@ -1090,6 +1090,19 @@ export default function SettingsScreen() {
             .catch(e => console.warn('[Prefs] Could not read the connection-in-common setting:', e));
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
+    // "Show who invited me to other members" (I3; server members.inviter_shown), on unless turned off. null until the node
+    // says (GET /api/profile/privacy, the member's alone); where invites are off nobody was invited, so it isn't asked.
+    const [inviterShown, setInviterShown] = useState<boolean | null>(null);
+    const invitesHere = invitesOn(nodeProfile?.features);
+    useEffect(() => {
+        if (!identity?.publicKey || !invitesHere) { setInviterShown(null); return; }
+        let cancelled = false;
+        signedGet('/api/profile/privacy')
+            .then(res => (res.ok ? res.json() : null))
+            .then(body => { if (!cancelled && body && typeof body.inviterShown === 'boolean') setInviterShown(body.inviterShown); })
+            .catch(e => console.warn('[Prefs] Could not read the show-who-invited-me setting:', e));
+        return () => { cancelled = true; };
+    }, [identity?.publicKey, invitesHere]);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
 
@@ -2313,6 +2326,26 @@ export default function SettingsScreen() {
                                 }
                             }}>
                                 <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />
+                            </Pressable>
+                        </View>
+                    )}
+                    {inviterShown !== null && (
+                        <View style={styles.menuBtn} testID="settings-show-inviter">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌱</Text></View>
+                            <View style={styles.menuTextBesideSwitch}>
+                                <Text style={styles.menuText}>{showInviterSwitchWords().label}</Text>
+                                <Text style={styles.menuSub}>{showInviterSwitchWords().hint}</Text>
+                            </View>
+                            <Pressable style={[styles.toggle, inviterShown && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel={showInviterSwitchWords().label} accessibilityState={{ checked: inviterShown }} onPress={async () => {
+                                const next = !inviterShown; setInviterShown(next);
+                                try {
+                                    await signedRequestWithMethod('PUT', '/api/profile/privacy', { inviterShown: next });
+                                } catch (e: any) {
+                                    setInviterShown(!next);
+                                    Alert.alert(t('Not saved'), e?.message ? signedRequestWords(e.message) : t('Your community could not save that.'));
+                                }
+                            }}>
+                                <View style={[styles.toggleThumb, inviterShown && styles.toggleThumbOn]} />
                             </Pressable>
                         </View>
                     )}

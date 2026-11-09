@@ -190,7 +190,7 @@ const memberTrust = (publicKey: string, callsign: string) => ({
     publicKey, callsign,
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
     risk: { band: 'red', headline: 'New here — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
-    vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
+    vouchedInBy: { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null },
     mutualCount: 0, mutualConnections: [], joinedAt: '2026-09-01T00:00:00.000Z', lastActiveAt: null,
 });
 /** What the node answers for an enterprise's key since slice E0: the same shape, saying what the key is. */
@@ -286,7 +286,7 @@ const holdCard = async (publicKey: string, callsign: string) => {
 };
 
 /** Words only the member Trust Profile draws: none of them may show for an enterprise's key, at any moment. */
-const TRUST_PROFILE_WORDS = ['Trust Profile', 'Reciprocity Health', 'Invited directly by the system admin', 'Trust Points', 'Collaboration Chemistry', 'Joined', 'Block'];
+const TRUST_PROFILE_WORDS = ['Trust Profile', 'Reciprocity Health', 'Invited with an owner’s invite card', 'Trust Points', 'Collaboration Chemistry', 'Joined', 'Block'];
 const expectNoTrustProfile = (when: string) => {
     for (const w of TRUST_PROFILE_WORDS) expect(text(), `${w} (${when})`).not.toContain(w);
     expect(host.querySelector('[data-testid="trust-track-record"]'), when).toBeNull();
@@ -545,7 +545,10 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('app', '(tabs)', 'market.tsx')]: 1,
             [path.join('app', '(tabs)', 'people.tsx')]: 2,
             [path.join('app', '(tabs)', 'ledger.tsx')]: 1,
-            [path.join('app', 'public-profile.tsx')]: 2,
+            // A connection in common on a profile. The inviter link moved into InvitedByCard (I3).
+            [path.join('app', 'public-profile.tsx')]: 1,
+            // A profile's inviter, and each person in its "Brought in n people" list (I3): a member, opened by their key.
+            [path.join('components', 'InvitedByCard.tsx')]: 2,
             [path.join('components', 'PostAuthorTrust.tsx')]: 1,
             [path.join('components', 'PulseFeedCard.tsx')]: 1,
             [path.join('components', 'AddedYouLines.tsx')]: 1,

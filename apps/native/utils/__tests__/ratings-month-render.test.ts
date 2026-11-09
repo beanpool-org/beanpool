@@ -122,7 +122,7 @@ import { unfit } from './profile-events-words-harness';
 const TRUST = (over: Record<string, unknown> = {}) => ({
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
     risk: { band: 'green', headline: 'Trust Profile', reasons: [], tips: [] },
-    vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
+    vouchedInBy: { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null },
     mutualCount: 0, mutualConnections: [],
     joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
     ...over,

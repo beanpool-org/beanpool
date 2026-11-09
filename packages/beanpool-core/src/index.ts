@@ -130,6 +130,7 @@ export * from './standing-deal.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './notice-bell.js';
+export * from './invited-by.js';
 export * from './market-fill.js';
 export * from './market-order.js';
 export * from './market-card-shell.js';

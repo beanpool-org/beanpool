@@ -101,10 +101,10 @@ describe("the knock's key in a browser", () => {
 
 describe('a restored key that waits here (slice Y0)', () => {
     it("a refused save puts back the established mark of the account already waiting (review of b9a4a876)", async () => {
-        const a = await generateIdentity();
+        const a = await generateIdentity('CJ');
         await waitWithRestoredKey(a, {});
         expect(isEstablishedKey(a.publicKey)).toBe(true);
-        const b = await generateIdentity();
+        const b = await generateIdentity('Other');
         await expect(waitWithRestoredKey(b, {})).rejects.toBeInstanceOf(IdentityHeldError);
         expect(isEstablishedKey(a.publicKey)).toBe(true);
         expect(isEstablishedKey(b.publicKey)).toBe(false);

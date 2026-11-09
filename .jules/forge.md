@@ -175,3 +175,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/decisions` in `apps/server/src/routes/commons.ts` called `description.trim()` outside a `try/catch` block without validating that `description` was a string. Non-string inputs threw unhandled `TypeError` exceptions, producing 500 server crashes instead of clean 400 Bad Request responses.
 **Learning:** Checking truthiness `!description` does not guard against non-string primitives (numbers, booleans) or objects/arrays from `req.body`, causing string method invocations like `.trim()` to crash synchronously in route handlers before domain logic runs.
 **Pattern:** Always check `typeof field === 'string'` prior to invoking string prototype methods on client-supplied body properties.
+
+## 2026-11-09 - [Unhandled promise rejection in APK mirror schedule timer]
+**Issue:** `startApkMirror` in `apps/server/src/services/apk-mirror.ts` invoked an async callback inside `setTimeout` without enclosing `logOutcome(await refreshApk())` in a `try/catch` block.
+**Learning:** An unexpected exception during async timer execution results in an unhandled promise rejection and stops recursive scheduling, breaking background APK update checks.
+**Pattern:** Always wrap the async body of recurring `setTimeout` or `setInterval` callbacks in `try/catch` with `finally` rescheduling to ensure background tasks remain alive and resilient.

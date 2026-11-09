@@ -661,8 +661,9 @@ export interface StandingPayment {
  */
 export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { releaseResult: any; releaseCredits: number } {
     if (p.row === 'approve') {
-        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, created_at=?, credits=?, hours=NULL, standing_id=?, period_no=?
-                                WHERE id=? AND status='requested'`).run(p.paidAt, p.paidAt, p.amount, p.standingId, p.periodNo, p.txId);
+        // The helper's request becomes period 1, paid now; when they asked (created_at) stays as it was.
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, credits=?, hours=NULL, standing_id=?, period_no=?
+                                WHERE id=? AND status='requested'`).run(p.paidAt, p.amount, p.standingId, p.periodNo, p.txId);
         if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
     } else {
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, standing_id, period_no)

@@ -131,6 +131,14 @@ describe('the reference, sealed', () => {
         expect(JSON.parse(metadataWithAbout(undefined, sealed))).toEqual({ about: sealed });
     });
 
+    it('adds under 700 characters to a line at its longest title (the node counts a line\'s metadata against its 64 KB bound)', () => {
+        const post = { id: 'a'.repeat(36), type: 'offer', title: 'ü'.repeat(500), credits: 6 };
+        const id = newDmMessageId();
+        const sealed = sealChatAbout(aboutOfPost(post)!, ctxOf(rob, ana), { senderPubHex: rob.publicKey, messageId: id });
+        const added = metadataWithAbout(undefined, sealed).length;
+        expect(added).toBeLessThan(700);
+    });
+
     it('opens nothing that is not exactly a reference', () => {
         expect(parseChatAbout('{"v":1,"post":"p1","title":"T","kind":"offer"}')).toEqual({ postId: 'p1', title: 'T', kind: 'offer' });
         for (const bad of ['', 'hello', '{"v":2,"post":"p1","title":"T","kind":"offer"}', '{"v":1,"post":"p 1","title":"T","kind":"offer"}', '{"v":1,"post":"p1","title":"","kind":"offer"}', '{"v":1,"post":"p1","title":"T","kind":"poll"}', null, 3]) {

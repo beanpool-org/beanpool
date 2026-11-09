@@ -52,7 +52,7 @@ export const CHAT_ABOUT_WORDS = {
     chip: word('About: {title}'),
     gone: word('This listing is no longer up.'),
     drop: word('Leave this listing out of your message'),
-    open: word('Open this listing'),
+    open: word('Open this listing: {title}'),
     offer: word('Offer'),
     need: word('Need'),
     event: word('Event'),
@@ -99,6 +99,11 @@ export function chatAboutChipWords(chip: ChatAboutChip): string {
     return chip.price
         ? t(CHAT_ABOUT_WORDS.chipPriced, { title: chip.title, price: chip.price })
         : t(CHAT_ABOUT_WORDS.chip, { title: chip.title });
+}
+
+/** What a screen reader says for the card: one sentence, the listing's title in it. */
+export function chatAboutOpenWords(title: string): string {
+    return t(CHAT_ABOUT_WORDS.open, { title });
 }
 
 /** The kind chip's word. */

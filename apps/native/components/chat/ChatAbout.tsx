@@ -11,7 +11,7 @@ import React, { useSyncExternalStore } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    CHAT_ABOUT_WORDS, chatAboutCard, chatAboutChipWords, chatAboutDrafts, t,
+    CHAT_ABOUT_WORDS, chatAboutCard, chatAboutChipWords, chatAboutDrafts, chatAboutOpenWords, t,
     type AboutPostLike, type ChatAbout, type ChatAboutChip,
 } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
@@ -75,7 +75,7 @@ export function ChatAboutCard({ styles, about, live, isMe, onOpen }: CardProps) 
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${t(CHAT_ABOUT_WORDS.open)}: ${card.title}`}
+            accessibilityHint={chatAboutOpenWords(card.title)}
             onPress={() => onOpen(card.postId)}
             style={[...box, { minHeight: 44 }]}
             testID="chat-about-card"

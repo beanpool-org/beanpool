@@ -14,7 +14,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, numberOfLines, style, onPress, accessibilityLabel, accessibilityRole, testID } = props;
+        const { children, numberOfLines, style, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID } = props;
         const attrs: Record<string, unknown> = {};
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         const flat = Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -25,6 +25,7 @@ vi.mock('react-native', () => {
         if (['height', 'maxHeight'].some((k) => typeof flat[k] === 'number')) attrs['data-fixed'] = 'height';
         if (testID) attrs['data-testid'] = testID;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (accessibilityHint) attrs['aria-description'] = accessibilityHint;
         if (accessibilityRole === 'button') attrs.role = 'button';
         if (onPress) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress(); };
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
@@ -73,7 +74,9 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
         const dom = draw(createElement(ChatAboutCard, { styles, about, live: { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
         const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
         expect(card.textContent).toBe('OfferFresh eggs, a dozen8 Beans');
-        expect(card.getAttribute('aria-label')).toBe('Open this listing: Fresh eggs, a dozen');
+        // Named by what it shows (WCAG 2.5.3: no label of its own to differ from the visible words); the sentence is its hint.
+        expect(card.getAttribute('aria-label')).toBeNull();
+        expect(card.getAttribute('aria-description')).toBe('Open this listing: Fresh eggs, a dozen');
         act(() => { card.click(); });
         expect(opened).toEqual(['post-eggs-1']);
     });
@@ -146,7 +149,7 @@ describe.each([['light' as const], ['dark' as const]])('the chip above the compo
     it('goes with the ✕, and stays while the screen is redrawn (typing)', () => {
         chatAboutDrafts.set('c1', aboutOfPost(EGGS));
         const dom = draw(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }));
-        act(() => root!.render(createElement(ChatAboutBanner, { styles, conversationId: 'c1' })));
+        act(() => root!.render(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }) as any));
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).not.toBeNull();
         act(() => { (dom.querySelector('[data-testid="chat-about-chip-drop"]') as HTMLElement).click(); });
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).toBeNull();

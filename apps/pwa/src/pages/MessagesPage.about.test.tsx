@@ -154,7 +154,10 @@ describe('the line that carries it', () => {
         // The chip is spent once the line is on its way, and the line shows its card at once.
         expect(screen.queryByTestId('chat-about-chip')).toBeNull();
         expect(chatAboutDrafts.get(DM)).toBeNull();
-        expect(await screen.findByTestId('chat-about-card')).toBeTruthy();
+        // On my own accent bubble the card is a plain darker shade of it: plain rgba, never a mixed colour an old WebView drops.
+        const mine = await screen.findByTestId('chat-about-card');
+        expect(mine.getAttribute('style')).toContain('rgba(0, 0, 0, 0.18)');
+        expect(mine.getAttribute('style')).not.toContain('color-mix');
     });
 
     it('only the next line carries it', async () => {
@@ -178,6 +181,12 @@ describe('the card in a bubble', () => {
         await waitFor(() => expect(card.textContent).toContain('Fresh eggs, a dozen'));
         expect(card.textContent).toContain('Offer');
         expect(card.textContent).toContain('8 Beans');
+        // Named by what it shows (WCAG 2.5.3: no label of its own to differ from the visible words); the sentence is its hint.
+        expect(card.getAttribute('aria-label')).toBeNull();
+        expect(card.getAttribute('title')).toBe('Open this listing: Fresh eggs, a dozen');
+        // In Ben's plain bubble it takes the page's own ground and border tokens, which both themes define.
+        expect(card.getAttribute('style')).toContain('var(--bg-hover)');
+        expect(card.getAttribute('style')).toContain('var(--border-primary)');
         fireEvent.click(card);
         expect(navigate).toHaveBeenCalledWith('marketplace', 'post-eggs-1');
     });

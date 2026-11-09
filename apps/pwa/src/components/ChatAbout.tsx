@@ -1,11 +1,11 @@
 /**
  * "About this listing" in a chat (@beanpool/core chat-about.ts; Marty, 9 Nov): the chip above the composer after Message
  * on a listing, and the small card at the top of the bubble that carried it. The phone draws the same two things
- * (apps/native/components/ChatAbout.tsx) from the same words.
+ * (apps/native/components/chat/ChatAbout.tsx) from the same words.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
-    CHAT_ABOUT_WORDS, chatAboutCard, chatAboutChipWords, chatAboutDrafts, t,
+    CHAT_ABOUT_WORDS, chatAboutCard, chatAboutChipWords, chatAboutDrafts, chatAboutOpenWords, t,
     type ChatAbout as ChatAboutRef, type ChatAboutChip,
 } from '@beanpool/core';
 import { getMarketplacePosts, type MarketplacePost } from '../lib/api';
@@ -86,29 +86,42 @@ export function AboutChipBar({ conversationId }: { conversationId: string }) {
     );
 }
 
+/** Which bubble a card sits in: my accent bubble, someone's plain one, or a line that was not delivered (the danger chip). */
+export type AboutTone = 'mine' | 'other' | 'failed';
+
 /**
- * The card at the top of a bubble. It takes the colours of the bubble it sits in (currentColor), so it reads in the
- * accent bubble and the plain one, light and dark. A tap opens the listing; one this reader can't see opens nothing.
+ * The tints are plain rgba and the app's own colour tokens, never a mix of the text colour: an old Android WebView drops a
+ * mixed colour and would draw no box (systemLineColours.test.ts holds the web app to this). On my accent bubble the card is
+ * a darker shade of it under the same white words (white on the accent is the bubble's own pair, and a darker ground only
+ * raises its contrast); in someone's bubble it takes the page's own hover ground and border, which both themes define; on a
+ * line that was not delivered it is an outline in the chip's own ink.
  */
-export function AboutCard({ about, onOpen }: { about: ChatAboutRef; onOpen?: (postId: string) => void }) {
+const TONES: Record<AboutTone, { background: string; border: string }> = {
+    mine: { background: 'rgba(0, 0, 0, 0.18)', border: '1px solid rgba(255, 255, 255, 0.5)' },
+    other: { background: 'var(--bg-hover)', border: '1px solid var(--border-primary)' },
+    failed: { background: 'rgba(0, 0, 0, 0.06)', border: '1px solid currentColor' },
+};
+
+/**
+ * The card at the top of a bubble. A tap opens the listing; one this reader can't see opens nothing. Named by what it shows
+ * (its kind, title and price: WCAG 2.5.3), with the longer sentence as its hint.
+ */
+export function AboutCard({ about, tone, onOpen }: { about: ChatAboutRef; tone: AboutTone; onOpen?: (postId: string) => void }) {
     const live = useAboutListing(about.postId);
     const card = chatAboutCard(about, live);
     const box = {
         display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'start', font: 'inherit', color: 'inherit',
-        margin: '0 0 4px', padding: '6px 8px', borderRadius: '8px',
-        background: 'color-mix(in srgb, currentColor 14%, transparent)',
-        border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
-        ...WRAP,
+        margin: '0 0 4px', padding: '6px 8px', borderRadius: '8px', ...TONES[tone], ...WRAP,
     } as const;
     if (card.gone) {
-        return <div data-testid="chat-about-gone" style={{ ...box, fontStyle: 'italic', opacity: 0.85 }}>{card.goneWords}</div>;
+        return <div data-testid="chat-about-gone" style={{ ...box, fontStyle: 'italic' }}>{card.goneWords}</div>;
     }
     return (
-        <button type="button" data-testid="chat-about-card" aria-label={`${t(CHAT_ABOUT_WORDS.open)}: ${card.title}`} onClick={() => onOpen?.(card.postId)}
+        <button type="button" data-testid="chat-about-card" title={chatAboutOpenWords(card.title)} onClick={() => onOpen?.(card.postId)}
             style={{ ...box, cursor: onOpen ? 'pointer' : 'default', minHeight: '44px' }}>
-            <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', opacity: 0.8 }}>{card.kindWords}</span>
+            <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.kindWords}</span>
             <span style={{ display: 'block', fontWeight: 600 }}>{card.title}</span>
-            {card.price && <span style={{ display: 'block', fontSize: '0.85rem', opacity: 0.9 }}>{card.price}</span>}
+            {card.price && <span style={{ display: 'block', fontSize: '0.85rem' }}>{card.price}</span>}
         </button>
     );
 }

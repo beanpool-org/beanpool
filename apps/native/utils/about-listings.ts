@@ -15,12 +15,6 @@ type Answer = { at: number; post: AboutPostLike | null };
 const found = new Map<string, Answer>();
 const asking = new Set<string>();
 
-/** Forget what was looked up (a test, or a community switch). */
-export function forgetAboutListings(): void {
-    found.clear();
-    asking.clear();
-}
-
 /** The answer held for each id now; an id never asked, or being asked, is absent. */
 export function useAboutListings(ids: readonly string[]): Map<string, AboutPostLike | null> {
     const [, bump] = useState(0);

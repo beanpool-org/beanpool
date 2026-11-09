@@ -2765,7 +2765,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         // The listing this line is about, opened from its own sealed part (core chat-about.ts): a card at the top.
                                         const ctx = isDm && !groupLine ? dmCtxFor(activeConv) : null;
                                         const about = ctx ? chatAboutOfLine({ myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex }, { conversationId: ctx.conversationId, senderPubHex: msg.authorPubkey, messageId: msg.id, metadata: msg.metadata }) : null;
-                                        return about ? <AboutCard about={about} onOpen={(postId) => onNavigate?.('marketplace', postId)} /> : null;
+                                        return about ? <AboutCard about={about} tone={isMe ? 'mine' : 'other'} onOpen={(postId) => onNavigate?.('marketplace', postId)} /> : null;
                                     })()}
                                     {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
@@ -3165,7 +3165,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     wordBreak: 'break-word',
                                 }}>
-                                    {line.about && <AboutCard about={line.about} onOpen={(postId) => onNavigate?.('marketplace', postId)} />}
+                                    {line.about && <AboutCard about={line.about} tone={failed ? 'failed' : 'mine'} onOpen={(postId) => onNavigate?.('marketplace', postId)} />}
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
                                         <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} links={!inRequest} />

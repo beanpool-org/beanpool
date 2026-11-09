@@ -43,7 +43,7 @@ import { getPosts, getMarketplaceTransaction } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { assertFeatureOn, getProfileSwitches } from '../config/node-profile.js';
-import { keepNotice } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails } from './kept-notices.js';
 import { marketplacePostOutOfSight } from './post-sight.js';
 import { audienceRefusal } from './member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from './own-addresses.js';
@@ -217,7 +217,9 @@ export function tellStanding(hooks: Pick<EscrowCallbacks, 'broadcast' | 'dispatc
             console.warn('[Standing] A live notice failed:', e?.message || e);
         }
         try {
-            hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, { screen: 'post', postId: n.data.postId }, 'escrow', 'community.notice' as PushNoticeKind);
+            // Its push notice names the kept copy: the alert acknowledged takes the bell's row off, and the other way round.
+            hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, { screen: 'post', postId: n.data.postId }, 'escrow', 'community.notice' as PushNoticeKind,
+                false, keptNoticeDetails([n]));
         } catch (e: any) {
             console.warn('[Standing] A push failed:', e?.message || e);
         }

@@ -46,7 +46,8 @@ import {
     starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
@@ -182,6 +183,9 @@ const findTownWords = (): AddressSearchWords => ({
     source: t(FIND_TOWN_SEARCH_WORDS.source),
     pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,
 });
+
+/** A request the community has said yes to (the card says so in the polite region above the waiting cards). */
+const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok && st.value.status === 'approved';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -1277,7 +1281,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     }, [publicKey]);
 
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
-    const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     /** Every cancel still out (by URL): two waiting cards are normal, and each one's button is its own. */
     const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
@@ -1314,16 +1317,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     };
 
     const knockKey = knocks.map(k => k.url).join(' ');
-    useEffect(() => {
-        if (!identity || !knocks.length) return;
-        let alive = true;
-        knocks.forEach(k => {
-            readKnockStatus(k.url, identity).then(r => {
-                if (alive) setKnockStatuses(was => ({ ...was, [k.url]: r }));
-            });
-        });
-        return () => { alive = false; };
-    }, [knockKey, identity?.publicKey]);
+    // What each community says now, kept fresh while Home is on screen (lib/use-knock-statuses.ts): a yes shows itself with no
+    // reload (Damo, 9 Nov 2026). A request cancelled in this visit is not asked again; its card stays with the cancelled line.
+    const [knockStatuses, setKnockStatuses] = useKnockStatuses(knocks.filter(k => !cancelledKnocks.has(k.url)), identity);
 
     const handleCancelKnock = async (k: RememberedKnock) => {
         if (!identity) return;
@@ -2668,6 +2664,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
                 const helping = helped || !!f.watches?.some(w => w.wouldHelp);
                 const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
+                // The community a remembered request went to, and the name to call it by: the yes region above the waiting
+                // cards and the waiting cards below say the same name.
+                const knockCommunity = (k: RememberedKnock) => f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                const knockName = (k: RememberedKnock) => k.name ?? knockCommunity(k)?.name ?? k.url.replace(/^https:\/\//, '');
                 return (
                     <HomeCard key={id} {...common}>
                         {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
@@ -2690,23 +2690,45 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 </Fragment>
                             );
                         })}
+                        {/* Always on the card, polite: a yes put into it is read out to a screen reader (a region added with its
+                            words in it is not always announced). A yes says the two ways to use it that work from here
+                            (DESIGN-global-yes-join-fable.md §2.2, slice Y0): the account's key lives at this address, and the
+                            community's page is another, which this browser keeps apart. Its page, where the 12 words bring the
+                            account and the yes is Join; or the phone app. No handoff yet (slice Y1). */}
+                        <div role="status" aria-live="polite" data-testid="home-find-yes-live">
+                            {knocks.filter(k => !cancelledKnocks.has(k.url) && yesOf(knockStatuses[k.url])).map(k => {
+                                const yesName = knockName(k);
+                                const address = k.url.replace(/^https:\/\//, '');
+                                return (
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name: yesName })}</p>
+                                        <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.')}
+                                        </p>
+                                        <div className="mt-2">
+                                            <a href={`${k.url}/app?door=signin`} target="_blank" rel="noopener noreferrer" data-testid={`home-find-invited-open-${k.url}`}
+                                                className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                {t('Open {address}', { address })}
+                                            </a>
+                                        </div>
+                                        <p dir="auto" className="m-0 mt-2 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('Or on your phone: open the BeanPool app, restore your account, then Find a community → {name} → Join.', { name: yesName })}
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
                         {knocks.map(k => {
-                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
-                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const comm = knockCommunity(k);
+                            const name = knockName(k);
                             const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);
                             const isCancelling = cancellingKnocks.has(k.url);
                             const cancelled = cancelledKnocks.has(k.url);
 
-                            if (!cancelled && st?.ok && st.value.status === 'approved') {
-                                const approved = cardKnockLines([k], knockStatuses)[0];
-                                return (
-                                    <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
-                                        {'🎉 ' + (approved?.text ?? '')}
-                                    </p>
-                                );
-                            }
+                            // A yes is drawn in the region above, not here.
+                            if (!cancelled && yesOf(st)) return null;
 
                             // What the community now says (the phone's knockCardState): only a pending request arrived and can be
                             // taken back. An answer that could not be read is said as it is, with no Cancel. Nothing open there

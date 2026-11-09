@@ -136,6 +136,10 @@ async function main() {
     const original = lockedDm();
     const msg = sendMessage(conv.id, victim.pub, original.ciphertext, original.nonce);
     if (!msg) throw new Error('fixture: message not created');
+    // The line's push goes after its answer (engine/messaging.ts, setImmediate) and keeps a notice for its recipient's bell,
+    // a phone or not (push_notices, web notifications W0): the fixture's own write, let land before the quiet check, which
+    // otherwise saw it as a table changing with no requests.
+    await new Promise((r) => setImmediate(r));
     registerPushToken(victim.pub, 'victim-existing-token', 'android');
     addFriend(victim.pub, other.pub);
     const crowdfundId = crypto.randomUUID();

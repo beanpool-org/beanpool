@@ -825,6 +825,24 @@ describe('the web waiting card tells the truth about what the community now answ
         expect(document.body.textContent).not.toContain('no open request');
     });
 
+    it("a yes says how to use it from here, never a dead 'Join now': its page with the 12 words, or the phone app (slice Y0)", async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        expect(card).toHaveTextContent('🎉 Byron Shire BeanPool said yes.');
+        expect(card).toHaveTextContent('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join.');
+        expect(card).toHaveTextContent('Settings → Show my 12 words');
+        expect(card).toHaveTextContent('Or on your phone: open the BeanPool app, restore your account, then Find a community → Byron Shire BeanPool → Join.');
+        expect(card.textContent).not.toContain('Join now');
+        // The community's own page, at its ways back; a new tab, with nothing of this page sent.
+        const open = screen.getByTestId(`home-find-invited-open-${BYRON.url}`);
+        expect(open).toHaveTextContent('Open byron.example.org');
+        expect(open.getAttribute('href')).toBe(`${BYRON.url}/app?door=signin`);
+        expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
     it('a cancel that gets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {
         await askedOf(BYRON);
         let down = false;
@@ -1087,5 +1105,54 @@ describe('Find your community stays on Home where the list does not hold it (Lou
         expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
 
         readSpy.mockRestore();
+    });
+});
+
+describe('a yes shows itself on the Find card (Damo, 9 Nov 2026: it only showed after a reload)', () => {
+    const SLEEPY = { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8 };
+    const hideTab = (hidden: boolean) => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        document.dispatchEvent(new Event('visibilitychange'));
+    };
+    afterEach(() => { hideTab(false); vi.restoreAllMocks(); });
+
+    it('the card shows "said yes" when the community answers while Home is open, with no reload, in a polite region (fails before: one read at open)', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        expect(readSpy).toHaveBeenCalledTimes(1);
+        const live = screen.getByTestId('home-find-yes-live');
+        expect(live).toHaveAttribute('aria-live', 'polite');
+        expect(live).toBeEmptyDOMElement();
+
+        // The member says yes. The tab goes away and comes back (or the window is focused): the card reads at once.
+        readSpy.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'BP-YES1', expiresAt: null } });
+        hideTab(true);
+        hideTab(false);
+        const yes = await screen.findByTestId('home-find-invited-https://sleepy.example.org');
+        // The yes says how to use it from here (slice Y0, merged in round 3): its page with the 12 words, or the phone app.
+        expect(yes).toHaveTextContent('🎉 Sleepy Hollow said yes.');
+        expect(yes).toHaveTextContent('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join.');
+        expect(yes).toHaveTextContent('Or on your phone: open the BeanPool app, restore your account, then Find a community → Sleepy Hollow → Join.');
+        expect(yes.textContent).not.toContain('Join now');
+        expect(screen.getByTestId('home-find-invited-open-https://sleepy.example.org')).toHaveAttribute('href', 'https://sleepy.example.org/app?door=signin');
+        // Put into the region that was already there, so a screen reader hears it; the waiting card is gone.
+        expect(screen.getByTestId('home-find-yes-live')).toBe(live);
+        expect(live).toContainElement(yes);
+        expect(screen.queryByTestId('home-waiting-card-https://sleepy.example.org')).toBeNull();
+    });
+
+    it('a hidden tab asks nothing', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        readSpy.mockClear();
+        hideTab(true);
+        await act(async () => { await new Promise(r => setTimeout(r, 60)); });
+        expect(readSpy).not.toHaveBeenCalled();
     });
 });

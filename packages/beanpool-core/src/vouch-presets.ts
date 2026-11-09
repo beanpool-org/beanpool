@@ -163,12 +163,13 @@ export const vouchPresets = {
 /**
  * The two boxes the owners' and admins' invite form shows under the vouch presets (DESIGN-invites-and-names-list-amend3-fable.md
  * §1 and §4). The phone's form draws them live (slice A2). The web app holds no names-list key, so until the web list is built
- * (Marty, 8 Nov, Q2: phone first) it draws both greyed with `webLater` under them (slice A3).
+ * (Marty, 8 Nov, Q2: phone first) it draws both switched off (slice A3), and a tap on either says `doneInApp` beside the row
+ * (Marty, 9 Nov: a circle with a line through it said nothing).
  */
 export const INVITE_ADDS_WORDS = {
     addToNames: word('Add them to the names list'),
     makeVoucher: word('Make them a voucher'),
-    webLater: word('On the phone for now: the names list’s keys live on the admins’ phones.'),
+    doneInApp: word('Adding someone to the names list, and making them a voucher, is done in the BeanPool app on your phone.'),
 } as const;
 
 export const ledger = {

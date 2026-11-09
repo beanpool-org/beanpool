@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Linkin
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,7 +25,8 @@ import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-inv
 import type { JoinKey } from '../utils/door-key';
 import { claimProbeOrigin } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult, PLACE_CIRCLE_WORDS } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, combineKnockTicks, findCommunityState, knockTickOf, t, type AddressResult, type KnockWatchTick, PLACE_CIRCLE_WORDS } from '@beanpool/core';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
 import { NoOwnerCard, type OwnerlessServer } from '../components/NoOwnerCard';
@@ -233,15 +234,40 @@ export default function FindCommunityScreen() {
     useEffect(() => {
         if (!pubkey) return;
         let alive = true;
-        rememberedKnocks(pubkey).then(list => {
-            if (!alive) return;
-            setAsked(list);
-            // Only the communities this key asked: a signed read shows a community who is asking.
-            list.forEach(k => { readStatus(k.url); });
-        });
+        rememberedKnocks(pubkey).then(list => { if (alive) setAsked(list); });
         cancelledKnocks(pubkey).then(c => { if (alive) setCancelled(c); });
         return () => { alive = false; };
-    }, [pubkey, readStatus]);
+    }, [pubkey]);
+
+    // Only the communities this key asked (a signed read shows a community who is asking): each when the list is here, then by
+    // itself while this screen is in front (Damo, 9 Nov 2026: the yes showed only after a manual refresh), on
+    // utils/use-knock-status-watch.ts's schedule. One that has its answer is not asked again; Check again still reads one.
+    const [shown, setShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setShown(true);
+        return () => setShown(false);
+    }, []));
+    const statusesRef = useRef(statuses);
+    statusesRef.current = statuses;
+    const askedRef = useRef(asked);
+    askedRef.current = asked;
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const readRound = async (): Promise<KnockWatchTick> => {
+        const me = identityRef.current;
+        if (!me) return { kind: 'settled' };
+        const ticks = await Promise.all(askedRef.current.map(async (k): Promise<KnockWatchTick> => {
+            const held = statusesRef.current[k.url];
+            if (held && knockTickOf(held).kind === 'settled') return { kind: 'settled' };
+            const r = await readKnockStatus(k.url, me);
+            setStatuses(s => ({ ...s, [k.url]: r }));
+            return knockTickOf(r);
+        }));
+        return combineKnockTicks(ticks);
+    };
+    // Keyed on each request (its address and when it was sent), not on the addresses: Ask to join again to a community whose
+    // earlier request has its answer is a new request there, and the watcher begins again for it (round 2 of #3009).
+    useKnockStatusWatch(readRound, !!pubkey && asked.length > 0, `${pubkey ?? ''}|${asked.map(a => `${a.url} ${a.sentAt}`).join(' ')}`, shown);
 
     // ── Watches ─────────────────────────────────────────────────────────────────────────────────────────
     const [watches, setWatches] = useState<PlaceWatch[] | null>(null);
@@ -473,7 +499,8 @@ export default function FindCommunityScreen() {
             const label = name ?? url.replace(/^https:\/\//, '');
             return (
                 <View>
-                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    {/* Polite: the yes that replaces this line is read out (the same Text, its words changed). */}
+                    <Text style={styles.note} accessibilityLiveRegion="polite">{findLineWords(state.note)}</Text>
                     {!!cancelNotes[url] && <Text style={styles.refusal}>{findLineWords(cancelNotes[url])}</Text>}
                     <View style={styles.actions}>
                         <Pressable
@@ -511,7 +538,7 @@ export default function FindCommunityScreen() {
         if (state.kind === 'invited') {
             return (
                 <View>
-                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    <Text style={styles.note} accessibilityLiveRegion="polite">{findLineWords(state.note)}</Text>
                     {/* The rule, where this community confirms its members: the sentence its join screen says (Marty, 3 Nov). */}
                     <DoorRuleLine url={url} testID="find-join-rule" />
                     <View style={styles.actions}>

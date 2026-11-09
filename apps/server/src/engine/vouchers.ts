@@ -61,7 +61,7 @@ import { db } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
-import { keepNotice } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 import { ownCoreLockRow } from '../config/core-settings.js';
 
 // A refusal with values in it, in English as a template literal wrote it, marked for the way out (member-words.ts).
@@ -362,7 +362,8 @@ export interface VoucherNotice { to: string; title: string; body: string; id: st
 export type TellVoucher = (notice: VoucherNotice) => void;
 export interface VoucherNoticeHooks {
     broadcast: (event: any, recipients?: string[]) => unknown;
-    dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'marketplace', kind: 'community.notice') => unknown;
+    dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'marketplace', kind: 'community.notice',
+        rehearsal?: boolean, options?: KeptNoticePushOptions) => unknown;
 }
 
 /** Inside a committee writer's transaction: the voucher's kept copy (keepNotice never throws; its id null when not kept). */
@@ -384,7 +385,8 @@ export function tellVoucherNotice(n: VoucherNotice, hooks: VoucherNoticeHooks): 
         console.warn('[Vouchers] A live notice failed:', (e as Error)?.message || e);
     }
     try {
-        hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, n.data, 'marketplace', 'community.notice');
+        // Its push notice names the kept copy: the alert acknowledged takes the bell's row off, and the other way round.
+        hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, n.data, 'marketplace', 'community.notice', false, keptNoticeDetails([n]));
     } catch (e) {
         console.warn('[Vouchers] A push failed:', (e as Error)?.message || e);
     }

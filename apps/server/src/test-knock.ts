@@ -356,6 +356,7 @@ async function main(): Promise<void> {
     const annStatus = await status(ann);
     assert(annStatus.status === 200 && annStatus.body?.status === 'approved' && annStatus.body?.invite === code && typeof annStatus.body?.expiresAt === 'string',
         `Ann's signed status returns the invite (${annStatus.text})`);
+    assert(!('member' in (annStatus.body ?? {})), `and says nothing of membership while she hasn't joined (${annStatus.text})`);
     const again = await approve(mia, annId);
     assert(again.status === 409 && again.body?.code === 'answered', `a second answer → 409 answered (${again.status})`);
     const declineApproved = await decline(mia, annId);
@@ -378,6 +379,9 @@ async function main(): Promise<void> {
     assert(annMember?.invited_by === max.pk && annMember?.invite_code === code, 'she is a member, invited by Max with that code');
     const annAfter = await status(ann);
     assert(annAfter.body?.status === 'approved', `her status still says approved (${annAfter.text})`);
+    // Beside the yes, that she is a member now (DESIGN-global-yes-join-fable.md §2.1, slice Y1): the page that holds her
+    // account elsewhere, and the phone's Find card, drop a yes she has used. Never a new status value.
+    assert(annAfter.body?.member === true && annAfter.body?.invite === code, `and that she is a member here now (${annAfter.text})`);
     const annMemberKnock = await knock(ann);
     assert(annMemberKnock.status === 409 && annMemberKnock.body?.code === 'already_member', 'and she can\'t knock: she is a member');
     const afterJoin = await list(mia);

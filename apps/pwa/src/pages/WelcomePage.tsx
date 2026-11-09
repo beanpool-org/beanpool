@@ -56,6 +56,7 @@ import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
 import { forgetKnockMark, isEstablishedKey, isKnockKey, knockWaitingKey, waitWithRestoredKey } from '../lib/knock-key';
+import { handoffJoined } from '../lib/handoff';
 import { readKnockStatus } from '../lib/knock';
 import { thisCommunityOrigin } from '../components/AskHere';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -672,6 +673,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         }
         // A key a request to join made is a member now: never read as waiting again (lib/knock-key.ts).
         forgetKnockMark(member.publicKey);
+        // Handed over by the page that holds it in this browser (lib/handoff.ts, slice Y1): that page hears it joined, and
+        // the photo ticked at Join, if any, is the photo step's first pick (nothing copies across unasked).
+        const handedPhoto = handoffJoined(member.publicKey);
+        if (handedPhoto) setPendingAvatar(handedPhoto);
         setPendingIdentity(member);
         // Redeemed already, so the final step has nothing left to redeem.
         setInviteRedeemed(true);
@@ -3203,6 +3208,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
                                         {t('Choose how to restore your identity on this device:')}
                                     </p>
+                                    {/* A global member whose request here was answered yes (slice Y1): their account is at global's
+                                        address, which this page can't read. The Join on global's yes brings it here. A page that
+                                        asked global's page itself was judged unsafe: see DESIGN-global-yes-join-fable.md, Y1's PR. */}
+                                    {localCommunity && (
+                                        <p data-testid="member-asked-from-global" className="m-0 mb-4 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
+                                            {t('Already asked from global? Go back there and tap Join.')}
+                                        </p>
+                                    )}
 
                                     {error && (
                                         <div

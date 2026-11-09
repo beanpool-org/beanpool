@@ -214,6 +214,14 @@ describe('the knock’s status, read from the community', () => {
         expect(readStatus({ status: 'approved' })).toEqual({ status: 'pending' });
     });
 
+    it('a yes the key has used says so: `member: true` beside approved (global yes Y1), and nothing else reads as one', () => {
+        expect(readStatus({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true }))
+            .toEqual({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true });
+        expect(readStatus({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: 'yes' }))
+            .toEqual({ status: 'approved', invite: 'ABCD2345', expiresAt: null });
+        expect(readStatus({ status: 'pending', member: true })).toEqual({ status: 'pending' });
+    });
+
     it('a refusal (a replaced key, knocks switched off) comes back in the community’s words', async () => {
         const words = 'This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.';
         answer = () => ({ status: 403, body: { error: words, code: 'key_invalidated' } });
@@ -273,6 +281,17 @@ describe('what a community’s card shows', () => {
     it('a member already is told so, whatever else is known', () => {
         expect(knockCardState(true, true, ok({ status: 'pending' }), 'You are already a member of this community.'))
             .toEqual({ kind: 'member', note: 'You are already a member of this community.' });
+    });
+
+    it('a yes already used (the key joined, here or on another device): the card says member, never Join (global yes Y1)', () => {
+        expect(knockCardState(true, true, ok({ status: 'approved', invite: 'ABCD2345', expiresAt: null, member: true })))
+            .toEqual({ kind: 'member', note: KNOCK_MESSAGES.member });
+        expect(KNOCK_MESSAGES.member).toBe('You are already a member of this community.');
+    });
+
+    it('the landing card has no line for a yes already used', () => {
+        const asked = [{ url: 'https://b.example.org', name: 'Beta', key: 'b', sentAt: '2026-09-21T00:00:00Z' }];
+        expect(cardKnockLines(asked, { 'https://b.example.org': ok({ status: 'approved', invite: 'X', expiresAt: null, member: true }) })).toEqual([]);
     });
 
     it('the landing card lists only what is waiting or said yes', () => {

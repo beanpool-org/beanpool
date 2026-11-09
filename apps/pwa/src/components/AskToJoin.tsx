@@ -81,7 +81,8 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
         switch (r.kind) {
             case 'waiting':
             case 'invited':
-                await rememberKnock(identity.publicKey, { url: origin, name: community.name, key: community.key ?? null });
+                // With the name it sent: the join after a yes starts from the one the members saw (global yes Y1).
+                await rememberKnock(identity.publicKey, { url: origin, name: community.name, key: community.key ?? null, callsign });
                 setOpen(false);
                 setMessage('');
                 setSaid(r.kind === 'waiting' ? r.message : t(KNOCK_MESSAGES.invited));

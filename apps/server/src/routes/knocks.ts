@@ -9,7 +9,7 @@
  *                                   `peek`: the ticket of the link shared outside that the stranger read, engine/knocks.ts
  *                                   "Where it came from": kept as its post and sharer when it opens its post now, and
  *                                   otherwise left out; never a refusal, and the answer is the same either way)
- *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
+ *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt, member? }
  *   POST /api/join/knock/cancel   → 200 { knock: { status: 'cancelled' } } | 404 `not_found` ("Cancel my request"; the key
  *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
  * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,

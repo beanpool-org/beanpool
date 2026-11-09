@@ -247,6 +247,22 @@ describe('local notices from the background sync', () => {
         expect(postedKnocks[0].title).toBe('BeanPool');
         expect(postedKnocks[0].body).toBe('A community answered your request.');
     });
+
+    it('a yes the key has already used (member: true, global yes Y1) posts no notice', async () => {
+        const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
+        const knocker = account();
+        mem.async.set('beanpool_knocks', JSON.stringify({
+            pubkey: knocker.publicKey,
+            knocks: [{ url: MULLUM, name: 'Mullumbimby', key: 'mullum', sentAt: new Date().toISOString() }],
+        }));
+        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
+            status: 'approved', invite: 'INV-USED-1234', expiresAt: new Date(Date.now() + 30 * DAY).toISOString(), member: true,
+        }), { status: 200 }));
+        const postedKnocks: LocalNotice[] = [];
+        const count = await postKnockStatusNoticesFromSync({ storage: AsyncStorage, account: knocker, post: async (n) => { postedKnocks.push(n); } });
+        expect(count).toBe(0);
+        expect(postedKnocks).toEqual([]);
+    });
 });
 
 // ── Requests to join (front doors S1): the floor under the community.knock push, and the answers to the asker ──────

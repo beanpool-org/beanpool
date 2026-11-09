@@ -573,6 +573,7 @@ export const TABLES: Record<string, TableEntry> = {
     agent_made: { kind: 'local', reason: "the groups, enterprises, shops and Pulse links this server's AI assistants made, by grant (agent/owner-seeds.ts): the grants are this server's own, as agent_suggestions are" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
+    web_push_subscriptions: { kind: 'local', reason: "the browsers that asked this server to say when their request to join is answered (engine/web-push-subscriptions.ts), sealed with its key: after a take-over the waiting page's own check and the 30-day invite still carry the yes" },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
     peek_tickets: { kind: 'local', reason: "the links members shared outside, each opening one post for seven days (engine/peek-tickets.ts): a promoted server starts with none, so each reads as stopped, never as open, and its member shares again" },

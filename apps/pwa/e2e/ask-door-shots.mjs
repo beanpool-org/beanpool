@@ -5,6 +5,9 @@
  *      Open in the BeanPool app · or ask here in your browser · …)
  *   2. the form (Ask to join {name}, the line under it, Your name, A few words), filled
  *   3. Send: the waiting page ("You asked to join {name} on {date}. Your request arrived."), then a reload: still waiting
+ *   3b. Tell me when they answer (web push W1): the card, with no service worker registered; tapped where the browser
+ *       refuses (headless Chromium does): the blocked words, Get the app above them on a phone, still no worker; then
+ *       with permission and the subscription kept: ✓ We'll tell you here when {name} answers.
  *   4. a yes: "🎉 {name} said yes." and Join {name}
  *   5. the bare card's `/app?door=ask`: the form open
  * The built web app is served as https://castlemaine.beanpool.org through Playwright's routing (a knock names an https
@@ -169,6 +172,26 @@ async function main() {
                 await page.getByTestId('knock-waiting').waitFor({ timeout: 15_000 });
                 await page.getByText('Your request arrived.').waitFor();
                 await shot('ask-3-waiting');
+                // 3b. Tell me when they answer: asked only at the tap.
+                const workers = () => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length);
+                await page.getByTestId('tell-me-card').scrollIntoViewIfNeeded();
+                if (await workers()) throw new Failure('a service worker was registered before the tap');
+                await shot('ask-3b-tell-me');
+                await page.getByTestId('tell-me').click();
+                await page.getByTestId('tell-me-off').waitFor({ timeout: 15_000 });
+                if (view.phone !== (await page.getByTestId('tell-me-get-app').count() === 1)) throw new Failure('Get the app should show on a phone only');
+                if (await workers()) throw new Failure('a service worker was registered though the browser refused');
+                await page.getByTestId('tell-me-card').scrollIntoViewIfNeeded();
+                await shot('ask-3c-tell-me-blocked');
+                // The headless shell refuses notifications whatever it is granted, so the browser's yes is stood in for this
+                // one shot (the subscription itself is the server suite's, test-web-push.ts, and the real walk's).
+                await page.addInitScript(() => Object.defineProperty(Notification, 'permission', { get: () => 'granted' }));
+                await page.evaluate(([origin, publicKey]) => localStorage.setItem('beanpool_web_push',
+                    JSON.stringify([{ origin, publicKey, subId: 'ab'.repeat(32), pushKey: null, vapidKey: 'k' }])), [SITE, asker]);
+                await page.reload();
+                await page.getByTestId('tell-me-on').waitFor({ timeout: 15_000 });
+                await page.getByTestId('tell-me-card').scrollIntoViewIfNeeded();
+                await shot('ask-3d-tell-me-on');
                 await page.reload();
                 await page.getByTestId('knock-waiting').waitFor({ timeout: 15_000 });
                 await page.getByText('Your request arrived.').waitFor();

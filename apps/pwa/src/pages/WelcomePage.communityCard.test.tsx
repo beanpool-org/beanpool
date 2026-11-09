@@ -52,10 +52,24 @@ describe("a local community's card on its welcome page", () => {
         render(<WelcomePage onComplete={vi.fn()} />);
         const card = await screen.findByTestId('community-card');
         expect(screen.getByRole('heading', { name: 'Castlemaine BeanPool' })).toBeTruthy();
-        const form = screen.getByText(/Join with Invite Code/);
+        // The form's heading says which community the code is for (join names N1, §2.5).
+        const form = screen.getByRole('heading', { name: 'Join Castlemaine BeanPool with an invite' });
         // The card comes first in the page.
         expect(card.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
+        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+    });
+
+    it("the invite form's heading names the community by its card: its name, else its address; a node with no card keeps the form's old heading", async () => {
+        stubNode({ ...CARD, name: null });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        expect(await screen.findByRole('heading', { name: 'Join castlemaine.beanpool.org with an invite' })).toBeTruthy();
+        cleanup();
+
+        stubNode(404);
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        expect(screen.queryByRole('heading', { name: /with an invite/ })).toBeNull();
     });
 
     it('Already a member opens the ways back', async () => {

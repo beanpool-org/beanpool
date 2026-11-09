@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ BeanPool से जुड़ें",
   "Tap Paste to insert the code from your invite.": "अपने आमंत्रण का कोड डालने के लिए पेस्ट करें पर टैप करें।",
   "📋 Paste": "📋 पेस्ट करें",
   "Paste your invite link or code": "अपने आमंत्रण का लिंक या कोड पेस्ट करें",
@@ -1941,7 +1940,6 @@
   "Resync Error": "पुन: सिंक त्रुटि",
   "Failed to rebuild and re-sync.": "पुनर्निर्माण और पुन: सिंक करने में विफल।",
   "Invalid URL": "अमान्य URL",
-  "Please enter a valid BeanPool Node IP address.": "कृपया एक मान्य BeanPool सर्वर IP पता दर्ज करें।",
   "Node Added": "सर्वर जोड़ा गया",
   "You have successfully connected to the new community.": "आप नए समुदाय से सफलतापूर्वक जुड़ गए हैं।",
   "Update Failed": "अपडेट विफल रहा",

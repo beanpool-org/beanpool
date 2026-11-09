@@ -555,7 +555,7 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
             'setIdentity(storedIdentity);',
             'return;',
             "if (spent !== 'carryOn') {",
-            'setError(inviteProblemMessage(check.reason));',
+            'setError(inviteProblemMessage(check.reason, nodeUrl));',
             'return;',
             'inAlready = true;',
         ]);

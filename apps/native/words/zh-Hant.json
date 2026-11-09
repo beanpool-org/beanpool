@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ 加入 BeanPool",
   "Tap Paste to insert the code from your invite.": "點一下「貼上」,即可填入邀請中的代碼。",
   "📋 Paste": "📋 貼上",
   "Paste your invite link or code": "貼上你的邀請連結或代碼",
@@ -1848,7 +1847,6 @@
   "Resync Error": "重新同步出錯",
   "Failed to rebuild and re-sync.": "重建並重新同步失敗。",
   "Invalid URL": "URL 無效",
-  "Please enter a valid BeanPool Node IP address.": "請輸入有效的 BeanPool 節點 IP 位址。",
   "Node Added": "節點已新增",
   "You have successfully connected to the new community.": "你已成功連線到新社群。",
   "Update Failed": "更新失敗",

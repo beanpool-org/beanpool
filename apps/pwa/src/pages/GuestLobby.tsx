@@ -36,6 +36,7 @@ import { modeFor } from '../lib/features';
 import { APP_GLOBAL_LINK, isAppsGlobal, lobbyJoinWays, openDoorAppDoors, usePhoneBrowser } from '../lib/global-entry';
 import { webAppHost } from '../lib/former-address';
 import { getNodeApiUrl } from '../lib/api';
+import { askedElsewhereLine, joinHeading, useAskedCommunityName, useOwnCommunityName } from '../lib/join-names';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
@@ -141,6 +142,11 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
         ownDoorLink: !!ownDoor,
         appVersions: health?.appVersions,
     })[0] === 'app';
+    // Which community the Join card joins (join names N1): the global community's own words at ours, else this community's
+    // name from its public card (its address until that answers). And, only at ours, when a community's card sent the
+    // visitor here (?ask=), the line that says this is not that community.
+    const ownName = useOwnCommunityName(!appsGlobal);
+    const askedName = useAskedCommunityName(appsGlobal ? askedCommunity : null);
 
     function openJoin(start: 'guard' | 'restore') {
         setJoin({ start: start === 'guard' && canHoldKey === false ? undefined : start });
@@ -177,7 +183,13 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
     const joinCard = (
         <section data-testid="lobby-join-card"
             className="mb-3 px-4 py-3 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/90 dark:bg-blue-950/60 text-center">
-            <h2 className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white">{t('Join BeanPool')}</h2>
+            {askedName && (
+                <p data-testid="lobby-asked-elsewhere" role="note" dir="auto"
+                    className="m-0 mb-2 text-sm font-semibold text-nature-900 dark:text-white leading-snug break-words">
+                    {askedElsewhereLine(askedName)}
+                </p>
+            )}
+            <h2 dir="auto" className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white break-words">{joinHeading(appsGlobal, ownName)}</h2>
             <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 leading-snug">
                 {/* What joining takes is WebJoin's sentence (the join screens' sweep, W4), given here whole. */}
                 {doorOpen

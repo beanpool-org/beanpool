@@ -2656,6 +2656,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         // What Copy puts on the clipboard: the words as the bubble shows them. Nothing for a deleted or removed
                         // line, a line that did not open, or a photo with no caption.
                         const copyWords = copyableChatText(isTombstone ? null : decryptMessage(msg), { removed: isTombstone, unreadable: UNREADABLE_BODIES });
+                        // Links in the words open, as on the phone (chat-links.ts): never in a line that did not open or was
+                        // deleted (no words to copy), nor in a chat that is still a request (the phone's onPressUrl is left out
+                        // there too: a stranger's first words are not a way out of the app).
+                        const linkable = copyWords !== null && !inRequest;
 
                         return (
                             <div
@@ -2762,7 +2766,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         />
                                                         {groupLine.text && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} />
+                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2784,7 +2788,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         <span style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🖼️ </span>{closedPhotoWords()}</span>
                                                         {caption && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
+                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2804,12 +2808,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
+                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                         </div>
                                                     )}
                                                 </>
                                             );
-                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} />}
+                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} links={linkable} />}
                                     </div>
                                     {groupLine?.details && (
                                         <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
@@ -3128,7 +3132,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 className="max-w-[85%] md:max-w-[70%]"
                                 style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}
                             >
-                                <div style={{
+                                {/* A line still going is the accent bubble with white words, as a sent one is, so it takes the same class: the
+                                    selection and a link's focus ring are drawn for it (index.css .bp-bubble-mine). A failed one is the danger chip. */}
+                                <div className={failed ? undefined : 'bp-bubble-mine'} style={{
                                     // A line that hasn't gone is never drawn as one that has: on a failed one, the danger chip's own pair.
                                     background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--accent)',
                                     color: failed ? 'var(--bp-chip-danger-ink)' : '#fff',
@@ -3141,7 +3147,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }}>
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
-                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} />
+                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} links={!inRequest} />
                                     </div>
                                     {failed && (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>

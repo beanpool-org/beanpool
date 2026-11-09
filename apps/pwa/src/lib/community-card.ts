@@ -4,7 +4,7 @@
  * welcome page draws the same card above its invite form (components/CommunityCardPanel.tsx). The shape and the words
  * are core's (community-card.ts), so both say the same thing.
  */
-import { COMMUNITY_CARD_WORDS, type CommunityCard, type WordKey } from '@beanpool/core';
+import { type CommunityCard } from '@beanpool/core';
 
 /**
  * The hint that this browser keeps an account here, which the node reads at `/` to send the browser on to the web app
@@ -21,8 +21,11 @@ export function setAccountHint(on: boolean, doc: Pick<Document, 'cookie'> = docu
     } catch { /* the card shows at the bare address; Already a member is one tap */ }
 }
 
-/** Where the card's doors open the welcome page: `/app?door=invite` (the invite form) or `/app?door=signin`. */
-export type WelcomeDoor = 'invite' | 'signin';
+/**
+ * Where the card's doors open the welcome page: `/app?door=invite` (the invite form), `/app?door=signin`, or
+ * `/app?door=ask`, Ask to join this community from here (DESIGN-shared-listing-door-fable.md §2.1).
+ */
+export type WelcomeDoor = 'invite' | 'signin' | 'ask';
 
 /** `?door=` in this page's address, taken out of it: the welcome page's starting screen, or null. */
 export function takeWelcomeDoor(win: Pick<Window, 'location' | 'history'> = window): WelcomeDoor | null {
@@ -34,7 +37,7 @@ export function takeWelcomeDoor(win: Pick<Window, 'location' | 'history'> = wind
         const qs = params.toString();
         win.history.replaceState(win.history.state, '', `${win.location.pathname}${qs ? `?${qs}` : ''}${win.location.hash || ''}`);
     } catch { /* the page still opens there */ }
-    return raw === 'invite' || raw === 'signin' ? raw : null;
+    return raw === 'invite' || raw === 'signin' || raw === 'ask' ? raw : null;
 }
 
 /** Whether this browser is an Android phone's, where the BeanPool app may be installed. */
@@ -43,17 +46,37 @@ export function onAndroid(ua: string = typeof navigator !== 'undefined' ? naviga
 }
 
 /**
- * Where the card's Ask to join goes, as the node's own page has it: on Android the app's card screen, falling back to the
- * global community's lobby; elsewhere the lobby with this community first; with neither, no link and the words that say
- * to ask from the app. `note`: the line under it.
+ * Where the card's Ask to join goes (DESIGN-shared-listing-door-fable.md §2.3): on an Android phone the app's card
+ * screen, falling back to this community's own ask door (`card.askUrl`, `https://<host>/app?door=ask`); elsewhere the
+ * form opens right here (`href` null), and the browser asks this community directly. Never another community's address.
+ * `null` where the community takes no requests.
  */
-export function askDoor(card: CommunityCard, android: boolean): { href: string | null; note: WordKey | null } {
-    if (card.joining !== 'requests') return { href: null, note: null };
+export function askDoor(card: CommunityCard, android: boolean): { href: string | null } | null {
+    if (card.joining !== 'requests') return null;
     if (android && card.host) {
         const node = encodeURIComponent(`https://${card.host}`);
         const fallback = card.askUrl ? `S.browser_fallback_url=${encodeURIComponent(card.askUrl)};` : '';
-        return { href: `intent://community-card?node=${node}#Intent;scheme=beanpool;package=org.beanpool.pillar;${fallback}end`, note: null };
+        return { href: `intent://community-card?node=${node}#Intent;scheme=beanpool;package=org.beanpool.pillar;${fallback}end` };
     }
-    if (card.askUrl) return { href: card.askUrl, note: COMMUNITY_CARD_WORDS.askViaGlobal };
-    return { href: null, note: COMMUNITY_CARD_WORDS.askInApp };
+    return { href: null };
+}
+
+/**
+ * "🌍 Look around the global community" from this community's card: the global community it names, with `?ask=<host>`,
+ * so a join there opens Home's Find card on this community (the global lobby keeps it, lib/visitor-lobby.ts). Built
+ * through URL: the operator's address may carry a path, a trailing `/` or a query. Null where it names none.
+ */
+export function lookAroundUrl(card: Pick<CommunityCard, 'globalUrl' | 'host'>): string | null {
+    if (!card.globalUrl) return null;
+    try {
+        const url = new URL(card.globalUrl);
+        if (!card.host) return url.toString();
+        url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
+        url.search = '';
+        url.hash = '';
+        url.searchParams.set('ask', card.host);
+        return url.toString();
+    } catch {
+        return null;
+    }
 }

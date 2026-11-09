@@ -15,7 +15,26 @@ export interface SimNavigation {
     goBack(): void;
     dispatch(action: NavigationAction): void;
     getState(): { key: string; index: number; routes: SimRoute[] };
-    addListener(): () => void;
+    addListener(type: string, cb: (e: { data?: { closing?: boolean } }) => void): () => void;
+}
+/**
+ * The stack's presentation of a screen. `transitionEnd` (closing: false) is what react-navigation's native stack emits once a
+ * screen is up; here it comes at once. A test that wants a screen still mid-presentation (iOS, the fade not finished) sets
+ * `presentation.held = true` before the screen mounts and calls `presentation.finish()` when it should be up.
+ */
+export const presentation = {
+    held: false,
+    waiting: new Set<() => void>(),
+    finish() { for (const w of [...this.waiting]) w(); this.waiting.clear(); },
+    reset() { this.held = false; this.waiting.clear(); },
+};
+export function addTransitionListener(type: string, cb: (e: { data?: { closing?: boolean } }) => void): () => void {
+    if (type !== 'transitionEnd') return () => {};
+    const fire = () => cb({ data: { closing: false } });
+    if (presentation.held) { presentation.waiting.add(fire); return () => { presentation.waiting.delete(fire); }; }
+    let live = true;
+    queueMicrotask(() => { if (live) fire(); });
+    return () => { live = false; };
 }
 /** The route a screen is drawn for, with its navigation; the stand-in useRoute, useNavigation and useLocalSearchParams read it. */
 export const RouteCtx = createContext<{ route: SimRoute; navigation: SimNavigation } | null>(null);
@@ -48,7 +67,7 @@ export function createStack() {
         goBack: () => dispatch({ source: key, ...CommonActions.goBack() }),
         dispatch: (action) => dispatch({ source: key, ...action }),
         getState: () => state,
-        addListener: () => () => {},
+        addListener: addTransitionListener,
     });
     const stack = {
         /** The router stand-in: what expo-router's `router` does to the stack. */

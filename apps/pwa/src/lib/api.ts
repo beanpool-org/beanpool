@@ -592,7 +592,10 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
     try {
         const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(code)}`);
         return typeof data?.valid === 'boolean' ? (data as InviteCheck) : null;
-    } catch {
+    } catch (e) {
+        // A community whose invites are off (the global one, 404 `feature_off`): the code is some other community's, and the
+        // join box says so (WelcomePage handleCreate) instead of sending a redeem this community can only refuse.
+        if ((e as { code?: unknown })?.code === 'feature_off') return { valid: false, reason: 'invites_off' };
         return null;
     }
 }

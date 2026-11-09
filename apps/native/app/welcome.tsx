@@ -22,6 +22,7 @@ import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCac
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
     bundledAvatarForPubkey, joinRuleLines, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold, type KnownRule,
+    shareAddress,
 } from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
@@ -97,7 +98,7 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { returnToApp } from '../utils/sso-signin';
 
 
-import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } from '../utils/invite-parser';
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
@@ -142,8 +143,14 @@ export default function WelcomeScreen() {
     // Friendly Step-1 rejection copy for a dud invite. Reasons come from
     // /api/invite/check; anything unrecognised falls back to the generic line.
     // In the screen, not above it: its sentences are the screen's t()'s.
-    function inviteProblemMessage(reason?: string): string {
+    function inviteProblemMessage(reason?: string, nodeUrl?: string): string {
+        // The address as the member typed or pasted it, with no scheme (core shareAddress), for the two answers about it.
+        const address = shareAddress(nodeUrl ?? '');
         switch (reason) {
+            case 'invites_off':
+                return t('{address} doesn’t use invites, so this code isn’t for it. Type the community address from your invite message, or open the invite link.', { address });
+            case 'not_a_community':
+                return t('There is no BeanPool community at {address}. Type the community address from your invite message, or open the invite link.', { address });
             case 'used':
                 return t('This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).');
             case 'expired':
@@ -421,6 +428,8 @@ export default function WelcomeScreen() {
     const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+    /** The community address `inviteCommunityName` was read at (join names N1): the step's heading names it only while the fields still point there. */
+    const [inviteNamedAt, setInviteNamedAt] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
 
@@ -805,9 +814,7 @@ export default function WelcomeScreen() {
     // clipboard programmatically.
     async function applyInviteContent(raw: string, source: 'home' | 'join') {
         const content = raw?.trim() || '';
-        const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
-            (content.includes('http') && content.includes('invite='));
-        if (looksLikeInvite) {
+        if (holdsInvite(content)) {
             await processFullUrl(content);
             return;
         }
@@ -843,12 +850,13 @@ export default function WelcomeScreen() {
     }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
-        // extractNodeOrigin copes with the URL being buried in a shared message
-        // ("Join my BeanPool community node: https://…") — an anchored match doesn't. It refuses an address that
-        // isn't plain host[:port] (utils/node-url.ts), and so does this: the invite isn't used.
-        let origin: string | null;
+        // readInviteText (utils/invite-parser.ts) copes with the link being buried in a shared message, or missing from the
+        // part of it that was pasted: the code alone goes in the code box, never the message's words after the link (9 Nov:
+        // they all did), and the community from the link, else from the message's "Community address" line. It refuses an
+        // address that isn't plain host[:port] (utils/node-url.ts), and so does this: the invite isn't used.
+        let read: { code: string | null; origin: string | null };
         try {
-            origin = extractNodeOrigin(fullUrl);
+            read = readInviteText(fullUrl);
         } catch (e) {
             if (e instanceof UnsafeNodeAddressError) {
                 Alert.alert(t('Invite not used'), welcomeLineWords(e.message));
@@ -856,15 +864,15 @@ export default function WelcomeScreen() {
             }
             throw e;
         }
-        if (origin) {
-            setCreateAnchorUrl(origin);
+        if (read.origin) {
+            setCreateAnchorUrl(read.origin);
         }
-        const inviteMatch = fullUrl.match(/[?&]invite=([^&]+)/);
-        if (inviteMatch) {
-            setInviteCode(decodeURIComponent(inviteMatch[1]));
-            noteLandingPost(decodeURIComponent(inviteMatch[1]), postIdFromInviteLink(fullUrl));
-        } else if (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-'))) {
-            setInviteCode(fullUrl);
+        const code = read.code ?? (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-')) ? fullUrl : null);
+        if (code) {
+            setInviteCode(code);
+            // The listing an invite-and-share link was sent from rides on its link only: a code pasted alone leaves the one
+            // an earlier link noted as it was, as before.
+            if (/[?&]invite=/.test(fullUrl)) noteLandingPost(code, postIdFromInviteLink(fullUrl));
         }
         setMode('create');
     }, [t]);
@@ -1247,6 +1255,10 @@ export default function WelcomeScreen() {
                 undoCommunity = !!storedIdentity && !(await AsyncStorage.getItem('beanpool_anchor_url'));
 
                 const check = await checkInvite(parsedCode, nodeUrl);
+                // Which community this code is for, said in the step's heading from here on (join names N1), whatever the node
+                // thinks of the code: a refused one is still a code for that community. Kept with the address it was read at.
+                setInviteCommunityName(check?.communityName || null);
+                setInviteNamedAt(nodeUrl);
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
@@ -1268,7 +1280,7 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        setError(inviteProblemMessage(check.reason));
+                        setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
                     // This join's own key, in already: the member has never been shown its words. On to the photo and
@@ -1276,7 +1288,6 @@ export default function WelcomeScreen() {
                     inAlready = true;
                 }
                 setInviterName(check?.inviterCallsign || null);
-                setInviteCommunityName(check?.communityName || null);
 
                 // Per-node callsign uniqueness: check against the target node BEFORE we
                 // create the identity or register, so a brand-new member picks a name
@@ -3042,13 +3053,22 @@ export default function WelcomeScreen() {
 
     // --- CREATE NEW IDENTITY ---
     if (mode === 'create') {
+        // "Join with an invite", then "Join {name}" once the node has checked the code and said whose community it is (join
+        // names N1): only while the code and address fields still name the community it was checked at, as Next reads them.
+        let createStepName: string | null = null;
+        if (inviteCommunityName && inviteNamedAt) {
+            try {
+                const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
+                if (at && at === inviteNamedAt) createStepName = inviteCommunityName;
+            } catch { /* an address that is not plain host[:port]: Next says so; no name is claimed for it */ }
+        }
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>{t('🎟️ Join BeanPool')}</Text>
+                        <Text style={styles.title} accessibilityRole="header">{createStepName ? t('Join {name}', { name: createStepName }) : t('🎟️ Join with an invite')}</Text>
 
                         {clipboardMayHaveInvite && !inviteCode && (
                             <View style={styles.pasteCard}>
@@ -3258,7 +3278,7 @@ export default function WelcomeScreen() {
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">

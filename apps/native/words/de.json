@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ BeanPool beitreten",
   "Tap Paste to insert the code from your invite.": "Tippe auf Einfügen, um den Code aus deiner Einladung einzufügen.",
   "📋 Paste": "📋 Einfügen",
   "Paste your invite link or code": "Füge deinen Einladungslink oder -code ein",
@@ -1940,7 +1939,6 @@
   "Resync Error": "Fehler bei der erneuten Synchronisierung",
   "Failed to rebuild and re-sync.": "Wiederaufbau und erneute Synchronisierung fehlgeschlagen.",
   "Invalid URL": "Ungültige URL",
-  "Please enter a valid BeanPool Node IP address.": "Bitte gib eine gültige IP-Adresse des BeanPool-Servers ein.",
   "Node Added": "Server hinzugefügt",
   "You have successfully connected to the new community.": "Du hast dich erfolgreich mit der neuen Community verbunden.",
   "Update Failed": "Aktualisierung fehlgeschlagen",

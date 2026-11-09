@@ -4,14 +4,19 @@
  *
  * The post as the node answers a ticket (lib/peek.ts getPeekPost: guestPost, nobody in it, its area only), drawn as the
  * global lobby draws a listing for a visitor (components/VisitorListing.tsx), under "A member of {community} shared this
- * with you"; then the community's own doors (components/CommunityCardPanel.tsx: Ask to join, Already a member, Look around
- * the global community), I have an invite, and on a phone Open in the BeanPool app and Get the app. A link that opens
- * nothing now says so, and shows the same doors; a community that couldn't be reached says that instead, never that the
- * link stopped, with Try again and the same doors. Nothing here signs or keeps anything: a stranger has no key yet.
+ * with you"; then the community's own doors in the order DESIGN-shared-listing-door-fable.md §2.3 sets:
+ *   - a computer: Ask to join {name} (the form, right here: the browser asks this community directly) · I have an invite
+ *     · Already a member · 🌍 Look around the global community first;
+ *   - a phone's browser: Open in the BeanPool app (on Android the store is its fallback; an iPhone's link has none, so
+ *     Get the app stays under it) · or ask here in your browser · I have an invite · Already a member · 🌍.
+ * A link that opens nothing now says so, and shows the same doors; a community that couldn't be reached says that
+ * instead, never that the link stopped, with Try again and the same doors. Nothing here signs or keeps anything until
+ * Send is tapped on the form (components/AskHere.tsx), which hands the key to the root (`onAsked`).
  */
 import { useEffect, useState } from 'react';
 import { PEEK_WORDS as W, communityCardName, t, type CommunityCard } from '@beanpool/core';
 import type { MarketplacePost } from '../lib/api';
+import type { BeanPoolIdentity } from '../lib/identity';
 import { getCommunityCard, getNodeApiUrl } from '../lib/api';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { beansOn } from '../lib/visitor-lobby';
@@ -23,11 +28,13 @@ type Loaded = { kind: 'loading' } | { kind: 'post'; post: MarketplacePost } | { 
 
 const DOOR = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
 
-export function PeekPage({ postId, ticket, onWelcome }: {
+export function PeekPage({ postId, ticket, onWelcome, onAsked }: {
     postId: string;
     ticket: string;
     /** The welcome page, at its invite form or its ways back: the visitor has an invite, or is already a member. */
     onWelcome: (door: 'invite' | 'signin') => void;
+    /** The request to join went from here: this browser waits to be let in (App's waiting page). */
+    onAsked: (identity: BeanPoolIdentity) => void;
 }) {
     const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
     const [card, setCard] = useState<CommunityCard | null>(null);
@@ -53,14 +60,21 @@ export function PeekPage({ postId, ticket, onWelcome }: {
             {phone && (
                 <>
                     <a href={phone.app} data-testid="peek-open-app" className={`${DOOR} bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on`}>{t(W.openInApp)}</a>
-                    <a href={phone.store} rel="noopener noreferrer" data-testid="peek-get-app" className={`${DOOR} border border-bp-ink-info text-bp-ink-info`}>{t(W.getApp)}</a>
+                    {/* An Android intent falls back to the store by itself; an iPhone's app link has no fallback. */}
+                    {!phone.app.startsWith('intent:') && (
+                        <a href={phone.store} rel="noopener noreferrer" data-testid="peek-get-app" className={`${DOOR} border border-bp-ink-info text-bp-ink-info`}>{t(W.getApp)}</a>
+                    )}
                 </>
             )}
-            {card && <CommunityCardPanel card={card} onSignIn={() => onWelcome('signin')} />}
-            <button type="button" data-testid="peek-invite" onClick={() => onWelcome('invite')}
-                className={`${DOOR} bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer`}>
-                {t('I have an invite')}
-            </button>
+            {card ? (
+                <CommunityCardPanel card={card} onSignIn={() => onWelcome('signin')} onInvite={() => onWelcome('invite')} inviteTestId="peek-invite"
+                    ask={{ onAsked, named: !phone, appAbove: !!phone }} lookFirst={!phone} />
+            ) : (
+                <button type="button" data-testid="peek-invite" onClick={() => onWelcome('invite')}
+                    className={`${DOOR} bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer`}>
+                    {t('I have an invite')}
+                </button>
+            )}
         </div>
     );
 

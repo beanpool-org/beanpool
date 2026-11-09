@@ -205,6 +205,9 @@ export interface SyncMarketplaceTransaction {
     disputeResolution?: string | null;
     disputeResolvedAt?: string | null;
     disputeResolvedBy?: string | null;
+    /** The standing deal this deal is a period of, and which period (schema.sql standing_deals). */
+    standingId?: string | null;
+    periodNo?: number | null;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
 }
@@ -1215,6 +1218,8 @@ function marketplaceTransactionOfRow(row: any, ratingTxKeys: ReadonlySet<string>
         disputeResolution: row.dispute_resolution ?? null,
         disputeResolvedAt: row.dispute_resolved_at ?? null,
         disputeResolvedBy: row.dispute_resolved_by ?? null,
+        standingId: row.standing_id ?? null,
+        periodNo: row.period_no ?? null,
         ratedByBuyer: ratingTxKeys.has(`${row.id}|${row.buyer_pubkey}`),
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     };

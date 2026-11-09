@@ -14,9 +14,8 @@ import React from 'react';
 import { View, Text, Pressable } from 'react-native';
 import type { ChatMessage, ChatKind, ChatRemovedRun } from '../../utils/chat-actions';
 import { isTombstone, messageTime, tombstoneWords, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
-import { splitTextWithLinks } from '../../utils/chat-links';
 import { chatLineWords } from '../../utils/chat-line-words';
-import { CHAT_FOLD_LINES, t, tn } from '@beanpool/core';
+import { CHAT_FOLD_LINES, splitTextWithLinks, t, tn } from '@beanpool/core';
 import { useChatFold } from './ChatFold';
 import type { ChatStyles } from './styles';
 

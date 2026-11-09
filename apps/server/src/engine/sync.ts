@@ -179,7 +179,7 @@ const IMPORT_CATEGORIES = {
  */
 export const LEDGER_SET: ReadonlySet<string> = new Set([
     'members', 'accounts', 'transactions', 'marketplace_transactions', 'settlements', 'treasury_operators',
-    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims',
+    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims', 'standing_deals',
 ]);
 
 /**
@@ -2482,8 +2482,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
                 // stamp is the main server's, which phones' deltas read after a take-over.
                 const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at,
-                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by, standing_id, period_no)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     post_id = excluded.post_id,
                                     buyer_pubkey = excluded.buyer_pubkey,
@@ -2497,7 +2497,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     last_reminded_at = excluded.last_reminded_at,
                                     dispute_resolution = excluded.dispute_resolution,
                                     dispute_resolved_at = excluded.dispute_resolved_at,
-                                    dispute_resolved_by = excluded.dispute_resolved_by`);
+                                    dispute_resolved_by = excluded.dispute_resolved_by,
+                                    standing_id = excluded.standing_id,
+                                    period_no = excluded.period_no`);
                 for (const mt of remote.marketplaceTransactions) {
                     const createdAt = mt.createdAt ?? mt.created_at ?? new Date().toISOString();
                     const completedAt = mt.completedAt ?? mt.completed_at ?? null;
@@ -2516,6 +2518,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         mt.disputeResolution ?? null,
                         mt.disputeResolvedAt ?? null,
                         mt.disputeResolvedBy ?? null,
+                        typeof mt.standingId === 'string' && mt.standingId ? mt.standingId : null,
+                        Number.isInteger(mt.periodNo) ? mt.periodNo : null,
                     );
                     if (res.changes > 0) marketplaceTxns++;
                 }

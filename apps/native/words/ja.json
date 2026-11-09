@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ BeanPoolに参加",
   "Tap Paste to insert the code from your invite.": "「貼り付け」をタップして、招待のコードを入力してください。",
   "📋 Paste": "📋 貼り付け",
   "Paste your invite link or code": "招待リンクまたはコードを貼り付けてください",
@@ -1848,7 +1847,6 @@
   "Resync Error": "再同期エラー",
   "Failed to rebuild and re-sync.": "再構築および再同期に失敗しました。",
   "Invalid URL": "無効なURL",
-  "Please enter a valid BeanPool Node IP address.": "有効なBeanPoolノードのIPアドレスを入力してください。",
   "Node Added": "ノードを追加しました",
   "You have successfully connected to the new community.": "新しいコミュニティへの接続に成功しました。",
   "Update Failed": "更新に失敗しました",

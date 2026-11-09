@@ -337,8 +337,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     // Each sentence's size where it differs from the 16 of body text (welcome.tsx makeStyles: headerTitle 24, title 20,
     // callsignLabel 18, memberBtnText 18, tosText 12); the rest at 16, the largest body size, so smaller text is over-measured.
     const FONT_OF: Record<string, number> = {
-        'Welcome to BeanPool': 24, '🎟️ Join BeanPool': 20, 'What should we call you?': 18,
-        '🎟️ Join with an invite': 18, '🌍 Explore BeanPool worldwide': 18,
+        // The card titles at 20 (styles.title: the invite step's, then "Join {name}" once its code is checked, and the global
+        // door's): they wrap, never truncate. "🎟️ Join with an invite" is also the home button at 18; its one-line fit is
+        // measured at 18 above, and here it is held to the title's larger size on the card.
+        'Welcome to BeanPool': 24, '🎟️ Join with an invite': 20, 'Join {name}': 20, '🌍 Join the global community': 20,
+        'What should we call you?': 18, '🌍 Explore BeanPool worldwide': 18,
         // The join card's helper lines (fieldHint, callsignHelper, callsignTip 13).
         "Required — the community node you're joining. Ask whoever invited you if you're unsure.": 13,
         'This is your display name — how the community sees you, e.g. Sarah. You can change it later.': 13,

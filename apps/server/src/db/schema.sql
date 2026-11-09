@@ -574,7 +574,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- Escrow dispute arbitration (§5 item 2, §6 correction 2): resolution type, timestamp and acting admin
     dispute_resolution TEXT,
     dispute_resolved_at DATETIME,
-    dispute_resolved_by TEXT
+    dispute_resolved_by TEXT,
+    -- A period of a standing deal (standing_deals below; DESIGN-standing-deals-fable.md §2.1): which one, and its number
+    -- from 1. NULL on a one-off deal.
+    standing_id TEXT REFERENCES standing_deals(id),
+    period_no INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -590,6 +594,49 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON
 -- A listing's open or held deals: both sides of its open deals hear its pushes on a node that reads by area, and a
 -- removal or hide asks whether it holds one. Without this each read searched every open deal on the node (#1769).
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status);
+-- At most one deal row per period of a standing deal: the node's second hold of a period is refused here, whatever the
+-- tick's own compare-and-swap missed (engine/standing-deals.ts).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_transactions_standing_period
+    ON marketplace_transactions(standing_id, period_no) WHERE standing_id IS NOT NULL;
+
+-- 5b. Standing deals (DESIGN-standing-deals-fable.md §2.1; Marty's decisions, 9 Nov 2026): a listing priced per week or per
+-- month, taken up, pays one period at a time. One period's Beans are held at a time, each period an ordinary deal row
+-- (marketplace_transactions.standing_id); this row is the arrangement and the payer's signed authorisation that bounds every
+-- hold the node makes for it (auth_*: the text, its signature, its signer). engine/standing-deals.ts runs it.
+CREATE TABLE IF NOT EXISTS standing_deals (
+    id TEXT PRIMARY KEY,
+    post_id TEXT NOT NULL REFERENCES posts(id),
+    payer_pubkey TEXT NOT NULL,
+    payee_pubkey TEXT NOT NULL,
+    beans_per_period REAL NOT NULL,
+    period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
+    -- Period n runs [starts_at + (n-1) units, starts_at + n units), UTC, months clamped (@beanpool/core periodEnd).
+    starts_at TEXT NOT NULL,
+    -- NULL: until one of them stops it.
+    max_periods INTEGER,
+    phase TEXT NOT NULL CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended')),
+    periods_done INTEGER NOT NULL DEFAULT 0,
+    current_tx_id TEXT REFERENCES marketplace_transactions(id),
+    next_due_at TEXT NOT NULL,
+    short_since TEXT,
+    -- payer | node_held | listing_hidden | cant_run (@beanpool/core StandingHeldBackReason), while phase is held_back.
+    held_back_reason TEXT,
+    stopped_by TEXT,
+    stopped_at TEXT,
+    ended_at TEXT,
+    -- stopped | count_reached | short | cancelled | listing_gone | account_closed | node_held | cant_run
+    ended_reason TEXT,
+    auth_signer TEXT NOT NULL,
+    auth_signature TEXT NOT NULL,
+    auth_payload TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_due ON standing_deals(phase, next_due_at);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payer ON standing_deals(payer_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -1526,6 +1573,14 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE marketplace_transactions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS standing_deals_touch_updated_at
+AFTER UPDATE ON standing_deals
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at

@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ Sumali sa BeanPool",
   "Tap Paste to insert the code from your invite.": "I-tap ang I-paste para ilagay ang code mula sa iyong imbitasyon.",
   "📋 Paste": "📋 I-paste",
   "Paste your invite link or code": "I-paste ang link o code ng iyong imbitasyon",
@@ -1939,7 +1938,6 @@
   "Resync Error": "Error sa Pag-resync",
   "Failed to rebuild and re-sync.": "Bigo sa muling pagbuo at pag-resync.",
   "Invalid URL": "Di-wastong URL",
-  "Please enter a valid BeanPool Node IP address.": "Mangyaring maglagay ng wastong IP address ng BeanPool Server.",
   "Node Added": "Naidagdag ang Server",
   "You have successfully connected to the new community.": "Matagumpay kang nakakonekta sa bagong komunidad.",
   "Update Failed": "Bigo ang Pag-update",

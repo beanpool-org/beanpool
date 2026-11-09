@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ Приєднатися до BeanPool",
   "Tap Paste to insert the code from your invite.": "Натисніть «Вставити», щоб додати код із вашого запрошення.",
   "📋 Paste": "📋 Вставити",
   "Paste your invite link or code": "Вставте посилання або код запрошення",
@@ -2121,7 +2120,6 @@
   "Resync Error": "Помилка ресинхронізації",
   "Failed to rebuild and re-sync.": "Не вдалося перебудувати й повторно синхронізувати.",
   "Invalid URL": "Недійсна URL-адреса",
-  "Please enter a valid BeanPool Node IP address.": "Введіть дійсну IP-адресу вузла BeanPool.",
   "Node Added": "Вузол додано",
   "You have successfully connected to the new community.": "Ви успішно підключилися до нової спільноти.",
   "Update Failed": "Оновлення не вдалося",

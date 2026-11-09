@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ BeanPool-ൽ ചേരൂ",
   "Tap Paste to insert the code from your invite.": "ക്ഷണത്തിലെ കോഡ് ചേർക്കാൻ 'ഒട്ടിക്കുക' അമർത്തുക.",
   "📋 Paste": "📋 ഒട്ടിക്കുക",
   "Paste your invite link or code": "നിങ്ങളുടെ ക്ഷണ ലിങ്കോ കോഡോ ഒട്ടിക്കുക",
@@ -1939,7 +1938,6 @@
   "Resync Error": "പുനഃസമന്വയ പിശക്",
   "Failed to rebuild and re-sync.": "പുനർനിർമ്മിക്കുന്നതിലും സമന്വയിപ്പിക്കുന്നതിലും പരാജയപ്പെട്ടു.",
   "Invalid URL": "അസാധുവായ URL",
-  "Please enter a valid BeanPool Node IP address.": "സാധുവായ BeanPool നോഡ് IP വിലാസം നൽകുക.",
   "Node Added": "നോഡ് ചേർത്തു",
   "You have successfully connected to the new community.": "പുതിയ കമ്മ്യൂണിറ്റിയിലേക്ക് വിജയകരമായി കണക്‌റ്റ് ചെയ്‌തു.",
   "Update Failed": "അപ്‌ഡേറ്റ് പരാജയപ്പെട്ടു",

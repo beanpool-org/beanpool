@@ -12,7 +12,6 @@
       "BeanPool": "BeanPool"
     }
   },
-  "🎟️ Join BeanPool": "🎟️ BeanPool 가입하기",
   "Tap Paste to insert the code from your invite.": "‘붙여넣기’를 눌러 초대장의 코드를 넣으세요.",
   "📋 Paste": "📋 붙여넣기",
   "Paste your invite link or code": "초대 링크나 코드를 붙여넣으세요",
@@ -1848,7 +1847,6 @@
   "Resync Error": "재동기화 오류",
   "Failed to rebuild and re-sync.": "재구축 및 재동기화에 실패했습니다.",
   "Invalid URL": "잘못된 URL",
-  "Please enter a valid BeanPool Node IP address.": "올바른 BeanPool 노드 IP 주소를 입력하세요.",
   "Node Added": "노드 추가됨",
   "You have successfully connected to the new community.": "새 커뮤니티에 성공적으로 연결되었습니다.",
   "Update Failed": "업데이트 실패",

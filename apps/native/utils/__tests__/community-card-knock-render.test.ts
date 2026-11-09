@@ -522,7 +522,9 @@ describe('the card with no account on the phone (shared-listing door A2)', () =>
         expect(field('A few words about yourself')).toBeTruthy();
         // The name box is empty: there is no account to take a name from.
         expect(field('Your name')!.value).toBe('');
-        expect(phoneKey.drafts).toBe(1);
+        // The key is drafted as the form opens, off the render: wait for it (it lost the race to a fixed wait on a loaded CI
+        // runner, 9 Nov), still exactly one draft.
+        await vi.waitFor(() => expect(phoneKey.drafts).toBe(1), { timeout: 2000, interval: 10 });
         expect(phoneKey.written).toEqual([]);
         expect(store.map.has(KNOCK_KEY_STORE_KEY)).toBe(false);
         expect(ids.set).toEqual([]);

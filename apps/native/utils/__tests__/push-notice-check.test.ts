@@ -572,9 +572,9 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
 
     it('the sync\'s own notices of a request to join open where it is answered: Invites for a new one, Find a community for an answer (front doors S1)', async () => {
         const own = (data: Record<string, unknown>): IncomingNotice => ({ identifier: nodeCrypto.randomUUID(), remote: false, title: 'x', body: 'y', data });
-        expect(await tap(own({ ...LOCAL_NOTICE_DATA, type: 'admin-knocks' }))).toEqual({ kind: 'route', route: '/(tabs)/people?view=invites' });
+        expect(await tap(own({ ...LOCAL_NOTICE_DATA, type: 'admin-knocks' }))).toEqual({ kind: 'route', route: '/(tabs)/people?view=invites&from=notice' });
         expect(await tap(own({ ...LOCAL_NOTICE_DATA, type: 'knock-answer', url: MULLUM }))).toEqual({ kind: 'route', route: '/find-community' });
-        expect(navigated).toEqual(['/(tabs)/people?view=invites', '/find-community']);
+        expect(navigated).toEqual(['/(tabs)/people?view=invites&from=notice', '/find-community']);
         // Any other type, one off an object's prototype included, opens the app where it was.
         for (const type of ['nowhere', 'constructor', '__proto__', 'toString', '/find-community', 42, null]) {
             expect(await tap(own({ ...LOCAL_NOTICE_DATA, type }))).toEqual({ kind: 'nothing', reason: 'local' });
@@ -630,7 +630,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
 
     it('a request to join lands on People → Invites, where it is listed with Invite and Not now, whatever the answer says (front doors S1)', () => {
         for (const d of [null, { screen: 'people' }, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) {
-            expect(noticeRoute('community.knock', d)).toBe('/(tabs)/people?view=invites');
+            expect(noticeRoute('community.knock', d)).toBe('/(tabs)/people?view=invites&from=notice');
         }
     });
 

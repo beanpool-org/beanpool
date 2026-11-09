@@ -423,7 +423,7 @@ describe('requests to join, from the background sync', () => {
         const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
         expect(await postKnockStatusNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (n) => { posted.push(n); } })).toBe(1);
         const taps = await Promise.all(posted.map((n, i) => checkTap({ identifier: `local-${i}`, remote: false, title: n.title, body: n.body, data: n.data }, { storage: AsyncStorage, recipient: kim.publicKey })));
-        expect(taps).toEqual([{ kind: 'route', route: '/(tabs)/people?view=invites' }, { kind: 'route', route: '/find-community' }]);
+        expect(taps).toEqual([{ kind: 'route', route: '/(tabs)/people?view=invites&from=notice' }, { kind: 'route', route: '/find-community' }]);
     });
 
     it("all of it under one deadline: a community that never answers can't hold the task past it (iOS gives ~30 s)", async () => {

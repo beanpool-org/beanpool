@@ -10,6 +10,9 @@ import { VouchPresetChoice } from './VouchPresetChoice';
 export const WANTS_TO_JOIN_WORDS = {
     help: word('People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than "no answer yet".'),
     unreachable: word("Couldn't reach your community. Check your connection and try again."),
+    // Said only when People was opened from the notice "someone asked to join" and nobody is waiting any more.
+    nobody: word('Nobody is waiting to join right now.'),
+    answeredAlready: word('Another owner or admin may have answered already.'),
 } as const;
 
 /** How many whole days ago a request was made (0 today), or null for a date that can't be read. */
@@ -31,8 +34,13 @@ function requestMeta(r: JoinRequest): string {
  * People → Invites → "Wants to join (n)" on the web (front doors S2, design §5.8): people asking to join this community,
  * for any member who may invite to answer, as the phone's knocks screen. Hidden where the community takes no requests or
  * the member can't answer them (the node's 404 / 403). `onCount` tells People how many wait, for its Invites tab.
+ *
+ * `fromNotice`: Invites was opened from the line "N people asked to join". A notice must never land on nothing, so if
+ * nobody is waiting by now (another owner or admin answered, or the person withdrew) two plain lines say so in the
+ * section's place (the phone's twin says the same). Opened any other way, an empty list is no section at all, as before;
+ * and a member who has just answered the last one themselves sees the section go, not a line about "another owner".
  */
-export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) => void; canSee?: boolean }) {
+export function WantsToJoin({ onCount, canSee = true, fromNotice = false }: { onCount?: (n: number) => void; canSee?: boolean; fromNotice?: boolean }) {
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [vouchPresets, setVouchPresets] = useState<Record<string, number | null>>({});
@@ -44,6 +52,8 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
     // A refusal is said above the list, not under its row: the list read after it no longer has that row (answered,
     // lapsed, joined, key replaced, gone), or no section at all (admins only), and the words must outlive it.
     const [refusal, setRefusal] = useState<{ id: string; callsign: string; message: string } | null>(null);
+    // This member has answered here already: an empty list is then their own doing, not "another owner or admin".
+    const [answeredHere, setAnsweredHere] = useState(false);
 
     const load = useCallback(async () => {
         if (!canSee) return;
@@ -75,6 +85,7 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
         const chosenVouch = verb === 'approve' && myVouching?.voucher ? vouchPresets[req.id] : null;
         const r = await answerJoinRequest(req.id, verb, chosenVouch ?? undefined);
         setBusy(null);
+        setAnsweredHere(true);
         if (r.ok) {
             const left = (requests ?? []).filter(k => k.id !== req.id).length;
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
@@ -94,7 +105,16 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
     };
 
     if (!canSee) return null;
-    if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
+    const nobodyWaiting = hidden || (requests !== null && requests.length === 0 && !error && !done);
+    if (!refusal && nobodyWaiting) {
+        if (!fromNotice || answeredHere) return null;
+        return (
+            <section className="p-4 sm:p-6 border-b border-nature-200 dark:border-nature-800" data-testid="wants-to-join-empty">
+                <p role="status" className="m-0 text-base font-bold leading-snug text-nature-950 dark:text-white break-words" data-testid="wants-to-join-nobody">{t(WANTS_TO_JOIN_WORDS.nobody)}</p>
+                <p className="m-0 mt-1 text-sm leading-snug text-nature-700 dark:text-nature-200 break-words" data-testid="wants-to-join-answered-already">{t(WANTS_TO_JOIN_WORDS.answeredAlready)}</p>
+            </section>
+        );
+    }
 
     return (
         <section className="p-4 sm:p-6 border-b border-nature-200 dark:border-nature-800" data-testid="wants-to-join" aria-labelledby={requests !== null ? "wants-to-join-title" : undefined}>

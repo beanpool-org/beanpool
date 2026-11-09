@@ -331,6 +331,18 @@ describe('Riverbend: nothing real, nothing leaves the machine', () => {
             expect(Math.abs(p.lng - riverbend.community.centre.lng)).toBeLessThan(0.06);
         }
     });
+
+    it('tells a phone where its map opens and what the community is called (GET /api/node/config), not the app\'s built-in default', async () => {
+        // The phone's Map moves to `serviceRadius` when it comes into focus; a node that sets none leaves it on the app's own default
+        // (a real town), which then shows on every Map picture. The node answers as the capture driver's phone asks, with no signature.
+        const res = await fetch(`http://localhost:${ready.httpPort}/api/node/config`);
+        expect(res.status).toBe(200);
+        const config = await res.json();
+        expect(config.areaName).toBe(riverbend.community.name);
+        expect(Math.abs(config.serviceRadius.lat - riverbend.community.centre.lat)).toBeLessThan(0.06);
+        expect(Math.abs(config.serviceRadius.lng - riverbend.community.centre.lng)).toBeLessThan(0.06);
+        expect(config.serviceRadius.radiusKm).toBeGreaterThan(0);
+    });
 });
 
 describe('Riverbend: the photographs (CREDITS.md)', () => {

@@ -1,7 +1,9 @@
 /**
- * The restore screens (G11-d): an account back in a browser with the sign-in it joined with. The node is a stubbed
- * fetch, every provider is a URL the page is asked to go to, and the copies are sealed here with core's own seal, as a
- * join seals them. Nothing leaves the test.
+ * The restore screens (G11-d), with nothing typed (recovery S1): an account back in a browser with the sign-in it joined
+ * with. This page's community, the sign-in, the community's find (a pick when one sign-in protects several), the collect
+ * by the find's hold, and the account handed on only if it opens to the key the find named. The node is a stubbed fetch,
+ * every provider is a URL the page is asked to go to, and the copies are sealed here with core's own seal, as a join
+ * seals them. Nothing leaves the test.
  */
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +28,7 @@ import { makeEphemeralKey, type EphemeralKey } from '../lib/web-restore';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 const ORIGIN = 'https://global.beanpool.org';
+const COMMUNITY = 'Mullumbimby';
 
 function b64url(s: string): string {
     return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -51,7 +54,7 @@ function stubNode(handlers: Record<string, Handler>) {
         if (!key) return json(404, { error: 'Not Found' });
         return handlers[key](body);
     }));
-    return { calls, recovery: () => calls.filter((c) => c.path.startsWith('/api/recovery/collect')) };
+    return { calls, recovery: () => calls.filter((c) => c.path.startsWith('/api/recovery/')) };
 }
 
 let account: BeanPoolIdentity;
@@ -63,18 +66,20 @@ async function copyOf(id: BeanPoolIdentity, provider: string, sub: string) {
     return { holderType: 'sso', shareIndex: 1, payload: c.encryptedShare, payloadIv: c.shareIv, payloadTag: c.shareTag, kdfParams: c.kdfParams };
 }
 
-/** The node's recovery routes, answering for Alice with `copy` (Alice's own, unless a test says otherwise). */
+/**
+ * The node's find and recovery routes: the find names Alice (unless a test says whom), the collect opens col-1 by the
+ * hold, and the copy is Alice's own unless a test says otherwise. find-nonce before find, fragments before collect.
+ */
 function recoveryNode(copy: () => Promise<unknown>, overrides: Record<string, Handler> = {}) {
     let nonces = 0;
     return stubNode({
-        '/api/recovery/lookup/': () => json(200, [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
-        '/api/recovery/collect/sso-nonce': () => json(200, {
+        '/api/recovery/find-nonce': () => json(200, {
             nonce: `rn-${++nonces}`, expiresInSeconds: 600,
             clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' },
         }),
-        '/api/recovery/collect/sso': () => json(200, { collected: 1, threshold: 1, enough: true }),
+        '/api/recovery/find': () => json(200, { accounts: [{ publicKey: account.publicKey, callsign: 'Alice' }] }),
         '/api/recovery/collect/fragments': async () => json(200, { collected: 1, threshold: 1, enough: true, fragments: [await copy()] }),
-        '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
+        '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1, progress: { collected: 1, enough: true } }),
         ...overrides,
     });
 }
@@ -85,28 +90,20 @@ function renderRestore(props: Partial<React.ComponentProps<typeof WebRestore>> =
     const onExisting = vi.fn();
     const navigate = vi.fn();
     render(<WebRestore onRestored={onRestored} onHeld={onHeld} onExisting={onExisting} onBack={vi.fn()} onOtherWay={vi.fn()}
-        navigate={navigate} origin={ORIGIN} authReturn={null} {...props} />);
+        community={COMMUNITY} navigate={navigate} origin={ORIGIN} authReturn={null} {...props} />);
     return { onRestored, onHeld, onExisting, navigate };
 }
 
-/** A restore that left the page for `provider` with nonce `nonce`, as the screens store it. */
+/** A restore that left the page for `provider` with nonce `nonce`, as the screens store it: no account is known yet. */
 async function leftFor(provider: JoinProvider, eph: EphemeralKey, nonce = 'rn-9'): Promise<PendingRestore> {
     const now = Date.now();
-    const r: PendingRestore = {
-        kind: 'restore', ephemeral: eph, account: { publicKey: account.publicKey, callsign: 'Alice' }, collectionId: 'col-1',
-        provider, nonce, startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS,
-    };
+    const r: PendingRestore = { kind: 'restore', ephemeral: eph, provider, nonce, startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS };
     await savePendingRestore(r);
     return r;
 }
 
 function returnFrom(provider: 'google' | 'apple' | 'facebook', nonce: string, sub: string, claimNonce = nonce): AuthReturn {
     return readAuthReturn(`/app/auth/${provider}`, `#state=${nonce}&id_token=${fakeJwt({ sub, nonce: claimNonce })}`)!;
-}
-
-async function pickAlice() {
-    fireEvent.change(await screen.findByTestId('restore-callsign'), { target: { value: 'Ali' } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
 }
 
 beforeEach(async () => {
@@ -123,21 +120,23 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('from the name to the provider', () => {
-    it("the account by name; the session and nonce asked by a throwaway key; Google left for with state === nonce; nothing saved", async () => {
+describe('from this community to the provider, with nothing typed', () => {
+    it('this community and its sign-ins first; the find nonce asked by a throwaway key; Google left for with state === nonce; nothing saved', async () => {
         const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         const { navigate } = renderRestore();
-        await pickAlice();
         await screen.findByTestId('restore-screen-providers');
         for (const p of ['google', 'apple', 'facebook']) await screen.findByTestId(`restore-provider-${p}`);
+        expect(screen.getByText('Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.')).toBeTruthy();
+        expect(screen.getByTestId('restore-community')).toHaveTextContent(COMMUNITY);
+        // No name to type, anywhere: no field, no "Your name here".
+        expect(screen.queryByRole('textbox')).toBeNull();
+        expect(screen.queryByText('Your name here', { exact: false })).toBeNull();
 
-        const [open, nonce] = node.recovery();
-        expect(open).toMatchObject({ path: '/api/recovery/collect', body: { callsign: 'Alice' } });
-        const eph = open.headers['X-Public-Key'];
+        const [nonce] = node.recovery();
+        expect(nonce).toMatchObject({ path: '/api/recovery/find-nonce', body: {} });
+        const eph = nonce.headers['X-Public-Key'];
         expect(eph).toMatch(/^[0-9a-f]{64}$/);
         expect(eph).not.toBe(account.publicKey);
-        expect(nonce).toMatchObject({ path: '/api/recovery/collect/sso-nonce', body: { collectionId: 'col-1' } });
-        expect(nonce.headers['X-Public-Key']).toBe(eph);
 
         fireEvent.click(screen.getByTestId('restore-provider-google'));
         await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
@@ -149,67 +148,52 @@ describe('from the name to the provider', () => {
         expect(url.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/app/auth/google`);
 
         const waiting = (await loadPendingRestore())!;
-        expect(waiting).toMatchObject({ kind: 'restore', provider: 'google', nonce: 'rn-1', collectionId: 'col-1', account: { publicKey: account.publicKey, callsign: 'Alice' } });
+        expect(waiting).toMatchObject({ kind: 'restore', provider: 'google', nonce: 'rn-1' });
         expect(waiting.ephemeral.publicKey).toBe(eph);
+        expect('account' in waiting || 'collectionId' in waiting).toBe(false);
+        // Nothing but the nonce was asked before the sign-in: no account is named, no session opened.
+        expect(node.recovery().map((c) => c.path)).toEqual(['/api/recovery/find-nonce']);
         expect(await loadIdentity()).toBeNull();
-    });
-
-    it('a browser that already holds another account: said, nothing opened on the node, nothing replaced', async () => {
-        await importIdentity(other);
-        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
-        const { onHeld } = renderRestore();
-        await pickAlice();
-        await waitFor(() => expect(onHeld).toHaveBeenCalledTimes(1));
-        expect(onHeld.mock.calls[0][0].publicKey).toBe(other.publicKey);
-        expect(node.recovery()).toHaveLength(0);
-        expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
     });
 
     it('the sign-in just tried at the door is offered first', async () => {
         recoveryNode(() => copyOf(account, 'apple', 'a-sub'));
         renderRestore({ provider: 'apple' });
-        await pickAlice();
         await screen.findByTestId('restore-provider-apple');
         const buttons = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid')).filter((t) => t?.startsWith('restore-provider-'));
         expect(buttons[0]).toBe('restore-provider-apple');
     });
 
-    it('no account by that name that a sign-in can bring back: said, with the other ways', async () => {
-        stubNode({ '/api/recovery/lookup/': () => json(200, []) });
+    it("a community whose server is older than the find: said, with the other ways, and no sign-in is offered", async () => {
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), { '/api/recovery/find-nonce': () => json(404, { error: 'Not Found' }) });
         renderRestore();
-        fireEvent.change(await screen.findByTestId('restore-callsign'), { target: { value: 'Zed' } });
-        await screen.findByTestId('restore-none');
+        expect(await screen.findByTestId('restore-too-old-server')).toHaveTextContent(
+            "Mullumbimby's server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.");
         screen.getByRole('button', { name: 'Use my 12 words' });
         screen.getByRole('button', { name: 'Link with my phone' });
+        expect(screen.queryByTestId('restore-provider-google')).toBeNull();
     });
 
-    it('the global node finds the whole name only: a name part-typed is never said to have no account starting so (review 4109516319)', async () => {
-        // As routes/community.ts answers on a node that shows visitors the listings and not the people: exact, case forgiven.
-        const lookups: string[] = [];
-        const node: ReturnType<typeof recoveryNode> = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
-            '/api/recovery/lookup/': () => {
-                const typed = decodeURIComponent(node.calls[node.calls.length - 1].path.split('/').pop() ?? '').toLowerCase();
-                lookups.push(typed);
-                return json(200, typed === 'alice' ? [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }] : []);
+    it("the sign-ins couldn't be got ready, and Try again gets them: the can't-reach notice goes with the trouble (review 4109590845)", async () => {
+        let down = true;
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/find-nonce': () => {
+                if (down) throw new TypeError('Failed to fetch');
+                return json(200, { nonce: 'rn-2', expiresInSeconds: 600, clientIds: { google: 'web-client' } });
             },
         });
         renderRestore();
-        const input = await screen.findByTestId('restore-callsign');
-        fireEvent.change(input, { target: { value: 'Ali' } });
-        const none = await screen.findByTestId('restore-none');
-        expect(none).toHaveTextContent('No account called Ali here can come back with a sign-in.');
-        expect(none).toHaveTextContent("Check you've typed your whole name.");
-        expect(none).not.toHaveTextContent('starting with');
-        fireEvent.change(input, { target: { value: 'alice' } });
-        await screen.findByRole('button', { name: 'Alice' });
-        expect(screen.queryByTestId('restore-none')).toBeNull();
-        expect(lookups).toEqual(['ali', 'alice']);
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Can't reach the community right now.");
+        down = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.queryByTestId('join-notice')).toBeNull();
     });
 });
 
-describe('each provider\'s return: the copy released to the throwaway key, opened, and the account handed on only if it is the name\'s', () => {
+describe("each provider's return: found, collected by the hold, opened, and handed on only if it is the key the find named", () => {
     for (const provider of ['google', 'apple', 'facebook'] as const) {
-        it(`${provider}: back to /app/auth/${provider}, Alice's own key and 12 words, the pending restore gone`, async () => {
+        it(`${provider}: back to /app/auth/${provider}, the one account found and brought back with its own key and 12 words, the pending restore gone`, async () => {
             const eph = makeEphemeralKey();
             await leftFor(provider, eph);
             const node = recoveryNode(() => copyOf(account, provider, `${provider}-sub-1`));
@@ -225,11 +209,13 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
             expect(restored.callsign).toBe('Alice');
 
             const calls = node.recovery();
-            expect(calls.map((c) => c.path)).toEqual(['/api/recovery/collect/sso', '/api/recovery/collect/fragments']);
+            expect(calls.map((c) => c.path)).toEqual(['/api/recovery/find', '/api/recovery/collect', '/api/recovery/collect/fragments']);
             for (const c of calls) expect(c.headers['X-Public-Key']).toBe(eph.publicKey);
             // The token and its nonce, and nothing else of the sign-in: never its sub.
-            expect(calls[0].body).toEqual({ collectionId: 'col-1', provider, idToken: expect.any(String), nonce: 'rn-9' });
+            expect(calls[0].body).toEqual({ provider, idToken: expect.any(String), nonce: 'rn-9' });
             expect(calls[0].body.idToken.split('.')).toHaveLength(3);
+            // The account picked by its key alone.
+            expect(calls[1].body).toEqual({ candidatePublicKey: account.publicKey });
             expect(await loadPendingRestore()).toBeNull();
             // Saving is WelcomePage's, through the guarded write: nothing here wrote the identity.
             expect(await loadIdentity()).toBeNull();
@@ -244,13 +230,78 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         render(
             <StrictMode>
                 <WebRestore onRestored={onRestored} onHeld={vi.fn()} onExisting={vi.fn()} onBack={vi.fn()} onOtherWay={vi.fn()}
-                    navigate={vi.fn()} origin={ORIGIN} authReturn={returnFrom('google', 'rn-9', 'google-sub-1')} />
+                    community={COMMUNITY} navigate={vi.fn()} origin={ORIGIN} authReturn={returnFrom('google', 'rn-9', 'google-sub-1')} />
             </StrictMode>,
         );
         await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(1));
         expect(onRestored.mock.calls[0][0].publicKey).toBe(account.publicKey);
-        expect(node.recovery().filter((c) => c.path === '/api/recovery/collect/sso')).toHaveLength(1);
+        expect(node.recovery().filter((c) => c.path === '/api/recovery/find')).toHaveLength(1);
+        expect(node.recovery().filter((c) => c.path === '/api/recovery/collect')).toHaveLength(1);
         expect(screen.queryByText("That sign-in wasn't started here.", { exact: false })).toBeNull();
+    });
+
+    it('one sign-in, two accounts: "Which account is yours?", nothing collected until the pick, then only the one picked', async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/find': () => json(200, { accounts: [{ publicKey: account.publicKey, callsign: 'Alice' }, { publicKey: other.publicKey, callsign: 'Mallory' }] }),
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        await screen.findByText('Which account is yours?');
+        const picks = await screen.findAllByTestId('restore-candidate');
+        expect(picks.map((b) => b.textContent)).toEqual(['AAlice', 'MMallory']);
+        expect(node.recovery().map((c) => c.path)).toEqual(['/api/recovery/find']);
+        fireEvent.click(screen.getByRole('button', { name: /Alice/ }));
+        await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(1));
+        expect(onRestored.mock.calls[0][0].publicKey).toBe(account.publicKey);
+        const collects = node.recovery().filter((c) => c.path === '/api/recovery/collect');
+        expect(collects).toHaveLength(1);
+        expect(collects[0].body).toEqual({ candidatePublicKey: account.publicKey });
+        expect(collects[0].headers['X-Public-Key']).toBe(eph.publicKey);
+    });
+
+    it('no account here uses this sign-in: said in the words of design §5, with the other ways; Start again is a new throwaway key', async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), { '/api/recovery/find': () => json(200, { accounts: [] }) });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('restore-none')).toHaveTextContent(
+            'No account at Mullumbimby uses this Google account. Try another community, or your 12 words.');
+        screen.getByRole('button', { name: 'Use my 12 words' });
+        screen.getByRole('button', { name: 'Link with my phone' });
+        expect(node.recovery().some((c) => c.path.startsWith('/api/recovery/collect'))).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+        await screen.findByTestId('restore-provider-google');
+        const nonce = node.recovery().filter((c) => c.path === '/api/recovery/find-nonce').pop()!;
+        expect(nonce.headers['X-Public-Key']).not.toBe(eph.publicKey);
+        expect(onRestored).not.toHaveBeenCalled();
+    });
+
+    it("the find was refused (busy finding another account): the node's sentence, back to the sign-ins with a fresh nonce", async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/find': () => json(503, { error: 'Busy finding another account. Wait a minute, then sign in again.', code: 'find_busy' }),
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('Busy finding another account. Wait a minute, then sign in again.');
+        await screen.findByTestId('restore-provider-google');
+        // Still said once the fresh nonce is in: why it came back here is not wiped by getting the sign-ins ready.
+        expect(screen.getByTestId('join-notice')).toHaveTextContent('Busy finding another account.');
+        const nonce = node.recovery().filter((c) => c.path === '/api/recovery/find-nonce').pop()!;
+        expect(nonce.headers['X-Public-Key']).toBe(eph.publicKey);
+        expect(onRestored).not.toHaveBeenCalled();
+    });
+
+    it("the collect was refused (the hold was spent or ran out): the node's sentence, back to the sign-ins", async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect': () => json(400, { error: "Sign in with your account's sign-in first." }),
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Sign in with your account's sign-in first.");
+        await screen.findByTestId('restore-provider-google');
+        expect(onRestored).not.toHaveBeenCalled();
     });
 
     it("this browser can't write the account: said, nothing saved, and Try again hands the same account on", async () => {
@@ -267,7 +318,7 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         expect(onRestored.mock.calls[1][0].publicKey).toBe(account.publicKey);
     });
 
-    it("a browser that can never save it is not a dead end: the other ways, and Start again back to the name (review 4109516322)", async () => {
+    it("a browser that can never save it is not a dead end: the other ways, and Start again back to the sign-ins (review 4109516322)", async () => {
         await leftFor('google', makeEphemeralKey());
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -281,37 +332,10 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         fireEvent.click(screen.getByRole('button', { name: 'Link with my phone' }));
         expect(onOtherWay).toHaveBeenCalledWith('phone');
         fireEvent.click(screen.getByRole('button', { name: '← Start again' }));
-        await screen.findByTestId('restore-screen-name');
+        await screen.findByTestId('restore-screen-providers');
         expect(onRestored).toHaveBeenCalledTimes(1);
         expect(await loadIdentity()).toBeNull();
         expect(await loadPendingRestore()).toBeNull();
-    });
-
-    it('the node let the session go before the sign-ins: back to the name, said, never an empty sign-in screen', async () => {
-        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
-            '/api/recovery/collect/sso-nonce': () => json(404, { error: 'No recovery session for this device.' }),
-        });
-        renderRestore();
-        await pickAlice();
-        expect(await screen.findByTestId('join-notice')).toHaveTextContent('That restore timed out on the community.');
-        await screen.findByTestId('restore-screen-name');
-    });
-
-    it("the sign-ins couldn't be got ready, and Try again gets them: the can't-reach notice goes with the trouble (review 4109590845)", async () => {
-        let down = true;
-        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
-            '/api/recovery/collect/sso-nonce': () => {
-                if (down) throw new TypeError('Failed to fetch');
-                return json(200, { nonce: 'rn-2', expiresInSeconds: 600, clientIds: { google: 'web-client' } });
-            },
-        });
-        renderRestore();
-        await pickAlice();
-        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Can't reach the community right now.");
-        down = false;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await screen.findByTestId('restore-provider-google');
-        expect(screen.queryByTestId('join-notice')).toBeNull();
     });
 
     // FABLE-sec-sso finding 2: a community with the seal sends the copy sealed to the throwaway key when asked.
@@ -352,18 +376,18 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
     });
 
     // FABLE-sec-sso finding 4: a session its owner stopped hands nothing over, even a copy it already released.
-    it('the session was stopped between the release and the fetch: back to the name, said, nothing restored', async () => {
+    it('the session was stopped between the collect and the fetch: back to the sign-ins, said, nothing restored', async () => {
         await leftFor('google', makeEphemeralKey());
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
             '/api/recovery/collect/fragments': () => json(400, { error: 'That recovery session was cancelled.' }),
         });
         const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
         expect(await screen.findByTestId('join-notice')).toHaveTextContent('That restore was stopped on the community, or has ended. Start again.');
-        await screen.findByTestId('restore-screen-name');
+        await screen.findByTestId('restore-screen-providers');
         expect(onRestored).not.toHaveBeenCalled();
     });
 
-    it("a copy that opens to another account than the name's: nothing handed on, nothing saved, and said", async () => {
+    it("a copy that opens to another key than the one the find named: nothing handed on, nothing saved, and said", async () => {
         await leftFor('google', makeEphemeralKey());
         recoveryNode(() => copyOf(other, 'google', 'g-sub-1'));
         const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
@@ -372,50 +396,38 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         expect(await loadIdentity()).toBeNull();
     });
 
-    it('a browser that now holds another account: refused, that account kept, never handed on', async () => {
+    it('a browser that now holds another account: refused before anything is collected, that account kept, never handed on', async () => {
         await leftFor('google', makeEphemeralKey());
         await importIdentity(other);
-        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         const { onRestored, onHeld } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
         await waitFor(() => expect(onHeld).toHaveBeenCalledTimes(1));
         expect(onHeld.mock.calls[0][0].publicKey).toBe(other.publicKey);
         expect(onRestored).not.toHaveBeenCalled();
+        expect(node.recovery().some((c) => c.path.startsWith('/api/recovery/collect'))).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
     });
 
-    it('a browser that already holds this same account: says it is already here, and opens it', async () => {
+    it('a browser that already holds the account found: says it is already here, collects nothing, and opens it', async () => {
         await leftFor('google', makeEphemeralKey());
         await importIdentity(account);
-        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         const { onRestored, onExisting } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
         expect(await screen.findByTestId('restore-already-here')).toHaveTextContent('Alice is already in this browser');
         expect(onRestored).not.toHaveBeenCalled();
+        expect(node.recovery().some((c) => c.path.startsWith('/api/recovery/collect'))).toBe(false);
         fireEvent.click(screen.getByRole('button', { name: 'Open Alice' }));
         expect(onExisting.mock.calls[0][0].publicKey).toBe(account.publicKey);
     });
 
-    it("a return this restore didn't start: nothing sent, its pending restore left as it was", async () => {
+    it("a return this restore didn't start: nothing found or sent, its pending restore left as it was", async () => {
         await leftFor('google', makeEphemeralKey());
         const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'someone-elses', 'g-sub-1') });
         expect(await screen.findByTestId('join-notice')).toHaveTextContent("That sign-in wasn't started here.");
-        expect(node.recovery()).toHaveLength(0);
+        expect(node.recovery().some((c) => c.path === '/api/recovery/find' || c.path.startsWith('/api/recovery/collect'))).toBe(false);
         expect(onRestored).not.toHaveBeenCalled();
         expect((await loadPendingRestore())?.nonce).toBe('rn-9');
-    });
-
-    it("a sign-in that isn't the account's: said plainly, back to the sign-ins with a fresh nonce", async () => {
-        await leftFor('google', makeEphemeralKey());
-        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
-            '/api/recovery/collect/sso': () => json(400, { error: 'That sign-in account is not the keeper for this recovery.' }),
-        });
-        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-2') });
-        expect(await screen.findByTestId('join-notice')).toHaveTextContent("That Google account isn't a way back into Alice.");
-        await screen.findByTestId('restore-provider-google');
-        // Still said once the fresh nonce is in: why it came back here is not wiped by getting the sign-ins ready.
-        expect(screen.getByTestId('join-notice')).toHaveTextContent("That Google account isn't a way back into Alice.");
-        expect(node.recovery().some((c) => c.path === '/api/recovery/collect/sso-nonce')).toBe(true);
-        expect(onRestored).not.toHaveBeenCalled();
     });
 
     it("the node can't be asked to finish: the account stays on this page, and Try again hands it on", async () => {

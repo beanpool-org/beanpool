@@ -22,6 +22,8 @@ import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
+import { InviteCopiedNote, InvitePictureQueue } from '../components/InvitePictures';
+import { invitePictureFor, shareInvite } from '../lib/invite-picture';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
@@ -84,6 +86,9 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     const [newCode, setNewCode] = useState<string | null>(null);
     const [intendedFor, setIntendedFor] = useState('');
     const [copied, setCopied] = useState(false);
+    // The invite whose Share could not send the message (no share in this browser, or it was refused): the message was copied
+    // instead, and the note under that invite says so, with the QR picture to save. Whether the copy worked rides with it.
+    const [shareNote, setShareNote] = useState<{ code: string; copied: boolean } | null>(null);
     const [showQR, setShowQR] = useState(false);
 
     // Tree
@@ -346,21 +351,27 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         }
     }
 
-    async function handleCopy(code: string) {
+    /** Puts text on the clipboard; false when neither way worked. */
+    async function copyText(text: string): Promise<boolean> {
         try {
-            await navigator.clipboard.writeText(code);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(text);
+            return true;
         } catch {
             const el = document.createElement('textarea');
-            el.value = code;
+            el.value = text;
             document.body.appendChild(el);
             el.select();
-            document.execCommand('copy');
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch { /* not copied */ }
             document.body.removeChild(el);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            return ok;
         }
+    }
+
+    async function handleCopy(code: string) {
+        await copyText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     }
 
     async function handleCopyProxy(code: string) {
@@ -369,7 +380,12 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         await handleCopy(`${window.location.origin}/?invite=${code}`);
     }
 
-    async function handleShare(code: string) {
+    /**
+     * Share sends the message with the QR picture (lib/invite-picture.ts), made when the code appeared: this handler must start
+     * the share before it awaits anything, or Safari refuses it. Where the browser has no share, or refuses it, the message is
+     * copied and the invite's note says so, with the picture to save.
+     */
+    function handleShare(code: string) {
         const inviteUrl = `${window.location.origin}/?invite=${code}`;
         // Plain words for a friend (no "node", no "URL"; front doors S10, core inviteShareText), naming the community as
         // its card does (read when the page opened: a share must start inside the tap, or Safari refuses it), else by
@@ -383,11 +399,14 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             text: messageText,
         };
 
-        if (navigator.share) {
-            try { await navigator.share(shareData); } catch { /* cancelled */ }
-        } else {
-            handleCopy(messageText);
-        }
+        void shareInvite(navigator, shareData, invitePictureFor(code)).then(async (result) => {
+            if (result === 'copy') {
+                const done = await copyText(messageText);
+                if (mounted.current) setShareNote({ code, copied: done });
+            } else if (mounted.current) {
+                setShareNote(null);
+            }
+        });
     }
 
     async function handleShareLink() {
@@ -479,6 +498,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 </div>
             )}
             {isPreview && bringSomeoneHere(true)}
+            {/* The QR pictures Share sends with an invite, made now (this card's code first) so a tap only has to share. */}
+            {!isPreview && <InvitePictureQueue codes={[showQR ? newCode : null, ...unusedInvites.map(inv => inv.code)]} />}
             {/* Section tabs */}
             <div className="flex gap-2 mb-6">
                 <button 
@@ -517,7 +538,13 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 {adminsRefused !== null ? refusalWords(adminsRefused) : adminsOnlyText(takesKnocks(nodeInfo))}
                             </p>
                             {takesKnocks(nodeInfo) && linkActions()}
-                            {offersInviteAsk(nodeInfo?.features, !adminsOnly) && <AskAnAdmin onCopy={handleCopyProxy} onShare={handleShare} />}
+                            {offersInviteAsk(nodeInfo?.features, !adminsOnly) && (
+                                <AskAnAdmin
+                                    onCopy={handleCopyProxy}
+                                    onShare={handleShare}
+                                    noteFor={(code) => (shareNote?.code === code ? <InviteCopiedNote code={code} copied={shareNote.copied} /> : null)}
+                                />
+                            )}
                         </div>
                     ) : (
                         <>
@@ -647,6 +674,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                     </button>
                                 )}
                             </div>
+                            {!isPreview && shareNote?.code === newCode && <InviteCopiedNote code={newCode} copied={shareNote.copied} />}
                         </div>
                     )}
                         </>
@@ -706,6 +734,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             )}
                                         </div>
                                     </div>
+                                    {!isPreview && shareNote?.code === inv.code && !(showQR && newCode === inv.code) && <InviteCopiedNote code={inv.code} copied={shareNote.copied} />}
                                     {isPreview && (
                                         <div className="mt-3 flex flex-col gap-2">
                                             <LocalCommunityAction feature="invites" label={t('📋 Copy')} aria-label={t('Copy invite link')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />

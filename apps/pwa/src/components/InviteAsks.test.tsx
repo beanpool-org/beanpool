@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AskAnAdmin, InviteAsksToAnswer } from './InviteAsks';
 
+// An answered invite draws its QR out of sight, to make the picture Share sends with it; qrcode.react brings its own copy of
+// React, which this test's renderer cannot use. The picture itself is lib/invite-picture.test.ts.
+vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
+
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 type Route = (url: string, init?: RequestInit) => Response | Promise<Response>;
 function stub(route: Route) {

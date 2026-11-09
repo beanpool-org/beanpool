@@ -2417,7 +2417,7 @@
   "This is a free listing (0 B). No credits transferred.": "این یک آگهی رایگان است (0 B). اعتباری منتقل نمی‌شود.",
   "This is how neighbours will know you. You can change it any time.": "همسایه‌ها شما را با این نام خواهند شناخت. هر زمان خواستید می‌توانید آن را تغییر دهید.",
   "This is the **only** way to recover your identity if you lose this device.": "اگر این دستگاه را گم کنید، این **تنها** راه بازیابی هویتتان است.",
-  "This is the global community, not {name}. Join here first, then find {name} under Find a community.": "این جامعه جهانی است، نه {name}. ابتدا اینجا بپیوندید، سپس {name} را در «یافتن یک جامعه» پیدا کنید.",
+  "This is the global community, not {name}. Join here first, then find {name} under Find your community.": "این جامعه جهانی است، نه {name}. ابتدا اینجا بپیوندید، سپس {name} را در «جامعه خود را پیدا کنید» پیدا کنید.",
   "This keeper stops being a keeper in 3 days, unless another keeper objects first.": "این مدیر تا ۳ روز دیگر از مدیریت کنار می‌رود، مگر اینکه مدیر دیگری ابتدا اعتراض کند.",
   "This listing belongs to another community. Buying it takes a cross-community purchase so both communities record it — not this button, yet.": "این آگهی متعلق به جامعه دیگری است. خرید آن نیازمند خرید بین‌جامعه‌ای است تا هر دو جامعه ثبت کنند — هنوز با این دکمه امکان‌پذیر نیست.",
   "This listing belongs to {name}, which has closed permanently.": "این آگهی متعلق به {name} است که برای همیشه بسته شده است.",

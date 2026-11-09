@@ -1117,7 +1117,7 @@ describe('the Join card says which community it joins (N1)', () => {
             const card = await screen.findByTestId('lobby-join-card');
             const line = within(card).getByTestId('lobby-asked-elsewhere');
             await waitFor(() => expect(line).toHaveTextContent(
-                'This is the global community, not Byron Shire BeanPool. Join here first, then find Byron Shire BeanPool under Find a community.'));
+                'This is the global community, not Byron Shire BeanPool. Join here first, then find Byron Shire BeanPool under Find your community.'));
             // At the top: before the heading. Nothing about where any button goes changes.
             expect(card.firstElementChild).toBe(line);
             expect(heading(card)).toHaveTextContent('Join the global community');
@@ -1131,7 +1131,7 @@ describe('the Join card says which community it joins (N1)', () => {
             await openLobby();
             const line = within(await screen.findByTestId('lobby-join-card')).getByTestId('lobby-asked-elsewhere');
             await waitFor(() => expect(line).toHaveTextContent(
-                'This is the global community, not ghost.example.org. Join here first, then find ghost.example.org under Find a community.'));
+                'This is the global community, not ghost.example.org. Join here first, then find ghost.example.org under Find your community.'));
         });
 
         it('with no ?ask=: no line', async () => {

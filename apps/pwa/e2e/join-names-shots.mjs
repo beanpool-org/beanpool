@@ -37,7 +37,7 @@ const SAYS = {
         ours: 'Join the global community',
         named: `Join ${NAME}`,
         invite: `Join ${NAME} with an invite`,
-        ask: 'This is the global community, not Byron Shire BeanPool. Join here first, then find Byron Shire BeanPool under Find a community.',
+        ask: 'This is the global community, not Byron Shire BeanPool. Join here first, then find Byron Shire BeanPool under Find your community.',
     },
     es: {
         ours: 'Únete a la comunidad global',

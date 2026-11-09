@@ -26,7 +26,7 @@ export function inviteHeading(name: string): string {
 
 /** At the top of global's Join card when a community's card sent the visitor here: this is not that community. */
 export function askedElsewhereLine(name: string): string {
-    return t('This is the global community, not {name}. Join here first, then find {name} under Find a community.', { name });
+    return t('This is the global community, not {name}. Join here first, then find {name} under Find your community.', { name });
 }
 
 /** What a join screen calls this community when it has no name of its own to give: the address the page is served from. */

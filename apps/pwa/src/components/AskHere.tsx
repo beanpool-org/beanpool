@@ -49,7 +49,7 @@ export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
             void signingKey().then(({ identity, asked }) => {
                 // The name it asked with, unless one is typed already.
                 if (asked) setCallsign((typed) => typed || clip(identity.callsign));
-            });
+            }).catch(() => { /* Send awaits the same key, and says it when there is none */ });
         }
         nameRef.current?.focus();
         // signingKey reads a ref only.

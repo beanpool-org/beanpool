@@ -2084,6 +2084,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let sent = 0;
     // A listing's push by area visits only the sockets it may reach (ws-area-index.ts), each still measured below.
     const sockets: Iterable<any> = reach && listingPushIndex ? wsClients.reachable(reach.parties, reach.place, reach.radiusKm) : wsClients;
+    const bellEvent = BELL_SOCKET_EVENTS.has(event?.type);
     for (const ws of sockets) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
@@ -2099,6 +2100,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             }
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
+        if (bellEvent && !ws._bell) continue;
         if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
         if (reach && !reach.reaches(ws._memberPubkey)) continue;
         let out = msg;
@@ -7303,6 +7305,13 @@ export function markConversationRead(pubkey: string, conversationId: string): vo
     // Opening a chat takes its notices off the bell, on every app the member has open.
     markBellNoticesSeenWhere(pubkey, 'conversationId', [conversationId]);
 }
+
+/**
+ * The bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS): sent only to a socket whose app said it reads them
+ * (`bell=1` on its connect, https-server.ts `_bell`). An app from before them takes any event it doesn't know for a
+ * doorbell, and an old phone runs a full sync for each: a push to a member would then cost every old phone of theirs a sync.
+ */
+const BELL_SOCKET_EVENTS: ReadonlySet<string> = new Set(['push_notice', 'push_notices_seen']);
 
 /** The bell's marks told to the member's own sockets, so every open app's count follows. */
 function toldBellSeen(pubkey: string, ids: string[]): string[] {

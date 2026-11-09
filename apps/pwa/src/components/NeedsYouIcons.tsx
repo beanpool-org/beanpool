@@ -483,7 +483,7 @@ export function NeedsYouIcons({
             {unseen > 0 ? (
                 <span
                     data-testid="bell-count"
-                    className={`absolute ${small ? 'top-1.5 -right-0.5' : 'top-1.5 right-0.5'} min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center leading-none pointer-events-none bg-bp-danger-fill text-bp-danger-on`}
+                    className={`absolute ${small ? 'top-1 right-0' : 'top-1.5 right-0.5'} min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center leading-none pointer-events-none bg-bp-danger-fill text-bp-danger-on`}
                 >
                     {bellBadge(unseen)}
                 </span>
@@ -517,7 +517,8 @@ export function NeedsYouIcons({
     }
 
     const room = slotWidth ?? Infinity;
-    const drawn = room >= HEADER_ALERT_SLOT_PX ? bell(false) : room >= SMALL_BELL_PX ? bell(true) : null;
+    // Half a pixel either way: the row lays out in fractions (a 43.8 px slot has room for the 44 px bell's drawing).
+    const drawn = room >= HEADER_ALERT_SLOT_PX - 0.5 ? bell(false) : room >= SMALL_BELL_PX - 0.5 ? bell(true) : null;
 
     return (
         <>
@@ -577,7 +578,7 @@ function NeedsSheet({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="needs-sheet-title"
-                className="w-full max-w-sm bg-surface-card rounded-2xl shadow-xl overflow-hidden border border-border-secondary p-3 animate-fade-in"
+                className="w-full max-w-sm bg-bg-card rounded-2xl shadow-xl overflow-hidden border border-border-secondary p-3 animate-fade-in"
                 onClick={e => e.stopPropagation()}
                 data-testid="needs-sheet"
             >
@@ -615,12 +616,12 @@ function NeedsSheet({
                                     aria-label={e.label}
                                     data-testid={`header-needs-${e.kind}`}
                                     data-kind={e.kind}
-                                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                                 >
                                     <span className={e.accent ? 'text-bp-ink-warning' : 'text-text-secondary'}>
                                         <NeedSvg kind={e.kind} />
                                     </span>
-                                    <span className={`flex-1 min-w-0 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
+                                    <span className={`flex-1 min-w-0 text-sm text-text-primary ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
                                         {e.label}
                                     </span>
                                     {e.count > 1 && (
@@ -648,11 +649,11 @@ function NeedsSheet({
                             }}
                             data-testid="bell-notice"
                             data-notice-id={n.id}
-                            className="w-full flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            className="w-full flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                         >
                             <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-bp-danger-fill" aria-hidden="true" />
                             <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-bold text-text-heading line-clamp-2 break-words">{n.title || n.body}</span>
+                                <span className="block text-sm font-bold text-text-primary line-clamp-2 break-words">{n.title || n.body}</span>
                                 {n.title && n.body && <span className="block text-sm text-text-primary line-clamp-3 break-words">{n.body}</span>}
                                 <span className="block text-xs text-text-muted">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
                             </span>

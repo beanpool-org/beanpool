@@ -421,6 +421,9 @@ export function connectToAnchor(url?: string): void {
             if (generation !== connectGeneration) return;
             // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
             params.push('nr=1');
+            // And the bell's events (@beanpool/core BELL_EVENTS): a build from before them took any unknown event for a
+            // doorbell, so the node sends them only to a socket that says it reads them.
+            params.push('bell=1');
             const wsUrl = params.length ? `${baseWsUrl}?${params.join('&')}` : baseWsUrl;
             establishConnection(wsUrl, baseWsUrl);
         })

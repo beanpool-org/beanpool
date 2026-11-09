@@ -173,6 +173,9 @@ class WebSocketSyncClient {
             }
             // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
             params.push('nr=1');
+            // And the bell's events (@beanpool/core BELL_EVENTS): a build from before them rang a full sync for any unknown
+            // event, so the node sends them only to a socket that says it reads them.
+            params.push('bell=1');
             if (params.length) {
                 wsUrl += `?${params.join('&')}`;
             }

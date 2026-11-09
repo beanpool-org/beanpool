@@ -7,7 +7,8 @@
  *   1. kept for all: a push to a member with no phone keeps them a notice as it does a member with one (the phone still the
  *      only one Expo is asked to reach); a member with the category off, and a key that is no member here, get none
  *   2. the socket: the member's own sockets hear `{ type: 'push_notice', id, kind }` the moment it is kept, with no words;
- *      nobody else's socket hears it
+ *      nobody else's socket hears it, nor a socket of an app from before the bell (no `bell=1`), which would take it for a
+ *      doorbell
  *   3. the list (GET /api/notices/push): the signer's own only, newest first, with their words, where a tap lands, and
  *      seenAt; unseen=1 the unseen only; unsigned 401, a key that is no member 403; private, no-store
  *   4. the mark (POST /api/notices/push/seen): only the signer's own ids are marked (another member's stay unseen), once;
@@ -74,11 +75,12 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
 }
 
 type Sock = { ws: WebSocket; events: any[] };
-function socket(id: Id): Promise<Sock> {
+/** A member's socket; `bell` false: an app from before the bell, which never said it reads its events. */
+function socket(id: Id, bell = true): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&nr=1${bell ? '&bell=1' : ''}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s: Sock = { ws, events: [] };
@@ -143,6 +145,7 @@ async function main() {
 
     const webSock = await socket(web);
     const annSock = await socket(ann);
+    const webOld = await socket(web, false);
     await sleep(100);
 
     try {
@@ -170,6 +173,8 @@ async function main() {
         assert(heard.length === 1 && Object.keys(heard[0]).sort().join(',') === 'id,kind,type', 'and nothing else: no words, no chat, no sender');
         const annHeard = annSock.events.filter(e => e.type === 'push_notice');
         assert(annHeard.length === 1 && annHeard[0].id === rowsOf(ann)[0]?.id, "another member's socket hears only their own notice");
+        // An app from before the bell takes any event it doesn't know for a doorbell (an old phone: a full sync each).
+        assert(!webOld.events.some(e => e.type === 'push_notice'), "the same member's socket from an app before the bell (no bell=1) hears nothing of it");
 
         // ── 3. The list ────────────────────────────────────────────────────────────────────────────────────
         console.log('\n--- 3. GET /api/notices/push: the signer\'s own ---');
@@ -206,6 +211,7 @@ async function main() {
         assert((await call('POST', web, '/api/notices/push/seen', { ids: [first?.id] })).body?.marked === 0, 'marked once: again marks nothing');
         await sleep(50);
         const seenHeard = webSock.events.filter(e => e.type === 'push_notices_seen');
+        assert(!webOld.events.some(e => e.type === 'push_notices_seen'), 'nor of the mark');
         assert(seenHeard.length === 1 && JSON.stringify(seenHeard[0].ids) === JSON.stringify([first?.id]),
             `the member's sockets hear which were marked, so every open app's count follows (${show(seenHeard)})`);
         for (const [body, why] of [[{}, 'no ids'], [{ ids: [] }, 'an empty list'], [{ ids: 'x' }, 'not a list'], [{ ids: Array(101).fill('a') }, 'more than 100'], [{ ids: [7] }, 'not a string']] as const) {
@@ -279,6 +285,7 @@ async function main() {
     } finally {
         (globalThis as any).fetch = realFetch;
         webSock.ws.close();
+        webOld.ws.close();
         annSock.ws.close();
     }
 }

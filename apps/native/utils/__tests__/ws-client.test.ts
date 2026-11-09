@@ -120,7 +120,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
         const socket = await startAndConnect();
         expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
-        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1');
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1&bell=1');
     });
 
     it('opens no socket at all, signed or not, to an address that names one host and reaches another (#1224 review 4113495290)', async () => {

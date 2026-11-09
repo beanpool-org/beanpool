@@ -66,7 +66,7 @@ import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
 import {
-    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere,
+    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
     keptNoticeIdsOf, type PushNoticeRow,
 } from './engine/push-notices.js';
 import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
@@ -7329,15 +7329,27 @@ function toldBellSeen(pubkey: string, ids: string[]): string[] {
 }
 
 /**
- * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen; a tap on its phone
- * notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
+ * A member takes these of their own notices off the bell (a tap on the row or on its ✕: POST /api/notices/push/seen; a tap on
+ * its phone notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
  * keptNoticeDetails), so the web app never shows that alert after.
  */
 export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
-    const marked = markPushNoticesSeen(pubkey, ids);
+    return afterBellMark(pubkey, markPushNoticesSeen(pubkey, ids));
+}
+
+/** Rows just marked: each kept alert's copy is marked with its row, and the member's sockets hear which. */
+function afterBellMark(pubkey: string, marked: string[]): string[] {
     const kept = keptNoticeIdsOf(pubkey, marked);
     if (kept.length > 0) markKeptNoticesSeen(pubkey, kept);
     return toldBellSeen(pubkey, marked);
+}
+
+/**
+ * "Clear all" (POST /api/notices/push/seen { all: true }): every notice of the member's own off the bell at once, and each
+ * kept alert's copy with it, as a tap on a row does. Their sockets hear which, so every open app's count follows.
+ */
+export function markAllBellNoticesSeen(pubkey: string): string[] {
+    return afterBellMark(pubkey, markAllPushNoticesSeen(pubkey));
 }
 
 /** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */

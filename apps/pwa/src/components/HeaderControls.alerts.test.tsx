@@ -406,6 +406,86 @@ describe('The bell: what happened, until it is opened', () => {
         expect(screen.queryByTestId('bell-count')).toBeNull();
     });
 
+    it("a row's ✕ clears it without opening it: off the list and the count, marked on the node, the sheet stays open", async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { title: '🤝 Request', body: 'Ben asked for your jam' })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        const clearAll = vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(2);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        const sheet = openSheet();
+        const x = within(sheet).getAllByRole('button', { name: 'Clear this notice' });
+        expect(x).toHaveLength(2);
+        // The touch floor: 44 px square, and a button of its own (a button inside a button is not valid).
+        expect(x[0].className).toContain('min-w-[44px]');
+        expect(x[0].className).toContain('min-h-[44px]');
+        expect(x[0].closest('[data-testid="bell-notice"]')).toBeNull();
+        fireEvent.click(x[1]);
+        expect(mark).toHaveBeenCalledTimes(1);
+        expect(mark).toHaveBeenCalledWith(['n2']);
+        expect(clearAll).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(within(screen.getByRole('dialog')).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n1']);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear this notice' }));
+        expect(mark).toHaveBeenLastCalledWith(['n1']);
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(within(screen.getByRole('dialog')).getByTestId('needs-sheet-empty')).toBeInTheDocument();
+    });
+
+    it('"Clear all" clears every notice in one request, and leaves "Needs you" alone', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([INVITE, DEAL]) as any });
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2'), notice('n3')]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        const clearAll = vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(3);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('3');
+        const sheet = openSheet();
+        expect(within(sheet).getByTestId('needs-sheet-needs')).toBeInTheDocument();
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
+        expect(clearAll).toHaveBeenCalledTimes(1);
+        expect(mark).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        // The three notices are gone, the count with them; the two open things are still there, and the bell is a dot again.
+        const after = screen.getByRole('dialog');
+        expect(within(after).queryAllByTestId('bell-notice')).toHaveLength(0);
+        expect(within(after).queryByTestId('bell-clear-all')).toBeNull();
+        expect(within(after).getByTestId('header-needs-invite')).toBeInTheDocument();
+        expect(within(after).getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+    });
+
+    it('no notices, no "Clear all": the sheet offers it only with something to clear', async () => {
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([]);
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([INVITE]) as any });
+        render(<HeaderRow />);
+        await settle();
+        const sheet = openSheet();
+        expect(within(sheet).queryByRole('button', { name: 'Clear all' })).toBeNull();
+        expect(within(sheet).getByTestId('header-needs-invite')).toBeInTheDocument();
+    });
+
+    it('a clear the node did not take: the list is read again and the rows come back', async () => {
+        const getBell = vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        vi.spyOn(api, 'clearAllBellNotices').mockRejectedValue(new Error('offline'));
+        vi.spyOn(api, 'markBellNoticesSeen').mockRejectedValue(new Error('offline'));
+        render(<HeaderRow />);
+        await settle();
+        fireEvent.click(within(openSheet()).getByRole('button', { name: 'Clear all' }));
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        const reads = getBell.mock.calls.length;
+        await settle();
+        expect(getBell.mock.calls.length).toBeGreaterThan(reads);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+        fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Clear this notice' })[0]);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+    });
+
     it('opening the chat marks its rows: the node tells the sockets which, and the count follows on every open app', async () => {
         const fire = catchBellEvents();
         vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { data: { screen: 'chat', conversationId: 'dm-ben' } })]);

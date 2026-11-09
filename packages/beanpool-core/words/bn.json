@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "আপনার বাজেট থেকে: কোনো সীমা নেই",
   "No limit": "কোনো সীমা নেই",
   "Your budget: No limit": "আপনার বাজেট: কোনো সীমা নেই",
-  "No limit · {vouched} vouched · {below} below zero": "কোনো সীমা নেই · {vouched} নিশ্চয়তাপ্রাপ্ত · {below} শূন্যের নিচে"
+  "No limit · {vouched} vouched · {below} below zero": "কোনো সীমা নেই · {vouched} নিশ্চয়তাপ্রাপ্ত · {below} শূন্যের নিচে",
+  "Clear all": "সব মুছুন",
+  "Clear this notice": "এই বিজ্ঞপ্তিটি মুছুন"
 }

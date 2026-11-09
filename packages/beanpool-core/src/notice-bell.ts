@@ -4,10 +4,13 @@
  * with what needs the member now (the open things, at the top) and what happened, newest first, with the real words.
  *
  * The list is the member's own server's (GET /api/notices/push?unseen=1): every push notice it kept for them, a phone or
- * not. A row leaves only when it is tapped (POST /api/notices/push/seen) or when its thing is opened (a chat read: the
- * server marks it); opening the sheet marks nothing, and there is no "Clear all" (its last line: "Older notices are gone
- * after 7 days."). The server tells the member's sockets
- * `push_notice` when one is kept and `push_notices_seen` when some are marked, so every open app's count follows.
+ * not. A row leaves when it is tapped (it opens its thing), when its ✕ is pressed (it opens nothing), when "Clear all" is
+ * pressed (every row, one request: POST /api/notices/push/seen { all: true }), or when its thing is opened (a chat read:
+ * the server marks it); opening the sheet marks nothing (its last line: "Older notices are gone after 7 days."). Marty,
+ * 10 Nov 2026, on old rows still red days later: "Need a clear individual and all" (this replaced the 9 Nov rule that had
+ * no "Clear all"). "Needs you", the open things at the top of the sheet, is neither: those leave when they are done.
+ * The server tells the member's sockets `push_notice` when one is kept and `push_notices_seen` when some are marked, so
+ * every open app's count follows.
  */
 import { t, tn } from './words.js';
 
@@ -33,6 +36,11 @@ export const BELL_PAGE_EVENT = 'beanpool:bell';
 /** The count on the bell: never more than "99+". */
 export function bellBadge(unseen: number): string {
     return unseen > 99 ? '99+' : String(Math.max(0, Math.floor(unseen)));
+}
+
+/** The words of the bell's two clear controls, one place for both apps: a visible "Clear all", and the ✕ on a row. */
+export function bellClearWords(): { all: string; one: string } {
+    return { all: t('Clear all'), one: t('Clear this notice') };
 }
 
 /** The bell's name for a screen reader, with what it holds. */

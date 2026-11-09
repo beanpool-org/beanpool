@@ -56,7 +56,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
 
     useEffect(() => { void load(); }, [load]);
 
-    const run = async (work: () => Promise<{ status: AlertsStatus }>, done: string | ((r: any) => string)) => {
+    const run = async <T extends { status: AlertsStatus }>(work: () => Promise<T>, done: string | ((r: T) => string)) => {
         setBusy(true);
         setMessage(null);
         try {

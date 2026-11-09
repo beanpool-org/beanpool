@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "Dal tuo budget: Nessun limite",
   "No limit": "Nessun limite",
   "Your budget: No limit": "Il tuo budget: Nessun limite",
-  "No limit · {vouched} vouched · {below} below zero": "Nessun limite · {vouched} garantiti · {below} sotto zero"
+  "No limit · {vouched} vouched · {below} below zero": "Nessun limite · {vouched} garantiti · {below} sotto zero",
+  "Clear all": "Cancella tutto",
+  "Clear this notice": "Cancella questa notifica"
 }

@@ -3,9 +3,10 @@
  * bell takes the needs-you row): parity with the phone's apps/native/components/NeedsYouIcons.tsx. One control: a red count
  * of the notices not yet opened (@beanpool/core notice-bell.ts), an amber dot when nothing is new but something needs the
  * member, and a sheet with what needs them now at the top ("Needs you", the open things, as the icons were) and what
- * happened under it, newest first, with the real words. A row leaves only when it is tapped (it opens its thing and is
- * marked) or when its thing is opened (a chat read: the node marks it and tells the sockets); opening the sheet marks
- * nothing, and there is no "Clear all". Members only.
+ * happened under it, newest first, with the real words. A row leaves when it is tapped (it opens its thing and is
+ * marked), when its ✕ is pressed (marked, opens nothing), when "Clear all" is pressed (every notice, one request), or when
+ * its thing is opened (a chat read: the node marks it and tells the sockets); opening the sheet marks nothing. "Needs you"
+ * is none of those: its rows are the open things, and leave when they are done (Marty, 10 Nov 2026). Members only.
  *
  * Where it is drawn (AppHeader.tsx):
  * - The mobile header (under 768 px): beside the tab's name, in the room between the sync chip and the pill
@@ -19,7 +20,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-    BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellLabel, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
+    BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellClearWords, bellLabel, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
     isPushNoticeKind, NEEDS_YOU_PRIORITY, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
 } from '@beanpool/core';
 import { t } from '@beanpool/core';
@@ -466,6 +467,16 @@ export function NeedsYouIcons({
         api.markBellNoticesSeen([n.id]).catch(() => { refreshBell(); });
         goToNoticeTarget(n.kind, n.data, onNavigate);
     };
+    // A notice's ✕: the same mark, and it opens nothing. A failed mark reads the list again, so the row comes back.
+    const clearNotice = (n: BellNotice) => {
+        setNotices(list => withoutBellNotices(list, [n.id]));
+        api.markBellNoticesSeen([n.id]).catch(() => { refreshBell(); });
+    };
+    // "Clear all": every notice (never "Needs you": those are the `entries`, which leave when they are done), in one request.
+    const clearAll = () => {
+        setNotices([]);
+        api.clearAllBellNotices().catch(() => { refreshBell(); });
+    };
     const unseen = notices.length;
     const label = bellLabel(unseen, entries.length);
     const bell = (small: boolean) => (
@@ -507,6 +518,8 @@ export function NeedsYouIcons({
             onClose={() => setSheet(false)}
             onPick={go}
             onOpenNotice={openNotice}
+            onClearNotice={clearNotice}
+            onClearAll={clearAll}
         />
     );
 
@@ -561,16 +574,23 @@ function NeedsSheet({
     onClose,
     onPick,
     onOpenNotice,
+    onClearNotice,
+    onClearAll,
 }: {
     entries: NeedsItem[];
     notices: BellNotice[];
     onClose: () => void;
     onPick: (target: NeedsTarget, kind: NeedsItem['kind']) => void;
     onOpenNotice: (notice: BellNotice) => void;
+    onClearNotice: (notice: BellNotice) => void;
+    onClearAll: () => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialogRef, onClose);
     const now = Date.now();
+    const clearWords = bellClearWords();
+    // A cleared row takes the button with it: keep the keyboard inside the sheet, on its title.
+    const focusSheetTitle = () => { dialogRef.current?.querySelector<HTMLElement>('#needs-sheet-title')?.focus(); };
 
     return (
         <div
@@ -644,25 +664,57 @@ function NeedsSheet({
                     {notices.length === 0 && entries.length === 0 && (
                         <p data-testid="needs-sheet-empty" className="px-2 py-4 text-sm text-text-secondary text-center">{t('Nothing new.')}</p>
                     )}
+                    {notices.length > 0 && (
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClearAll();
+                                    focusSheetTitle();
+                                }}
+                                data-testid="bell-clear-all"
+                                className="min-h-[44px] px-3 rounded-lg text-sm font-semibold text-bp-ink-accent hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                {clearWords.all}
+                            </button>
+                        </div>
+                    )}
                     {notices.map((n) => (
-                        <button
-                            key={n.id}
-                            type="button"
-                            onClick={() => {
-                                onClose();
-                                onOpenNotice(n);
-                            }}
-                            data-testid="bell-notice"
-                            data-notice-id={n.id}
-                            className="w-full flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
-                        >
-                            <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-bp-danger-fill" aria-hidden="true" />
-                            <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-bold text-text-primary line-clamp-2 break-words">{n.title || n.body}</span>
-                                {n.title && n.body && <span className="block text-sm text-text-primary line-clamp-3 break-words">{n.body}</span>}
-                                <span className="block text-xs text-text-secondary">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
-                            </span>
-                        </button>
+                        <div key={n.id} data-testid="bell-notice-row" className="flex items-start gap-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClose();
+                                    onOpenNotice(n);
+                                }}
+                                data-testid="bell-notice"
+                                data-notice-id={n.id}
+                                className="flex-1 min-w-0 flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-bp-danger-fill" aria-hidden="true" />
+                                <span className="flex-1 min-w-0">
+                                    <span className="block text-sm font-bold text-text-primary line-clamp-2 break-words">{n.title || n.body}</span>
+                                    {n.title && n.body && <span className="block text-sm text-text-primary line-clamp-3 break-words">{n.body}</span>}
+                                    <span className="block text-xs text-text-secondary">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClearNotice(n);
+                                    focusSheetTitle();
+                                }}
+                                aria-label={clearWords.one}
+                                title={clearWords.one}
+                                data-testid="bell-notice-clear"
+                                data-notice-id={n.id}
+                                className="shrink-0 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-text-muted hover:text-text-primary hover:bg-bg-hover cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     ))}
                     <p data-testid="needs-sheet-lifetime" className="px-2 pt-2 pb-1 text-xs text-text-muted text-center">{t('Older notices are gone after 7 days.')}</p>
                 </div>

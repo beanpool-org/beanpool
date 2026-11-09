@@ -2388,5 +2388,7 @@
   "From your budget: No limit": "از بودجه شما: بدون سقف",
   "No limit": "بدون سقف",
   "Your budget: No limit": "بودجه شما: بدون سقف",
-  "No limit · {vouched} vouched · {below} below zero": "بدون سقف · {vouched} ضمانت‌شده · {below} زیر صفر"
+  "No limit · {vouched} vouched · {below} below zero": "بدون سقف · {vouched} ضمانت‌شده · {below} زیر صفر",
+  "Clear all": "پاک کردن همه",
+  "Clear this notice": "پاک کردن این اعلان"
 }

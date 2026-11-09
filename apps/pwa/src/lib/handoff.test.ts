@@ -39,7 +39,7 @@ describe('the address the holder opens', () => {
         expect(url).not.toContain(me.publicKey);
         // The address is exactly the line above: the constants and the nonce. "door", "hand", "off" and "example" are in
         // it by design and are also recovery words, so the phrase is looked for whole, in each form a URL could carry it.
-        for (const sep of [' ', '+', '%20', '-', ',', '']) expect(url).not.toContain(me.mnemonic!.join(sep));
+        for (const sep of [' ', '+', '%20', '%2B', '-', ',', '%2C', '']) expect(url).not.toContain(me.mnemonic!.join(sep));
     });
 
     it('the receiver reads only a well-formed handoff from another https origin', () => {

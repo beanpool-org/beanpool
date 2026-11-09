@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 import { communityCardName, t, type CommunityCard } from '@beanpool/core';
 import { getCommunityCard } from '../lib/api';
 import {
-    HANDOFF_LISTEN_MS, accountFrom, answerMessage, awaitHandoffJoin, readyMessage, type HandoffAnswer,
+    HANDOFF_LISTEN_MS, accountFrom, answerMessage, awaitHandoffJoin, dropOpener, readyMessage, type HandoffAnswer,
 } from '../lib/handoff';
 import {
     IdentityHeldError, IdentityStoreUnavailableError, NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, SentJoinWaitingError,
@@ -68,8 +68,12 @@ export function HandoffPage({ handoff, onOpen, onJoin, onMember }: {
     // The window that opened this one, read once: the only one this page talks to, and only at `from`.
     const opener = useRef<Window | null>(typeof window !== 'undefined' ? window.opener as Window | null : null);
 
+    // A refusal is this page's last word to the one that opened it: said, then the link goes (lib/handoff.ts dropOpener).
+    // `joined` is said by the welcome page once the yes has made the key a member (handoffJoined), which drops it too.
     const answer = (a: HandoffAnswer) => {
         try { opener.current?.postMessage(answerMessage(nonce, a), from); } catch { /* its tab has gone */ }
+        opener.current = null;
+        dropOpener();
     };
 
     useEffect(() => {
@@ -203,7 +207,7 @@ export function HandoffPage({ handoff, onOpen, onJoin, onMember }: {
             body = (
                 <>
                     <p data-testid="handoff-nothing" className="m-0 mb-4 text-base break-words">
-                        {t('Nothing came from the page that opened this one. Go back there and tap Join again.')}
+                        {t('Nothing came from the page that opened this one. Go back there to try again, or to see the other ways to join.')}
                     </p>
                     {openButton}
                 </>

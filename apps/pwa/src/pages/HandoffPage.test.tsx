@@ -93,6 +93,8 @@ describe('the handoff door at the community', () => {
         expect(statusReads).toEqual([account.publicKey]);
         expect(answers()).toEqual([[answerMessage(NONCE, 'refused'), GLOBAL]]);
         expect(await loadIdentity()).toBeNull();
+        // Its last word to the page that opened it: the link goes.
+        expect(window.opener).toBeNull();
     });
 
     it('a browser with another account here: says so, answers held, and that account is untouched', async () => {
@@ -156,6 +158,6 @@ describe('the handoff door at the community', () => {
     it('opened by nothing (no opener): says to go back and tap Join again', async () => {
         Object.defineProperty(window, 'opener', { value: null, configurable: true, writable: true });
         renderPage();
-        expect(await screen.findByTestId('handoff-nothing')).toHaveTextContent('Nothing came from the page that opened this one. Go back there and tap Join again.');
+        expect(await screen.findByTestId('handoff-nothing')).toHaveTextContent('Nothing came from the page that opened this one. Go back there to try again, or to see the other ways to join.');
     });
 });

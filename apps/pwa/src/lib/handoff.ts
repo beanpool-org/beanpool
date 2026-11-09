@@ -194,8 +194,10 @@ export interface HandoffRun {
 
 /**
  * The holder's side, once the window is open: waits for its `ready`, posts the account to `origin` only, and says what
- * came back (`onEnd`, once). `timeout`: no `ready` in `readyMs`, or no answer in `answerMs`. `closed`: the window went
- * before it answered. `listenOn` is where messages arrive (this page's window).
+ * came back (`onEnd`, once). No `ready` in `readyMs`: `onLate`, so the fallback card can show, while a `ready` that comes
+ * later (a slow phone loading the community's page) is still taken, by the same checks. `timeout`: nothing at all in
+ * `answerMs`, or no answer in that long once the account went. `closed`: the window went before it answered (`timeout`
+ * if it went before it said ready). `listenOn` is where messages arrive (this page's window).
  */
 export function runHandoff(opts: {
     win: Window;
@@ -204,6 +206,7 @@ export function runHandoff(opts: {
     account: () => Promise<{ account: HandedAccount; photo: string | null }>;
     listenOn: Pick<Window, 'addEventListener' | 'removeEventListener'>;
     onSent?: () => void;
+    onLate?: () => void;
     onEnd: (end: HandoffEnd) => void;
     readyMs?: number;
     answerMs?: number;
@@ -217,6 +220,7 @@ export function runHandoff(opts: {
         state = 'done';
         opts.listenOn.removeEventListener('message', onMessage as EventListener);
         clearTimeout(timer);
+        clearTimeout(late);
         clearInterval(poll);
         if (how) opts.onEnd(how);
     };
@@ -224,6 +228,7 @@ export function runHandoff(opts: {
         if (state === 'waiting' && isReadyFrom(event, win, origin, nonce)) {
             state = 'sending';
             clearTimeout(timer);
+            clearTimeout(late);
             void opts.account().then(({ account, photo }) => {
                 if (state !== 'sending') return;
                 // The one post with the key in it: to the knock's own origin, never '*'.
@@ -240,7 +245,8 @@ export function runHandoff(opts: {
         }
     };
     opts.listenOn.addEventListener('message', onMessage as EventListener);
-    timer = setTimeout(() => end('timeout'), opts.readyMs ?? HANDOFF_READY_MS);
+    const late = setTimeout(() => { if (state === 'waiting') opts.onLate?.(); }, opts.readyMs ?? HANDOFF_READY_MS);
+    timer = setTimeout(() => end('timeout'), opts.answerMs ?? HANDOFF_ANSWER_MS);
     const isClosed = () => {
         try { return win.closed; } catch { return true; /* cut off from it: as closed */ }
     };
@@ -255,7 +261,12 @@ export function runHandoff(opts: {
  * member's picture here as a profile takes it (a shipped picture, or a data URL under the knock's limit), read from this
  * node at the tap. None, or one that can't be read: null, and no tickbox is offered.
  */
-export async function holderPhoto(publicKey: string): Promise<string | null> {
+export async function holderPhoto(publicKey: string, withinMs = 5_000): Promise<string | null> {
+    // Bounded: a slow read never holds the account back; past it, no photo is offered.
+    return Promise.race([readHolderPhoto(publicKey), new Promise<null>((resolve) => setTimeout(() => resolve(null), withinMs))]);
+}
+
+async function readHolderPhoto(publicKey: string): Promise<string | null> {
     try {
         const profile = await getMemberProfile(publicKey, publicKey);
         const value = typeof profile?.avatar === 'string' ? profile.avatar.trim() : '';
@@ -300,5 +311,14 @@ export function handoffJoined(publicKey: string): string | null {
     const { opener, from, nonce, photo } = reply;
     reply = null;
     try { opener.postMessage(answerMessage(nonce, 'joined'), from); } catch { /* its tab has gone: its next status read says member */ }
+    dropOpener();
     return photo;
+}
+
+/**
+ * The receiver's last word is said: the link to the page that opened it goes (design §2.1 step 5), so nothing in this
+ * page can reach that tab again (a script here could otherwise send it somewhere else: `opener.location = …`).
+ */
+export function dropOpener(): void {
+    try { window.opener = null; } catch { /* a browser that won't: the link stays, and nothing here uses it */ }
 }

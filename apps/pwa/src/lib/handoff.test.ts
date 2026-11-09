@@ -167,15 +167,44 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
         expect(answerFrom(event({ ...answerMessage(nonce, 'held'), type: 'steal' }, BYRON, win), win, BYRON, nonce)).toBeNull();
     });
 
-    it('no ready in 20 s: timeout, and nothing is ever posted; a window closed after the account went: closed', async () => {
-        const first = fakeWindow();
+    it('no ready in 20 s: late (the fallback shows), nothing posted; a late ready, by the same checks, still gets it, at that origin only', async () => {
+        const { win, posted } = fakeWindow();
         const ends: string[] = [];
-        runHandoff({ win: first.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
-        await vi.advanceTimersByTimeAsync(20_001);
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, first.win));
+        const late = vi.fn();
+        runHandoff({ win, origin: BYRON, nonce, account, listenOn: host, onLate: late, onEnd: (e) => ends.push(e) });
+        await vi.advanceTimersByTimeAsync(19_000);
+        expect(late).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1_001);
+        expect(late).toHaveBeenCalledTimes(1);
+        expect(posted).toEqual([]);
+        // A slow phone: the community's page says ready at 45 s. Another origin's late ready is still nothing.
+        await vi.advanceTimersByTimeAsync(25_000);
+        host.dispatchEvent(event(readyMessage(nonce), SPY, win));
+        await vi.advanceTimersByTimeAsync(10);
+        expect(posted).toEqual([]);
+        host.dispatchEvent(event(readyMessage(nonce), BYRON, win));
+        await vi.advanceTimersByTimeAsync(10);
+        expect(posted).toHaveLength(1);
+        expect(posted[0].targetOrigin).toBe(BYRON);
+        expect(ends).toEqual([]);
+        expect(late).toHaveBeenCalledTimes(1);
+    });
+
+    it('nothing at all for 15 minutes: timeout, nothing posted; a window closed before its ready: timeout; after the account: closed', async () => {
+        const ends: string[] = [];
+        const silent = fakeWindow();
+        runHandoff({ win: silent.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        await vi.advanceTimersByTimeAsync(15 * 60_000 + 1);
+        host.dispatchEvent(event(readyMessage(nonce), BYRON, silent.win));
         await vi.advanceTimersByTimeAsync(10);
         expect(ends).toEqual(['timeout']);
-        expect(first.posted).toEqual([]);
+        expect(silent.posted).toEqual([]);
+
+        const shut = fakeWindow();
+        runHandoff({ win: shut.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        shut.win.closed = true;
+        await vi.advanceTimersByTimeAsync(1_001);
+        expect(ends).toEqual(['timeout', 'timeout']);
 
         const second = fakeWindow();
         runHandoff({ win: second.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
@@ -183,7 +212,7 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
         await vi.advanceTimersByTimeAsync(10);
         second.win.closed = true;
         await vi.advanceTimersByTimeAsync(1_001);
-        expect(ends).toEqual(['timeout', 'closed']);
+        expect(ends).toEqual(['timeout', 'timeout', 'closed']);
     });
 
     it('isReadyFrom is the one test for the ready', () => {
@@ -194,13 +223,19 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
 });
 
 describe('the receiver, after Join', () => {
-    it('tells the page it came from, at its origin only, once, and gives back the photo ticked', () => {
+    afterEach(() => { Object.defineProperty(window, 'opener', { value: null, configurable: true, writable: true }); });
+
+    it('tells the page it came from, at its origin only, once, gives back the photo ticked, and drops the opener', () => {
         const { win: opener, posted } = fakeWindow();
+        Object.defineProperty(window, 'opener', { value: opener, configurable: true, writable: true });
         awaitHandoffJoin(me.publicKey, opener, GLOBAL, 'f'.repeat(32), 'bundled://bean-green');
         expect(handoffJoined('9'.repeat(64))).toBeNull();
         expect(posted).toEqual([]);
+        expect(window.opener).toBe(opener);
         expect(handoffJoined(me.publicKey)).toBe('bundled://bean-green');
         expect(posted).toEqual([{ data: answerMessage('f'.repeat(32), 'joined'), targetOrigin: GLOBAL }]);
+        // Its last word said: this page keeps no way to reach (or send elsewhere) the tab that opened it.
+        expect(window.opener).toBeNull();
         expect(handoffJoined(me.publicKey)).toBeNull();
         expect(posted).toHaveLength(1);
     });

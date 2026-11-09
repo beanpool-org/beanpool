@@ -68,6 +68,9 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
                 },
                 photo: await holderPhoto(identity.publicKey),
             }),
+            // No answer from the page yet: the fallback card, while a late answer from that page is still taken.
+            onLate: () => setState('fallback'),
+            onSent: () => setState('running'),
             onEnd: (end) => {
                 run.current = null;
                 if (end === 'joined') {

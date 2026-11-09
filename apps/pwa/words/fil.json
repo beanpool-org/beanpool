@@ -4693,7 +4693,7 @@
   "Recover with Social Sign-In": "Ibalik gamit ang Social Sign-In",
   "Tell me": "Sabihin sa akin",
   "Tell me when they answer": "Sabihin sa akin kapag sumagot sila",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "Ang notification na iyon ay hindi galing sa iyong komunidad. Huwag pansinin ang sinabi nito. Hindi kailanman hihingin ng BeanPool ang 12 salita mo o isang password sa isang notification.",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "Ang notification na iyon ay hindi nanggaling sa iyong komunidad. Huwag pansinin ang sinabi nito. Hindi kailanman humihingi ang BeanPool ng iyong 12 salita o password sa isang notification.",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "Sasabihan ang may-ari ng account sa kanyang mga device na ibinabalik ang account, kung sakaling hindi siya iyon.",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "Hindi natanggap ng komunidad na ito ang hiling na sabihan ka. Bumalik sa pahinang ito: nagche-check ito tuwing ilang minuto habang bukas.",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "Para sumali, buksan ang pahina nito sa browser na ito, i-tap ang “Miyembro na” at ibalik gamit ang 12 salita mo, pagkatapos i-tap ang “Sumali”. Nasa “Mga Setting” → “Ipakita ang aking 12 salita” ang 12 salita mo.",
@@ -4706,7 +4706,7 @@
   "You asked to join {name}.": "Humiling kang sumali sa {name}.",
   "Your 12 words stay the same: the ones you came back with.": "Pareho pa rin ang iyong 12 salita: ang mga ginamit mo sa pagbalik.",
   "Your browser blocked them for this site: allow them from the icon by the address.": "Hinarang ng iyong browser ang mga ito para sa site na ito: payagan ang mga ito mula sa icon sa tabi ng address.",
-  "Your name here": "Ang pangalan mo rito",
+  "Your name here": "Ang iyong pangalan dito",
   "your browser": "iyong browser",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Mas luma ang server ng {community} kaysa sa app na ito at hindi pa nito mahahanap ang iyong account mula sa isang sign-in. Hilingin sa admin ng {community} na mag-update, o gamitin ang 12 salita mo.",
   "✓ We'll tell you here when {name} answers.": "✓ Sasabihan ka namin dito kapag may sagot mula sa {name}."

@@ -4517,7 +4517,7 @@
   "Recover with Social Sign-In": "通过社交账户恢复",
   "Tell me": "通知我",
   "Tell me when they answer": "对方回复时通知我",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "这条通知并非来自你的社区。请忽略它所说的内容。BeanPool 绝不会在通知中索要你的 12 个助记词或密码。",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "那条通知不是来自你的社区。请忽略它的内容。BeanPool 绝不会在通知中索要你的 12 个助记词或密码。",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "账户的主人会在其设备上收到提示，说明账户正在被恢复，以防不是本人操作。",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "这个社区无法接收通知你的请求。请回到此页面：页面打开时每隔几分钟检查一次。",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "要加入，请在此浏览器中打开它的页面，点按“已是成员”并用你的 12 个助记词恢复，然后点按“加入”。你的 12 个助记词在“设置” → “显示我的 12 个助记词”里。",
@@ -4530,7 +4530,7 @@
   "You asked to join {name}.": "你已申请加入 {name}。",
   "Your 12 words stay the same: the ones you came back with.": "你的 12 个助记词保持不变：就是你回来时用的那些。",
   "Your browser blocked them for this site: allow them from the icon by the address.": "你的浏览器已针对此网站屏蔽了它们：请从地址栏旁的图标允许它们。",
-  "Your name here": "你的名字",
+  "Your name here": "在此输入你的名字",
   "your browser": "你的浏览器",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} 的服务器比这个应用旧，目前还无法通过登录找到你的账户。请让它的管理员更新，或使用你的 12 个助记词。",
   "✓ We'll tell you here when {name} answers.": "✓ {name} 回复时，我们会在这里通知你。"

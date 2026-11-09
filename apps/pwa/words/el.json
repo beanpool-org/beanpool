@@ -4693,7 +4693,7 @@
   "Recover with Social Sign-In": "Ανάκτηση με κοινωνική σύνδεση",
   "Tell me": "Ενημέρωσέ με",
   "Tell me when they answer": "Ενημέρωσέ με όταν απαντήσουν",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "Αυτή η ειδοποίηση δεν προήλθε από την κοινότητά σας. Αγνοήστε ό,τι έλεγε. Το BeanPool δεν ζητά ποτέ τις 12 λέξεις σας ή κωδικό πρόσβασης σε μια ειδοποίηση.",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "Αυτή η ειδοποίηση δεν προήλθε από την κοινότητά σου. Αγνόησε όσα έλεγε. Το BeanPool δεν ζητά ποτέ τις 12 λέξεις σου ή κωδικό σε ειδοποίηση.",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "Το άτομο στο οποίο ανήκει ο λογαριασμός ενημερώνεται στις συσκευές του ότι ο λογαριασμός επαναφέρεται, σε περίπτωση που δεν είναι το ίδιο.",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "Αυτή η κοινότητα δεν μπόρεσε να δεχτεί το αίτημα να σας ενημερώσει. Επιστρέψτε σε αυτή τη σελίδα: ελέγχει κάθε λίγα λεπτά όσο είναι ανοιχτή.",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "Για να συμμετάσχετε, ανοίξτε τη σελίδα της κοινότητας σε αυτό το πρόγραμμα περιήγησης, πατήστε «Ήδη μέλος» και επαναφέρετε με τις 12 λέξεις σας, μετά πατήστε «Συμμετοχή». Οι 12 λέξεις σας βρίσκονται στις «Ρυθμίσεις» → «Εμφάνιση των 12 λέξεών μου».",
@@ -4706,7 +4706,7 @@
   "You asked to join {name}.": "Ζητήσατε να συμμετάσχετε στην κοινότητα {name}.",
   "Your 12 words stay the same: the ones you came back with.": "Οι 12 λέξεις σας παραμένουν οι ίδιες: αυτές με τις οποίες επιστρέψατε.",
   "Your browser blocked them for this site: allow them from the icon by the address.": "Το πρόγραμμα περιήγησής σας τις μπλόκαρε για αυτόν τον ιστότοπο: επιτρέψτε τις από το εικονίδιο δίπλα στη διεύθυνση.",
-  "Your name here": "Το όνομά σας εδώ",
+  "Your name here": "Το όνομά σου εδώ",
   "your browser": "το πρόγραμμα περιήγησής σας",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Ο διακομιστής της κοινότητας {community} είναι παλαιότερος από αυτήν την εφαρμογή και δεν μπορεί ακόμη να βρει τον λογαριασμό σας από μια σύνδεση. Ζητήστε από τη διαχείριση της κοινότητας {community} να τον ενημερώσει ή χρησιμοποιήστε τις 12 λέξεις σας.",
   "✓ We'll tell you here when {name} answers.": "✓ Θα σας ενημερώσουμε εδώ όταν απαντήσει {name}."

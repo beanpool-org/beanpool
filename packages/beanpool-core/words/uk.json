@@ -2513,7 +2513,7 @@
   "🔁 Standing deal since {date} · {n} Beans a week": "🔁 Регулярна угода з {date} · {n} бобів на тиждень",
   "A member": "Учасник",
   "A community answered your request to join.": "Спільнота відповіла на ваш запит на приєднання.",
-  "After reading '{title}', which {sharer} shared outside.": "Після прочитання «{title}». Передано назовні: {sharer}.",
+  "After reading '{title}', which {sharer} shared outside.": "Після прочитання «{title}»: цим оголошенням поза спільнотою поділився учасник {sharer}.",
   "Notifications": "Сповіщення",
   "Notifications: {n} new|Notifications: {n} new": {
     "one": "Сповіщення: {n} нове",

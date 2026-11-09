@@ -4517,7 +4517,7 @@
   "Recover with Social Sign-In": "소셜 로그인으로 복구",
   "Tell me": "알려주기",
   "Tell me when they answer": "답이 오면 알려주기",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "그 알림은 내 커뮤니티에서 온 것이 아니에요. 그 내용은 무시하세요. BeanPool은 알림으로 12개의 단어나 비밀번호를 절대 묻지 않아요.",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "그 알림은 내 커뮤니티에서 온 것이 아니에요. 내용은 무시하세요. BeanPool은 알림으로 12개 단어나 비밀번호를 절대 묻지 않아요.",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "계정 주인의 기기에는 계정이 복원되고 있다고 알림이 가요. 본인이 아닐 경우를 대비해서예요.",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "이 커뮤니티가 알림 요청을 받지 못했어요. 이 페이지로 돌아오세요. 열려 있는 동안 몇 분마다 확인해요.",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "참여하려면 이 브라우저에서 그 페이지를 열고 “이미 멤버예요”를 탭해 12개의 단어로 복원한 뒤 “참여”를 탭하세요. 12개의 단어는 “설정” → “내 12개 단어 보기”에 있어요.",
@@ -4530,7 +4530,7 @@
   "You asked to join {name}.": "{name}에 참여를 신청했어요.",
   "Your 12 words stay the same: the ones you came back with.": "12개의 단어는 그대로예요. 계정을 되찾을 때 쓴 단어 그대로예요.",
   "Your browser blocked them for this site: allow them from the icon by the address.": "브라우저가 이 사이트에서 알림을 차단했어요. 주소창 옆 아이콘에서 허용해 주세요.",
-  "Your name here": "여기에 이름",
+  "Your name here": "여기에 이름 입력",
   "your browser": "브라우저",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}의 서버가 이 앱보다 오래되어 아직 로그인으로 내 계정을 찾을 수 없어요. 관리자에게 업데이트를 요청하거나 12개의 단어를 사용하세요.",
   "✓ We'll tell you here when {name} answers.": "✓ {name}에서 답이 오면 여기서 알려 드려요."

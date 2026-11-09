@@ -4693,7 +4693,7 @@
   "Recover with Social Sign-In": "സോഷ്യൽ സൈൻ-ഇൻ വഴി വീണ്ടെടുക്കുക",
   "Tell me": "എന്നെ അറിയിക്കൂ",
   "Tell me when they answer": "അവർ മറുപടി നൽകുമ്പോൾ എന്നെ അറിയിക്കൂ",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "ആ അറിയിപ്പ് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിൽ നിന്ന് വന്നതല്ല. അതിൽ പറഞ്ഞത് അവഗണിക്കുക. BeanPool ഒരിക്കലും ഒരു അറിയിപ്പിൽ നിങ്ങളുടെ 12 വാക്കുകളോ പാസ്‌വേഡോ ചോദിക്കില്ല.",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "ആ അറിയിപ്പ് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിൽ നിന്നല്ല വന്നത്. അതിൽ പറഞ്ഞത് അവഗണിക്കുക. BeanPool ഒരിക്കലും ഒരു അറിയിപ്പിൽ നിങ്ങളുടെ 12 വാക്കുകളോ പാസ്‌വേഡോ ആവശ്യപ്പെടില്ല.",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "അക്കൗണ്ടിന്റെ ഉടമയെ അവരുടെ ഉപകരണങ്ങളിൽ അക്കൗണ്ട് പുനഃസ്ഥാപിക്കപ്പെടുകയാണെന്ന് അറിയിക്കും, അത് അവർ അല്ലെങ്കിൽ എന്ന മുൻകരുതലായി.",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "ഈ കമ്മ്യൂണിറ്റിക്ക് നിങ്ങളെ അറിയിക്കാനുള്ള അഭ്യർത്ഥന സ്വീകരിക്കാൻ കഴിഞ്ഞില്ല. ഈ പേജിലേക്ക് മടങ്ങിവരൂ: തുറന്നിരിക്കുമ്പോൾ ഇത് കുറച്ച് മിനിറ്റിൽ ഒരിക്കൽ പരിശോധിക്കും.",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "ചേരാൻ, ഈ ബ്രൗസറിൽ അതിന്റെ പേജ് തുറക്കുക, “ഇതിനകം അംഗമാണ്” ടാപ്പ് ചെയ്ത് നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിച്ച് പുനഃസ്ഥാപിക്കുക, തുടർന്ന് “ചേരുക” ടാപ്പ് ചെയ്യുക. നിങ്ങളുടെ 12 വാക്കുകൾ “ക്രമീകരണങ്ങൾ” → “എന്റെ 12 വാക്കുകൾ കാണിക്കുക” എന്നതിലുണ്ട്.",
@@ -4706,7 +4706,7 @@
   "You asked to join {name}.": "നിങ്ങൾ {name}-ൽ ചേരാൻ അഭ്യർത്ഥിച്ചു.",
   "Your 12 words stay the same: the ones you came back with.": "നിങ്ങളുടെ 12 വാക്കുകൾ അതേപടി തുടരും: നിങ്ങൾ തിരികെ വന്നപ്പോൾ ഉപയോഗിച്ചവ.",
   "Your browser blocked them for this site: allow them from the icon by the address.": "നിങ്ങളുടെ ബ്രൗസർ ഈ സൈറ്റിനായി അവ തടഞ്ഞു: വിലാസത്തിനരികിലെ ഐക്കണിൽ നിന്ന് അനുവദിക്കുക.",
-  "Your name here": "നിങ്ങളുടെ പേര് ഇവിടെ",
+  "Your name here": "നിങ്ങളുടെ പേര് ഇവിടെ നൽകുക",
   "your browser": "നിങ്ങളുടെ ബ്രൗസർ",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}-ന്റെ സെർവർ ഈ ആപ്പിനേക്കാൾ പഴയതാണ്, സൈൻ-ഇൻ വഴി നിങ്ങളുടെ അക്കൗണ്ട് ഇതുവരെ കണ്ടെത്താൻ അതിന് കഴിയില്ല. അപ്ഡേറ്റ് ചെയ്യാൻ അതിന്റെ അഡ്മിനോട് ആവശ്യപ്പെടുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
   "✓ We'll tell you here when {name} answers.": "✓ {name} മറുപടി നൽകുമ്പോൾ ഞങ്ങൾ നിങ്ങളെ ഇവിടെ അറിയിക്കും."

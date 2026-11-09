@@ -4703,7 +4703,7 @@
   "Recover with Social Sign-In": "سوشل سائن ان سے بحال کریں",
   "Tell me": "مجھے بتائیں",
   "Tell me when they answer": "جواب ملنے پر مجھے بتائیں",
-  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "وہ اطلاع آپ کی کمیونٹی کی طرف سے نہیں آئی تھی۔ اس میں جو لکھا تھا اسے نظر انداز کریں۔ BeanPool کسی اطلاع میں کبھی آپ کے 12 الفاظ یا پاس ورڈ نہیں مانگتا۔",
+  "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.": "یہ اطلاع آپ کی کمیونٹی کی طرف سے نہیں آئی۔ جو اس میں لکھا تھا اسے نظر انداز کریں۔ BeanPool کبھی کسی اطلاع میں آپ کے 12 الفاظ یا پاس ورڈ نہیں مانگتا۔",
   "The account's owner is told on their devices that it is being brought back, in case it isn't them.": "اکاؤنٹ کے مالک کو ان کے آلات پر بتایا جاتا ہے کہ اکاؤنٹ بحال کیا جا رہا ہے، تاکہ اگر یہ وہ خود نہ ہوں تو پتا چل جائے۔",
   "This community couldn't take the request to tell you. Come back to this page: it checks every few minutes while open.": "یہ کمیونٹی آپ کو بتانے کی درخواست قبول نہیں کر سکی۔ اس صفحے پر واپس آئیں: یہ کھلا رہنے پر ہر چند منٹ بعد جانچتا ہے۔",
   "To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.": "شامل ہونے کے لیے، اس کا صفحہ اس براؤزر میں کھولیں، “پہلے سے رکن ہیں” پر ٹیپ کریں اور اپنے 12 الفاظ سے بحال کریں، پھر “شامل ہوں” پر ٹیپ کریں۔ آپ کے 12 الفاظ “سیٹنگز” → “میرے 12 الفاظ دکھائیں” میں ہیں۔",
@@ -4716,7 +4716,7 @@
   "You asked to join {name}.": "آپ نے {name} میں شامل ہونے کی درخواست دی۔",
   "Your 12 words stay the same: the ones you came back with.": "آپ کے 12 الفاظ وہی رہتے ہیں: جن کے ساتھ آپ نے اکاؤنٹ واپس پایا۔",
   "Your browser blocked them for this site: allow them from the icon by the address.": "آپ کے براؤزر نے انہیں اس سائٹ کے لیے روک دیا ہے: پتے کے پاس والے آئیکن سے انہیں اجازت دیں۔",
-  "Your name here": "آپ کا نام یہاں",
+  "Your name here": "یہاں آپ کا نام",
   "your browser": "آپ کا براؤزر",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} کا سرور اس ایپ سے پرانا ہے اور ابھی سائن ان سے آپ کا اکاؤنٹ نہیں ڈھونڈ سکتا۔ اس کے ایڈمن سے اپ ڈیٹ کرنے کو کہیں، یا اپنے 12 الفاظ استعمال کریں۔",
   "✓ We'll tell you here when {name} answers.": "✓ جب {name} کی طرف سے جواب آئے گا، ہم آپ کو یہیں بتائیں گے۔"

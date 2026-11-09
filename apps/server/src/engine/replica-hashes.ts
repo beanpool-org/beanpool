@@ -156,7 +156,14 @@ export interface TableHashes {
  * `join_requests` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the provenance line answerers
  * read; the request itself is copied whole, and after a take-over from such a copy it simply shows no "After reading" line.
  */
-export const TABLE_HASHES_VERSION = 26;
+/**
+ * 27: members gains inviter_shown (a member's "Show who invited me to other members", DESIGN-invites-vouching-review-
+ * fable.md slice I3). Raised for the same reason as 8: a standby updated before its main server hashes `members` over one
+ * more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has (engine/sync.ts
+ * writeMemberStanding); what an older importer drops is a member's switch, and after a take-over from such a copy their
+ * inviter shows again until they switch it off again.
+ */
+export const TABLE_HASHES_VERSION = 27;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

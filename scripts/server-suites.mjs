@@ -156,6 +156,7 @@ export const SUITES = [
     'test-enterprise-limit-bigger-of-two',
     'test-boot-opening-line-count',
     'test-badge-earned-only-http',
+    'test-invited-by-http',
     'test-balance-tier-credit-http',
     'test-names-debts-http',
     'test-commons-pay-idempotent-http',

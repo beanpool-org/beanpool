@@ -34,6 +34,7 @@ import {
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
+    inviterShownOf, setInviterShown, viewerSeesInviterOf, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
@@ -272,7 +273,12 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         // code hung off a pruned or re-keyed member, or off a row an old door stored under another spelling of a key,
         // never redeems (engine/invites.ts), so past one the fallbacks below pick another.
         const members = getAllMembers().filter(m => mayBringSomeoneIn(m.publicKey));
-        let genesisMember = members.find(m => m.invitedBy === 'genesis');
+        // Made under an owner's or admin's key, the code hangs off that person, so whoever joins with it reads "Invited by"
+        // them (state-engine.ts resolveVouchedInBy, DESIGN-invites-vouching-review-fable.md slice I3). Under the node
+        // password no person is known: it hangs off the genesis member as before, and reads as an owner's invite card.
+        // Codes made before this hang where they were made (nothing is rewritten).
+        let genesisMember = issuedBy !== 'owner:password' ? members.find(m => m.publicKey === issuedBy) : undefined;
+        if (!genesisMember) genesisMember = members.find(m => m.invitedBy === 'genesis');
         if (!genesisMember) {
             // Restored DB fallback: find the 'Admin' or first non-system member to act as genesis
             genesisMember = members.find(m => m.callsign === 'Admin')
@@ -1501,7 +1507,71 @@ router.get('/api/invite/tree', async (ctx) => {
     // their own branch only: the people they brought in are theirs to know, as /api/invite/mine says.
     if ((typeof root !== 'string' || root !== ctx.state.actor)
         && refusedWholeDirectory(ctx, word('On this community you see the people you invited, not everyone: ask with root set to your own key'))) return;
-    ctx.body = getInviteTree(root);
+    ctx.body = treeForViewer(getInviteTree(root), ctx.state.actor as string | undefined, !root);
+});
+
+/**
+ * The invite tree as `viewer` may read it (I3): a member who switched "Show who invited me to other members" off is never
+ * shown under their inviter to a plain member (state-engine.ts viewerSeesInviterOf: the member themself, an owner or
+ * admin and the inviter still see it). In the whole tree they stand as a root of their own, their own branch with them;
+ * in someone's branch they and their branch are left out; and no node they are carries their inviter's key (`invitedBy`
+ * reads '' for that viewer, as for a member nobody invited). Nothing else changes.
+ */
+type TreeNode = ReturnType<typeof getInviteTree>[number];
+function treeForViewer(nodes: TreeNode[], viewer: string | undefined, wholeTree: boolean): TreeNode[] {
+    const detached: TreeNode[] = [];
+    const walk = (node: TreeNode): TreeNode => ({
+        ...node,
+        invitedBy: node.invitedBy && !viewerSeesInviterOf(viewer, node.publicKey, node.invitedBy) ? '' : node.invitedBy,
+        children: node.children.filter((child) => {
+            if (viewerSeesInviterOf(viewer, child.publicKey, node.publicKey)) return true;
+            if (wholeTree) detached.push(child);
+            return false;
+        }).map(walk),
+    });
+    const kept = nodes.map(walk);
+    // A detached member's own branch is walked as any other, which may detach more.
+    for (let i = 0; i < detached.length; i++) detached[i] = walk(detached[i]);
+    return wholeTree ? [...kept, ...detached].sort((a, b) => a.callsign.localeCompare(b.callsign)) : kept;
+}
+
+// A member's "Show who invited me to other members" (Settings → Privacy, I3): theirs to read and set, a member's alone.
+router.get('/api/profile/privacy', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INVITER_SHOWN_MEMBERS_ONLY_MESSAGE };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { inviterShown: inviterShownOf(actor) };
+});
+
+router.put('/api/profile/privacy', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const { inviterShown } = (ctx as any).requestBody || {};
+    if (typeof inviterShown !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: word('Send inviterShown as true or false.') };
+        return;
+    }
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INVITER_SHOWN_MEMBERS_ONLY_MESSAGE };
+        return;
+    }
+    setInviterShown(actor, inviterShown);
+    ctx.body = { success: true, inviterShown: inviterShownOf(actor) };
 });
 
 // A member's own invites, to that member alone, whatever ENFORCE_READ_AUTH says, as /api/community/me is: an unused code is

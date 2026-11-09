@@ -258,3 +258,8 @@ export function _ageFindHoldForTests(throwawayKey: string, byMs: number): boolea
     h.expiresAt -= byMs;
     return true;
 }
+
+/** Tests: whether this throwaway key holds a find in memory now, read without taking it or dropping anything. */
+export function _holdsFindForTests(throwawayKey: string): boolean {
+    return holds.has(throwawayKey);
+}

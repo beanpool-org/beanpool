@@ -13,10 +13,13 @@
  *   2. a stranger's valid token: an empty list, no session row, no push
  *   3. two owners, one sub: both names; collect for one opens one session and one push
  *   4. a row without a find hash is found by the scan and healed; the second find runs no scan (counter); one scan at a
- *      time, a second caller gets the 503 sentence; the boot count falls by one
- *   5. a retired seal key still finds (a take-over's carried key), and the find hash is written again under the live one
+ *      time, a second caller gets the 503 sentence (worded so no app's match catches it); the boot count falls by one
+ *   5. keys a take-over replaced (the deciding review of 38f03fac): a copy deposited while the server ran on its own key,
+ *      whose member doesn't restore before the next take-over, is still found there, by the scan: the start's relock
+ *      clears the retired key's find hash, and so does a deposit that carries the copy; the boot count shows it until
+ *      then. Before that relock, a find tries the retired key's hash too
  *   6. collect with no hold, or a key not in the matches, or another device's hold, opens nothing
- *   7. the hold dies at 5 minutes
+ *   7. the hold dies at 5 minutes, and leaves memory then with no find or collect after it
  *   8. a token from another provider is refused as /collect/sso refuses it
  *   9. a standby refuses, and keeps the member's hold for its main server's answer
  *  10. no seal key: the 503 sentence, the nonce unspent and the hold kept
@@ -34,6 +37,7 @@ const GLOBAL = process.env.NODE_PROFILE === 'global';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { KEEPER_ALG_RELEASE, openReleaseOnDevice, openSeedFromSso, sealSeedToSso } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, registerPushToken } from './state-engine.js';
@@ -46,6 +50,7 @@ import { setNodeRole } from './config/node-role.js';
 import {
     RECOVERY_SEAL_KEY_MISSING, installCarriedRecoverySealKey, recoverySealKeyPath, recoverySealSubkey, rewrapRowsFromRetiredKeys,
 } from './services/recovery-seal-key.js';
+import { getCurrentShares } from './engine/recovery-shares.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -197,6 +202,7 @@ type FindEngine = {
     findScanStats(): { scans: number; scrypts: number; healed: number; scanning: boolean };
     countUnfindableSignInCopies(): number;
     _ageFindHoldForTests(throwawayKey: string, byMs: number): boolean;
+    _holdsFindForTests(throwawayKey: string): boolean;
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -372,33 +378,76 @@ async function main(): Promise<void> {
     while (!(engine?.findScanStats().scanning) && waited < 10_000) { await sleep(5); waited += 5; }
     check(!!engine?.findScanStats().scanning, `a stranger's find is scanning the community's ${fillers.length} old copies (waited ${waited} ms)`);
     const secondStranger = await findBy(newId(), 'google', '888888888888888888888');
-    check(secondStranger.found.status === 503 && secondStranger.found.body?.error === 'Busy finding another account. Try again in a minute.',
-        `a second caller meanwhile gets 503 "Busy finding another account. Try again in a minute." (${secondStranger.found.status} ${brief(secondStranger.found.body)})`);
+    // Worded so no app's match catches it (test-member-words: the web's join reads "try again in " as a sentence that
+    // already says when); the apps read the code.
+    check(secondStranger.found.status === 503 && secondStranger.found.body?.error === 'Busy finding another account. Wait a minute, then sign in again.'
+        && secondStranger.found.body?.code === 'find_busy',
+        `a second caller meanwhile gets 503 find_busy, "Busy finding another account. Wait a minute, then sign in again." (${secondStranger.found.status} ${brief(secondStranger.found.body)})`);
     const firstDone = await firstStranger;
     check(firstDone.found.status === 200 && firstDone.found.body?.accounts?.length === 0 && !engine?.findScanStats().scanning,
         `the first finishes with its empty list, and the next scan may start (${firstDone.found.status})`);
     db.transaction(() => { for (const pk of fillers) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(pk); })();
 
-    // ── 5. a retired seal key ───────────────────────────────────────────────────────────────────────
-    console.log('\n── 5. a key a take-over replaced still finds ──');
-    const REN_SUB = '105555555555555555555';
-    const ren = newId();
-    addMember(ren, GLOBAL ? 'Ren31337' : 'Ren');
-    check((await connect(ren, 'google', REN_SUB)).status === 200, 'Ren connects Google under this server\'s key');
-    const renHashUnderOld = rowOf(ren.pk, 'google')?.findHash;
-    // A take-over brings the community's key (services/recovery-seal-key.ts): this server's own is kept, retired, and the
-    // next boot locks every copy again with the live key. A find hash can't be worked out again without the sub.
+    // ── 5. keys a take-over replaced ────────────────────────────────────────────────────────────────
+    console.log('\n── 5. a key a take-over replaced: every copy stays findable through the next take-over ──');
+    const REN_SUB = '105555555555555555555', VIC_SUB = '105555555555555555557';
+    const UMA_SUB = '105555555555555555556', UMA_APPLE = '001234.umaumaumaumaumaumaumaumaumaumaum.0005';
+    const ren = newId(), vic = newId(), uma = newId();
+    const renName = GLOBAL ? 'Ren31337' : 'Ren', vicName = GLOBAL ? 'Vic4242' : 'Vic', umaName = GLOBAL ? 'Uma1999' : 'Uma';
+    for (const [id, name] of [[ren, renName], [vic, vicName], [uma, umaName]] as [Id, string][]) addMember(id, name);
+    const connected5 = [await connect(ren, 'google', REN_SUB), await connect(vic, 'google', VIC_SUB), await connect(uma, 'google', UMA_SUB),
+        await connect(uma, 'apple', UMA_APPLE)];
+    check(connected5.every((c) => c.status === 200), `Ren, Vic and Uma (Google, then Apple) connect while this server runs on its own key (${connected5.map((c) => c.status).join(' ')})`);
+    const umaAppleUnderOld = rowOf(uma.pk, 'apple')?.findHash;
+    // A take-over or a sealed-backup restore brings the community's key (services/recovery-seal-key.ts): this server's own
+    // is kept beside it, retired, and the next start locks every copy only that one opens again with the live key. A find
+    // hash can't be worked out again without the member's sub.
     const carried = installCarriedRecoverySealKey(crypto.randomBytes(32).toString('base64'));
+    check(carried.outcome === 'replaced' && !!umaAppleUnderOld && rowOf(ren.pk, 'google')?.findHash !== expectedFindHash('google', REN_SUB),
+        `setup: the carried key is live and this server's own is retired; the find hashes are still the retired key's (${carried.outcome})`);
+
+    // Until that start (one whose relock failed runs on as it is): the index tries the retired key's hash too.
+    const scansBeforeVic = engine?.findScanStats().scans ?? -1;
+    const vicFound = await findBy(newId(), 'google', VIC_SUB);
+    check(vicFound.found.status === 200 && brief(names(vicFound.found)) === brief([`${vicName}:${vic.pk}`]) && engine?.findScanStats().scans === scansBeforeVic
+        && rowOf(vic.pk, 'google')?.findHash === expectedFindHash('google', VIC_SUB),
+        `before the relock, a find tries the retired key's hash too: Vic is found with no scan, and Vic's find hash is written again under the live key (${brief(vicFound.found.body)})`);
+    // And a deposit locks every copy it carries with the live key: Uma connects Google again, which carries Apple. Apple's
+    // find hash is the retired key's, and once the copy opens under the live key no relock comes to it.
+    const umaAgain = await connect(uma, 'google', UMA_SUB);
+    const umaAppleCarried = rowOf(uma.pk, 'apple')?.findHash;
+    check(umaAgain.status === 200 && umaAppleCarried === null,
+        `a deposit carries a copy only the retired key opened without that key's find hash, which no take-over could find it by (${umaAgain.status}, ${umaAppleCarried === null ? 'none' : umaAppleCarried === umaAppleUnderOld ? 'the retired key\'s kept' : String(umaAppleCarried)})`);
+
+    // The start after the key change: every copy only the retired key opens is locked again with the live key.
+    const renBefore = rowOf(ren.pk, 'google');
     const relocked = rewrapRowsFromRetiredKeys();
-    check(carried.outcome === 'replaced' && relocked.shares > 0 && rowOf(ren.pk, 'google')?.findHash === renHashUnderOld && renHashUnderOld !== expectedFindHash('google', REN_SUB),
-        `setup: the carried key is live, the old one retired, the copies locked again; Ren's find hash is still the old key's (${carried.outcome}, ${relocked.shares} relocked)`);
-    const scansBefore5 = engine?.findScanStats().scans ?? -1;
+    const renAfter = rowOf(ren.pk, 'google');
+    check(relocked.shares > 0 && renAfter?.findHash === null && !!renBefore && !!renAfter && renAfter.updatedAt > renBefore.updatedAt,
+        `the relock locks Ren's copy again with the live key and clears its find hash, the retired key's, in the same stamped write (${relocked.shares} relocked, ${renAfter?.findHash === null ? 'cleared' : 'kept'})`);
+
+    // The next server: a take-over carries the live key only (services/takeover-envelope.ts BUNDLED_FILES), never a retired
+    // one, and a sealed backup is the same bundle.
+    const dataDir = path.dirname(recoverySealKeyPath());
+    const retiredFiles = fs.readdirSync(dataDir).filter((n) => /^recovery-seal-retired-[0-9a-f]{16}\.key$/.test(n));
+    for (const n of retiredFiles) fs.renameSync(path.join(dataDir, n), path.join(dataDir, `${n}.next-server-holds-none`));
+    let renOpens = false;
+    try { renOpens = getCurrentShares(ren.pk).some((s) => s.holderType === 'sso' && s.holderRef === 'google'); } catch { /* does not open */ }
+    check(retiredFiles.length === 1 && renOpens, `setup: the next server holds the live key only (${retiredFiles.length} retired key set aside), and Ren's copy opens under it`);
+    const unfindable5 = engine?.countUnfindableSignInCopies() ?? -1;
+    const scansBeforeRen = engine?.findScanStats().scans ?? -1;
     const renPhone = newId();
     const renFound = await findBy(renPhone, 'google', REN_SUB);
-    check(renFound.found.status === 200 && brief(names(renFound.found)) === brief([`${GLOBAL ? 'Ren31337' : 'Ren'}:${ren.pk}`]) && engine?.findScanStats().scans === scansBefore5,
-        `the find tries the retired key's hash too, and finds Ren with no scan (${renFound.found.status} ${brief(renFound.found.body)})`);
-    check(rowOf(ren.pk, 'google')?.findHash === expectedFindHash('google', REN_SUB),
-        'and writes Ren\'s find hash again under the live key, so the next take-over, which carries only that key, still finds it');
+    check(renFound.found.status === 200 && brief(names(renFound.found)) === brief([`${renName}:${ren.pk}`]) && engine?.findScanStats().scans === scansBeforeRen + 1,
+        `there, Ren's sign-in still finds Ren, by the scan (${renFound.found.status} ${brief(renFound.found.body)})`);
+    const unfindableAfterRen = engine?.countUnfindableSignInCopies() ?? -1;
+    check(unfindable5 >= 1 && unfindableAfterRen === unfindable5 - 1 && rowOf(ren.pk, 'google')?.findHash === expectedFindHash('google', REN_SUB),
+        `the boot count showed Ren's copy until then (${unfindable5}, then ${unfindableAfterRen}), and the scan wrote its find hash under the live key`);
+    const umaByApple = await findBy(newId(), 'apple', UMA_APPLE);
+    const vicThere = await findBy(newId(), 'google', VIC_SUB);
+    check(brief(names(umaByApple.found)) === brief([`${umaName}:${uma.pk}`]) && rowOf(uma.pk, 'apple')?.findHash === expectedFindHash('apple', UMA_APPLE)
+        && brief(names(vicThere.found)) === brief([`${vicName}:${vic.pk}`]),
+        `and Uma's carried Apple copy and Vic are found there too (${brief(umaByApple.found.body)} ${brief(vicThere.found.body)})`);
     const renBack = await collect(renPhone, ren.pk);
     const renOpened = await openReleased(renPhone, renBack.body?.collectionId, 'google', REN_SUB);
     check(renBack.status === 200 && renOpened.pk === ren.pk, `Ren's copy, locked again with the live key, comes back to Ren's own key (${renBack.status} ${renOpened.pk === ren.pk ? 'equal' : renOpened.error})`);
@@ -443,6 +492,16 @@ async function main(): Promise<void> {
     const aged5 = engine?._ageFindHoldForTests(slower.pk, 5 * 60 * 1000) ?? false;
     const at5 = await collect(slower, damo.pk);
     check(aged5 && at5.status === 400 && sessionsFor(damo.pk) === sessions7, `5 minutes after it, the hold is gone and nothing opens (${at5.status} ${brief(at5.body)})`);
+    // Nothing has to come by for it to go: a hold keeps a verified sub, so it leaves memory when its time is up, on a quiet
+    // server too, with no find or collect after it.
+    const idle = newId();
+    await findBy(idle, 'google', DAMO_SUB);
+    const heldIdle = engine?._holdsFindForTests(idle.pk) ?? false;
+    engine?._ageFindHoldForTests(idle.pk, 5 * 60 * 1000);
+    await sleep(50);
+    const stillHeld = engine?._holdsFindForTests(idle.pk) ?? true;
+    check(heldIdle && !stillHeld,
+        `with no find or collect after it, an expired hold and its verified sub are gone from memory at its 5 minutes (${heldIdle ? 'held' : 'never held'}, then ${stillHeld ? 'still held' : 'gone'})`);
 
     // ── 8. a token from another provider ────────────────────────────────────────────────────────────
     console.log('\n── 8. another provider\'s token is refused as /collect/sso refuses it ──');

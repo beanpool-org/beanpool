@@ -5,17 +5,19 @@
  *
  *   GET  /api/notices[?unseen=1]   → { notices: [{ id, title, body, severity, data, createdAt, seenAt }] }, oldest first
  *   POST /api/notices/seen  { ids } → { success: true, marked }
- *   GET  /api/notices/push/:id     → { id, kind, title, body, data, sentAt }: one push's details (engine/push-notices.ts)
+ *   GET  /api/notices/push/:id     → { id, kind, title, body, data, sentAt }: one push's details (engine/push-notices.ts),
+ *                                    read by a tap on it: off the bell
  *   GET  /api/notices/push[?unseen=1] → { notices: [{ id, kind, title, body, data, sentAt, seenAt }] }, newest first: the bell
  *   POST /api/notices/push/seen  { ids } → { success: true, marked }: rows off the bell (a tap on one)
  *
  * ## The bell (DESIGN-web-notifications-fable.md §2.1)
  *
  * Both apps' bell reads the push notices this server kept for its member, a phone or not: at most 100, 7 days, newest
- * first. A row leaves only when the member taps it (the mark here) or opens its thing (a chat they read; a moderation
- * alert they acknowledge, which `POST /api/notices/seen` passes on); reading the list marks nothing. Under the same gate
- * as every route here, the signer's own only; a standby answers the read (it keeps no push notices: an empty list) and
- * refuses the mark.
+ * first. A row leaves only when the member taps it (the mark here), taps its notification on their phone (which reads its
+ * details, `GET /api/notices/push/:id`: only that tap does), or opens its thing (a chat they read; an alert they
+ * acknowledge, which `POST /api/notices/seen` passes on: every kept notice that is pushed names its kept copy,
+ * engine/kept-notices.ts keptNoticeDetails); reading the list marks nothing. Under the same gate as every route here, the
+ * signer's own only; a standby answers the read (it keeps no push notices: an empty list) and refuses the mark.
  *
  * ## Only ever the signer's own
  *
@@ -117,6 +119,9 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: word('This server has no such notice for you. Notices are kept for 7 days.'), code: 'no_notice' };
             return;
         }
+        // Only a tap on its notification reads one notice's details (the phone's followTap): it is opened, so off the bell,
+        // and its alert's kept copy marked, as a tap on the bell's row does. On the main server only: a standby holds none.
+        if (getNodeRole() === 'primary') markBellNoticesSeen(actor, [notice.id]);
         ctx.body = notice;
     });
 

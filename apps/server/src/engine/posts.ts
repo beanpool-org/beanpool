@@ -32,6 +32,7 @@ import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import { endStandingDealsOnRemovedListing, standingPeriodSettled, stopStandingDealsOnListing, tellStanding, type StandingNotice } from './standing-deals.js';
+import type { PushDetailsFor } from './kept-notices.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -231,6 +232,8 @@ type PushFn = (
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
     kind: PushNoticeKind,
+    rehearsal?: boolean,
+    detailsFor?: PushDetailsFor,
 ) => void;
 
 export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
@@ -997,7 +1000,9 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 function standingHooksOf(broadcast: BroadcastFn, push: PushFn | undefined): Parameters<typeof tellStanding>[0] {
     return {
         broadcast: (event, recipients) => broadcast(event, recipients),
-        dispatchPushNotification: (to, actor, title, body, data, category, kind) => push?.(to, actor, title, body, data, category, kind),
+        // Every argument through: a standing deal's notice names its kept copy for the bell (detailsFor).
+        dispatchPushNotification: (to, actor, title, body, data, category, kind, rehearsal, detailsFor) =>
+            push?.(to, actor, title, body, data, category, kind, rehearsal, detailsFor),
     };
 }
 

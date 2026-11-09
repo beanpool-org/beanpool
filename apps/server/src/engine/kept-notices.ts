@@ -125,6 +125,24 @@ export function keepNotice(recipient: string, title: string, body: string, data:
     }
 }
 
+/** What one recipient's push notice carries beside its sender's data (state-engine.ts deliverPushNotices `detailsFor`). */
+export type PushDetailsFor = (recipient: string) => Record<string, unknown> | undefined;
+
+/**
+ * For a push of notices just kept: each recipient's push notice names their own kept copy (`noticeId`), so acknowledging the
+ * alert takes its row off the bell, and a tap on the row marks the alert (state-engine.ts markBellNoticesSeen). Every sender
+ * that keeps a notice and pushes it passes this (web notifications W0, review of #3006). A copy that wasn't kept (null) names
+ * nothing.
+ */
+export function keptNoticeDetails(notices: readonly { to: string; id: string | null }[]): PushDetailsFor {
+    const ids = new Map<string, string>();
+    for (const n of notices) if (n.id) ids.set(n.to, n.id);
+    return (recipient) => {
+        const noticeId = ids.get(recipient);
+        return noticeId ? { noticeId } : undefined;
+    };
+}
+
 /**
  * A member's own notices, oldest first, within both bounds (the newest KEPT_NOTICES.perMember, none older than
  * KEPT_NOTICES.maxAgeDays, whenever the tidy last ran). `unseenOnly`: those they have not marked seen.

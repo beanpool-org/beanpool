@@ -55,7 +55,7 @@ import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, word
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { keepNotice } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type PushDetailsFor } from './kept-notices.js';
 import {
     attributeProjectEscrow, isClosedAccount, owedFromProjectEscrow, type StrandedPledgeLedger, type StrandedPledgeReturn, type StrandedProjectEscrow,
 } from './stranded-pledges.js';
@@ -70,7 +70,7 @@ export interface UnfundedPledgeHooks extends StrandedPledgeLedger {
     broadcast: (event: any, recipients?: string[]) => unknown;
     dispatchPushNotification: (
         targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>,
-        categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind,
+        categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind, rehearsal?: boolean, detailsFor?: PushDetailsFor,
     ) => unknown;
 }
 
@@ -279,7 +279,9 @@ function tell(hooks: Pick<UnfundedPledgeHooks, 'broadcast' | 'dispatchPushNotifi
     }
     for (const group of byWords.values()) {
         try {
-            hooks.dispatchPushNotification(group.map((n) => n.to), 'SYSTEM', group[0].title, group[0].body, data, 'escrow', 'community.notice');
+            // Each push notice names its member's kept copy: the alert acknowledged takes the bell's row off, and the other way round.
+            hooks.dispatchPushNotification(group.map((n) => n.to), 'SYSTEM', group[0].title, group[0].body, data, 'escrow', 'community.notice',
+                false, keptNoticeDetails(group));
         } catch (e: any) {
             console.warn('[Pledges] A push failed:', e?.message || e);
         }

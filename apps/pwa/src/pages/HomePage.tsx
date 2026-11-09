@@ -2543,7 +2543,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
-                case 'people': return onNavigate('people-invites');
+                // The line "N people asked to join" is a notice (Invites says so if they are answered by now); "N asked for an
+                // invite", which lands here too, is not.
+                case 'people': return item.kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
                 case 'shop': return onNavigate('shop', (target as any).id);
                 case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;

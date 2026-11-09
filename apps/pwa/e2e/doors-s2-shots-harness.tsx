@@ -4,6 +4,8 @@
  *
  *   ?view=wants    the list of two requests, with Invite and Not now
  *   ?view=find     the Find card: the asked community first, then two listed rows, each with Ask to join
+ *   ?view=empty    nobody is waiting (another owner answered); `&notice=1`: People was opened from the notice "N people asked
+ *                  to join", so the section says so instead of showing nothing
  * `&refuse=1` makes every answer and knock a refusal in the community's words (and the list read after a refused answer
  * no longer has that row, as the node's doesn't); `&dark=1` the dark theme.
  */
@@ -44,7 +46,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         return refuse ? json(409, { error: 'Another member has already answered this request.', code: 'answered' }) : json(200, { knock: { id, status: 'approved' } });
     }
     if (url.includes('/api/join/knocks')) {
-        const open = REQUESTS.filter(r => !answered.has(r.id));
+        const open = view === 'empty' ? [] : REQUESTS.filter(r => !answered.has(r.id));
         return json(200, { knocks: open, total: open.length });
     }
     if (url.endsWith('/api/join/knock')) {
@@ -56,6 +58,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 };
 
 function Harness() {
+    if (view === 'empty') {
+        return (
+            <div className="max-w-md mx-auto bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden" data-testid="shot">
+                <WantsToJoin fromNotice={params.get('notice') === '1'} />
+            </div>
+        );
+    }
     if (view === 'wants') {
         return (
             <div className="max-w-md mx-auto bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden" data-testid="shot">

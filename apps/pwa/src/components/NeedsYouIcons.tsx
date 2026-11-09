@@ -44,7 +44,7 @@ export function allNeedsLabel(kinds: number): string {
 }
 
 /** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
-export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
+export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void, kind?: NeedsItem['kind']): void {
     if (!onNavigate) return;
     switch (target.to) {
         // On the deal itself, not only its listing: a recurring listing's author lands on this one (deals S4).
@@ -57,7 +57,9 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
         case 'group': return onNavigate('group', target.id);
         case 'invite': return onNavigate('group', target.id);
         case 'invites': return onNavigate('projects');
-        case 'people': return onNavigate('people-invites');
+        // The line "N people asked to join" (not "N asked for an invite", which lands here too) is a notice: 'asked' tells Invites
+        // so, and it says so if they are answered by now instead of showing nothing (WantsToJoin).
+        case 'people': return kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
         default: return undefined;
     }
 }
@@ -375,9 +377,9 @@ export function NeedsYouIcons({
 
     const isSidebar = variant === 'sidebar';
     // A tap on a need: that need is about to change, so Home's copy of it no longer stands in.
-    const go = (target: NeedsTarget) => {
+    const go = (target: NeedsTarget, kind?: NeedsItem['kind']) => {
         forgetHomeForHeader();
-        goToWebNeedsTarget(target, onNavigate);
+        goToWebNeedsTarget(target, onNavigate, kind);
     };
     const sheetEl = sheet && (
         <NeedsSheet
@@ -396,7 +398,7 @@ export function NeedsYouIcons({
         return (
             <button
                 key={k}
-                onClick={() => go(entry.target)}
+                onClick={() => go(entry.target, entry.kind)}
                 aria-label={entry.label}
                 title={entry.label}
                 data-testid={`header-needs-${k}`}
@@ -523,7 +525,7 @@ function NeedsSheet({
 }: {
     entries: NeedsItem[];
     onClose: () => void;
-    onPick: (target: NeedsTarget) => void;
+    onPick: (target: NeedsTarget, kind: NeedsItem['kind']) => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialogRef, onClose);
@@ -569,7 +571,7 @@ function NeedsSheet({
                             type="button"
                             onClick={() => {
                                 onClose();
-                                onPick(e.target);
+                                onPick(e.target, e.kind);
                             }}
                             aria-label={e.label}
                             className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"

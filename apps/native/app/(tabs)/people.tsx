@@ -187,13 +187,29 @@ export default function PeopleScreen() {
         },
     }));
 
-    const params = useLocalSearchParams<{ view?: string }>();
+    const params = useLocalSearchParams<{ view?: string; from?: string }>();
     const [view, setView] = useState<SubView>(initialPeopleView(params.view));
     const [keyboardHeight, setKeyboardHeight] = useState(0);
+    // A notice ("someone asked to join": the push, or the app's own copy of it) opened this screen. Taken
+    // from the route once and cleared from it, so it doesn't outlive this visit: it ends when the member picks another pill
+    // or leaves the tab (WantsToJoin says "nobody is waiting" only for a visit a notice began).
+    const [fromNotice, setFromNotice] = useState(params.from === 'notice');
+    // Which notice tap this is. People is a tab and stays mounted, and so does Wants to join while Invites is the last view, so
+    // it would show the list it read last time: "nobody is waiting" over an old, empty list while someone is. Each tap starts
+    // Wants to join over (it is keyed on this), from a fresh read, with nothing kept from the visit before (an answer given there).
+    const [noticeVisit, setNoticeVisit] = useState(0);
 
     useEffect(() => {
         if (isPeopleView(params.view)) setView(params.view);
     }, [params.view]);
+
+    useEffect(() => {
+        if (params.from !== 'notice') return;
+        setFromNotice(true);
+        setNoticeVisit(n => n + 1);
+        router.setParams({ from: undefined });
+    }, [params.from]);
+    useFocusEffect(useCallback(() => () => setFromNotice(false), []));
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('set_people_view', (data) => {
@@ -1024,7 +1040,7 @@ export default function PeopleScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: isActive }}
                             style={[styles.pill, isActive && styles.pillActive]}
-                            onPress={() => { setView(v); router.setParams({ view: v }); }}
+                            onPress={() => { setView(v); setFromNotice(false); router.setParams({ view: v }); }}
                         >
                             {/* One line each: a name too long for the row in another language shrinks, all three together. It never
                                 wraps (the emoji would sit alone on the first line) and never breaks a word. */}
@@ -1362,7 +1378,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
                             {identity && anchorUrl && takesKnocks && (
-                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} />
+                                <WantsToJoin key={noticeVisit} anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} fromNotice={fromNotice} />
                             )}
                             {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && doorAdminsOnly && mayInvite && (
                                 <InviteAsksToAnswer anchorUrl={anchorUrl} identity={identity} />

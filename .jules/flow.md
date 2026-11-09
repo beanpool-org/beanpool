@@ -159,3 +159,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-13 - Strictly type fetchNodeLogs return value with LogEntry
 **Learning:** `fetchNodeLogs` in `lib/node-client.ts` returned `Promise<any[]>`, weakening type safety across manager API callers like `App.tsx` and appliance sections.
 **Action:** Export `LogEntry` interface in `node-client.ts` and type `fetchNodeLogs` as returning `Promise<LogEntry[]>`.
+
+## 2026-12-14 - Replace catch err any in AdviseTheOwners
+**Learning:** `AdviseTheOwners.tsx` used `catch (err: any)` in its async advice send handler, bypassing strict error typing and risking issues with non-standard error throws.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.

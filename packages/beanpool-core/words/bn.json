@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "আপনার বাজেট: কোনো সীমা নেই",
   "No limit · {vouched} vouched · {below} below zero": "কোনো সীমা নেই · {vouched} নিশ্চয়তাপ্রাপ্ত · {below} শূন্যের নিচে",
   "Clear all": "সব মুছুন",
-  "Clear this notice": "এই বিজ্ঞপ্তিটি মুছুন"
+  "Clear this notice": "এই বিজ্ঞপ্তিটি মুছুন",
+  "Pending ({count})": "অপেক্ষমাণ ({count})",
+  "Joined ({count})": "যোগ দিয়েছেন ({count})",
+  "For someone who asked to join": "যিনি যোগ দিতে চেয়েছেন তাঁর জন্য",
+  "Name on the phone": "নামটি ফোনে আছে",
+  "{amount} vouch": "{amount} নিশ্চয়তা",
+  "voucher budget {amount}": "নিশ্চয়তাকারীর বাজেট {amount}",
+  "confirms them as known": "তাঁদের পরিচিত হিসেবে নিশ্চিত করে",
+  "Plain invite": "সাধারণ আমন্ত্রণ",
+  "{time} left": "{time} বাকি",
+  "Invite for {name}": "{name}-এর জন্য আমন্ত্রণ",
+  "Invite made": "আমন্ত্রণ তৈরি হয়েছে"
 }

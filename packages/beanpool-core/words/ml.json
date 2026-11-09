@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "നിങ്ങളുടെ ബജറ്റ്: പരിധിയില്ല",
   "No limit · {vouched} vouched · {below} below zero": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {below} പൂജ്യത്തിന് താഴെ",
   "Clear all": "എല്ലാം മായ്ക്കുക",
-  "Clear this notice": "ഈ അറിയിപ്പ് മായ്ക്കുക"
+  "Clear this notice": "ഈ അറിയിപ്പ് മായ്ക്കുക",
+  "Pending ({count})": "തീർപ്പാക്കാത്തവ ({count})",
+  "Joined ({count})": "ചേർന്നവർ ({count})",
+  "For someone who asked to join": "ചേരാൻ അഭ്യർത്ഥിച്ച ഒരാൾക്ക്",
+  "Name on the phone": "പേര് ഫോണിലുണ്ട്",
+  "{amount} vouch": "{amount} ഉറപ്പ്",
+  "voucher budget {amount}": "ഗ്യാരന്റർ ബജറ്റ് {amount}",
+  "confirms them as known": "അവരെ അറിയപ്പെടുന്നവരായി സ്ഥിരീകരിക്കുന്നു",
+  "Plain invite": "സാധാരണ ക്ഷണം",
+  "{time} left": "{time} ബാക്കി",
+  "Invite for {name}": "{name}-നുള്ള ക്ഷണം",
+  "Invite made": "ക്ഷണം ഉണ്ടാക്കി"
 }

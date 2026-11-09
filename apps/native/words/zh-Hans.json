@@ -1353,9 +1353,7 @@
   "Share this community's link": "分享该社区的链接",
   "📤 Share the link": "📤 分享链接",
   "📤 Invite Someone": "📤 邀请新人",
-  "Who is this invite for? (For your records)": "此邀请发给谁？（供你备忘）",
   "Generating...": "正在生成...",
-  "Share this cryptographic code": "分享此加密代码",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ 待处理 ({n})"
   },
@@ -6846,5 +6844,7 @@
   "Nothing new.": "暂无新内容。",
   "Older notices are gone after 7 days.": "较早的通知将在 7 天后消失。",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · 无上限 · 已担保 {vouched} · {belowZero} 为负 ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "无上限 · 已担保 {vouched} · {belowZero} 为负 · 已注销 {writtenOff} · 已转赠 {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "无上限 · 已担保 {vouched} · {belowZero} 为负 · 已注销 {writtenOff} · 已转赠 {passedOn}",
+  "Make another invite": "再创建一个邀请",
+  "A note for you, kept on your community's server": "给你自己的备注，保存在你所在社区的服务器上"
 }

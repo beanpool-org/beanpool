@@ -2702,5 +2702,16 @@
   "Your budget: No limit": "ميزانيتك: بلا حد",
   "No limit · {vouched} vouched · {below} below zero": "بلا حد · تمت تزكية {vouched} · {below} تحت الصفر",
   "Clear all": "مسح الكل",
-  "Clear this notice": "مسح هذا الإشعار"
+  "Clear this notice": "مسح هذا الإشعار",
+  "Pending ({count})": "قيد الانتظار ({count})",
+  "Joined ({count})": "انضموا ({count})",
+  "For someone who asked to join": "لشخص طلب الانضمام",
+  "Name on the phone": "الاسم على الهاتف",
+  "{amount} vouch": "تزكية بقيمة {amount}",
+  "voucher budget {amount}": "ميزانية المزكّي {amount}",
+  "confirms them as known": "يؤكد أنهم معروفون",
+  "Plain invite": "دعوة عادية",
+  "{time} left": "متبقٍ {time}",
+  "Invite for {name}": "دعوة لـ {name}",
+  "Invite made": "تم إنشاء الدعوة"
 }

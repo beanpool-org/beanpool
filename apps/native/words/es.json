@@ -1421,9 +1421,7 @@
   "Share this community's link": "Comparte el enlace de esta comunidad",
   "📤 Share the link": "📤 Compartir el enlace",
   "📤 Invite Someone": "📤 Invitar a alguien",
-  "Who is this invite for? (For your records)": "¿Para quién es esta invitación? (Para tu registro)",
   "Generating...": "Generando...",
-  "Share this cryptographic code": "Comparte este código criptográfico",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ PENDIENTES ({n})",
     "other": "⏳ PENDIENTES ({n})"
@@ -7105,5 +7103,7 @@
   "Nothing new.": "Nada nuevo.",
   "Older notices are gone after 7 days.": "Los avisos anteriores desaparecen a los 7 días.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Sin límite · {vouched} avalados · {belowZero} bajo cero ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Sin límite · {vouched} avalados · {belowZero} bajo cero · {writtenOff} condonados · {passedOn} transferidos"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Sin límite · {vouched} avalados · {belowZero} bajo cero · {writtenOff} condonados · {passedOn} transferidos",
+  "Make another invite": "Crear otra invitación",
+  "A note for you, kept on your community's server": "Una nota para ti, guardada en el servidor de tu comunidad"
 }

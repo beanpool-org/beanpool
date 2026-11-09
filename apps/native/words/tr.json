@@ -1422,9 +1422,7 @@
   "Share this community's link": "Bu topluluğun bağlantısını paylaş",
   "📤 Share the link": "📤 Bağlantıyı paylaş",
   "📤 Invite Someone": "📤 Birini Davet Et",
-  "Who is this invite for? (For your records)": "Bu davet kimin için? (Kendi kaydın için)",
   "Generating...": "Oluşturuluyor...",
-  "Share this cryptographic code": "Bu kriptografik kodu paylaş",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ BEKLEMEDE ({n})",
     "other": "⏳ BEKLEMEDE ({n})"
@@ -7105,5 +7103,7 @@
   "Nothing new.": "Yeni bir şey yok.",
   "Older notices are gone after 7 days.": "Eski bildirimler 7 gün sonra kaybolur.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Sınırsız · {vouched} kefil olundu · {belowZero} sıfırın altında ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Sınırsız · {vouched} kefil olundu · {belowZero} sıfırın altında · {writtenOff} silindi · {passedOn} devredildi"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Sınırsız · {vouched} kefil olundu · {belowZero} sıfırın altında · {writtenOff} silindi · {passedOn} devredildi",
+  "Make another invite": "Başka bir davet oluştur",
+  "A note for you, kept on your community's server": "Sana bir not, topluluğunun sunucusunda saklanır"
 }

@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Bütçen: Sınırsız",
   "No limit · {vouched} vouched · {below} below zero": "Sınırsız · {vouched} kefil olundu · {below} sıfırın altında",
   "Clear all": "Tümünü temizle",
-  "Clear this notice": "Bu bildirimi temizle"
+  "Clear this notice": "Bu bildirimi temizle",
+  "Pending ({count})": "Bekleyen ({count})",
+  "Joined ({count})": "Katılan ({count})",
+  "For someone who asked to join": "Katılmak isteyen biri için",
+  "Name on the phone": "İsim telefonda",
+  "{amount} vouch": "{amount} kefalet",
+  "voucher budget {amount}": "kefil bütçesi {amount}",
+  "confirms them as known": "onları tanınan kişi olarak onaylar",
+  "Plain invite": "Sade davet",
+  "{time} left": "{time} kaldı",
+  "Invite for {name}": "{name} için davet",
+  "Invite made": "Davet oluşturuldu"
 }

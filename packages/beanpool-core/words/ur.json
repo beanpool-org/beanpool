@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "آپ کا بجٹ: کوئی حد نہیں",
   "No limit · {vouched} vouched · {below} below zero": "کوئی حد نہیں · {vouched} تصدیق شدہ · {below} صفر سے نیچے",
   "Clear all": "سب صاف کریں",
-  "Clear this notice": "یہ اطلاع صاف کریں"
+  "Clear this notice": "یہ اطلاع صاف کریں",
+  "Pending ({count})": "زیرِ التوا ({count})",
+  "Joined ({count})": "شامل ہو چکے ({count})",
+  "For someone who asked to join": "اس کے لیے جس نے شامل ہونے کی درخواست کی",
+  "Name on the phone": "نام فون پر ہے",
+  "{amount} vouch": "{amount} کی تصدیق",
+  "voucher budget {amount}": "تصدیق کنندہ کا بجٹ {amount}",
+  "confirms them as known": "انہیں جانے پہچانے کے طور پر تصدیق کرتا ہے",
+  "Plain invite": "سادہ دعوت",
+  "{time} left": "{time} باقی",
+  "Invite for {name}": "{name} کے لیے دعوت",
+  "Invite made": "دعوت بن گئی"
 }

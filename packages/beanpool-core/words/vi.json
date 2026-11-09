@@ -2312,5 +2312,16 @@
   "Your budget: No limit": "Ngân sách của bạn: Không giới hạn",
   "No limit · {vouched} vouched · {below} below zero": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {below}",
   "Clear all": "Xóa tất cả",
-  "Clear this notice": "Xóa thông báo này"
+  "Clear this notice": "Xóa thông báo này",
+  "Pending ({count})": "Đang chờ ({count})",
+  "Joined ({count})": "Đã tham gia ({count})",
+  "For someone who asked to join": "Dành cho người đã xin tham gia",
+  "Name on the phone": "Tên nằm trên điện thoại",
+  "{amount} vouch": "bảo lãnh {amount}",
+  "voucher budget {amount}": "hạn mức người bảo lãnh {amount}",
+  "confirms them as known": "xác nhận họ là người quen biết",
+  "Plain invite": "Lời mời thường",
+  "{time} left": "còn {time}",
+  "Invite for {name}": "Lời mời cho {name}",
+  "Invite made": "Đã tạo lời mời"
 }

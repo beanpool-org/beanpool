@@ -1353,9 +1353,7 @@
   "Share this community's link": "このコミュニティのリンクを共有",
   "📤 Share the link": "📤 リンクを共有",
   "📤 Invite Someone": "📤 誰かを招待する",
-  "Who is this invite for? (For your records)": "誰への招待ですか？（控え用）",
   "Generating...": "生成中...",
-  "Share this cryptographic code": "この暗号コードを共有",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ 保留中（{n}）"
   },
@@ -6846,5 +6844,7 @@
   "Nothing new.": "新着はありません。",
   "Older notices are gone after 7 days.": "古い通知は7日後に消えます。",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · 上限なし · 保証済み {vouched} · マイナス {belowZero} ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "上限なし · 保証済み {vouched} · マイナス {belowZero} · 償却済み {writtenOff} · 譲渡済み {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "上限なし · 保証済み {vouched} · マイナス {belowZero} · 償却済み {writtenOff} · 譲渡済み {passedOn}",
+  "Make another invite": "別の招待を作る",
+  "A note for you, kept on your community's server": "あなた用のメモ（コミュニティのサーバーに保存されます）"
 }

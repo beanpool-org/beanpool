@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Bajeti yako: Hakuna kikomo",
   "No limit · {vouched} vouched · {below} below zero": "Hakuna kikomo · {vouched} wamedhaminiwa · {below} chini ya sifuri",
   "Clear all": "Futa zote",
-  "Clear this notice": "Futa arifa hii"
+  "Clear this notice": "Futa arifa hii",
+  "Pending ({count})": "Yanayosubiri ({count})",
+  "Joined ({count})": "Waliojiunga ({count})",
+  "For someone who asked to join": "Kwa mtu aliyeomba kujiunga",
+  "Name on the phone": "Jina liko kwenye simu",
+  "{amount} vouch": "dhamana ya {amount}",
+  "voucher budget {amount}": "bajeti ya mdhamini {amount}",
+  "confirms them as known": "inawathibitisha kuwa wanajulikana",
+  "Plain invite": "Mwaliko wa kawaida",
+  "{time} left": "zimebaki {time}",
+  "Invite for {name}": "Mwaliko kwa {name}",
+  "Invite made": "Mwaliko umetengenezwa"
 }

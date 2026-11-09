@@ -2691,7 +2691,6 @@
   "Who can see this?": "ഇത് ആർക്കൊക്കെ കാണാനാകും?",
   "Who hosts it": "ആരാണ് ഇത് ഹോസ്റ്റ് ചെയ്യുന്നത്",
   "Who invited whom. The tree shows how your community grows.": "ആര് ആരെ ക്ഷണിച്ചു. കമ്മ്യൂണിറ്റി എങ്ങനെ വളരുന്നുവെന്ന് മരം കാണിക്കുന്നു.",
-  "Who is this invite for? (For your records)": "ഈ ക്ഷണം ആർക്കാണ്? (നിങ്ങളുടെ അറിവിലേക്കായി)",
   "Who should be able to join?": "ആർക്കൊക്കെ ചേരാൻ കഴിയണം?",
   "Who should lead?": "ആരാണ് നേതൃത്വം നൽകേണ്ടത്?",
   "Who you work well with": "നിങ്ങൾ നന്നായി സഹകരിച്ച് പ്രവർത്തിക്കുന്ന ആളുകൾ",
@@ -4706,5 +4705,7 @@
   "Your name here": "നിങ്ങളുടെ പേര് ഇവിടെ നൽകുക",
   "your browser": "നിങ്ങളുടെ ബ്രൗസർ",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}-ന്റെ സെർവർ ഈ ആപ്പിനേക്കാൾ പഴയതാണ്, സൈൻ-ഇൻ വഴി നിങ്ങളുടെ അക്കൗണ്ട് ഇതുവരെ കണ്ടെത്താൻ അതിന് കഴിയില്ല. അപ്ഡേറ്റ് ചെയ്യാൻ അതിന്റെ അഡ്മിനോട് ആവശ്യപ്പെടുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} മറുപടി നൽകുമ്പോൾ ഞങ്ങൾ നിങ്ങളെ ഇവിടെ അറിയിക്കും."
+  "✓ We'll tell you here when {name} answers.": "✓ {name} മറുപടി നൽകുമ്പോൾ ഞങ്ങൾ നിങ്ങളെ ഇവിടെ അറിയിക്കും.",
+  "Make another invite": "മറ്റൊരു ക്ഷണം ഉണ്ടാക്കുക",
+  "A note for you, kept on your community's server": "നിങ്ങൾക്കുള്ള ഒരു കുറിപ്പ്, നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിൽ സൂക്ഷിക്കുന്നു"
 }

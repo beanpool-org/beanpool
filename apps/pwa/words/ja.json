@@ -2635,7 +2635,6 @@
   "Who can see this?": "誰に公開しますか？",
   "Who hosts it": "ホスティングについて",
   "Who invited whom. The tree shows how your community grows.": "誰が誰を招待したか。コミュニティの広がりをツリーで確認できます。",
-  "Who is this invite for? (For your records)": "誰への招待ですか？（控え用）",
   "Who should be able to join?": "誰が参加できるようにしますか？",
   "Who should lead?": "誰がリードすべきですか？",
   "Who you work well with": "相性の良い相手",
@@ -4530,5 +4529,7 @@
   "Your name here": "あなたのお名前",
   "your browser": "お使いのブラウザ",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} のサーバーはこのアプリより古く、まだサインインからアカウントを見つけられません。その管理者に更新を依頼するか、12個の単語を使ってください。",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} が返答したら、ここでお知らせします。"
+  "✓ We'll tell you here when {name} answers.": "✓ {name} が返答したら、ここでお知らせします。",
+  "Make another invite": "別の招待を作る",
+  "A note for you, kept on your community's server": "あなた用のメモ（コミュニティのサーバーに保存されます）"
 }

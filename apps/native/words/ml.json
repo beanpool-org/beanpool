@@ -1421,9 +1421,7 @@
   "Share this community's link": "ഈ കമ്മ്യൂണിറ്റിയുടെ ലിങ്ക് പങ്കിടുക",
   "📤 Share the link": "📤 ലിങ്ക് പങ്കിടുക",
   "📤 Invite Someone": "📤 ആരെയെങ്കിലും ക്ഷണിക്കുക",
-  "Who is this invite for? (For your records)": "ഈ ക്ഷണം ആർക്കാണ്? (നിങ്ങളുടെ അറിവിലേക്കായി)",
   "Generating...": "തയ്യാറാക്കുന്നു...",
-  "Share this cryptographic code": "ഈ ക്രിപ്റ്റോഗ്രാഫിക് കോഡ് പങ്കിടുക",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ തീർപ്പാക്കാത്തത് ({n})",
     "other": "⏳ തീർപ്പാക്കാത്തവ ({n})"
@@ -7105,5 +7103,7 @@
   "Nothing new.": "പുതിയതായി ഒന്നുമില്ല.",
   "Older notices are gone after 7 days.": "പഴയ അറിയിപ്പുകൾ 7 ദിവസത്തിനു ശേഷം ഇല്ലാതാകും.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {belowZero} പൂജ്യത്തിന് താഴെ ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {belowZero} പൂജ്യത്തിന് താഴെ · {writtenOff} എഴുതിത്തള്ളി · {passedOn} കൈമാറി"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "പരിധിയില്ല · {vouched} ഉറപ്പുനൽകി · {belowZero} പൂജ്യത്തിന് താഴെ · {writtenOff} എഴുതിത്തള്ളി · {passedOn} കൈമാറി",
+  "Make another invite": "മറ്റൊരു ക്ഷണം ഉണ്ടാക്കുക",
+  "A note for you, kept on your community's server": "നിങ്ങൾക്കുള്ള ഒരു കുറിപ്പ്, നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിൽ സൂക്ഷിക്കുന്നു"
 }

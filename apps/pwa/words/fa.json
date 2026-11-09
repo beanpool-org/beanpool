@@ -2691,7 +2691,6 @@
   "Who can see this?": "چه کسی می‌تواند این را ببیند؟",
   "Who hosts it": "چه کسی آن را میزبانی می‌کند",
   "Who invited whom. The tree shows how your community grows.": "چه کسی چه کسی را دعوت کرده است. این درخت نحوه رشد جامعه شما را نشان می‌دهد.",
-  "Who is this invite for? (For your records)": "این دعوت برای چه کسی است؟ (برای یادداشت خودتان)",
   "Who should be able to join?": "چه کسانی باید بتوانند عضو شوند؟",
   "Who should lead?": "چه کسی باید رهبری کند؟",
   "Who you work well with": "کسانی که با آن‌ها خوب کار می‌کنید",
@@ -4716,5 +4715,7 @@
   "Your name here": "نام شما اینجا",
   "your browser": "مرورگر شما",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "سرور {community} از این برنامه قدیمی‌تر است و هنوز نمی‌تواند حساب شما را از روی ورود پیدا کند. از مدیر {community} بخواهید به‌روزرسانی کند، یا از 12 کلمه‌تان استفاده کنید.",
-  "✓ We'll tell you here when {name} answers.": "✓ وقتی {name} پاسخ دهد، اینجا به شما خبر می‌دهیم."
+  "✓ We'll tell you here when {name} answers.": "✓ وقتی {name} پاسخ دهد، اینجا به شما خبر می‌دهیم.",
+  "Make another invite": "ساخت دعوت دیگر",
+  "A note for you, kept on your community's server": "یادداشتی برای شما، نگه‌داری‌شده روی سرور جامعهٔ شما"
 }

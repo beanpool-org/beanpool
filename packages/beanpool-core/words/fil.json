@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Iyong badyet: Walang limitasyon",
   "No limit · {vouched} vouched · {below} below zero": "Walang limitasyon · {vouched} napatunayan · {below} mababa sa zero",
   "Clear all": "I-clear lahat",
-  "Clear this notice": "I-clear ang abisong ito"
+  "Clear this notice": "I-clear ang abisong ito",
+  "Pending ({count})": "Nakabinbin ({count})",
+  "Joined ({count})": "Sumali ({count})",
+  "For someone who asked to join": "Para sa taong humiling na sumali",
+  "Name on the phone": "Nasa telepono ang pangalan",
+  "{amount} vouch": "pagpapatunay na {amount}",
+  "voucher budget {amount}": "badyet ng tagapagpatunay {amount}",
+  "confirms them as known": "kinukumpirma silang kilala",
+  "Plain invite": "Simpleng imbitasyon",
+  "{time} left": "{time} na lang",
+  "Invite for {name}": "Imbitasyon para kay {name}",
+  "Invite made": "Nagawa na ang imbitasyon"
 }

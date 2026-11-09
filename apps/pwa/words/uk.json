@@ -2803,7 +2803,6 @@
   "Who can see this?": "Хто може це бачити?",
   "Who hosts it": "Хто хостить",
   "Who invited whom. The tree shows how your community grows.": "Хто кого запросив. Дерево показує, як зростає ваша спільнота.",
-  "Who is this invite for? (For your records)": "Для кого це запрошення? (Для ваших записів)",
   "Who should be able to join?": "Хто може приєднуватися?",
   "Who should lead?": "Хто має очолювати?",
   "Who you work well with": "З ким ви добре спрацьовуєтеся",
@@ -5058,5 +5057,7 @@
   "Your name here": "Ваше ім’я тут",
   "your browser": "ваш браузер",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Сервер спільноти {community} старший за цей застосунок і ще не може знайти ваш акаунт за входом. Попросіть адміністрацію спільноти {community} оновити його або скористайтеся своїми 12 словами.",
-  "✓ We'll tell you here when {name} answers.": "✓ Ми повідомимо вас тут, коли {name} відповість."
+  "✓ We'll tell you here when {name} answers.": "✓ Ми повідомимо вас тут, коли {name} відповість.",
+  "Make another invite": "Створити ще одне запрошення",
+  "A note for you, kept on your community's server": "Нотатка для вас, зберігається на сервері вашої спільноти"
 }

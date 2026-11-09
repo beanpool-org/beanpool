@@ -2691,7 +2691,6 @@
   "Who can see this?": "یہ کون دیکھ سکتا ہے؟",
   "Who hosts it": "اس کی میزبانی کون کرتا ہے",
   "Who invited whom. The tree shows how your community grows.": "کس نے کس کو مدعو کیا۔ یہ شجرہ دکھاتا ہے کہ آپ کی کمیونٹی کیسے بڑھتی ہے۔",
-  "Who is this invite for? (For your records)": "یہ دعوت نامہ کس کے لیے ہے؟ (آپ کے ریکارڈ کے لیے)",
   "Who should be able to join?": "کون شامل ہونے کا اہل ہونا چاہیے؟",
   "Who should lead?": "کسے سربراہ ہونا چاہیے؟",
   "Who you work well with": "آپ کس کے ساتھ اچھا کام کرتے ہیں",
@@ -4716,5 +4715,7 @@
   "Your name here": "یہاں آپ کا نام",
   "your browser": "آپ کا براؤزر",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} کا سرور اس ایپ سے پرانا ہے اور ابھی سائن ان سے آپ کا اکاؤنٹ نہیں ڈھونڈ سکتا۔ اس کے ایڈمن سے اپ ڈیٹ کرنے کو کہیں، یا اپنے 12 الفاظ استعمال کریں۔",
-  "✓ We'll tell you here when {name} answers.": "✓ جب {name} کی طرف سے جواب آئے گا، ہم آپ کو یہیں بتائیں گے۔"
+  "✓ We'll tell you here when {name} answers.": "✓ جب {name} کی طرف سے جواب آئے گا، ہم آپ کو یہیں بتائیں گے۔",
+  "Make another invite": "ایک اور دعوت بنائیں",
+  "A note for you, kept on your community's server": "آپ کے لیے ایک نوٹ، جو آپ کی کمیونٹی کے سرور پر رکھا جاتا ہے"
 }

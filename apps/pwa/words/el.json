@@ -2690,7 +2690,6 @@
   "Who can see this?": "Ποιος μπορεί να το δει αυτό;",
   "Who hosts it": "Ποιος το φιλοξενεί",
   "Who invited whom. The tree shows how your community grows.": "Ποιος προσκάλεσε ποιον. Το δέντρο δείχνει πώς μεγαλώνει η κοινότητά σας.",
-  "Who is this invite for? (For your records)": "Για ποιον είναι αυτή η πρόσκληση; (Για το αρχείο σας)",
   "Who should be able to join?": "Ποιος θα πρέπει να μπορεί να συμμετέχει;",
   "Who should lead?": "Ποιος πρέπει να ηγηθεί;",
   "Who you work well with": "Με ποιον συνεργάζεσαι καλά",
@@ -4706,5 +4705,7 @@
   "Your name here": "Το όνομά σου εδώ",
   "your browser": "το πρόγραμμα περιήγησής σας",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Ο διακομιστής της κοινότητας {community} είναι παλαιότερος από αυτήν την εφαρμογή και δεν μπορεί ακόμη να βρει τον λογαριασμό σας από μια σύνδεση. Ζητήστε από τη διαχείριση της κοινότητας {community} να τον ενημερώσει ή χρησιμοποιήστε τις 12 λέξεις σας.",
-  "✓ We'll tell you here when {name} answers.": "✓ Θα σας ενημερώσουμε εδώ όταν απαντήσει {name}."
+  "✓ We'll tell you here when {name} answers.": "✓ Θα σας ενημερώσουμε εδώ όταν απαντήσει {name}.",
+  "Make another invite": "Δημιουργία άλλης πρόσκλησης",
+  "A note for you, kept on your community's server": "Μια σημείωση για εσάς, αποθηκευμένη στον διακομιστή της κοινότητάς σας"
 }

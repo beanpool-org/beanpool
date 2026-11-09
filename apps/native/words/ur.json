@@ -1421,9 +1421,7 @@
   "Share this community's link": "اس کمیونٹی کا لنک شیئر کریں",
   "📤 Share the link": "📤 لنک شیئر کریں",
   "📤 Invite Someone": "📤 کسی کو مدعو کریں",
-  "Who is this invite for? (For your records)": "یہ دعوت نامہ کس کے لیے ہے؟ (آپ کے ریکارڈ کے لیے)",
   "Generating...": "تیار کیا جا رہا ہے...",
-  "Share this cryptographic code": "یہ کرپٹوگرافک کوڈ شیئر کریں",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ زیر التواء ({n})",
     "other": "⏳ زیر التواء ({n})"
@@ -7110,5 +7108,7 @@
   "Nothing new.": "کچھ نیا نہیں۔",
   "Older notices are gone after 7 days.": "پرانی اطلاعات 7 دن بعد ختم ہو جاتی ہیں۔",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · کوئی حد نہیں · {vouched} تصدیق شدہ · {belowZero} صفر سے نیچے ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "کوئی حد نہیں · {vouched} تصدیق شدہ · {belowZero} صفر سے نیچے · {writtenOff} رائٹ آف · {passedOn} منتقل کیا گیا"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "کوئی حد نہیں · {vouched} تصدیق شدہ · {belowZero} صفر سے نیچے · {writtenOff} رائٹ آف · {passedOn} منتقل کیا گیا",
+  "Make another invite": "ایک اور دعوت بنائیں",
+  "A note for you, kept on your community's server": "آپ کے لیے ایک نوٹ، جو آپ کی کمیونٹی کے سرور پر رکھا جاتا ہے"
 }

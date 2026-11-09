@@ -2546,5 +2546,16 @@
   "Your budget: No limit": "Ваш бюджет: Без обмежень",
   "No limit · {vouched} vouched · {below} below zero": "Без обмежень · під порукою {vouched} · нижче нуля {below}",
   "Clear all": "Очистити все",
-  "Clear this notice": "Прибрати це сповіщення"
+  "Clear this notice": "Прибрати це сповіщення",
+  "Pending ({count})": "Очікують ({count})",
+  "Joined ({count})": "Приєдналися ({count})",
+  "For someone who asked to join": "Для того, хто попросився долучитися",
+  "Name on the phone": "Ім’я — на телефоні",
+  "{amount} vouch": "поручительство на {amount}",
+  "voucher budget {amount}": "бюджет поручителя {amount}",
+  "confirms them as known": "підтверджує їх як знайомих",
+  "Plain invite": "Звичайне запрошення",
+  "{time} left": "залишилося {time}",
+  "Invite for {name}": "Запрошення для {name}",
+  "Invite made": "Запрошення створено"
 }

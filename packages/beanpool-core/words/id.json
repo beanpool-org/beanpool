@@ -2312,5 +2312,16 @@
   "Your budget: No limit": "Anggaran Anda: Tanpa batas",
   "No limit · {vouched} vouched · {below} below zero": "Tanpa batas · {vouched} dijamin · {below} di bawah nol",
   "Clear all": "Hapus semua",
-  "Clear this notice": "Hapus pemberitahuan ini"
+  "Clear this notice": "Hapus pemberitahuan ini",
+  "Pending ({count})": "Tertunda ({count})",
+  "Joined ({count})": "Sudah bergabung ({count})",
+  "For someone who asked to join": "Untuk orang yang meminta bergabung",
+  "Name on the phone": "Nama ada di ponsel",
+  "{amount} vouch": "jaminan {amount}",
+  "voucher budget {amount}": "anggaran penjamin {amount}",
+  "confirms them as known": "mengonfirmasi mereka sebagai orang yang dikenal",
+  "Plain invite": "Undangan biasa",
+  "{time} left": "sisa {time}",
+  "Invite for {name}": "Undangan untuk {name}",
+  "Invite made": "Undangan dibuat"
 }

@@ -2691,7 +2691,6 @@
   "Who can see this?": "Nani anaweza kuona hii?",
   "Who hosts it": "Nani anayeihudumia",
   "Who invited whom. The tree shows how your community grows.": "Nani alimwalika nani. Mti unaonyesha jinsi jumuiya yako inavyokua.",
-  "Who is this invite for? (For your records)": "Mwaliko huu ni wa nani? (Kwa kumbukumbu zako)",
   "Who should be able to join?": "Nani anapaswa kuweza kujiunga?",
   "Who should lead?": "Nani anapaswa kuongoza?",
   "Who you work well with": "Unaofanya nao kazi vizuri",
@@ -4716,5 +4715,7 @@
   "Your name here": "Jina lako hapa",
   "your browser": "kivinjari chako",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Seva ya {community} ni ya zamani kuliko programu hii na bado haiwezi kupata akaunti yako kutoka kwa kuingia. Mwombe msimamizi wa {community} asasishe, au tumia maneno yako 12.",
-  "✓ We'll tell you here when {name} answers.": "✓ Tutakuarifu hapa {name} atakapojibu."
+  "✓ We'll tell you here when {name} answers.": "✓ Tutakuarifu hapa {name} atakapojibu.",
+  "Make another invite": "Tengeneza mwaliko mwingine",
+  "A note for you, kept on your community's server": "Dokezo kwa ajili yako, linalohifadhiwa kwenye seva ya jumuiya yako"
 }

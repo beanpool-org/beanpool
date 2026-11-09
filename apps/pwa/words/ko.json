@@ -2635,7 +2635,6 @@
   "Who can see this?": "누가 볼 수 있나요?",
   "Who hosts it": "호스팅 주체",
   "Who invited whom. The tree shows how your community grows.": "누가 누구를 초대했는지 보여 줘요. 나무를 통해 커뮤니티가 어떻게 자라는지 볼 수 있어요.",
-  "Who is this invite for? (For your records)": "누구에게 보낼 초대장인가요? (내 메모용)",
   "Who should be able to join?": "누가 가입할 수 있도록 할까요?",
   "Who should lead?": "누가 대표를 맡을까요?",
   "Who you work well with": "나와 잘 맞는 사람",
@@ -4530,5 +4529,7 @@
   "Your name here": "여기에 이름 입력",
   "your browser": "브라우저",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}의 서버가 이 앱보다 오래되어 아직 로그인으로 내 계정을 찾을 수 없어요. 관리자에게 업데이트를 요청하거나 12개의 단어를 사용하세요.",
-  "✓ We'll tell you here when {name} answers.": "✓ {name}에서 답이 오면 여기서 알려 드려요."
+  "✓ We'll tell you here when {name} answers.": "✓ {name}에서 답이 오면 여기서 알려 드려요.",
+  "Make another invite": "다른 초대 만들기",
+  "A note for you, kept on your community's server": "나를 위한 메모, 커뮤니티 서버에 보관됩니다"
 }

@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "بودجه شما: بدون سقف",
   "No limit · {vouched} vouched · {below} below zero": "بدون سقف · {vouched} ضمانت‌شده · {below} زیر صفر",
   "Clear all": "پاک کردن همه",
-  "Clear this notice": "پاک کردن این اعلان"
+  "Clear this notice": "پاک کردن این اعلان",
+  "Pending ({count})": "در انتظار ({count})",
+  "Joined ({count})": "پیوسته‌اند ({count})",
+  "For someone who asked to join": "برای کسی که درخواست پیوستن داده",
+  "Name on the phone": "نام روی گوشی است",
+  "{amount} vouch": "ضمانت {amount}",
+  "voucher budget {amount}": "بودجهٔ ضامن {amount}",
+  "confirms them as known": "آن‌ها را به‌عنوان آشنا تأیید می‌کند",
+  "Plain invite": "دعوت ساده",
+  "{time} left": "{time} مانده",
+  "Invite for {name}": "دعوت برای {name}",
+  "Invite made": "دعوت ساخته شد"
 }

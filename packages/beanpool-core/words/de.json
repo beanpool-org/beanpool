@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Dein Budget: Kein Limit",
   "No limit · {vouched} vouched · {below} below zero": "Kein Limit · {vouched} verbürgt · {below} im Minus",
   "Clear all": "Alle löschen",
-  "Clear this notice": "Diese Benachrichtigung löschen"
+  "Clear this notice": "Diese Benachrichtigung löschen",
+  "Pending ({count})": "Ausstehend ({count})",
+  "Joined ({count})": "Beigetreten ({count})",
+  "For someone who asked to join": "Für jemanden, der beitreten wollte",
+  "Name on the phone": "Name auf dem Handy",
+  "{amount} vouch": "{amount} Bürgschaft",
+  "voucher budget {amount}": "Bürgen-Budget {amount}",
+  "confirms them as known": "bestätigt sie als bekannt",
+  "Plain invite": "Einfache Einladung",
+  "{time} left": "noch {time}",
+  "Invite for {name}": "Einladung für {name}",
+  "Invite made": "Einladung erstellt"
 }

@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "உங்கள் பட்ஜெட்: வரம்பு இல்லை",
   "No limit · {vouched} vouched · {below} below zero": "வரம்பு இல்லை · {vouched} உறுதியளிக்கப்பட்டது · {below} பூஜ்ஜியத்திற்குக் கீழே",
   "Clear all": "அனைத்தையும் அழி",
-  "Clear this notice": "இந்த அறிவிப்பை அழி"
+  "Clear this notice": "இந்த அறிவிப்பை அழி",
+  "Pending ({count})": "நிலுவையில் ({count})",
+  "Joined ({count})": "இணைந்தவர்கள் ({count})",
+  "For someone who asked to join": "சேரக் கேட்ட ஒருவருக்காக",
+  "Name on the phone": "பெயர் தொலைபேசியில் உள்ளது",
+  "{amount} vouch": "{amount} உறுதி",
+  "voucher budget {amount}": "உறுதியளிப்பவர் பட்ஜெட் {amount}",
+  "confirms them as known": "அவர்களை அறிமுகமானவர்களாக உறுதிப்படுத்தும்",
+  "Plain invite": "சாதாரண அழைப்பு",
+  "{time} left": "{time} மீதம்",
+  "Invite for {name}": "{name}-க்கான அழைப்பு",
+  "Invite made": "அழைப்பு உருவாக்கப்பட்டது"
 }

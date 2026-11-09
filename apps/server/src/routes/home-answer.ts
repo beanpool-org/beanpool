@@ -78,7 +78,7 @@ import {
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
-    getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
+    getMember, getPosts, getBalance, getMarketplaceTransactions, getMarketplaceTransaction, getConversationsByMember, getListedUnreadCounts,
     listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo, getTransactions,
     getEnterpriseLedger, treasuryKeepers, getConversation, getConversationMessages, type EnterpriseLedgerEntry,
 } from '../state-engine.js';
@@ -586,9 +586,19 @@ function chats(c: Ctx): ReturnType<typeof listYourChats> {
 const muted = (mute: { mutedUntil: string | null; always?: boolean } | null | undefined, now: number) =>
     !!mute && (!!mute.always || mute.mutedUntil === null || Date.parse(mute.mutedUntil) > now);
 
-/** The signer's open marketplace trades (requested or in progress), newest first: the deals card's and the needs line's. */
+/**
+ * The signer's open marketplace trades (requested or in progress), newest first: the deals card's and the needs line's. A
+ * standing deal between its periods is one too (DESIGN-standing-deals-fable §2.2): short of the next period's Beans, its
+ * current row is the period last settled, so the read by status never finds it, and its payer must still be told.
+ */
 function openDeals(me: string) {
     const raw = [...getMarketplaceTransactions(me, { status: 'requested' }, 200), ...getMarketplaceTransactions(me, { status: 'pending' }, 200)];
+    const between = db.prepare(`SELECT current_tx_id AS id FROM standing_deals WHERE (payer_pubkey = ? OR payee_pubkey = ?)
+                                AND phase IN ('short', 'due') AND current_tx_id IS NOT NULL LIMIT 200`).all(me, me) as { id: string }[];
+    for (const { id } of between) {
+        const tx = getMarketplaceTransaction(id);
+        if (tx && tx.status !== 'pending' && tx.status !== 'requested') raw.push(tx);
+    }
     return coreOpenDeals(raw, me);
 }
 

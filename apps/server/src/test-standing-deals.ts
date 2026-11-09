@@ -111,15 +111,20 @@ async function call(id: Id, method: 'GET' | 'POST', path: string, body?: Record<
 const post = (id: Id, path: string, body: Record<string, unknown>) => call(id, 'POST', path, body);
 
 interface AuthOpts { postId: string; payee: string; beans: number; unit: StandingPeriodUnit; max: number | null; startsAt?: string; id?: string; host?: string; nonce?: string }
-/** A standing authorisation as an app makes one, signed by `signer` over the text's UTF-8 bytes. */
-function authorise(signer: Id, o: AuthOpts): { id: string; startsAt: string; payload: string; standing: Record<string, unknown> } {
+/**
+ * A standing authorisation as an app makes one (@beanpool/core signStandingAuthorisation), signed by `signer` as every member
+ * statement is: 0xFF, then the text's UTF-8 bytes. `bare` signs the text alone, as an older app's "Manage" button signs any
+ * text a node sends it: never an authorisation.
+ */
+function authorise(signer: Id, o: AuthOpts & { bare?: boolean }): { id: string; startsAt: string; payload: string; standing: Record<string, unknown> } {
     const id = o.id ?? crypto.randomUUID();
     const startsAt = o.startsAt ?? new Date(Date.now()).toISOString();
     const payload = standingAuthorisationText({
         host: o.host ?? HOST, standingId: id, listingId: o.postId, payee: o.payee, beansPerPeriod: o.beans, unit: o.unit, maxPeriods: o.max, startsAt,
         nonce: o.nonce ?? crypto.randomBytes(12).toString('hex'),
     });
-    const signature = crypto.sign(null, Buffer.from(payload, 'utf-8'), signer.priv).toString('base64');
+    const bytes = o.bare ? Buffer.from(payload, 'utf-8') : Buffer.concat([Buffer.from([0xff]), Buffer.from(payload, 'utf-8')]);
+    const signature = crypto.sign(null, bytes, signer.priv).toString('base64');
     return { id, startsAt, payload, standing: { authorisation: { payload, signature }, ...(o.max === null ? { untilStopped: true } : { periods: o.max }), startsAt } };
 }
 
@@ -274,6 +279,19 @@ async function main(): Promise<void> {
     assert(s1.settled === 1 && s1.short === 1 && shortRow.phase === 'short' && !!shortRow.short_since && periodRows(a1.id).length === 3,
         `period 3 is settled, period 4 can't be held: short (${JSON.stringify(s1)}, ${shortRow.phase})`);
     assert(keptKinds(marty.pk, a1.id).includes('standing_short') && keptKinds(rob.pk, a1.id).includes('standing_short'), 'both are told at the due time');
+    // S2's Home rule: short is the payer's step, though its current row is the period last settled (not pending); never the
+    // payee's. And the read carries when it went short, for the payer's banner with its week.
+    const shortTxId = standingRow(a1.id).current_tx_id;
+    const homeDeals = async (who: Id) => (await call(who, 'GET', '/api/home?cards=deals')).body?.cards?.deals;
+    const martyHome = await homeDeals(marty);
+    const robHome = await homeDeals(rob);
+    assert((martyHome?.items ?? []).some((d: any) => d.txId === shortTxId && d.waitsOnMe),
+        `Home: a short standing deal waits on its payer (${JSON.stringify(martyHome)})`);
+    assert((robHome?.items ?? []).some((d: any) => d.txId === shortTxId && !d.waitsOnMe) && robHome?.waitingOnMe?.txId !== shortTxId,
+        `Home: it is under way for the payee, never waiting on them (${JSON.stringify(robHome)})`);
+    const shortRead = ((await call(marty, 'GET', `/api/marketplace/transactions?publicKey=${marty.pk}`)).body as any[]).find((t) => t.id === shortTxId);
+    assert(shortRead?.standingPhase === 'short' && shortRead?.standingShortSince === standingRow(a1.id).short_since,
+        `the read carries the phase and since when it is short (${JSON.stringify(shortRead)})`);
     assert(tick(end3 + 30 * 60_000).held === 0, 'not tried again before the hour');
     adminSetCreditFrozen(marty.pk, false);
     transfer(ana.pk, marty.pk, drained, 'back for the test', 'direct', true);
@@ -394,6 +412,7 @@ async function main(): Promise<void> {
     const otherKey = authorise(stranger, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null });
     const cases: Array<[string, unknown]> = [
         ['signed by another key', otherKey.standing],
+        ['the bare text signed, as an older app signs a node\'s text', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null, bare: true }).standing],
         ['a price that is not the listing\'s', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 20, unit: 'month', max: null }).standing],
         ['another listing', authorise(zed, { postId: storage.id, payee: rob.pk, beans: 30, unit: 'month', max: null }).standing],
         ['another payee', authorise(zed, { postId: tool.id, payee: ana.pk, beans: 30, unit: 'month', max: null }).standing],

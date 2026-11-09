@@ -20,9 +20,11 @@
  */
 
 import {
-    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, utf8Bytes, toBase64, type Signer,
+    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation, utf8Bytes, toBase64,
+    type Signer, type StandingAuthorisationFields, type StandingStartBody,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
+import { hallAudienceFor } from './hall-state';
 import { requestSigningFormatFor } from './request-signing-version';
 import { assertPlainNodeAddress } from './node-url';
 
@@ -144,6 +146,17 @@ export async function signReEnrollStatement(nodeUrl: string, code: string, priva
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign a re-key ask: the node address names no host');
     return { signature: await signReEnroll(nodeUrl, code, memberSigner(privateKeyHex)), signedFor: host };
+}
+
+/**
+ * A standing deal's authorisation (DESIGN-standing-deals-fable §6; S2), as the web signs it (apps/pwa lib/api.ts
+ * signStandingStart): core's signStandingAuthorisation builds the text from the fields the take-up screen chose and signs
+ * `0xFF ‖` it. The host is the one this phone's requests to `nodeUrl` are signed for (on the hall laptop, the community's own
+ * name: utils/hall-state.ts), never one a node sent. Throws, having signed nothing, for an address that isn't plain.
+ */
+export async function signStandingStatement(nodeUrl: string, fields: StandingAuthorisationFields, privateKeyHex: string): Promise<StandingStartBody> {
+    assertPlainNodeAddress(nodeUrl);
+    return signStandingAuthorisation(nodeUrl, fields, memberSigner(privateKeyHex), await hallAudienceFor(nodeUrl));
 }
 
 /** The old forms are plain UTF-8, which never starts with the 0xFF every format-2 signature does. */

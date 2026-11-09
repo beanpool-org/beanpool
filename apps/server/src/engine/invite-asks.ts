@@ -174,7 +174,8 @@ function liveAsk(id: string, now: number): AskRow | undefined {
     return db.prepare(`SELECT * FROM invite_asks WHERE id = ? AND ${LIVE}`).get(id, liveSince(now)) as AskRow | undefined;
 }
 
-export type AskAnswerOutcome = { ok: true; asker: string } | { ok: false; reason: 'not_found' };
+/** `noticeId`: the asker's kept copy of the answer, which the push names so the bell's row and the alert clear together. */
+export type AskAnswerOutcome = { ok: true; asker: string; noticeId: string } | { ok: false; reason: 'not_found' };
 
 /**
  * "Send invite": in one transaction the invite, the ask's delete and the notice that holds the code, so an invite nobody
@@ -192,7 +193,7 @@ export function answerWithInvite(id: string, admin: string, now = Date.now(), vo
         const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,
             { kind: NOTICE_KIND, outcome: 'invited', code: invite.code, askedAt: row.asked_at }, now);
         if (!kept) throw new Error('an ask could not be answered: the answer was not kept');
-        return { ok: true, asker: row.asker_pubkey };
+        return { ok: true, asker: row.asker_pubkey, noticeId: kept };
     })();
 }
 
@@ -205,7 +206,7 @@ export function answerNo(id: string, reason: string, now = Date.now()): AskAnswe
         const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,
             { kind: NOTICE_KIND, outcome: 'no', askedAt: row.asked_at, ...(reason ? { reason } : {}) }, now);
         if (!kept) throw new Error('an ask could not be answered: the answer was not kept');
-        return { ok: true, asker: row.asker_pubkey };
+        return { ok: true, asker: row.asker_pubkey, noticeId: kept };
     })();
 }
 

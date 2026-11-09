@@ -681,13 +681,18 @@ export default function HomeScreen() {
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
 
+    /** Home is the screen shown (not covered by another one): the Find card asks its communities nothing while it is not. */
+    const [homeShown, setHomeShown] = useState(true);
+
     // On landing and on returning to Home; the two-minute backstop while Home is in front and the app is open.
     useFocusEffect(useCallback(() => {
         focused.current = true;
+        setHomeShown(true);
         void refreshRef.current('focus');
         const poll = setInterval(() => { if (AppState.currentState === 'active') void refreshRef.current('poll'); }, HOME_SAFETY_POLL_MS);
         return () => {
             focused.current = false;
+            setHomeShown(false);
             clearInterval(poll);
             setTuneOpen(false);
             // Leaving Home ends Arrange: every move is saved already, and a card being carried is put back.
@@ -1238,7 +1243,7 @@ export default function HomeScreen() {
                 // The directory's rows are other people's publications: each is checked before it is drawn.
                 const home = readGlobalHome(c.find);
                 return home ? frame(
-                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} onKnocksChange={setKnocks} onCancelled={onKnockCancelled} />,
+                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} onKnocksChange={setKnocks} onCancelled={onKnockCancelled} shown={homeShown} />,
                 ) : null;
             }
             case 'steps': {

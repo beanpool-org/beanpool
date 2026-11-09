@@ -1,5 +1,5 @@
 /**
- * The needs-you icons in App's own header row and side bar, on ONE mounted header as the app runs (PR #2478, deciding review
+ * The bell (it took the needs-you icons' place, Marty 9 Nov 2026) in App's own header row and side bar, on ONE mounted header as the app runs (PR #2478, deciding review
  * at 6113c9ad): the tab and the needs change in place, never by loading the page again.
  *
  * 1. Stuck hidden: one tab with no room (the Map's logo) hid the icons on every tab after it, because the icons' box went
@@ -67,6 +67,8 @@ vi.mock('./lib/api', () => ({
     getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getUnseenNotices: vi.fn(async () => []),
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 0 })),
+    getBellNotices: vi.fn(async () => []),
+    markBellNoticesSeen: vi.fn(async () => 0),
     getMemberProfile: vi.fn(async () => ({ publicKey: 'my-user-pubkey', avatar: null, bio: '', contact: null })),
     getHome: vi.fn(async () => ({ notModified: false, etag: null, answer: answer(node.needs) })),
 }));
@@ -144,9 +146,12 @@ function laidOut() {
 
 const header = () => document.querySelector('header') as HTMLElement;
 const sidebar = () => document.querySelector('aside') as HTMLElement;
-/** What the header row draws for the needs, left to right: each kind, "more" (•••) or "chip" (the count). */
-const drawn = (root: HTMLElement = header()) => [...root.querySelectorAll<HTMLElement>('[data-testid^="header-needs-"]')]
-    .filter(e => e.tagName === 'BUTTON').map(e => e.dataset.testid!.replace('header-needs-', ''));
+/** What the header row draws: the bell, the small bell (28 px), or nothing. */
+const drawn = (root: HTMLElement = header()) => {
+    const b = root.querySelector<HTMLElement>('[data-testid="header-bell"]');
+    return b ? (b.style.width === '28px' ? 'small' : 'bell') : null;
+};
+const hasDot = (root: HTMLElement = header()) => !!root.querySelector('[data-testid="bell-dot"]');
 const titleWords = () => header().querySelector('[data-testid="header-title"]')?.textContent ?? null;
 
 async function needs(items: NeedsItem[]) {
@@ -179,7 +184,7 @@ afterEach(() => {
 });
 
 describe("App's header row: one mounted header, the tab and the needs changing in place", () => {
-    it('Home → Map → Home → Commons with needs 0 → 3 → 0 → 1: the icons come back after the map, and every title is whole', async () => {
+    it('Home → Map → Home → Commons with needs 0 → 3 → 0 → 1: the bell comes back after the map, and every title is whole', async () => {
         window.innerWidth = 390;
         render(<App />);
         await screen.findByTestId('home-page');
@@ -187,31 +192,34 @@ describe("App's header row: one mounted header, the tab and the needs changing i
         const slot = header().querySelector('[data-needs-slot]');
 
         expect(titleWords()).toBe('Home');
-        expect(drawn()).toEqual([]);
+        // The bell is always there for a member, needs or not (Marty, 9 Nov: it takes the needs-you row).
+        expect(drawn()).toBe('bell');
+        expect(hasDot()).toBe(false);
 
         await needs([DEAL, VOTE, INVITE]);
-        // 206 − (60 + 12) = 134 px beside "Home": a slot for each of the three, the deal nearest the pill.
-        expect(drawn()).toEqual(['invite', 'vote', 'deal']);
+        // 206 − (60 + 12) = 134 px beside "Home": room for the bell, with the dot for what needs the member.
+        expect(drawn()).toBe('bell');
+        expect(hasDot()).toBe(true);
 
         await goTo(/Map/);
         await screen.findByTestId('map-page');
         expect(titleWords()).toBeNull();
         // The logo reaches past the pill's left edge: no room beside it, so nothing is drawn under it.
-        expect(drawn()).toEqual([]);
+        expect(drawn()).toBeNull();
 
         await goTo(/Home/);
         expect(titleWords()).toBe('Home');
-        expect(drawn()).toEqual(['invite', 'vote', 'deal']);
+        expect(drawn()).toBe('bell');
 
         await goTo(/Commons/);
         expect(titleWords()).toBe('Commons');
-        // 206 − (100 + 12) = 94 px beside "Commons": two slots, the deal and ••• for the other two.
-        expect(drawn()).toEqual(['more', 'deal']);
+        // 206 − (100 + 12) = 94 px beside "Commons": still the whole bell.
+        expect(drawn()).toBe('bell');
 
         await needs([]);
-        expect(drawn()).toEqual([]);
+        expect(hasDot()).toBe(false);
         await needs([INVITE]);
-        expect(drawn()).toEqual(['invite']);
+        expect(hasDot()).toBe(true);
         expect(titleWords()).toBe('Commons');
 
         // The slot was never taken down: the same element measured the whole way.
@@ -219,7 +227,7 @@ describe("App's header row: one mounted header, the tab and the needs changing i
         expect(header().querySelector('[data-needs-slot]')).toBe(slot);
     });
 
-    it("the rule is the row's own CSS: the title's words first, then the icons, a slot per kind, and none past the logo", async () => {
+    it("the rule is the row's own CSS: the title's words first, then the bell's 44 px, and none past the logo", async () => {
         window.innerWidth = 390;
         render(<App />);
         await screen.findByTestId('home-page');
@@ -229,22 +237,20 @@ describe("App's header row: one mounted header, the tab and the needs changing i
         const titleBox = title.parentElement!;
         const middle = titleBox.parentElement!;
         const slot = middle.querySelector<HTMLElement>('[data-needs-slot]')!;
-        // The title and the icons share the row's middle; the title's box never shrinks below its words (only below the
-        // row's own width, where it is cut as before), and the icons' slot shrinks first, to nothing.
         expect(middle.dataset.headerMiddle).toBeDefined();
         expect(titleBox.style.flex).toBe('1 0 auto');
         expect(titleBox.style.maxWidth).toBe('100%');
         expect(slot.parentElement).toBe(middle);
-        expect(slot.style.flex).toBe('0 1 132px');
+        expect(slot.style.flex).toBe('0 1 44px');
         expect(slot.style.minWidth).toBe('0px');
         expect(slot.style.overflow).toBe('hidden');
-        // From 768 px the side bar has them: the header row (which still shows there) draws none.
+        // From 768 px the side bar has it: the header row (which still shows there) draws none.
         expect(slot.className).toContain('md:hidden');
 
-        // A kind more or less changes the slot's basis, not the title's.
+        // One control whatever needs the member: the slot's basis never changes, nor the title's.
         await needs([DEAL, VOTE, INVITE, MESSAGE, GROUP]);
-        expect(slot.style.flex).toBe('0 1 220px');
-        await needs([INVITE]);
+        expect(slot.style.flex).toBe('0 1 44px');
+        await needs([]);
         expect(slot.style.flex).toBe('0 1 44px');
 
         // On the map the slot ends where the logo does (the middle's right edge less the logo's, and its 4 px).
@@ -256,32 +262,37 @@ describe("App's header row: one mounted header, the tab and the needs changing i
     });
 });
 
-describe("App's side bar (wide screens): the icons get a row of their own", () => {
-    it('five kinds: all drawn on their own row above the status and Settings, never in that row', async () => {
+describe("App's side bar (wide screens): the bell gets a row of its own", () => {
+    it('five kinds: the bell on its own row above the status and Settings, never in that row, its sheet listing all five', async () => {
         window.innerWidth = 1280;
         render(<App />);
         await screen.findByTestId('home-page');
         await needs([DEAL, VOTE, INVITE, MESSAGE, GROUP]);
 
         const row = within(sidebar()).getByTestId('sidebar-needs-row');
-        // 256 px side bar less its 12 px padding each side: 232 px, room for five 44 px slots; it wraps rather than cut.
-        expect(row.className).toContain('flex-wrap');
-        expect(drawn(row)).toEqual(['group', 'message', 'invite', 'vote', 'deal']);
-        expect(within(row).queryByTestId('header-needs-more')).toBeNull();
+        const bell = within(row).getByTestId('sidebar-bell');
+        expect(hasDot(row)).toBe(true);
+        expect(within(row).getAllByRole('button')).toEqual([bell]);
 
         const settingsRow = within(sidebar()).getByTestId('sidebar-settings').parentElement!;
         expect(settingsRow.contains(row)).toBe(false);
         expect(row.contains(settingsRow)).toBe(false);
-        expect(drawn(settingsRow)).toEqual([]);
+        expect(within(settingsRow).queryByTestId('sidebar-bell')).toBeNull();
         expect(within(settingsRow).getByTestId('sync-status')).toBeInTheDocument();
+
+        fireEvent.click(bell);
+        const sheet = screen.getByRole('dialog');
+        expect(within(sheet).getAllByRole('button').filter(b => b.dataset.kind).map(b => b.dataset.kind))
+            .toEqual(['deal', 'vote', 'invite', 'message', 'group']);
     });
 
-    it('nothing needs you: no row at all', async () => {
+    it('nothing needs you: the plain bell, no dot', async () => {
         window.innerWidth = 1280;
         render(<App />);
         await screen.findByTestId('home-page');
         await needs([]);
-        expect(within(sidebar()).queryByTestId('sidebar-needs-row')).toBeNull();
-        expect(drawn(sidebar())).toEqual([]);
+        const row = within(sidebar()).getByTestId('sidebar-needs-row');
+        expect(within(row).getByTestId('sidebar-bell')).toHaveAccessibleName('Notifications');
+        expect(hasDot(row)).toBe(false);
     });
 });

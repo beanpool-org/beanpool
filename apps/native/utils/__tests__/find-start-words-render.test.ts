@@ -34,6 +34,7 @@ const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, pushed: []
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), back: () => {}, navigate: () => {} },
     useLocalSearchParams: () => nav.params,
+    useFocusEffect: () => {},
     ErrorBoundary: () => null,
 }));
 vi.mock('@expo/vector-icons', async () => {

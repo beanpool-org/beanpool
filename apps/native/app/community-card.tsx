@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, readCommunityCard, t, tn, word, type CommunityCard,
+    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, knockTickOf, readCommunityCard, t, tn, word, type CommunityCard, type KnockWatchTick,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
@@ -22,6 +22,7 @@ import {
 import { knockFromNode } from '../utils/knock-address';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
@@ -155,16 +156,25 @@ export default function CommunityCardScreen() {
 
     // The community's answer, only where this key asked it: a signed read shows a community who is asking.
     const [status, setStatus] = useState<KnockStatusResult | null>(null);
-    const [statusAsk, setStatusAsk] = useState(0);
-    useEffect(() => {
-        if (!origin || !identity || !asked) return;
-        let alive = true;
-        setStatus(null);
-        readKnockStatus(origin, identity)
-            .then(r => { if (alive) setStatus(r); })
-            .catch(() => { if (alive) setStatus({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable }); });
-        return () => { alive = false; };
-    }, [origin, identity?.publicKey, asked, statusAsk]);
+    // Read when the card knows it was asked, then by itself while this screen is in front (Damo, 9 Nov 2026: the yes showed
+    // only after a manual refresh), on utils/use-knock-status-watch.ts's schedule; Check again reads at once.
+    const [shown, setShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setShown(true);
+        return () => setShown(false);
+    }, []));
+    useEffect(() => { setStatus(null); }, [origin, identity?.publicKey, asked]);
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const readRound = async (): Promise<KnockWatchTick> => {
+        const me = identityRef.current;
+        if (!origin || !me) return { kind: 'settled' };
+        const r: KnockStatusResult = await readKnockStatus(origin, me)
+            .catch((): KnockStatusResult => ({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable }));
+        setStatus(r);
+        return knockTickOf(r);
+    };
+    const watch = useKnockStatusWatch(readRound, !!origin && !!identity && !!asked, `${origin ?? ''}|${identity?.publicKey ?? ''}`, shown);
 
     // What this key's request says here, as Find a community decides it (app/find-community.tsx stateFor).
     const knock: KnockCardState = asked === null
@@ -235,9 +245,11 @@ export default function CommunityCardScreen() {
                 router.replace('/welcome');
                 return;
             }
-            // Read what it says now: waiting, or a yes with its invite.
+            // Read what it says now: waiting, or a yes with its invite. The old answer goes first (as Check again does), so the
+            // card shows "checking", never the earlier request's "no longer open" and a second Ask, while the read is out.
             setAsked(true);
-            setStatusAsk(n => n + 1);
+            setStatus(null);
+            watch.restart();
         } else if (r.kind === 'member') {
             setFormOpen(false);
             setMemberNote(r.message);
@@ -353,7 +365,7 @@ export default function CommunityCardScreen() {
                         )}
                         {knock.kind === 'unreachable' && (
                             <View style={styles.actions}>
-                                <Pressable style={styles.secondary} onPress={() => setStatusAsk(n => n + 1)} accessibilityRole="button" testID="community-card-check-again">
+                                <Pressable style={styles.secondary} onPress={() => { setStatus(null); void watch.readNow(); }} accessibilityRole="button" testID="community-card-check-again">
                                     <Text style={styles.secondaryText}>{t('Check again')}</Text>
                                 </Pressable>
                             </View>

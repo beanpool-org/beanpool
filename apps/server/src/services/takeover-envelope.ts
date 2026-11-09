@@ -52,6 +52,7 @@ import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 import { OPEN_JOIN_KEY_FILE, readOpenJoinKeyForBundle } from './open-join-key.js';
+import { VAPID_KEY_FILE } from './web-push.js';
 import { withoutOldAddresses } from './address-retention.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
@@ -107,8 +108,13 @@ export function bundledLocalConfigUpdates(
  * `open-join.key` is the open door's key (services/open-join-key.ts), kept the same way: only here, installed by the
  * take-over's `open-door` step and a sealed-backup restore with installCarriedOpenJoinKey. A bundle sealed before it was a
  * file carries it as `openJoins.salt` instead.
+ *
+ * `vapid.key` is the node's own web push key (services/web-push.ts): browsers subscribe to its public key, so the server
+ * that takes over, or a restore, must hold the same one or every push service refuses it. Written as the other files are
+ * (0600); a bundle sealed before it travelled, or from a node that never needed one, has none, and the server makes its own
+ * at first need (its browsers then subscribe again at their next tap).
  */
-export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, VAPID_KEY_FILE] as const;
 
 export interface TakeoverBundle {
     v: 1;

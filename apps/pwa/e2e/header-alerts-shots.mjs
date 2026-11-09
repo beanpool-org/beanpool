@@ -1,18 +1,21 @@
 /* global process, console, document, getComputedStyle, innerWidth, window, requestAnimationFrame, setTimeout, URL */
 /**
- * The needs-you icons in App's real header row and side bar (e2e/header-alerts-harness.tsx: MobileHeader and
+ * The bell (it took the needs-you icons' place: DESIGN-web-notifications-fable.md §2.1, Marty 9 Nov 2026) in App's real
+ * header row and side bar (e2e/header-alerts-harness.tsx: MobileHeader and
  * SidebarStatus, as App.tsx draws them), in headless Chromium with the tab and the needs changed IN PLACE on one mounted
  * header, as the app runs: 320, 360, 375, 390, 412, 430, 480, 700 and 1280 px wide, 100% and 130% text, light and dark,
  * the chip at its widest ("Offline", "59m ago" under it) and at "Offline" alone, with no needs, one, three and five, along
  * a route of tab changes (Home → Map → Home → Commons, and the deciding review's People, Market, Commons, The Pulse, Chat,
  * Home, Commons).
  *
- * Fails (exit 1) on, at any step: a tab's title cut or met by the icons; the icons' slot not the width the row's rule
- * gives it (the title's words first, then a slot per kind; on the map, to 4 px short of the logo; from 768 px none, where
- * the side bar has them and the header row still shows beside it); what is drawn not what
- * fits in the slot as it is now (the icons stuck, hidden or not); a control outside its slot; a needs target under 44 px
- * tall; the pill off the screen or sideways scroll; in the side bar, the icons' row, the "?" or Settings past its edge, or
- * the icons sharing Settings' row.
+ * Fails (exit 1) on, at any step: a tab's title cut or met by the bell; the bell's slot not the width the row's rule
+ * gives it (the title's words first, then the bell's 44 px; on the map, to 4 px short of the logo; from 768 px none, where
+ * the side bar has it and the header row still shows beside it); what is drawn not what fits in the slot as it is now (the
+ * bell at 44 px, the small one from 28 px, none under that); the bell or its red count outside its slot; the bell under
+ * 44 px tall; the pill off the screen or sideways scroll; in the side bar, the bell's row, the "?" or Settings past its
+ * edge, or the bell sharing Settings' row. The node's list is answered here with three notices, so the red count is drawn
+ * at every step. Then the sheet, at 320 px and 130% text in both themes: inside the screen, every row at least 44 px tall,
+ * no sideways scroll (crops sheet-*.png).
  *
  * Run from apps/pwa: node e2e/header-alerts-shots.mjs   (HEADER_ALERTS_SHOTS_DIR=<dir>: where the crops and results.json
  * go; default e2e/screenshots/header-alerts, gitignored). Nothing here talks to a node: every request off this machine
@@ -40,6 +43,14 @@ const ROUTE = [
     ['map', 5], ['projects', 5], ['ledger', 5], ['home', 5], ['map', 1], ['map', 3, true], ['map', 0], ['projects', 0],
 ];
 
+/** What the node's list answers here: three notices, so the red count is drawn (GET /api/notices/push?unseen=1). */
+const nowS = Math.floor(Date.now() / 1000);
+const BELL_LIST = { notices: [
+    { id: 'n1', kind: 'chat.message', title: '💬 New Message', body: 'Maya Fernández-Okonkwo sent you a message', data: { screen: 'chat', conversationId: 'c1' }, sentAt: nowS - 120, seenAt: null },
+    { id: 'n2', kind: 'market.request', title: '🤝 New request for "Hand-built sourdough starter kit with jar and notes"', body: 'Ben asked for your sourdough starter kit and would like to collect it this weekend', data: { screen: 'post', postId: 'p1' }, sentAt: nowS - 3 * 3600, seenAt: null },
+    { id: 'n3', kind: 'community.notice', title: '🛡️ Your report', body: 'The post you reported was reviewed and kept.', data: {}, sentAt: nowS - 2 * 86400, seenAt: null },
+] };
+
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, logLevel: 'error' });
 await server.listen();
 const origin = `http://localhost:${server.httpServer.address().port}`;
@@ -60,9 +71,10 @@ const measure = () => {
         const chipEl = header.querySelector('[data-testid="sync-chip"]');
         const buttons = [...slot.querySelectorAll('button')];
         const s = r(slot), m = r(middle);
-        const kinds = Math.round((parseFloat(slot.style.flexBasis) || 0) / SLOT);
-        const drawn = buttons.map(b => b.dataset.testid.replace('header-needs-', ''));
-        const h = { kinds, drawn, slot: Math.round(s.width * 10) / 10, middle: Math.round(m.width * 10) / 10, dotOnly: chipEl?.dataset.dotOnly === 'true', pillRight: Math.round(pill.right) };
+        const basis = parseFloat(slot.style.flexBasis) || 0;
+        const drawn = buttons.map(b => (b.style.width === `${CHIP}px` ? 'small' : 'bell'));
+        const h = { basis, drawn, slot: Math.round(s.width * 10) / 10, middle: Math.round(m.width * 10) / 10, dotOnly: chipEl?.dataset.dotOnly === 'true', pillRight: Math.round(pill.right) };
+        if (basis !== SLOT) out.problems.push(`slot basis ${basis} px, not the bell's ${SLOT}`);
         let expectSlot;
         if (span) {
             const cs = getComputedStyle(span), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
@@ -73,31 +85,32 @@ const measure = () => {
             h.title = span.textContent;
             h.cut = words > content + 0.01;
             h.need = Math.round((words + pl + pr) * 10) / 10;
-            expectSlot = Math.max(0, Math.min(kinds * SLOT, m.width - (words + pl + pr)));
+            expectSlot = Math.max(0, Math.min(SLOT, m.width - (words + pl + pr)));
             if (h.cut && words + pl + pr <= m.width) out.problems.push(`"${h.title}" cut with room for it`);
             else if (h.cut) out.problems.push(`"${h.title}" cut (no room even alone: ${h.need} > ${h.middle})`);
-            if (buttons.length && Math.min(...buttons.map(b => r(b).left)) < box.right - 0.5) out.problems.push(`icons meet "${h.title}"`);
+            if (buttons.length && Math.min(...buttons.map(b => r(b).left)) < box.right - 0.5) out.problems.push(`the bell meets "${h.title}"`);
         } else {
             // The logo's right edge: its box, and the bean, the word and the version under its end (which hangs past it).
             const lr = Math.max(r(logo).right, ...[...(logo.firstElementChild?.children ?? [])].map(c => r(c).right));
             h.logoRight = Math.round(lr);
-            expectSlot = Math.min(kinds * SLOT, Math.max(0, Math.floor(m.right - lr - CLEAR)));
-            if (buttons.length && Math.min(...buttons.map(b => r(b).left)) < lr + CLEAR - 0.5) out.problems.push('icons under the logo');
+            expectSlot = Math.min(SLOT, Math.max(0, Math.floor(m.right - lr - CLEAR)));
+            if (buttons.length && Math.min(...buttons.map(b => r(b).left)) < lr + CLEAR - 0.5) out.problems.push('the bell under the logo');
         }
-        // From 768 px the side bar has the icons, and the header (which still shows beside it) none.
+        // From 768 px the side bar has the bell, and the header (which still shows beside it) none.
         h.wide = getComputedStyle(slot).display === 'none';
         if (h.wide) expectSlot = 0;
         h.expectSlot = Math.round(expectSlot * 10) / 10;
         if (Math.abs(s.width - expectSlot) > 1) out.problems.push(`slot ${h.slot} px, the rule gives ${h.expectSlot}`);
-        // What fits in the slot as it is now (the phone's fitNeedsYou, then the count chip).
-        const slots = Math.floor(s.width / SLOT);
-        const want = kinds === 0 ? 0 : slots >= kinds ? kinds : slots >= 1 ? slots : s.width >= CHIP ? 1 : 0;
-        const wantChip = kinds > 0 && slots === 0 && s.width >= CHIP;
-        if (buttons.length !== want || (wantChip !== drawn.includes('chip'))) out.problems.push(`drew ${drawn.join(',') || 'nothing'} in ${h.slot} px (fits ${want}${wantChip ? ', the chip' : ''})`);
+        // What fits in the slot as it is now: the bell, the small bell, or nothing.
+        const want = s.width >= SLOT - 0.5 ? 'bell' : s.width >= CHIP ? 'small' : null;
+        if ((drawn[0] ?? null) !== want || drawn.length > 1) out.problems.push(`drew ${drawn.join(',') || 'nothing'} in ${h.slot} px (fits ${want ?? 'nothing'})`);
         for (const b of buttons) {
             const br = r(b);
-            if (br.left < s.left - 0.5 || br.right > s.right + 0.5) out.problems.push(`${b.dataset.testid} outside its slot`);
-            if (br.height < 43.5) out.problems.push(`${b.dataset.testid} ${br.height} px tall`);
+            if (br.left < s.left - 0.5 || br.right > s.right + 0.5) out.problems.push(`the bell outside its slot`);
+            if (br.height < 43.5) out.problems.push(`the bell ${br.height} px tall`);
+            const count = b.querySelector('[data-testid="bell-count"]');
+            if (!count) out.problems.push('no red count with three notices');
+            else if (r(count).right > s.right + 0.5 || r(count).left < s.left - 0.5) out.problems.push('the red count outside the slot');
         }
         if (pill.right > innerWidth + 0.5) out.problems.push(`pill off the screen (${h.pillRight})`);
         out.header = h;
@@ -113,7 +126,7 @@ const measure = () => {
         const buttons = row ? [...row.querySelectorAll('button')] : [];
         const chipCut = chipEl ? (chipEl.scrollWidth > chipEl.clientWidth + 0.5 || (words && (words.scrollWidth > words.clientWidth + 0.5 || r(words).right > r(chipEl).right + 0.5))) : false;
         const sd = {
-            drawn: buttons.map(b => b.dataset.testid.replace('header-needs-', '')),
+            drawn: buttons.map(b => b.dataset.testid),
             lines: new Set(buttons.map(b => Math.round(r(b).top))).size,
             settingsRight: Math.round(r(settings).right), helpRight: Math.round(help.right), asideRight: Math.round(a.right),
             chip: chipEl ? Math.round(r(chipEl).width) : 0, chipWordsCut: chipCut,
@@ -132,7 +145,8 @@ const measure = () => {
         }
         if (r(settings).right > a.right + 0.5 || help.right > a.right + 0.5) out.problems.push('side bar: ? or Settings past its edge');
         for (const b of buttons) if (r(b).right > a.right + 0.5 || r(b).left < a.left - 0.5) out.problems.push(`side bar: ${b.dataset.testid} past its edge`);
-        if (row && row.contains(settings)) out.problems.push('side bar: the icons share Settings\' row');
+        if (row && row.contains(settings)) out.problems.push('side bar: the bell shares Settings\' row');
+        if (buttons.length !== 1 || buttons[0].dataset.testid !== 'sidebar-bell') out.problems.push(`side bar: ${buttons.length} controls in the bell's row`);
         out.side = sd;
     }
     if (out.scrollW > innerWidth) out.problems.push(`sideways scroll ${out.scrollW}`);
@@ -154,6 +168,7 @@ for (const width of WIDTHS) {
                     const ctx = await browser.newContext({ viewport: { width, height: 560 }, colorScheme: theme, reducedMotion: 'reduce' });
                     await ctx.route('**/*', (route) => {
                         const u = new URL(route.request().url());
+                        if (u.hostname === 'localhost' && u.pathname === '/api/notices/push') return route.fulfill({ json: BELL_LIST });
                         return u.hostname === 'localhost' && !u.pathname.startsWith('/api/') ? route.continue() : route.abort();
                     });
                     const page = await ctx.newPage();
@@ -188,6 +203,44 @@ for (const width of WIDTHS) {
             }
         }
     }
+}
+// The sheet, at the floor: 320 px and 130% text, both themes, with three needs and three notices.
+for (const theme of THEMES) {
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 640 }, colorScheme: theme, reducedMotion: 'reduce' });
+    await ctx.route('**/*', (route) => {
+        const u = new URL(route.request().url());
+        if (u.hostname === 'localhost' && u.pathname === '/api/notices/push') return route.fulfill({ json: BELL_LIST });
+        return u.hostname === 'localhost' && !u.pathname.startsWith('/api/') ? route.continue() : route.abort();
+    });
+    const page = await ctx.newPage();
+    await page.goto(`${origin}/e2e/header-alerts-harness.html?chip=plain${theme === 'dark' ? '&dark=1' : ''}`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.harness);
+    await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
+    await page.evaluate(() => window.harness.set({ tab: 'home', needs: 3 }));
+    // Opened at 100% (at 130% the row beside "Home" has no room for the bell at 320 px), then the text grows to 130%.
+    await page.waitForSelector('[data-testid="header-bell"] [data-testid="bell-count"]');
+    await page.evaluate(() => document.querySelector('[data-testid="header-bell"]').click());
+    await page.waitForSelector('[data-testid="needs-sheet"]');
+    await page.addStyleTag({ content: 'html { font-size: 130% !important; }' });
+    await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 50)))));
+    const m = await page.evaluate(() => {
+        const problems = [];
+        const sheet = document.querySelector('[data-testid="needs-sheet"]').getBoundingClientRect();
+        if (sheet.left < -0.5 || sheet.right > innerWidth + 0.5) problems.push(`sheet ${Math.round(sheet.left)}–${Math.round(sheet.right)} past the screen`);
+        for (const b of document.querySelectorAll('[data-testid="needs-sheet"] button')) {
+            const br = b.getBoundingClientRect();
+            if (br.height < 43.5) problems.push(`${b.getAttribute('aria-label') || b.textContent.slice(0, 20)} ${Math.round(br.height)} px tall`);
+            if (br.right > sheet.right + 0.5) problems.push('a row past the sheet');
+        }
+        if (document.querySelectorAll('[data-testid="bell-notice"]').length !== 3) problems.push('not three notices');
+        if (document.documentElement.scrollWidth > innerWidth) problems.push(`sideways scroll ${document.documentElement.scrollWidth}`);
+        return { problems };
+    });
+    const key = `sheet-320-130-${theme}`;
+    results.push({ key, width: 320, text: 130, theme, ...m });
+    if (m.problems.length) { failures++; console.log('FAIL', key, m.problems.join('; ')); }
+    await page.screenshot({ path: path.join(SHOTS_DIR, `${key}.png`), clip: { x: 0, y: 0, width: 320, height: 640 } });
+    await ctx.close();
 }
 fs.writeFileSync(path.join(SHOTS_DIR, 'results.json'), JSON.stringify(results, null, 1));
 await browser.close();

@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { createDeferredSync, isOthersListingDoorbell, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
+import { BELL_EVENTS, BELL_PAGE_EVENT, createDeferredSync, isOthersListingDoorbell, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -288,6 +288,14 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
                 return;
             }
 
+            // The bell (components/NeedsYouIcons.tsx): a notice kept for this member, or some marked seen on another tab or
+            // device. Handed to the page as BELL_PAGE_EVENT; only the bell reads again. Never a doorbell for the rest: the
+            // thing a notice is about rings its own.
+            if (data.type === BELL_EVENTS.kept || data.type === BELL_EVENTS.seen) {
+                try { window.dispatchEvent(new CustomEvent(BELL_PAGE_EVENT, { detail: data })); } catch { /* no window */ }
+                return;
+            }
+
             currentState = {
                 connected: true,
                 lastSyncTime: Date.now(),
@@ -413,6 +421,9 @@ export function connectToAnchor(url?: string): void {
             if (generation !== connectGeneration) return;
             // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
             params.push('nr=1');
+            // And the bell's events (@beanpool/core BELL_EVENTS): a build from before them took any unknown event for a
+            // doorbell, so the node sends them only to a socket that says it reads them.
+            params.push('bell=1');
             const wsUrl = params.length ? `${baseWsUrl}?${params.join('&')}` : baseWsUrl;
             establishConnection(wsUrl, baseWsUrl);
         })

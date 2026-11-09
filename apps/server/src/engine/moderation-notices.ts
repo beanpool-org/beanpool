@@ -12,13 +12,14 @@
 import { word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { reportKind } from '../services/report-kind.js';
-import { keepNotice } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 
 // English's own t(): a refusal with a value in it, which member-words.ts finds again by its catalog sentence.
 const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind,
+    rehearsal?: boolean, options?: KeptNoticePushOptions) => void;
 
 export interface ModerationNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -91,8 +92,12 @@ export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title:
     // Each recipient's copy is kept first (engine/kept-notices.ts), so a web app that is closed now shows it when it
     // next opens; the live notice carries that copy's id, so the web app that shows it live marks it seen and never
     // shows it twice. One live notice per recipient: each names only their own copy.
+    // Each push notice kept for the bell names its recipient's kept copy (`noticeId`), so acknowledging the alert takes the
+    // row off the bell and a tap on the row marks the alert (state-engine.ts markBellNoticesSeen).
+    const kept: { to: string; id: string | null }[] = [];
     for (const pk of to) {
         const noticeId = keepNotice(pk, title, body, data);
+        kept.push({ to: pk, id: noticeId });
         try {
             cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data, ...(noticeId ? { noticeId } : {}) }, [pk]);
         } catch (e: any) {
@@ -100,7 +105,7 @@ export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title:
         }
     }
     try {
-        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace', 'community.notice');
+        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace', 'community.notice', false, keptNoticeDetails(kept));
     } catch (e: any) {
         console.warn('[Moderation] Push failed:', e?.message || e);
     }

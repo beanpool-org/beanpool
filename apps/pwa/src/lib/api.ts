@@ -8,7 +8,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
-import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
+import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -550,6 +550,17 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
+/** The bell: the signer's own push notices not yet opened, newest first (GET /api/notices/push?unseen=1). */
+export async function getBellNotices(): Promise<BellNotice[]> {
+    return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
+}
+
+/** Takes these of the signer's own notices off the bell (a tap on the row); the node ignores an id that is not theirs. */
+export async function markBellNoticesSeen(ids: string[]): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
+}
+
 /**
  * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
  * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
@@ -677,16 +688,17 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
 
 /**
  * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
- * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
- * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts) and the browser it asked
+ * to be told on (lib/web-push.ts). Signed for that host only. The caller keeps its own timeout and reads the Response; a
+ * POST or DELETE carries `bodyString` as JSON.
  */
 export async function signedFetchAt(
-    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+    method: 'GET' | 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
 ): Promise<Response> {
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
-    return fetch(`${community}${path}`, method === 'POST'
-        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
-        : { method, headers: signed, cache: 'no-cache' });
+    return fetch(`${community}${path}`, method === 'GET'
+        ? { method, headers: signed, cache: 'no-cache' }
+        : { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString });
 }
 
 /**

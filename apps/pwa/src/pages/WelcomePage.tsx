@@ -55,7 +55,9 @@ import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
-import { forgetKnockMark, isKnockKey, knockWaitingKey } from '../lib/knock-key';
+import { forgetKnockMark, isEstablishedKey, isKnockKey, knockWaitingKey, waitWithRestoredKey } from '../lib/knock-key';
+import { readKnockStatus } from '../lib/knock';
+import { thisCommunityOrigin } from '../components/AskHere';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -161,12 +163,12 @@ const BUNDLED_AVATARS = [
  * five columns are 29px and four 36px, which broke "Phot/o" and "Back/up" (deciding review of #1766, N5). There each
  * column keeps only its dot, and the current step is named whole under them.
  */
-export function OnboardingStepper({ step, firstLabel, area = false }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean }) {
+export function OnboardingStepper({ step, firstLabel, area = false, backup = true }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean; backup?: boolean }) {
     const first = firstLabel ?? t('Your Name');
-    const steps = area
-        ? [first, t('Your Photo'), t('Your Area'), t('Safety Backup'), t('How it Works')]
-        : [first, t('Your Photo'), t('Safety Backup'), t('How it Works')];
-    const position = step === 'area' ? 3 : area && step >= 3 ? step + 1 : step;
+    // `backup` false: an account restored here that joins after a yes (slice Y0) has no Safety Backup step, its words
+    // being the ones it came back with.
+    const steps = [first, t('Your Photo'), ...(area ? [t('Your Area')] : []), ...(backup ? [t('Safety Backup')] : []), t('How it Works')];
+    const position = step === 'area' ? 3 : (area && step >= 3 ? step + 1 : step) - (!backup && step === 4 ? 1 : 0);
     return (
         <div style={{ marginBottom: '1.5rem', width: '100%' }}>
         <div data-testid="onboarding-stepper" style={{
@@ -632,13 +634,21 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     const knockJoinStarted = useRef(false);
     // The yes was refused (handleCreate): the screen offers Back to my request, not a Try again that is refused the same way.
     const [knockRefused, setKnockRefused] = useState(false);
+    // The key waiting here has no name: an account restored with its 12 words (slice Y0), which the words don't name. The
+    // yes asks for one before it joins, since a join needs a name.
+    const [knockNeedsName, setKnockNeedsName] = useState(false);
     useEffect(() => {
         if (!knockYes || knockJoinStarted.current) return;
         if (door === 'checking' || sentJoin !== 'none' || sentInvite !== 'none') return;
         knockJoinStarted.current = true;
-        void handleCreate(knockYes.invite);
+        void knockWaitingKey().catch(() => null).then((held) => {
+            if (held && !held.callsign.trim()) setKnockNeedsName(true);
+            else void handleCreate(knockYes.invite);
+        });
         // handleCreate reads refs and state setters only.
     }, [knockYes, door, sentJoin, sentInvite]);
+    // The account this join is for was restored here, so its 12 words are not new (slice Y0): no Safety Backup step.
+    const [wordsKnown, setWordsKnown] = useState(false);
 
     function retrySentInvite() {
         if (typeof sentInvite !== 'object' || sentInvite.busy) return;
@@ -653,6 +663,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
      */
     function enterAsInvited(member: BeanPoolIdentity, asked: string, earlier = false) {
         inviteKey.current = null;
+        // An account restored here that joined after a yes (slice Y0): its words are the ones it came back with, so the
+        // Safety Backup step is left out, and Settings doesn't ask for them as unsaved.
+        const known = isEstablishedKey(member.publicKey);
+        setWordsKnown(known);
+        if (known) {
+            try { localStorage.setItem(seedViewedKey(member.publicKey), 'true'); } catch { /* storage off: Settings asks once */ }
+        }
         // A key a request to join made is a member now: never read as waiting again (lib/knock-key.ts).
         forgetKnockMark(member.publicKey);
         setPendingIdentity(member);
@@ -954,6 +971,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             // On a Try again the key is this page's already (inviteKey), and so is the name it went with: nothing is typed
             // on the yes screen, so the empty field never names it (review 4508428682).
             if (knockInvite !== undefined) trimmedCallsign = (inviteKey.current ?? held)?.callsign.trim() || trimmedCallsign;
+            // A restored account with no name (slice Y0) joins under the name typed on the yes screen.
+            if (knockInvite !== undefined && trimmedCallsign.length < 2) {
+                setKnockNeedsName(true);
+                setError(t('Callsign must be at least 2 characters.'));
+                setLoading(false);
+                return;
+            }
+            // Named now: the form goes, so a refusal below shows Back to my request, never a Join refused the same way.
+            if (knockInvite !== undefined) setKnockNeedsName(false);
 
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result
@@ -1410,9 +1436,45 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             onComplete(member);
             return true;
         }
+        // No member here, but it asked this community from another one (global's Find card) and that request is open or
+        // answered yes: the waiting page, with this key (slice Y0). Nothing open: the door, as before.
+        if (await restoredKeyAsked(identity)) return waitHereWithRestoredKey(identity);
         setShowQrPairing(false);
         setShowRecovery(false);
         setRestoredForDoor(identity);
+        return true;
+    }
+
+    /**
+     * Whether a key restored here that is no member has a request to join open here, or a yes (DESIGN-global-yes-join-
+     * fable.md §3, slice Y0): read from this community's own knock route, signed by that key, which answers only for it.
+     * No answer, or one this page can't read, is "no": the restore goes on as it did before.
+     */
+    async function restoredKeyAsked(identity: BeanPoolIdentity): Promise<boolean> {
+        const status = await readKnockStatus(thisCommunityOrigin(), identity).catch(() => null);
+        return !!status?.ok && (status.value.status === 'approved' || status.value.status === 'pending');
+    }
+
+    /**
+     * That key, kept as this browser's waiting key (lib/knock-key.ts waitWithRestoredKey): the root opens the waiting page,
+     * whose yes is "Join {name}" with this same key, the invite a member's yes made being bound to it. Saved through the
+     * guarded write, which refuses what every save here refuses.
+     */
+    async function waitHereWithRestoredKey(identity: BeanPoolIdentity): Promise<boolean> {
+        setShowQrPairing(false);
+        setShowRecovery(false);
+        try {
+            await waitWithRestoredKey(identity, sentJoinGuard());
+        } catch (e) {
+            if (e instanceof SentJoinWaitingError) {
+                settleSentJoinFirst();
+                return true;
+            }
+            if (!(e instanceof IdentityHeldError)) throw e;
+            setHeldIdentity(e.held);
+            return true;
+        }
+        onComplete(identity);
         return true;
     }
 
@@ -1459,6 +1521,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             return;
         }
         try {
+            // A key this community has as no member, that asked it from another community (slice Y0): the waiting page,
+            // where a yes is Join. Asked only when the node answers that it is no member; no answer goes on as before.
+            const restored = await identityFromMnemonic(words, '');
+            const membership = await checkMembershipWithKey(restored).catch(() => null);
+            if (membership && !membership.isMember && await restoredKeyAsked(restored)) {
+                await waitHereWithRestoredKey(restored);
+                return;
+            }
             // The 12 words ARE the identity. The callsign and avatar are just
             // node-held profile data that travel with the key, so we pull the
             // callsign down rather than asking for it (the avatar is read live
@@ -1657,7 +1727,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                            The name alone: the invite is spent, and no way off leads to another account from here. Next
                            goes back to the photo, with the same name or a new one. */
                         <>
-                            <OnboardingStepper area={byArea} step={1} />
+                            <OnboardingStepper area={byArea} step={1} backup={!wordsKnown} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 {t('✏️ Your name')}
                             </h3>
@@ -1736,7 +1806,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={2} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <OnboardingStepper area={byArea} step={2} backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 {t('📸 Choose your look')}
                             </h3>
@@ -1929,6 +1999,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     onClick={() => {
                                         setShowAvatarSetup(false);
                                         if (byArea) setShowAreaStep(true);
+                                        else if (wordsKnown) setShowOnboardingGuide(true);
                                         setError(null);
                                     }}
                                     disabled={loading}
@@ -1974,12 +2045,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     ) : hasMnemonic(pendingIdentity) && showAreaStep ? (
                         /* ===== YOUR AREA (a community that syncs by area) ===== */
                         <>
-                            <OnboardingStepper step="area" area firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <OnboardingStepper step="area" area backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
                             <AreaStep
                                 send={senderForKey(pendingIdentity.privateKey, pendingIdentity.publicKey)}
                                 limits={nearbyLimits}
-                                onSaved={(_area, placeName) => { rememberAreaPlace(placeName); setShowAreaStep(false); setError(null); }}
-                                onSkip={() => { setShowAreaStep(false); setError(null); }}
+                                onSaved={(_area, placeName) => { rememberAreaPlace(placeName); setShowAreaStep(false); if (wordsKnown) setShowOnboardingGuide(true); setError(null); }}
+                                onSkip={() => { setShowAreaStep(false); if (wordsKnown) setShowOnboardingGuide(true); setError(null); }}
                             />
                             <button
                                 type="button"
@@ -1992,7 +2063,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <OnboardingStepper area={byArea} step={4} backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            {/* In the Safety Backup step's place for an account restored here (slice Y0): one line. */}
+                            {wordsKnown && (
+                                <p data-testid="tour-words-kept" className="m-0 mb-3 text-sm text-text-primary break-words">
+                                    {t('Your 12 words stay the same: the ones you came back with.')}
+                                </p>
+                            )}
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">{t('🫘 Welcome to BeanPool')}</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: beansOff ? '1rem' : '1.5rem', lineHeight: 1.5 }}>
                                 {beansOff ? t(HOW_IT_WORKS_WITHOUT_BEANS.intro) : t("Let's look at how this community economy works.")}
@@ -2145,14 +2222,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             )}
 
                             <button
-                                onClick={() => { setShowOnboardingGuide(false); setError(null); }}
+                                onClick={() => {
+                                    setShowOnboardingGuide(false);
+                                    // No backup step to go back to: the step before it (the area, or the photo).
+                                    if (wordsKnown) { if (byArea) setShowAreaStep(true); else setShowAvatarSetup(true); }
+                                    setError(null);
+                                }}
                                 style={{
                                     background: 'none', border: 'none',
                                     color: 'var(--text-muted)', fontSize: '0.85rem',
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                {t('← Back to Backup')}
+                                {wordsKnown ? t('← Back') : t('← Back to Backup')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) ? (
@@ -2795,7 +2877,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             <h3 dir="auto" style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
                                 {t('Join {name}', { name: knockYes.name })}
                             </h3>
-                            {error && !loading ? (
+                            {knockNeedsName && !loading ? (
+                                /* An account restored with its 12 words carries no name (slice Y0): asked once, here. */
+                                <form data-testid="knock-join-name" onSubmit={(e) => { e.preventDefault(); setError(null); void handleCreate(knockYes.invite); }}>
+                                    <label htmlFor="knock-join-callsign" className="block mb-1 text-sm font-semibold break-words">{t('Your name here')}</label>
+                                    <input id="knock-join-callsign" type="text" value={callsign} maxLength={MAX_JOIN_CALLSIGN} autoComplete="nickname"
+                                        onChange={(e) => setCallsign(e.target.value)} style={inputStyle} />
+                                    {error && <p role="alert" data-testid="knock-join-error" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>{error}</p>}
+                                    <button type="submit" data-testid="knock-join-name-go"
+                                        className="block w-full min-h-[48px] px-4 py-3 mb-3 rounded-xl text-base font-bold border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer break-words">
+                                        {t('Join {name}', { name: knockYes.name })}
+                                    </button>
+                                </form>
+                            ) : error && !loading ? (
                                 <>
                                     <p role="alert" data-testid="knock-join-error" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>{error}</p>
                                     {!knockRefused && (

@@ -142,6 +142,17 @@ async function main(): Promise<void> {
         'HTML document (/app) receives X-Content-Type-Options: nosniff');
     assert(appDocRes.headers.has('strict-transport-security'),
         'HTML document (/app) receives Strict-Transport-Security');
+    // No opener policy on the web app (DESIGN-global-yes-join-fable.md §2.1, slice Y1): the page that holds an account
+    // opens a community's /app?door=handoff and hands the account to that window over postMessage, which needs the
+    // opener link both ways. A Cross-Origin-Opener-Policy (same-origin, or same-origin-allow-popups on the opened page)
+    // would cut it, and every yes on the web would fall back to the 12 words.
+    assert(!appDocRes.headers.has('cross-origin-opener-policy'),
+        'HTML document (/app) sends no Cross-Origin-Opener-Policy (the account handoff needs the opener)');
+    const handoffDocRes = await fetch(`${BASE}/app?door=handoff&n=${'a'.repeat(32)}&from=${encodeURIComponent('https://global.example.org')}`);
+    // This server has no built web app to send (the document route answers as it does for /app, headers and all).
+    assert(handoffDocRes.status === appDocRes.status && handoffDocRes.headers.has('content-security-policy')
+        && !handoffDocRes.headers.has('cross-origin-opener-policy'),
+        `the handoff's own address (/app?door=handoff) is the same document, with none either (${handoffDocRes.status}, /app ${appDocRes.status})`);
 
     const settingsDocRes = await fetch(`${BASE}/settings`);
     assert(settingsDocRes.headers.has('content-security-policy'),

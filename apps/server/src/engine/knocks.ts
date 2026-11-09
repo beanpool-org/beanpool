@@ -386,11 +386,16 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
     }
 }
 
-/** What the applicant's app reads (`GET /api/join/knock/status`). A decline in its block reads as `pending`. */
+/**
+ * What the applicant's app reads (`GET /api/join/knock/status`). A decline in its block reads as `pending`. `member`:
+ * the yes has been used, and the key is a member here now (DESIGN-global-yes-join-fable.md §2.1, slice Y1), so a page
+ * that holds the account at another address, and the phone's Find card, can drop the yes. Beside `approved` only, and
+ * never a new status value: an older app reads an unknown one as `pending`, and ignores the field.
+ */
 export type KnockStatusAnswer =
     | { status: 'none' }
     | { status: 'pending' }
-    | { status: 'approved'; invite: string; expiresAt: string | null };
+    | { status: 'approved'; invite: string; expiresAt: string | null; member?: true };
 
 export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAnswer {
     const key = pubkey.toLowerCase();
@@ -399,7 +404,15 @@ export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAns
     const standing = standingOf(latestKnock(key), now);
     switch (standing.kind) {
         case 'waiting': return { status: 'pending' };
-        case 'invited': return { status: 'approved', invite: standing.row.invite_code!, expiresAt: standing.expiresAt === null ? null : iso(standing.expiresAt) };
+        case 'invited': {
+            // A member here: a row that isn't a visitor's, and not a closed account (which joined once, and is no member).
+            const member = getMember(db, key);
+            const joined = !!member && member.status !== 'pruned' && alreadyJoined(db, key);
+            return {
+                status: 'approved', invite: standing.row.invite_code!, expiresAt: standing.expiresAt === null ? null : iso(standing.expiresAt),
+                ...(joined ? { member: true as const } : {}),
+            };
+        }
         default: return { status: 'none' };
     }
 }

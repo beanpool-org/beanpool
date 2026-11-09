@@ -33,7 +33,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, t, word } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, t, word } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -102,6 +102,12 @@ export interface KnockRequest {
     callsign: string;
     /** A photo as a data URL, or a shipped `bundled://` picture. Left out when it isn't one of those. */
     avatar?: string | null;
+    /**
+     * The ticket of the link shared outside that the request comes after (shared-listing door A3): the community names
+     * the listing and the member who shared it to whoever answers. Left out unless it has a ticket's shape; the
+     * community never refuses a request for one that opens nothing.
+     */
+    peek?: string | null;
 }
 
 // ── The form ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -137,7 +143,7 @@ export function knockAvatar(value: string | null | undefined): string | undefine
  */
 export function knockBody(
     req: KnockRequest, toNode?: string, fromNode: string | null = KNOCK_FROM_NODE,
-): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
+): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
     const avatar = knockAvatar(req.avatar);
     return {
         message: req.message.trim(),
@@ -145,6 +151,7 @@ export function knockBody(
         ...(fromNode ? { fromNode } : {}),
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
+        ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
     };
 }
 

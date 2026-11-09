@@ -375,7 +375,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
-        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at'),
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey'),
         except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
     },
     moderation_notices: {

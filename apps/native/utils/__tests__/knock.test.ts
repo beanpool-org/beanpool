@@ -297,6 +297,14 @@ describe('the form', () => {
         expect(knockAvatar(`data:image/png;base64,${'A'.repeat(150_001)}`)).toBeUndefined();
         expect(knockBody({ callsign: 'Robin', message: 'Hi', avatar: '/api/avatar/x' })).not.toHaveProperty('avatar');
     });
+
+    it("carries the shared link's ticket only in a ticket's shape (shared-listing door A3)", () => {
+        const T = 'AbCdEfGhIjKlMnOpQrSt_-';
+        expect(knockBody({ callsign: 'Robin', message: 'Hi', peek: T }, 'mullum.beanpool.org', null)).toEqual({ callsign: 'Robin', message: 'Hi', toNode: 'mullum.beanpool.org', peek: T });
+        for (const bad of [undefined, null, '', 'not-a-ticket', `${T}A`]) {
+            expect(knockBody({ callsign: 'Robin', message: 'Hi', peek: bad as any })).not.toHaveProperty('peek');
+        }
+    });
 });
 
 describe('what the phone remembers', () => {

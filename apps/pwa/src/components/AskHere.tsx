@@ -22,10 +22,14 @@ export function thisCommunityOrigin(): string | null {
  * and no other is drafted. Without it, a key this browser saved at an earlier Send that didn't go through (unreachable,
  * or refused) is found as the form opens and signs again, under the name typed now: one key per browser, and a second
  * draft would only be refused by the save (review 4508428755).
+ *
+ * `peek`: on the shared post's page, its link's ticket, sent with the request so the members who answer read which listing
+ * it came after and who shared it (shared-listing door A3). The stranger is told nothing of it.
  */
-export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
+export function AskHere({ name, held, peek, onAsked, onClose, testId = 'ask-here' }: {
     name: string;
     held?: BeanPoolIdentity | null;
+    peek?: string | null;
     onAsked: (identity: BeanPoolIdentity) => void;
     onClose?: () => void;
     testId?: string;
@@ -71,7 +75,7 @@ export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
             else setProblem(t("This browser couldn't keep your account, so the request was not sent."));
             return;
         }
-        const r = await sendKnock(origin, identity, { callsign, message });
+        const r = await sendKnock(origin, identity, { callsign, message, peek });
         setSending(false);
         switch (r.kind) {
             case 'waiting':

@@ -513,7 +513,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community'
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
@@ -558,6 +558,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Commons, Decide, where the case, who brought it and the member's reply sit side by side.
     if (d.screen === 'decide') return '/(tabs)/projects?section=decide';
     if (d.screen === 'settings') return '/(tabs)/settings';
+    // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
+    // Shared outside, where that link's row counts who asked.
+    if (d.screen === 'shared-outside') return '/shared-outside';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }

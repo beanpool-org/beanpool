@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, readCommunityCard, t, tn, word, type CommunityCard,
+    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, readCommunityCard, t, tn, word, type CommunityCard,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
@@ -82,8 +82,11 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  * Nothing is read but the community's public card; nothing is written or sent until Send is tapped.
  */
 export default function CommunityCardScreen() {
-    const params = useLocalSearchParams<{ node?: string }>();
+    const params = useLocalSearchParams<{ node?: string; peek?: string }>();
     const origin = communityOrigin(params.node);
+    // Opened from a shared post's screen: its link's ticket, sent with the request (shared-listing door A3), so the
+    // members who answer read which listing it came after and who shared it. Nothing of it is shown here.
+    const peekTicket = isPeekTicket(params.peek) ? params.peek : null;
     const { identity, setIdentity } = useIdentity();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -220,7 +223,7 @@ export default function CommunityCardScreen() {
         // community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(origin, signer, { callsign, message, avatar }, knockFromNode(anchor, guest));
+        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(signer.publicKey, { url: origin, name: c.name });

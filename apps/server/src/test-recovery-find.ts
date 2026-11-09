@@ -16,8 +16,8 @@
  *      time, a second caller gets the 503 sentence (worded so no app's match catches it); the boot count falls by one
  *   5. keys a take-over replaced (the deciding review of 38f03fac): a copy deposited while the server ran on its own key,
  *      whose member doesn't restore before the next take-over, is still found there, by the scan: the start's relock
- *      clears the retired key's find hash, and so does a deposit that carries the copy; the boot count shows it until
- *      then. Before that relock, a find tries the retired key's hash too
+ *      clears the retired key's find hash, and so does a deposit or a disconnect that carries the copy; the boot count
+ *      shows it until then. Before that relock, a find tries the retired key's hash too
  *   6. collect with no hold, or a key not in the matches, or another device's hold, opens nothing
  *   7. the hold dies at 5 minutes, and leaves memory then with no find or collect after it
  *   8. a token from another provider is refused as /collect/sso refuses it
@@ -139,6 +139,14 @@ async function connect(id: Id, provider: Provider, sub: string, extra: Record<st
     return call(id, '/api/recovery/shares/sso', {
         provider, idToken: mint(provider, sub, n), nonce: n, shares: [{ holderType: 'sso', holderRef: provider, shareIndex: 1, ...sealed, ...extra }],
     });
+}
+/** Settings' Disconnect: DELETE /api/recovery/shares/sso/:provider, signed by the member. The status. */
+async function disconnect(id: Id, provider: Provider): Promise<number> {
+    const ts = Date.now(); const n = crypto.randomBytes(16).toString('hex'); const p = `/api/recovery/shares/sso/${provider}`;
+    const sig = crypto.sign(null, Buffer.from(`DELETE\n${p}\n${ts}\n${n}\n`), id.priv).toString('base64');
+    pruneAuthAttempts(Date.now() + 120_000); resetGatewayRateLimit();
+    const res = await localFetch(`${BASE}${p}`, { method: 'DELETE', headers: { 'X-Public-Key': id.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': n } });
+    return res.status;
 }
 /** The global community's open door: one sign-in joins and enrols the same sign-in as the recovery copy. */
 async function joinThroughDoor(id: Id, callsign: string, provider: Provider, sub: string): Promise<{ status: number; body: any }> {
@@ -278,13 +286,7 @@ async function main(): Promise<void> {
         `connecting Apple too writes Apple's find hash and carries Google's into the new generation (${withApple.status})`);
     const byApple = await findBy(newId(), 'apple', DAMO_APPLE);
     check(byApple.found.status === 200 && brief(names(byApple.found)) === brief([`${damoName}:${damo.pk}`]), `Apple finds the same account (${brief(byApple.found.body)})`);
-    const dropApple = await (async () => {
-        const ts = Date.now(); const n = crypto.randomBytes(16).toString('hex'); const p = '/api/recovery/shares/sso/apple';
-        const sig = crypto.sign(null, Buffer.from(`DELETE\n${p}\n${ts}\n${n}\n`), damo.priv).toString('base64');
-        pruneAuthAttempts(Date.now() + 120_000); resetGatewayRateLimit();
-        const res = await localFetch(`${BASE}${p}`, { method: 'DELETE', headers: { 'X-Public-Key': damo.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': n } });
-        return res.status;
-    })();
+    const dropApple = await disconnect(damo, 'apple');
     check(dropApple === 200 && rowOf(damo.pk, 'apple') === null && rowOf(damo.pk, 'google')?.findHash === expectedFindHash('google', DAMO_SUB),
         `disconnecting Apple keeps Google findable: the next generation carries its find hash (${dropApple})`);
 
@@ -390,15 +392,18 @@ async function main(): Promise<void> {
 
     // ── 5. keys a take-over replaced ────────────────────────────────────────────────────────────────
     console.log('\n── 5. a key a take-over replaced: every copy stays findable through the next take-over ──');
-    const REN_SUB = '105555555555555555555', VIC_SUB = '105555555555555555557';
+    const REN_SUB = '105555555555555555555', VIC_SUB = '105555555555555555557', WES_SUB = '105555555555555555558';
     const UMA_SUB = '105555555555555555556', UMA_APPLE = '001234.umaumaumaumaumaumaumaumaumaumaum.0005';
-    const ren = newId(), vic = newId(), uma = newId();
-    const renName = GLOBAL ? 'Ren31337' : 'Ren', vicName = GLOBAL ? 'Vic4242' : 'Vic', umaName = GLOBAL ? 'Uma1999' : 'Uma';
-    for (const [id, name] of [[ren, renName], [vic, vicName], [uma, umaName]] as [Id, string][]) addMember(id, name);
+    const WES_APPLE = '001234.weswesweswesweswesweswesweswes.0006';
+    const ren = newId(), vic = newId(), uma = newId(), wes = newId();
+    const renName = GLOBAL ? 'Ren31337' : 'Ren', vicName = GLOBAL ? 'Vic4242' : 'Vic', umaName = GLOBAL ? 'Uma1999' : 'Uma', wesName = GLOBAL ? 'Wes7007' : 'Wes';
+    for (const [id, name] of [[ren, renName], [vic, vicName], [uma, umaName], [wes, wesName]] as [Id, string][]) addMember(id, name);
     const connected5 = [await connect(ren, 'google', REN_SUB), await connect(vic, 'google', VIC_SUB), await connect(uma, 'google', UMA_SUB),
-        await connect(uma, 'apple', UMA_APPLE)];
-    check(connected5.every((c) => c.status === 200), `Ren, Vic and Uma (Google, then Apple) connect while this server runs on its own key (${connected5.map((c) => c.status).join(' ')})`);
+        await connect(uma, 'apple', UMA_APPLE), await connect(wes, 'google', WES_SUB), await connect(wes, 'apple', WES_APPLE)];
+    check(connected5.every((c) => c.status === 200),
+        `Ren, Vic, Uma and Wes (both with Google, then Apple) connect while this server runs on its own key (${connected5.map((c) => c.status).join(' ')})`);
     const umaAppleUnderOld = rowOf(uma.pk, 'apple')?.findHash;
+    const wesGoogleUnderOld = rowOf(wes.pk, 'google')?.findHash;
     // A take-over or a sealed-backup restore brings the community's key (services/recovery-seal-key.ts): this server's own
     // is kept beside it, retired, and the next start locks every copy only that one opens again with the live key. A find
     // hash can't be worked out again without the member's sub.
@@ -418,6 +423,11 @@ async function main(): Promise<void> {
     const umaAppleCarried = rowOf(uma.pk, 'apple')?.findHash;
     check(umaAgain.status === 200 && umaAppleCarried === null,
         `a deposit carries a copy only the retired key opened without that key's find hash, which no take-over could find it by (${umaAgain.status}, ${umaAppleCarried === null ? 'none' : umaAppleCarried === umaAppleUnderOld ? 'the retired key\'s kept' : String(umaAppleCarried)})`);
+    // So does a disconnect: Wes disconnects Apple, which carries Google.
+    const wesDropped = await disconnect(wes, 'apple');
+    const wesGoogleCarried = rowOf(wes.pk, 'google')?.findHash;
+    check(wesDropped === 200 && rowOf(wes.pk, 'apple') === null && !!wesGoogleUnderOld && wesGoogleCarried === null,
+        `and so does a disconnect: Wes's Google, carried when Apple goes, without the retired key's find hash (${wesDropped}, ${wesGoogleCarried === null ? 'none' : wesGoogleCarried === wesGoogleUnderOld ? 'the retired key\'s kept' : String(wesGoogleCarried)})`);
 
     // The start after the key change: every copy only the retired key opens is locked again with the live key.
     const renBefore = rowOf(ren.pk, 'google');
@@ -444,10 +454,12 @@ async function main(): Promise<void> {
     check(unfindable5 >= 1 && unfindableAfterRen === unfindable5 - 1 && rowOf(ren.pk, 'google')?.findHash === expectedFindHash('google', REN_SUB),
         `the boot count showed Ren's copy until then (${unfindable5}, then ${unfindableAfterRen}), and the scan wrote its find hash under the live key`);
     const umaByApple = await findBy(newId(), 'apple', UMA_APPLE);
+    const wesByGoogle = await findBy(newId(), 'google', WES_SUB);
     const vicThere = await findBy(newId(), 'google', VIC_SUB);
     check(brief(names(umaByApple.found)) === brief([`${umaName}:${uma.pk}`]) && rowOf(uma.pk, 'apple')?.findHash === expectedFindHash('apple', UMA_APPLE)
+        && brief(names(wesByGoogle.found)) === brief([`${wesName}:${wes.pk}`]) && rowOf(wes.pk, 'google')?.findHash === expectedFindHash('google', WES_SUB)
         && brief(names(vicThere.found)) === brief([`${vicName}:${vic.pk}`]),
-        `and Uma's carried Apple copy and Vic are found there too (${brief(umaByApple.found.body)} ${brief(vicThere.found.body)})`);
+        `and the copies the deposit and the disconnect carried (Uma's Apple, Wes's Google) and Vic's are found there too (${brief([umaByApple.found.body, wesByGoogle.found.body, vicThere.found.body])})`);
     const renBack = await collect(renPhone, ren.pk);
     const renOpened = await openReleased(renPhone, renBack.body?.collectionId, 'google', REN_SUB);
     check(renBack.status === 200 && renOpened.pk === ren.pk, `Ren's copy, locked again with the live key, comes back to Ren's own key (${renBack.status} ${renOpened.pk === ren.pk ? 'equal' : renOpened.error})`);

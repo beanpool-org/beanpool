@@ -532,8 +532,11 @@ function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySe
     const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
     db.pragma('secure_delete = ON');
     try {
-        const updShare = db.prepare(`UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
-            ${opts.clearFindHash ? 'sso_find_hash = NULL, ' : ''}updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`);
+        const updShare = db.prepare(opts.clearFindHash
+            ? `UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?, sso_find_hash = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
+            : `UPDATE recovery_shares SET encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`);
         const updRelease = db.prepare(`UPDATE recovery_releases SET payload = ?, payload_iv = ?, payload_tag = ?, kdf_params = ?
             WHERE id = ?`);
         db.transaction(() => {

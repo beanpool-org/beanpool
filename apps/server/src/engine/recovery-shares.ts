@@ -409,7 +409,8 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
  * A copy only a key a take-over replaced opens reads with no find hash: that hash was made under the replaced key, which
  * no take-over carries, and a deposit or a disconnect that carries the copy forward locks it again with the live key,
  * where the start's relock, which clears such a hash, no longer reaches it (services/recovery-seal-key.ts
- * rewrapRowsFromRetiredKeys). The scan finds the copy at its member's next restore (engine/recovery-find.ts).
+ * rewrapRowsFromRetiredKeys). The scan finds the copy at its member's next restore (engine/recovery-find.ts). (A find
+ * may have written that hash again under the live key since; dropping it then costs its member one scan.)
  */
 function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
     const { fields: copy, retired } = openRecoveryFieldsNotingRetired(

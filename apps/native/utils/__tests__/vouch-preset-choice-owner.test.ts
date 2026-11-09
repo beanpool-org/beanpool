@@ -40,7 +40,7 @@ function draw(props: Record<string, unknown>): HTMLDivElement {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    act(() => root!.render(createElement(VouchPresetChoice, { value: null, onChange: () => {}, budgetLeft: 0, budgetTotal: 0, ...props } as any)));
+    act(() => root!.render(createElement(VouchPresetChoice as any, { value: null, onChange: () => {}, budgetLeft: 0, budgetTotal: 0, ...props }) as any));
     return host;
 }
 afterEach(() => {
@@ -50,7 +50,7 @@ afterEach(() => {
     host = null;
 });
 
-const chips = (h: HTMLElement) => [...h.querySelectorAll('[data-testid^="invite-vouch-"]')].filter((e) => e.tagName === 'BUTTON');
+const chips = (h: HTMLElement) => Array.from(h.querySelectorAll('[data-testid^="invite-vouch-"]')).filter((e) => e.tagName === 'BUTTON');
 const ids = (h: HTMLElement) => chips(h).map((e) => e.getAttribute('data-testid')!.replace('invite-vouch-', ''));
 const off = (h: HTMLElement, id: string) => h.querySelector(`[data-testid="invite-vouch-${id}"]`)?.getAttribute('data-disabled') === 'true';
 

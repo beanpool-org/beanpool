@@ -13,6 +13,8 @@ import '../src/index.css';
 const params = new URLSearchParams(location.search);
 const view = params.get('view') || 'invite';
 const theme = params.get('theme') || 'dark';
+/** An owner's view (Marty, 9 Nov): no budget limit, 200 and 500 too. */
+const owner = params.get('owner') === '1';
 
 try { localStorage.setItem('beanpool-theme-mode', theme); } catch {}
 if (theme === 'dark') {
@@ -70,8 +72,9 @@ function HarnessApp() {
                     vouching={{
                         voucher: true,
                         budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-                        presets: [25, 50, 75, 100],
-                        vouchMax: 100,
+                        noLimit: owner,
+                        presets: owner ? [25, 50, 75, 100, 200, 500] : [25, 50, 75, 100],
+                        vouchMax: owner ? 500 : 100,
                         budgetMax: 2000,
                         vouchedBy: [],
                         history: [
@@ -111,7 +114,8 @@ function HarnessApp() {
 
 // The profile's vouch card asks GET /api/vouchers/me, which needs a stored identity to sign with (lib/api.ts
 // getMyVouching): without one it answers null and the card is never drawn. A throwaway key, in this browser only.
-const ready = view === 'profile' ? createIdentity('Alice').then(() => undefined, () => undefined) : Promise.resolve();
+// An owner's invite view signs its read of /api/vouchers/me too, so the presets show (200 and 500).
+const ready = view === 'profile' || (owner && view === 'invite') ? createIdentity('Alice').then(() => undefined, () => undefined) : Promise.resolve();
 
 void ready.then(() => showLanguage('en')).then(() => {
     createRoot(document.getElementById('root')!).render(<HarnessApp />);

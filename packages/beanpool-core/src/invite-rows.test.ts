@@ -31,7 +31,7 @@ describe('the one life of an invite', () => {
 
 describe('who an invite is for', () => {
     it('the name opened from the names list, when this phone opened one', () => {
-        expect(inviteWho(inv(1, { namesEntryId: 'e1', intendedFor: 'ignored' }), { name: 'Dee Dee' })).toBe('Dee Dee');
+        expect(inviteWho(inv(1, { namesEntryId: 'e1', intendedFor: 'ignored' }), { name: 'Sam' })).toBe('Sam');
     });
 
     it('a bound invite whose name can’t be opened here: on the web the name is on the phone; on a phone, the note or the code', () => {
@@ -47,7 +47,7 @@ describe('who an invite is for', () => {
     });
 
     it('a name is never taken from a plain invite’s opened-name option: it needs the entry', () => {
-        expect(inviteWho(inv(1, { intendedFor: 'Kim' }), { name: 'Dee Dee' })).toBe('For: Kim');
+        expect(inviteWho(inv(1, { intendedFor: 'Kim' }), { name: 'Sam' })).toBe('For: Kim');
     });
 
     it('made for a request to join: its note is the applicant’s key, which is never shown', () => {
@@ -121,7 +121,7 @@ describe('Pending and Joined', () => {
 
 describe('the made card’s title', () => {
     it('names who it is for, else says it was made', () => {
-        expect(inviteMadeTitle('Dee Dee')).toBe('Invite for Dee Dee');
+        expect(inviteMadeTitle('Sam')).toBe('Invite for Sam');
         expect(inviteMadeTitle(null)).toBe('Invite made');
         expect(inviteMadeTitle('  ')).toBe('Invite made');
     });

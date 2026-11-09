@@ -1,13 +1,13 @@
 /**
  * People → Invites: the invites a member has made, said in words (invites-vouching slice I1; DESIGN-invites-vouching-review-
- * fable.md §3 asks 3 and 5). Marty, 10 Nov: Dee Dee's bound invite showed as a bare code under "Share this cryptographic code",
+ * fable.md §3 asks 3 and 5). Marty, 10 Nov: a bound invite showed as a bare code under "Share this cryptographic code",
  * so a second, plain invite was made for her. Now:
  *
  *   Pending (n) ›  and  Joined (n) ›   folded, closed until opened (and kept open for the session once opened), count in the row
  *   each Pending row   who it is for (the name opened from the names list on this phone, else the note, else the code), what it
  *                      carries ("200 vouch · voucher budget 1,000 · confirms them as known"), "23 days left" (red at 3 or fewer)
  *   the whole row      opens the invite: its QR and Share (the caller's, the text message)
- *   the made card      "Invite for Dee Dee · 200 vouch · voucher budget 1,000 · 30 days left" and Share
+ *   the made card      "Invite for Sam · 200 vouch · voucher budget 1,000 · 30 days left" and Share
  *
  * The words are core's (invite-rows.ts), so the web says the same. A name is opened from the names list only by the caller:
  * this draws what it is handed, and says when Pending is open with a bound invite in it (`onNeedNames`) so the caller opens

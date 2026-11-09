@@ -1,7 +1,7 @@
 /**
  * Invites → the invites a member has made, said in words (invites-vouching slice I1; DESIGN-invites-vouching-review-fable.md §3
- * asks 3 and 5; the phone's twin is apps/native/components/InviteRows.tsx). Marty, 10 Nov: Dee Dee's bound invite showed as a bare
- * code, so a second, plain one was made for her. Now:
+ * asks 3 and 5; the phone's twin is apps/native/components/InviteRows.tsx). Marty, 10 Nov: a bound invite showed as a bare
+ * code, so a second, plain one was made for the same person. Now:
  *
  *   Pending (n) ›  and  Joined (n) ›   folded, closed until opened (and kept open for the session once opened), count in the row
  *   each Pending row   who it is for (the note, else the code; "Name on the phone" for an invite bound to the names list, whose

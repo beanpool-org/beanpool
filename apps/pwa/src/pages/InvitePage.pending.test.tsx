@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { inviteFolds } from '@beanpool/core';
 
 /**
- * Invites → Pending and Joined (invites-vouching slice I1; Marty, 10 Nov: Dee Dee's bound invite showed as a bare code, so a second,
+ * Invites → Pending and Joined (invites-vouching slice I1; Marty, 10 Nov: a bound invite showed as a bare code, so a second,
  * plain one was made for her). Both are folded and closed at first render with their counts in the row; an opened row says who the
  * invite is for, what it carries and how long it has left (red at 3 days or fewer); the whole row opens the invite; and the made
  * card says the same, with the form folded behind "Make another invite". The web holds no names-list key, so an invite bound to an
@@ -48,7 +48,7 @@ const base = (code: string, madeDaysAgo: number) => ({
 
 function fixture() {
     INVITES.rows = [
-        // Dee Dee's: bound to a names-list entry, with a 200 vouch and a 1,000 voucher budget, made 7 days ago (23 left).
+        // A bound invite: bound to a names-list entry, with a 200 vouch and a 1,000 voucher budget, made 7 days ago (23 left).
         { ...base('INV-BOUND-0001', 7), namesEntryId: 'entry-1', vouchAmount: 200, voucherLevel: 1000 },
         // A plain one with a note.
         { ...base('INV-NOTE-0002', 1), intendedFor: 'Kim' },
@@ -175,11 +175,11 @@ describe('the made card and the folded form', () => {
     it('after Generate the card says who it is for, what it carries and 30 days; the form is gone until Make another invite', async () => {
         INVITES.rows = [];
         render(<InvitePage identity={IDENTITY} />);
-        fireEvent.change(await screen.findByPlaceholderText("A note for you, kept on your community's server"), { target: { value: 'Dee Dee' } });
+        fireEvent.change(await screen.findByPlaceholderText("A note for you, kept on your community's server"), { target: { value: 'Sam' } });
         fireEvent.click(screen.getByRole('radio', { name: /100/ }));
         fireEvent.click(screen.getByRole('button', { name: /Generate New Invite/ }));
         const card = await screen.findByTestId('invite-made-card');
-        expect(within(card).getByTestId('invite-made-title')).toHaveTextContent('Invite for Dee Dee');
+        expect(within(card).getByTestId('invite-made-title')).toHaveTextContent('Invite for Sam');
         expect(within(card).getByTestId('invite-made-carries')).toHaveTextContent('100 vouch');
         expect(within(card).getByTestId('invite-made-left')).toHaveTextContent('30 days left');
         expect(card).not.toHaveTextContent('cryptographic');

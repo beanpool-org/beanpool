@@ -698,7 +698,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
 });
 
 // ── Pending and the made card (invites-vouching slice I1) ───────────────────────────────────────────────────────────────────────
-// Marty, 10 Nov: Dee Dee's bound invite showed as a bare code under "Share this cryptographic code", so a plain one was made as
+// Marty, 10 Nov: a bound invite showed as a bare code under "Share this cryptographic code", so a plain one was made as
 // well. Pending and Joined are folded and closed at first; an opened Pending row says who it is for (the name opened from the
 // names list on this phone), what it carries and how long it has left; the made card says the same.
 const DAY = 24 * 60 * 60 * 1000;
@@ -710,25 +710,25 @@ const mineRow = (code: string, daysAgo: number, extra: Record<string, unknown> =
 const rowsText = () => Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]')).map((r) => r.textContent ?? '');
 
 describe('People → Invites: Pending and Joined are folded, and each row says what the invite is for', () => {
-    const DEE_DEE = mineRow('INV-DEE-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 });
+    const BOUND = mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 });
     const PLAIN = mineRow('INV-PLAIN-0002', 1, { intendedFor: 'Kim' });
     const USED = mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' });
 
     it('closed at first render with the counts in the rows, and the names list is not read while it is closed', async () => {
         node.role = 'owner';
-        node.mine = [DEE_DEE, PLAIN, USED];
+        node.mine = [BOUND, PLAIN, USED];
         await open();
         expect(q('invites-pending-fold')?.textContent).toContain('Pending (2)');
         expect(q('invites-joined-fold')?.textContent).toContain('Joined (1)');
         expect(q('invite-pending-row')).toBeNull();
         expect(q('invite-joined-row')).toBeNull();
-        expect(host.textContent).not.toContain('INV-DEE-0001');
+        expect(host.textContent).not.toContain('INV-BOUND-0001');
         expect(list.opens, 'a closed fold reads no name: the list is a logged read').toBe(0);
     });
 
     it('an owner opens Pending: the name opened from the list, what it carries in words, the days left', async () => {
         node.role = 'owner';
-        node.mine = [DEE_DEE, PLAIN, USED];
+        node.mine = [BOUND, PLAIN, USED];
         await open();
         await press('invites-pending-fold');
         expect(list.opens, 'the list is opened once, for the bound invite in it').toBe(1);
@@ -756,21 +756,21 @@ describe('People → Invites: Pending and Joined are folded, and each row says w
         node.role = 'owner';
         list.refuse = 'This community keeps no names list.';
         list.refuseStatus = 404;
-        node.mine = [DEE_DEE];
+        node.mine = [BOUND];
         await open();
         await press('invites-pending-fold');
         const [row] = rowsText();
-        expect(row).toContain('INV-DEE-0001');
+        expect(row).toContain('INV-BOUND-0001');
         expect(row).toContain('200 vouch · voucher budget 1,000 · confirms them as known');
     });
 
     it('a member, who is offered no names list, never opens it', async () => {
         node.role = null;
-        node.mine = [DEE_DEE];
+        node.mine = [BOUND];
         await open();
         await press('invites-pending-fold');
         expect(list.opens).toBe(0);
-        expect(rowsText()[0]).toContain('INV-DEE-0001');
+        expect(rowsText()[0]).toContain('INV-BOUND-0001');
     });
 
     it('a code made for a request to join says so, and the applicant’s key is not shown as a name', async () => {

@@ -101,7 +101,7 @@ export function inviteTimeLeft(inv: Pick<InviteRowSource, 'createdAt' | 'expires
     };
 }
 
-/** The made card's one line, after Generate: "Invite for Dee Dee". */
+/** The made card's one line, after Generate: "Invite for Sam". */
 export function inviteMadeTitle(who: string | null | undefined): string {
     const name = who?.trim();
     return name ? t('Invite for {name}', { name }) : t('Invite made');

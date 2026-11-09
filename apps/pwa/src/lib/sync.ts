@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { createDeferredSync, isOthersListingDoorbell, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
+import { BELL_EVENTS, BELL_PAGE_EVENT, createDeferredSync, isOthersListingDoorbell, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -285,6 +285,14 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             // sends to their sockets only. lib/blocklist reads the list again; nothing else needs a sync for it.
             if (data.type === 'blocklist_updated') {
                 ringBlocklistDoorbell();
+                return;
+            }
+
+            // The bell (components/NeedsYouIcons.tsx): a notice kept for this member, or some marked seen on another tab or
+            // device. Handed to the page as BELL_PAGE_EVENT; only the bell reads again. Never a doorbell for the rest: the
+            // thing a notice is about rings its own.
+            if (data.type === BELL_EVENTS.kept || data.type === BELL_EVENTS.seen) {
+                try { window.dispatchEvent(new CustomEvent(BELL_PAGE_EVENT, { detail: data })); } catch { /* no window */ }
                 return;
             }
 

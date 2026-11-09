@@ -4363,9 +4363,6 @@
   "{n} listing|{n} listings": {
     "other": "投稿{n}件"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "other": "他に{n}件の要対応事項があります"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "other": "公開中の提供のうち{n}件はまだお店に入っていないため、注目に設定できません。"
   },
@@ -4385,9 +4382,6 @@
   },
   "{n} poll open|{n} polls open": {
     "other": "投票中のアンケート{n}件"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "other": "あなたの対応が必要なものが{n}件"
   },
   "{n} thing|{n} things": {
     "other": "{n}点"

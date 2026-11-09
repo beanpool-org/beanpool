@@ -4529,10 +4529,6 @@
     "one": "{n}টি তালিকা",
     "other": "{n}টি তালিকা"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "one": "আরও {n}টি বিষয়ে আপনাকে দরকার",
-    "other": "আরও {n}টি বিষয়ে আপনাকে দরকার"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "one": "এর চালু প্রস্তাবগুলোর মধ্যে {n}টি এখনও এর দোকানে নেই, তাই সেটি নির্বাচিত করা যাবে না।",
     "other": "এর চালু প্রস্তাবগুলোর মধ্যে {n}টি এখনও এর দোকানে নেই, তাই সেগুলো নির্বাচিত করা যাবে না।"
@@ -4558,10 +4554,6 @@
   "{n} poll open|{n} polls open": {
     "one": "{n}টি পোল খোলা",
     "other": "{n}টি পোল খোলা"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "one": "{n}টি বিষয়ে আপনাকে দরকার",
-    "other": "{n}টি বিষয়ে আপনাকে দরকার"
   },
   "{n} thing|{n} things": {
     "one": "{n}টি জিনিস",

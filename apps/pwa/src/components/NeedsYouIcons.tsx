@@ -1,24 +1,28 @@
 /**
- * Small icons showing what needs you right now: parity with the phone's apps/native/components/NeedsYouIcons.tsx. One
- * icon per kind, only while something of that kind does; the highest-priority icon sits nearest the "?" and Settings,
- * and the lowest fold first into "•••", which opens the "Needs you" sheet (@beanpool/core needs-you.ts, as the phone's).
- * Members only.
+ * The bell in the top bar (scratch/fable-design/DESIGN-web-notifications-fable.md §2.1, slice W0; Marty, 9 Nov 2026: the
+ * bell takes the needs-you row): parity with the phone's apps/native/components/NeedsYouIcons.tsx. One control: a red count
+ * of the notices not yet opened (@beanpool/core notice-bell.ts), an amber dot when nothing is new but something needs the
+ * member, and a sheet with what needs them now at the top ("Needs you", the open things, as the icons were) and what
+ * happened under it, newest first, with the real words. A row leaves only when it is tapped (it opens its thing and is
+ * marked) or when its thing is opened (a chat read: the node marks it and tells the sockets); opening the sheet marks
+ * nothing, and there is no "Clear all". Members only.
  *
- * Where they are drawn (AppHeader.tsx):
+ * Where it is drawn (AppHeader.tsx):
  * - The mobile header (under 768 px): beside the tab's name, in the room between the sync chip and the pill
- *   (HeaderTitle's `end`). The row's CSS gives the name its words first and this slot what is left, up to a slot per kind,
- *   so nothing measured here can cut the name. The slot measures its own width, as the phone's row does (onLayout), and
- *   draws what fits in it; what it draws never changes that width, and it stays mounted on every tab, so every change of
- *   tab, needs or width is measured. On the map the logo is drawn over that room: the slot stops 4 px short of it (at
- *   320–430 px there is no room at all). Between 28 and 44 px, a count chip in place of the icons.
- * - The side bar (768 px and up): a row of their own above the connection status, the "?" and Settings, wrapping rather
- *   than pushing them (five kinds fit in its 232 px). The header row still shows beside the side bar there (its md:hidden
- *   loses to its inline display), and its slot draws nothing.
+ *   (HeaderTitle's `end`). The row's CSS gives the name its words first and this slot what is left, up to the bell's 44 px,
+ *   so nothing measured here can cut the name. The slot measures its own width (onLayout, as the phone's), and stays
+ *   mounted on every tab. On the map the logo is drawn over that room: the slot stops 4 px short of it. Between 28 and
+ *   44 px, a 28 px bell.
+ * - The side bar (768 px and up): a row of its own above the connection status, the "?" and Settings. The header row still
+ *   shows beside the side bar there (its md:hidden loses to its inline display), and its slot draws nothing.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { capitalFirst, createRefreshGate, fitNeedsYou, inviteAskNeedsLine, isOwnInviteChange, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } from '@beanpool/core';
-import { t, tn } from '@beanpool/core';
+import {
+    BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellLabel, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
+    isPushNoticeKind, NEEDS_YOU_PRIORITY, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
+} from '@beanpool/core';
+import { t } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
 import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, forgetHomeForHeader } from '../lib/home-store';
 import { onConversationRead } from '../lib/conversation-read';
@@ -29,19 +33,12 @@ import * as api from '../lib/api';
 const NODE_MIN_GAP_MS = 15_000;
 const SAFETY_POLL_MS = 120_000;
 const WS_SETTLE_MS = 3_000;
-/** On the map: the room kept between the logo's right edge and the first icon. */
+/** On the map: the room kept between the logo's right edge and the bell. */
 const LOGO_CLEAR_PX = 4;
-/** The count chip, where the slot has room for it but not for one icon. */
-const COUNT_CHIP_PX = 28;
-
-export function moreLabel(hidden: number): string {
-    return tn(hidden, '{n} more thing needs you', '{n} more things need you');
-}
-
-/** The name of a control that stands for every need at once (the count chip, or "•••" with no icon beside it). */
-export function allNeedsLabel(kinds: number): string {
-    return tn(kinds, '{n} thing needs you', '{n} things need you');
-}
+/** The small bell, where the slot has room for it but not for the full one. */
+const SMALL_BELL_PX = 28;
+/** A notice kept: the list is read again this long after, so a burst is one read. */
+const BELL_SETTLE_MS = 300;
 
 /** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
 export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
@@ -62,11 +59,42 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
     }
 }
 
-/** Slot width in pixels for each header alert icon. 44 px matches tour-check and pill height. */
+/**
+ * Where a tap on a notice lands in the web app: parity with the phone's push tap (apps/native utils/push-notice-check.ts
+ * noticeRoute). A post, a chat, an enterprise, a group or an invitation when the notice names one; else its kind's tab.
+ */
+export function goToNoticeTarget(kind: string, data: Record<string, unknown>, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
+    if (!onNavigate) return;
+    const id = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length <= 200 ? v : undefined);
+    switch (data.screen) {
+        case 'requests': return onNavigate('messages');
+        case 'post': if (id(data.postId)) return onNavigate('marketplace', id(data.postId), id(data.txId)); break;
+        case 'chat': if (id(data.conversationId)) return onNavigate('messages', id(data.conversationId)); break;
+        case 'enterprise': if (id(data.publicKey)) return onNavigate('enterprise', id(data.publicKey)); break;
+        case 'group': case 'invite': if (id(data.groupId)) return onNavigate('group', id(data.groupId)); break;
+        case 'decide': return onNavigate('projects');
+        case 'settings': return onNavigate('settings');
+        default: break;
+    }
+    const tab = isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
+    const web: Record<string, string> = { home: 'home', market: 'marketplace', chats: 'messages', settings: 'settings', people: 'people-invites' };
+    return onNavigate(web[tab] ?? 'home');
+}
+
+/** The bell's size: 44 px matches tour-check and pill height. */
 export const HEADER_ALERT_SLOT_PX = 44;
 
+function BellSvg({ shadow = false, small = false }: { shadow?: boolean; small?: boolean }) {
+    const size = small ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]';
+    return (
+        <svg className={`${size} shrink-0${shadow ? ' drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="bell">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+        </svg>
+    );
+}
+
 /** `shadow`: on the header's photo, the phone's icon shadow (black at 75%, 1 px down, 4 px soft), so the icon reads on the vines. */
-function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind | 'more'; shadow?: boolean }) {
+function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind; shadow?: boolean }) {
     const cls = `w-[20px] h-[20px] shrink-0${shadow ? ' drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]' : ''}`;
     switch (kind) {
         case 'invite':
@@ -103,12 +131,6 @@ function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind | 'more'; shadow
             return (
                 <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="ask">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-                </svg>
-            );
-        case 'more':
-            return (
-                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="more">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
                 </svg>
             );
         default:
@@ -148,6 +170,7 @@ export function NeedsYouIcons({
     variant?: 'header' | 'sidebar';
 }) {
     const [entries, setEntries] = useState<NeedsItem[]>([]);
+    const [notices, setNotices] = useState<BellNotice[]>([]);
     const [sheet, setSheet] = useState(false);
     // The header's slot: the element (a callback ref, so the effects below measure whichever is mounted), its width as laid
     // out (null until measured: with no ResizeObserver, as in jsdom, everything is drawn), and on the map how far it may
@@ -212,6 +235,58 @@ export function NeedsYouIcons({
         }
     }, [filterAndSort, isHidden]);
 
+    // The bell's list: read when the app opens, when a notice is kept or a chat is read, with the needs' own gated reads
+    // (a reconnect's sync among them), on the way back to the tab, and on the safety poll. A read under way is the read;
+    // never on the copy that is not on screen.
+    const bellBusy = useRef(false);
+    const refreshBell = useCallback(async () => {
+        const pk = identityRef.current;
+        if (!pk || bellBusy.current || isHidden()) return;
+        bellBusy.current = true;
+        try {
+            const list = await api.getBellNotices();
+            if (identityRef.current === pk) setNotices(list);
+        } catch {
+            // A node from before the bell answers 404, a dropped network nothing: keep what was drawn
+        } finally {
+            bellBusy.current = false;
+        }
+    }, [isHidden]);
+
+    useEffect(() => {
+        if (!identityPubkey) {
+            setNotices([]);
+            return;
+        }
+        // The first read is the gate's first (below), with the needs'.
+        let settle: ReturnType<typeof setTimeout> | null = null;
+        const onBell = (e: Event) => {
+            const event = (e as CustomEvent<{ type?: unknown; ids?: unknown }>).detail ?? {};
+            if (event.type === BELL_EVENTS.seen && Array.isArray(event.ids)) {
+                setNotices(list => withoutBellNotices(list, event.ids as unknown[]));
+                return;
+            }
+            if (settle) clearTimeout(settle);
+            settle = setTimeout(refreshBell, BELL_SETTLE_MS);
+        };
+        if (typeof window !== 'undefined') window.addEventListener(BELL_PAGE_EVENT, onBell);
+        const unsubRead = onConversationRead(() => { refreshBell(); });
+        const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
+        const poll = setInterval(() => { if (visible()) refreshBell(); }, SAFETY_POLL_MS);
+        const onBack = () => { if (visible()) refreshBell(); };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onBack);
+        const wide = typeof window !== 'undefined' ? window.matchMedia?.('(min-width: 768px)') : undefined;
+        wide?.addEventListener?.('change', onBack);
+        return () => {
+            if (settle) clearTimeout(settle);
+            if (typeof window !== 'undefined') window.removeEventListener(BELL_PAGE_EVENT, onBell);
+            unsubRead();
+            clearInterval(poll);
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onBack);
+            wide?.removeEventListener?.('change', onBack);
+        };
+    }, [identityPubkey, refreshBell]);
+
     // Load initial data and subscribe to Home reads and refresh gate
     useEffect(() => {
         if (!identityPubkey) {
@@ -228,6 +303,7 @@ export function NeedsYouIcons({
 
         const g = createRefreshGate(NODE_MIN_GAP_MS, () => {
             refresh();
+            refreshBell();
         });
         gate.current = g;
 
@@ -247,7 +323,7 @@ export function NeedsYouIcons({
             if (gate.current === g) gate.current = null;
             unsubscribe();
         };
-    }, [identityPubkey, filterAndSort, refresh]);
+    }, [identityPubkey, filterAndSort, refresh, refreshBell]);
 
     // Each tab change requests a refresh through the gate (copying phone's refresh rule)
     useEffect(() => {
@@ -379,125 +455,82 @@ export function NeedsYouIcons({
         forgetHomeForHeader();
         goToWebNeedsTarget(target, onNavigate);
     };
+    // A tap on a notice: off the bell at once (and on the node, which tells the member's other apps), then to its thing.
+    const openNotice = (n: BellNotice) => {
+        setNotices(list => withoutBellNotices(list, [n.id]));
+        api.markBellNoticesSeen([n.id]).catch(() => { refreshBell(); });
+        goToNoticeTarget(n.kind, n.data, onNavigate);
+    };
+    const unseen = notices.length;
+    const label = bellLabel(unseen, entries.length);
+    const bell = (small: boolean) => (
+        <button
+            type="button"
+            onClick={() => setSheet(true)}
+            aria-label={label}
+            title={label}
+            aria-haspopup="dialog"
+            data-testid={isSidebar ? 'sidebar-bell' : 'header-bell'}
+            data-unseen={unseen}
+            className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] ${
+                isSidebar
+                    ? 'rounded-lg text-text-secondary hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                    : 'rounded-full focus-visible:ring-inset text-white hover:bg-white/15'
+            }`}
+            style={{ width: `${small ? SMALL_BELL_PX : HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
+        >
+            <BellSvg shadow={!isSidebar} small={small} />
+            {unseen > 0 ? (
+                <span
+                    data-testid="bell-count"
+                    className={`absolute ${small ? 'top-1.5 -right-0.5' : 'top-1.5 right-0.5'} min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center leading-none pointer-events-none bg-bp-danger-fill text-bp-danger-on`}
+                >
+                    {bellBadge(unseen)}
+                </span>
+            ) : entries.length > 0 ? (
+                <span
+                    data-testid="bell-dot"
+                    className={`absolute top-2.5 ${small ? 'right-0' : 'right-2'} w-[9px] h-[9px] rounded-full pointer-events-none ${isSidebar ? 'bg-bp-gold-fill' : 'bg-amber-300'}`}
+                />
+            ) : null}
+        </button>
+    );
     const sheetEl = sheet && (
         <NeedsSheet
             entries={entries}
+            notices={notices}
             onClose={() => setSheet(false)}
             onPick={go}
+            onOpenNotice={openNotice}
         />
     );
 
-    const needButton = (entry: NeedsItem) => {
-        const k = entry.kind;
-        const isAccent = entry.accent;
-        const iconColor = isSidebar
-            ? (isAccent ? 'text-bp-ink-warning' : 'text-text-secondary')
-            : (isAccent ? 'text-amber-300' : 'text-white');
-        return (
-            <button
-                key={k}
-                onClick={() => go(entry.target)}
-                aria-label={entry.label}
-                title={entry.label}
-                data-testid={`header-needs-${k}`}
-                data-kind={k}
-                className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] ${iconColor} ${
-                    isSidebar
-                        ? 'rounded-lg hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
-                        : 'rounded-full focus-visible:ring-inset hover:bg-white/15'
-                }`}
-                style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
-            >
-                <NeedSvg kind={k} shadow={!isSidebar} />
-                {entry.count > 1 && (
-                    <span
-                        className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
-                            // The side bar is light in light mode: its badge takes the gold role tokens (as the header pill), never white.
-                            isSidebar ? 'bg-bp-gold-fill text-bp-gold-on' : isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
-                        }`}
-                    >
-                        {entry.count > 9 ? '9+' : entry.count}
-                    </span>
-                )}
-            </button>
-        );
-    };
-
     if (isSidebar) {
-        if (entries.length === 0) return null;
         return (
-            <div data-testid="sidebar-needs-row" className="flex flex-wrap items-center justify-end">
-                {needsYouRowOrder({ shown: entries, hidden: 0 }).map(k => {
-                    const entry = entries.find(e => e.kind === k);
-                    return entry ? needButton(entry) : null;
-                })}
-            </div>
+            <>
+                <div data-testid="sidebar-needs-row" className="flex flex-wrap items-center justify-end">
+                    {bell(false)}
+                </div>
+                {sheetEl}
+            </>
         );
     }
 
     const room = slotWidth ?? Infinity;
-    const fit = fitNeedsYou(entries, room, HEADER_ALERT_SLOT_PX);
-    const byKind = new Map(fit.shown.map(e => [e.kind, e]));
-    const countChip = entries.length > 0 && fit.shown.length === 0 && fit.hidden === 0 && room >= COUNT_CHIP_PX;
-    const hasAccent = entries.some(e => e.accent);
-
-    let drawn: ReactNode = null;
-    if (countChip) {
-        const label = allNeedsLabel(entries.length);
-        drawn = (
-            <button
-                onClick={() => setSheet(true)}
-                aria-label={label}
-                title={label}
-                data-testid="header-needs-chip"
-                className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px]"
-                style={{ width: `${COUNT_CHIP_PX}px`, height: '44px' }}
-            >
-                <span
-                    className={`min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-black flex items-center justify-center leading-none ${
-                        hasAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
-                    }`}
-                >
-                    {entries.length > 9 ? '9+' : entries.length}
-                </span>
-            </button>
-        );
-    } else if (fit.shown.length > 0 || fit.hidden > 0) {
-        drawn = needsYouRowOrder(fit).map(k => {
-            if (k === 'more') {
-                // With icons beside it, "•••" is the rest; alone, it is all of them.
-                const label = fit.shown.length > 0 ? moreLabel(fit.hidden) : allNeedsLabel(entries.length);
-                return (
-                    <button
-                        key="more"
-                        onClick={() => setSheet(true)}
-                        aria-label={label}
-                        title={label}
-                        data-testid="header-needs-more"
-                        className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] rounded-full text-white hover:bg-white/15"
-                        style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
-                    >
-                        <NeedSvg kind="more" shadow />
-                    </button>
-                );
-            }
-            const entry = byKind.get(k);
-            return entry ? needButton(entry) : null;
-        });
-    }
+    const drawn = room >= HEADER_ALERT_SLOT_PX ? bell(false) : room >= SMALL_BELL_PX ? bell(true) : null;
 
     return (
         <>
-            {/* The slot: a slot per kind wide at most, shrinking to nothing before the title gives way (HeaderTitle), and on
-                the map no further than the logo. 44 px tall for the targets, 38 px in the row (as the pill's). From 768 px
-                none: the side bar has the icons there (SidebarStatus), and the header row, though its md:hidden loses to
-                its own inline display and it still shows beside the side bar, mustn't draw them a second time. */}
+            {/* The slot: the bell's 44 px at most, shrinking to nothing before the title gives way (HeaderTitle), and on the
+                map no further than the logo. 44 px tall for the target, 38 px in the row (as the pill's). From 768 px none:
+                the side bar has the bell there (SidebarStatus), and the header row, though its md:hidden loses to its own
+                inline display and it still shows beside the side bar, mustn't draw it a second time. */}
             <div
                 ref={setSlot}
                 data-needs-slot
                 className="flex items-center justify-end md:hidden"
                 style={{
-                    flex: `0 1 ${entries.length * HEADER_ALERT_SLOT_PX}px`,
+                    flex: `0 1 ${HEADER_ALERT_SLOT_PX}px`,
                     minWidth: 0,
                     maxWidth: logoRoom !== undefined ? `${logoRoom}px` : undefined,
                     height: '44px',
@@ -518,15 +551,20 @@ export function NeedsYouIcons({
 
 function NeedsSheet({
     entries,
+    notices,
     onClose,
     onPick,
+    onOpenNotice,
 }: {
     entries: NeedsItem[];
+    notices: BellNotice[];
     onClose: () => void;
     onPick: (target: NeedsTarget) => void;
+    onOpenNotice: (notice: BellNotice) => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialogRef, onClose);
+    const now = Date.now();
 
     return (
         <div
@@ -549,7 +587,7 @@ function NeedsSheet({
                         tabIndex={-1}
                         className="text-xs font-bold uppercase tracking-wider text-text-secondary outline-none"
                     >
-                        {t('Needs you')}
+                        {t('Notifications')}
                     </h2>
                     <button
                         type="button"
@@ -562,29 +600,65 @@ function NeedsSheet({
                         </svg>
                     </button>
                 </div>
-                <div className="py-1 max-h-[60vh] overflow-y-auto">
-                    {entries.map((e) => (
+                <div className="py-1 max-h-[65vh] overflow-y-auto">
+                    {entries.length > 0 && (
+                        <div data-testid="needs-sheet-needs" className="pb-1 mb-1 border-b border-border-secondary">
+                            <h3 className="px-2 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-text-muted">{t('Needs you')}</h3>
+                            {entries.map((e) => (
+                                <button
+                                    key={e.kind}
+                                    type="button"
+                                    onClick={() => {
+                                        onClose();
+                                        onPick(e.target);
+                                    }}
+                                    aria-label={e.label}
+                                    data-testid={`header-needs-${e.kind}`}
+                                    data-kind={e.kind}
+                                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                                >
+                                    <span className={e.accent ? 'text-bp-ink-warning' : 'text-text-secondary'}>
+                                        <NeedSvg kind={e.kind} />
+                                    </span>
+                                    <span className={`flex-1 min-w-0 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
+                                        {e.label}
+                                    </span>
+                                    {e.count > 1 && (
+                                        <span className="shrink-0 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-black flex items-center justify-center leading-none bg-bp-gold-fill text-bp-gold-on">
+                                            {e.count > 9 ? '9+' : e.count}
+                                        </span>
+                                    )}
+                                    <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                    </svg>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {notices.length === 0 && entries.length === 0 && (
+                        <p data-testid="needs-sheet-empty" className="px-2 py-4 text-sm text-text-secondary text-center">{t('Nothing new.')}</p>
+                    )}
+                    {notices.map((n) => (
                         <button
-                            key={e.kind}
+                            key={n.id}
                             type="button"
                             onClick={() => {
                                 onClose();
-                                onPick(e.target);
+                                onOpenNotice(n);
                             }}
-                            aria-label={e.label}
-                            className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            data-testid="bell-notice"
+                            data-notice-id={n.id}
+                            className="w-full flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                         >
-                            <span className={e.accent ? 'text-bp-ink-warning' : 'text-text-secondary'}>
-                                <NeedSvg kind={e.kind} />
+                            <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-bp-danger-fill" aria-hidden="true" />
+                            <span className="flex-1 min-w-0">
+                                <span className="block text-sm font-bold text-text-heading line-clamp-2 break-words">{n.title || n.body}</span>
+                                {n.title && n.body && <span className="block text-sm text-text-primary line-clamp-3 break-words">{n.body}</span>}
+                                <span className="block text-xs text-text-muted">{timeAgo(Math.max(0, now - n.sentAt * 1000))}</span>
                             </span>
-                            <span className={`flex-1 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
-                                {e.label}
-                            </span>
-                            <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg>
                         </button>
                     ))}
+                    <p data-testid="needs-sheet-lifetime" className="px-2 pt-2 pb-1 text-xs text-text-muted text-center">{t('Older notices are gone after 7 days.')}</p>
                 </div>
             </div>
         </div>

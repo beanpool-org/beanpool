@@ -4529,10 +4529,6 @@
     "one": "{n} பதிவு",
     "other": "{n} பதிவுகள்"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "one": "மேலும் {n} விஷயத்திற்கு உங்கள் கவனம் தேவை",
-    "other": "மேலும் {n} விஷயங்களுக்கு உங்கள் கவனம் தேவை"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "one": "இதன் செயலில் உள்ள சலுகைகளில் {n} இன்னும் அதன் கடையில் இல்லை, எனவே அதைச் சிறப்பிக்க முடியாது.",
     "other": "இதன் செயலில் உள்ள சலுகைகளில் {n} இன்னும் அதன் கடையில் இல்லை, எனவே அவற்றைச் சிறப்பிக்க முடியாது."
@@ -4558,10 +4554,6 @@
   "{n} poll open|{n} polls open": {
     "one": "{n} வாக்கெடுப்பு திறந்துள்ளது",
     "other": "{n} வாக்கெடுப்புகள் திறந்துள்ளன"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "one": "உங்களுக்காக {n} விஷயம் காத்திருக்கிறது",
-    "other": "உங்களுக்காக {n} விஷயங்கள் காத்திருக்கின்றன"
   },
   "{n} thing|{n} things": {
     "one": "{n} பொருள்",

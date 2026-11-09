@@ -4861,12 +4861,6 @@
     "many": "{n} объявлений",
     "other": "{n} объявления"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "one": "Ещё {n} элемент ждёт вашего внимания",
-    "few": "Ещё {n} элемента ждут вашего внимания",
-    "many": "Ещё {n} элементов ждут вашего внимания",
-    "other": "Ещё {n} элемента ждут вашего внимания"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "one": "{n} из его активных Предложений ещё не в его витрине, поэтому его нельзя выделить.",
     "few": "{n} из его активных Предложений ещё не в его витрине, поэтому их нельзя выделить.",
@@ -4904,12 +4898,6 @@
     "few": "{n} опроса открыто",
     "many": "{n} опросов открыто",
     "other": "{n} опроса открыто"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "one": "{n} вещь ждёт вас",
-    "few": "{n} вещи ждут вас",
-    "many": "{n} вещей ждут вас",
-    "other": "{n} вещи ждут вас"
   },
   "{n} thing|{n} things": {
     "one": "{n} вещь",

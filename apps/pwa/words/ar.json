@@ -5193,14 +5193,6 @@
     "many": "{n} إعلانًا",
     "other": "{n} إعلان"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "zero": "{n} أمر إضافي يحتاجك",
-    "one": "{n} أمر إضافي يحتاجك",
-    "two": "{n} أمر إضافي يحتاجك",
-    "few": "{n} أمور إضافية تحتاجك",
-    "many": "{n} أمرًا إضافيًا يحتاجك",
-    "other": "{n} أمر إضافي يحتاجك"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "zero": "{n} من عروضه الحية ليست في متجره بعد، لذا لا يمكن تمييزها.",
     "one": "أحد عروضه الحية ليس في متجره بعد، لذا لا يمكن تمييزه.",
@@ -5250,14 +5242,6 @@
     "few": "{n} استطلاعات مفتوحة",
     "many": "{n} استطلاعًا مفتوحًا",
     "other": "{n} استطلاع مفتوح"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "zero": "{n} شيء يحتاج إليك",
-    "one": "شيء واحد يحتاج إليك",
-    "two": "شيئان يحتاجان إليك",
-    "few": "{n} أشياء تحتاج إليك",
-    "many": "{n} شيئًا يحتاج إليك",
-    "other": "{n} شيء يحتاج إليك"
   },
   "{n} thing|{n} things": {
     "zero": "{n} أشياء",

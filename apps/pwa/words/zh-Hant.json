@@ -4363,9 +4363,6 @@
   "{n} listing|{n} listings": {
     "other": "{n} 則貼文"
   },
-  "{n} more thing needs you|{n} more things need you": {
-    "other": "還有 {n} 件事需要你處理"
-  },
   "{n} of its live Offers isn't in its shop yet, so it can't be featured.|{n} of its live Offers aren't in its shop yet, so they can't be featured.": {
     "other": "它正在發布的提供中有 {n} 個尚未放進它的小店，所以無法設為精選。"
   },
@@ -4385,9 +4382,6 @@
   },
   "{n} poll open|{n} polls open": {
     "other": "{n} 項民意調查進行中"
-  },
-  "{n} thing needs you|{n} things need you": {
-    "other": "有 {n} 件事需要你"
   },
   "{n} thing|{n} things": {
     "other": "{n} 件物品"

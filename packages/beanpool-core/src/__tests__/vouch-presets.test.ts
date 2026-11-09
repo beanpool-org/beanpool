@@ -3,6 +3,14 @@ import {
     VOUCH_PRESETS,
     VOUCH_MAX,
     VOUCHES_PER_PERSON,
+    OWNER_VOUCH_PRESETS,
+    OWNER_VOUCH_MAX,
+    PERSON_VOUCH_MAX,
+    PERSON_VOUCH_MAX_WITH_OWNER,
+    isOwnerVouchPreset,
+    vouchPresetsFor,
+    vouchMaxFor,
+    personVouchMax,
     VOUCHER_BUDGET_MIN,
     VOUCHER_BUDGET_MAX,
     isVouchPreset,
@@ -31,6 +39,25 @@ describe('vouch-presets core logic and history line formatting', () => {
         expect(isBudgetLevel(2000)).toBe(true);
         expect(isBudgetLevel(2100)).toBe(false);
         expect(isBudgetLevel(150)).toBe(false);
+    });
+
+    it("gives an owner 200 and 500 too, a 500 cap per person they vouch for, and nobody else either (Marty, 9 Nov)", () => {
+        expect(OWNER_VOUCH_PRESETS).toEqual([25, 50, 75, 100, 200, 500]);
+        expect(OWNER_VOUCH_MAX).toBe(500);
+        expect(PERSON_VOUCH_MAX).toBe(300);
+        expect(PERSON_VOUCH_MAX_WITH_OWNER).toBe(500);
+        expect(vouchPresetsFor(true)).toEqual([25, 50, 75, 100, 200, 500]);
+        expect(vouchPresetsFor(false)).toEqual([25, 50, 75, 100]);
+        expect(vouchMaxFor(true)).toBe(500);
+        expect(vouchMaxFor(false)).toBe(100);
+        expect(personVouchMax(true)).toBe(500);
+        expect(personVouchMax(false)).toBe(300);
+        expect(isOwnerVouchPreset(200)).toBe(true);
+        expect(isOwnerVouchPreset(500)).toBe(true);
+        expect(isOwnerVouchPreset(25)).toBe(true);
+        expect(isOwnerVouchPreset(300)).toBe(false);
+        expect(isVouchPreset(200)).toBe(false);
+        expect(isVouchPreset(500)).toBe(false);
     });
 
     it('formats grant lines in plain words without keys or raw enums', () => {

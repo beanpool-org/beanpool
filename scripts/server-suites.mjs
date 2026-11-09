@@ -605,6 +605,7 @@ export const SUITES = [
     'test-names-list',
     'test-invite-bound-name',
     'test-invite-adds-voucher',
+    'test-owner-vouch',
     'test-vouch-reset',
     'test-vouchers',
     'test-credit-gift',

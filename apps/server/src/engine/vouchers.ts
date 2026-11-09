@@ -14,7 +14,8 @@
  *
  * An owner or admin vouches by the role whatever their budget's source (amend2 §2(b)): while they hold the role, Stop
  * vouching refuses their budget, and a revoked entry or a step-back moves its source back to the role (a `voucher_source`
- * line, entry → role) instead of stopping it, the same left and held. Only an owner lowers an owner's budget.
+ * line, entry → role) instead of stopping it, the same left and held. Nobody sets an owner's budget: an owner vouches with
+ * no limit (Marty, 9 Nov; OWNER_VOUCH_ACTOR), and what the role gave them waits, whole, for a step down to admin.
  * The credit-committee flag is an admin's: any role change that leaves them no admin (made owner included) clears it, logged.
  *
  * ## The budget (`voucher_allocations`, never updated or deleted)
@@ -38,7 +39,10 @@
  * ## The vouch
  * A preset (core VOUCH_PRESETS), never another amount. One voucher's vouches for one person: a first vouch, then raises,
  * VOUCH_MAX (100) in all, each raise a further hold and room_gifts row on the same pair (§9 rule 1). At most
- * VOUCHES_PER_PERSON (3) vouchers' vouches count for one person (rule 2). Never from a profile for a member below zero now,
+ * VOUCHES_PER_PERSON (3) vouchers' vouches count for one person (rule 2), 300 in all.
+ * An owner (Marty, 9 Nov) vouches with no budget limit, from OWNER_VOUCH_PRESETS (200 and 500 too, nobody else's), up to
+ * 500 for one person; their hold is recorded (OWNER_VOUCH_ACTOR) and never drawn from a budget. A person an owner vouched for
+ * may hold 500 in all, and the three-vouchers rule never refuses an owner's vouch. Never from a profile for a member below zero now,
  * read from the stored balance (rule 3). A vouch on an invite lands at the redeem, in its transaction (the joiner is new,
  * so it is their first, and it is that voucher's one vouch for them); an offline ticket never carries one.
  *
@@ -50,7 +54,7 @@
 import crypto from 'node:crypto';
 import {
     VOUCH_MAX, VOUCHES_PER_PERSON, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_DEFAULT, MEMBER_GIFT_DEFAULT, VOUCH_PRESETS,
-    isVouchPreset, isBudgetLevel, isMemberGiftSetting, word, wordsFor,
+    isVouchPreset, isOwnerVouchPreset, isBudgetLevel, isMemberGiftSetting, vouchPresetsFor, vouchMaxFor, personVouchMax, word, wordsFor,
 } from '@beanpool/core';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -69,6 +73,13 @@ export const MEMBER_GIFT_KEY = 'member_gift';
 export const VOUCHERS_MIGRATION_ACTOR = 'migration:vouchers';
 /** The actor of the first owner's grant, made by the community's claim code. */
 export const CLAIM_ACTOR = 'node:claim';
+/**
+ * The actor of a `hold` an owner made (Marty, 9 Nov: owners vouch with no budget limit). The line records the vouch as any
+ * hold does (whose budget: member_pubkey; on whom: ref, the room_gifts id or the invite code; how much: amount), and no budget
+ * sum counts it, nor its `return`: an owner's vouch never draws a budget down, so the budget an owner holds by the role is
+ * whole if they step down to admin. The other holds' actor is the voucher's own key, which member_pubkey already says.
+ */
+export const OWNER_VOUCH_ACTOR = 'role:owner';
 
 /** An invite lives 30 days (engine/invites.ts redeemInvite): a hold on a code older than that is back in the budget. */
 const INVITE_LIFE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -84,6 +95,8 @@ export class VoucherError extends Error {
 export const VOUCHER_WORDS = {
     notAVoucher: word('You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.'),
     badAmount: word('A vouch is 25, 50, 75 or 100 Beans.'),
+    badOwnerAmount: word('An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.'),
+    ownerAmountOnly: word('Only an owner can vouch 200 or 500 Beans.'),
     ownVouch: word('You can’t vouch for yourself.'),
     notMember: word('Only an active member of this community can be vouched for.'),
     committeeOnly: word('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'),
@@ -106,12 +119,13 @@ const alreadyVouched = (name: string) => tr('You’ve already vouched for @{name
 const threeVouches = (name: string) => tr('@{name} has three vouches.', { name });
 const belowZero = (name: string) => tr('@{name} is below zero: a credit-line gift or a Decision can help.', { name });
 const noVouchYet = (name: string) => tr('You haven’t vouched for @{name} yet, so there is no vouch to raise.', { name });
-const overMax = (name: string, total: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max: VOUCH_MAX, total });
+const overMax = (name: string, total: number, max: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max, total });
+const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total, max });
 const alreadyVoucher = (name: string) => tr('@{name} is a voucher already.', { name });
 const notVoucher = (name: string) => tr('@{name} isn’t a voucher.', { name });
 const roleVoucher = (name: string) => tr('@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.', { name });
-const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.', { name });
-const ownerBudget = (name: string) => tr('@{name} is an owner: only another owner can lower their budget.', { name });
+const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.', { name });
+const ownerNoLimit = (name: string) => tr('@{name} is an owner: owners vouch with no limit, so there is no budget to set.', { name });
 const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held });
 const overCeiling = () => tr('A voucher has at most {max} Beans in hand, left and held together.', { max: VOUCHER_BUDGET_MAX });
 const openDebt = (amount: number) => tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount });
@@ -179,6 +193,7 @@ export function voucherSettings() {
     return {
         voucherBudget: voucherBudgetSetting(), memberGift: memberGiftSetting(),
         presets: [...VOUCH_PRESETS], vouchMax: VOUCH_MAX, vouchesPerPerson: VOUCHES_PER_PERSON, budgetMax: VOUCHER_BUDGET_MAX,
+        ownerPresets: [...vouchPresetsFor(true)], ownerVouchMax: vouchMaxFor(true), personMax: personVouchMax(false), personMaxWithOwner: personVouchMax(true),
     };
 }
 
@@ -245,7 +260,7 @@ export interface Budget {
      * the same. Never what a voucher can't use: a vouch checks it, and a read shows it, without waiting for the prune.
      */
     left: number;
-    /** On invites not used yet and in date. */
+    /** On invites not used yet and in date. An owner's holds are in neither `left` nor `held` (OWNER_VOUCH_ACTOR). */
     held: number;
     heldInvites: number;
     /** The vouches that landed. */
@@ -264,14 +279,18 @@ const LAPSED_HOLD = `${OPEN_HOLD}
 
 const lifeCutoff = (at: number) => new Date(at - INVITE_LIFE_MS).toISOString();
 
+/** A line of the budget `a`: every line but an owner's hold (OWNER_VOUCH_ACTOR) and its `return`, which share its ref. */
+const BUDGET_LINE = (a: string) => `NOT EXISTS (SELECT 1 FROM voucher_allocations o WHERE o.member_pubkey = ${a}.member_pubkey
+    AND o.kind = 'hold' AND o.actor = '${OWNER_VOUCH_ACTOR}' AND o.ref = ${a}.ref)`;
+
 export function budgetOf(pk: string, at = Date.now()): Budget {
     const cutoff = lifeCutoff(at);
-    const lines = (db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?').get(pk) as { n: number }).n;
-    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
+    const lines = (db.prepare(`SELECT COALESCE(SUM(a.amount), 0) AS n FROM voucher_allocations a WHERE a.member_pubkey = ? AND ${BUDGET_LINE('a')}`).get(pk) as { n: number }).n;
+    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
     const left = lines + lapsed;
     const held = db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n, COUNT(*) AS c FROM voucher_allocations h
         JOIN invite_codes ic ON ic.code = h.ref
-        WHERE h.member_pubkey = ? AND ${OPEN_HOLD} AND ic.used_by IS NULL AND ic.created_at > ?`).get(pk, cutoff) as { n: number; c: number };
+        WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${OPEN_HOLD} AND ic.used_by IS NULL AND ic.created_at > ?`).get(pk, cutoff) as { n: number; c: number };
     const vouched = db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts
         WHERE from_pubkey = ? AND kind = 'vouch'`).get(pk) as { n: number; c: number };
     return { left, held: held.n, heldInvites: held.c, vouched: vouched.n, peopleVouched: vouched.c, level: left + held.n };
@@ -499,7 +518,7 @@ export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) 
     if (!live) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
     const held = heldPrivilegedRole(pk);
     if (live.source === 'role' || held) {
-        throw new VoucherError(409, 'role_voucher', held === 'owner' && !isNodeOwner(actor) ? ownerVoucher(callsignOf(pk)) : roleVoucher(callsignOf(pk)));
+        throw new VoucherError(409, 'role_voucher', held === 'owner' ? ownerVoucher(callsignOf(pk)) : roleVoucher(callsignOf(pk)));
     }
     const notice = db.transaction(() => {
         stopBudget(pk, actor, 'stopped');
@@ -514,8 +533,8 @@ export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) 
  * and held together, 100 to 2,000 in 100s. A raise writes `top_up` +n, a lower `lower` −n, never below what is held on
  * unused invites; room already given is never touched. The same level again writes nothing. Never your own. A raise only
  * for a voucher whose account is active and whose credit line isn't frozen (§5.6 step 3); a lower whatever their state.
- * An owner's budget (their role held, or held aside by a suspension) is lowered only by another owner: a committee admin
- * may raise it, never take from it (403 `owner_only`). These routes take a member's own signature and nothing else (no
+ * An owner (their role held, or held aside by a suspension) vouches with no limit (Marty, 9 Nov), so nobody sets their
+ * budget while they hold the role (409 `no_limit`): what the role gave them waits, whole, for a step down to admin. These routes take a member's own signature and nothing else (no
  * admin session or automation token reaches /api/names), so the signer here is who acts.
  * Each change is a notice to the voucher (§10.2), kept in the transaction and told by `tell` after it.
  */
@@ -526,13 +545,13 @@ export function setBudgetLevel(actor: string, member: unknown, body: { level?: u
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
     const level = body.level;
     if (!isBudgetLevel(level)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
+    if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'no_limit', ownerNoLimit(callsignOf(pk)));
     const notice = db.transaction((): VoucherNotice | undefined => {
         returnLapsedHolds(pk);
         const before = budgetOf(pk);
         if (level < before.held) throw new VoucherError(409, 'below_held', belowHeld(callsignOf(pk), before.held));
         const n = level - before.level;
         if (n === 0) return undefined;
-        if (n < 0 && heldPrivilegedRole(pk) === 'owner' && !isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', ownerBudget(callsignOf(pk)));
         if (n > 0) {
             const m = getMember(db, pk);
             if (!m || m.status !== 'active') throw new VoucherError(409, 'paused', raisePaused(callsignOf(pk)));
@@ -600,11 +619,17 @@ function belowZeroNow(pk: string): boolean {
     return ((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0) < 0;
 }
 
-/** What one voucher's vouches for one person come to, and how many vouchers' vouches the person has. */
-function pairOf(voucher: string, person: string): { total: number; vouchers: number } {
+/**
+ * What one voucher's vouches for one person come to, how many vouchers' vouches the person has, what every vouch for them
+ * comes to (`personTotal`), and whether an owner vouched for them (`ownerVouched`: a vouch whose hold an owner made,
+ * OWNER_VOUCH_ACTOR, from a profile or on an invite), which lifts what they may hold in all from 300 to 500.
+ */
+function pairOf(voucher: string, person: string): { total: number; vouchers: number; personTotal: number; ownerVouched: boolean } {
     const total = (db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND to_pubkey = ?`).get(voucher, person) as { n: number }).n;
-    const vouchers = (db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { n: number }).n;
-    return { total, vouchers };
+    const all = db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS c, COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { c: number; n: number };
+    const ownerVouched = !!db.prepare(`SELECT 1 FROM room_gifts g WHERE g.kind = 'vouch' AND g.to_pubkey = ? AND EXISTS (SELECT 1 FROM voucher_allocations h
+        WHERE h.member_pubkey = g.from_pubkey AND h.kind = 'hold' AND h.actor = ? AND h.ref IN (g.id, g.invite_code)) LIMIT 1`).get(person, OWNER_VOUCH_ACTOR);
+    return { total, vouchers: all.c, personTotal: all.n, ownerVouched };
 }
 
 /** Inside a vouch's transaction: the vouch's room_gifts row, from the voucher's budget (its hold written by the caller). */
@@ -618,23 +643,39 @@ function addVouchRow(voucher: string, person: string, amount: number, inviteCode
 /**
  * The checks of a vouch from `voucher`, before any write and again inside its transaction: a voucher, a preset, a budget
  * not frozen, at most what is left (a hold whose code lapsed counted back, as budgetOf counts it). Beans on, a main
- * server. Throws VoucherError, or Beans off's own refusal.
+ * server. An owner whose role acts now (Marty, 9 Nov) picks from the owner presets (200 and 500 too, refused from anyone
+ * else) and is never refused for budget: their hold is recorded with OWNER_VOUCH_ACTOR and no budget counts it. Throws
+ * VoucherError, or Beans off's own refusal. `owner`: whether this vouch is an owner's.
  */
-function assertMayVouch(voucher: string, amount: unknown): number {
+function assertMayVouch(voucher: string, amount: unknown): { amount: number; owner: boolean } {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!liveVoucher(voucher)) throw new VoucherError(403, 'not_a_voucher', VOUCHER_WORDS.notAVoucher);
-    if (!isVouchPreset(amount)) throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badAmount);
+    const owner = isNodeOwner(voucher);
+    if (owner) {
+        if (!isOwnerVouchPreset(amount)) throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badOwnerAmount);
+    } else if (!isVouchPreset(amount)) {
+        if (isOwnerVouchPreset(amount)) throw new VoucherError(403, 'owner_amount', VOUCHER_WORDS.ownerAmountOnly);
+        throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badAmount);
+    }
+    const n = amount as number;
     if (isFrozen(voucher)) throw new VoucherError(409, 'frozen', VOUCHER_WORDS.frozen);
-    const { left } = budgetOf(voucher);
-    if (amount > left) throw new VoucherError(409, 'not_enough', notEnough(left, amount));
-    return amount;
+    if (!owner) {
+        const { left } = budgetOf(voucher);
+        if (n > left) throw new VoucherError(409, 'not_enough', notEnough(left, n));
+    }
+    return { amount: n, owner };
 }
+
+/** The hold's actor: the voucher's own key, or OWNER_VOUCH_ACTOR for an owner's vouch (recorded, drawn from no budget). */
+const holdActor = (voucher: string, owner: boolean) => (owner ? OWNER_VOUCH_ACTOR : voucher);
 
 /**
  * A vouch from a member's profile (POST /api/vouch `{ memberPubkey, vouchAmount, raise? }`, §4 Q1 and §9), landing at once:
  * a `hold` with the room_gifts id and the room_gifts row, in one transaction that checks every rule again. Without `raise`,
- * the voucher's one vouch for this person; with it, a further vouch on top of theirs, the two together at most 100.
+ * the voucher's one vouch for this person; with it, a further vouch on top of theirs, the two together at most 100 (an
+ * owner's: 500). Every vouch for one person comes to 300 at most, or 500 once an owner vouched for them or is vouching now
+ * (Marty, 9 Nov). The three-vouchers rule never refuses an owner's vouch: theirs may top a person up to 500.
  */
 export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown; vouchAmount?: unknown; raise?: unknown }) {
     const person = memberKey(body.memberPubkey);
@@ -648,18 +689,23 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
     let id = '';
     db.transaction(() => {
         returnLapsedHolds(voucher);
-        assertMayVouch(voucher, amount);
+        const { owner } = assertMayVouch(voucher, amount);
         if (belowZeroNow(person)) throw new VoucherError(409, 'below_zero', belowZero(m.callsign));
         const pair = pairOf(voucher, person);
+        const pairMax = vouchMaxFor(owner);
         if (raise) {
             if (pair.total === 0) throw new VoucherError(409, 'no_vouch_yet', noVouchYet(m.callsign));
-            if (pair.total + amount > VOUCH_MAX) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total), { prior: pair.total });
+            if (pair.total + amount > pairMax) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total, pairMax), { prior: pair.total });
         } else {
             if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign), { prior: pair.total });
-            if (pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
+            if (!owner && pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
+        }
+        const personMax = personVouchMax(owner || pair.ownerVouched);
+        if (pair.personTotal + amount > personMax) {
+            throw new VoucherError(409, 'over_person_max', overPerson(m.callsign, pair.personTotal, personMax), { personTotal: pair.personTotal, personMax });
         }
         id = addVouchRow(voucher, person, amount, null);
-        addLine(voucher, 'hold', -amount, voucher, id);
+        addLine(voucher, 'hold', -amount, holdActor(voucher, owner), id);
     })();
     return { id, memberPubkey: person, amount, total: pairOf(voucher, person).total, budget: budgetOf(voucher) };
 }
@@ -669,14 +715,14 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
  * Throws as a profile vouch does. The hold itself is written with the code, in one transaction ({@link holdForInvite}).
  */
 export function checkInviteVouch(maker: string, amount: unknown): number {
-    return assertMayVouch(maker, amount);
+    return assertMayVouch(maker, amount).amount;
 }
 
-/** Inside generateInvite's transaction, with the code's row: the hold, after every check again. */
+/** Inside generateInvite's transaction, with the code's row: the hold, after every check again (an owner's: OWNER_VOUCH_ACTOR). */
 export function holdForInvite(maker: string, code: string, amount: number): void {
     returnLapsedHolds(maker);
-    assertMayVouch(maker, amount);
-    addLine(maker, 'hold', -amount, maker, code);
+    const { owner } = assertMayVouch(maker, amount);
+    addLine(maker, 'hold', -amount, holdActor(maker, owner), code);
 }
 
 /**
@@ -686,12 +732,14 @@ export function holdForInvite(maker: string, code: string, amount: number): void
  * refusal: the joiner joins either way. With Beans switched off since the code was made (before any Bean moved: the ledger
  * keeps them on after), no room lands either, and the hold goes back to its maker. Nor while the maker's credit line or
  * known floor is frozen (nothing more out of a frozen budget): the hold goes back, and once unfrozen the maker may vouch
- * for the joiner from their profile, this pair having no vouch yet.
+ * for the joiner from their profile, this pair having no vouch yet. An owner's hold (OWNER_VOUCH_ACTOR) carries one of the
+ * owner presets, and lands as it was made, whatever their role at the redeem: it was an owner's vouch when they made it.
  */
 export function landInviteVouch(maker: string, code: string, joiner: string, amount: number): { landed: number } | { ended: string } {
-    const hold = db.prepare(`SELECT -h.amount AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
-        .get(maker, code) as { amount: number } | undefined;
-    if (!hold || hold.amount !== amount || !isVouchPreset(amount)) return { ended: VOUCHER_WORDS.voucherEnded };
+    const hold = db.prepare(`SELECT -h.amount AS amount, h.actor AS actor FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
+        .get(maker, code) as { amount: number; actor: string } | undefined;
+    const preset = hold?.actor === OWNER_VOUCH_ACTOR ? isOwnerVouchPreset(amount) : isVouchPreset(amount);
+    if (!hold || hold.amount !== amount || !preset) return { ended: VOUCHER_WORDS.voucherEnded };
     const pair = pairOf(maker, joiner);
     if (!getProfileSwitches().beans || isFrozen(maker) || pair.total > 0 || pair.vouchers >= VOUCHES_PER_PERSON) {
         addLine(maker, 'return', amount, 'node', code);
@@ -912,6 +960,8 @@ export function voucherSummary(pk: string) {
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
         madeBy: row?.made_by ?? null, madeByCallsign: callsignOf(row?.made_by), madeAt: row?.made_at ?? null,
         stoppedAt: row?.stopped_at ?? null, stopReason: row?.stop_reason ?? null,
+        // An owner vouches with no limit (Marty, 9 Nov): the apps read "No limit" for them, never left or level.
+        noLimit: isNodeOwner(pk),
         ...b, belowZero: below, writtenOff, passedOn: passedOnOf(pk), invitesWithVouch: sent,
         trading: { withOthers: marks.filter((m) => m === 'others').length, insideOnly: marks.filter((m) => m === 'inside').length },
     };
@@ -1017,13 +1067,17 @@ export function readVoucherCard(viewer: string, member: unknown) {
     return { ...voucherCard(pk), canChange: isOnCreditCommittee(viewer) && viewer !== pk };
 }
 
-/** GET /api/vouchers/me: whether the signer is a voucher now, their numbers and history, the presets (any member). */
+/**
+ * GET /api/vouchers/me: whether the signer is a voucher now, their numbers and history, the presets they pick from (any
+ * member). An owner (Marty, 9 Nov): `noLimit`, the six owner presets, and 500 for one person; the apps show "No limit".
+ */
 export function myVouching(pk: string) {
     const live = !!liveVoucher(pk);
+    const owner = live && isNodeOwner(pk);
     return {
         voucher: live,
         ...(live ? { budget: budgetOf(pk), source: voucherRow(pk)!.source, history: historyOf(pk, 50) } : {}),
-        presets: [...VOUCH_PRESETS], vouchMax: VOUCH_MAX, budgetMax: VOUCHER_BUDGET_MAX,
+        noLimit: owner, presets: [...vouchPresetsFor(owner)], vouchMax: vouchMaxFor(owner), budgetMax: VOUCHER_BUDGET_MAX,
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
         vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount) AS amount, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
             GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount: number; at: string }[])

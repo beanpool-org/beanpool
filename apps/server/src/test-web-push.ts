@@ -34,7 +34,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import {
     encryptPushPayload, vapidAuthorization, ensureVapidKey, readVapidKey, vapidKeyPath, isPushServiceEndpoint, pushTtl,
-    _setWebPushFetchForTests, VAPID_KEY_FILE, WEB_PUSH_RULES,
+    _setWebPushFetchForTests, _webPushQueueForTests, sendWebPush, VAPID_KEY_FILE, WEB_PUSH_RULES,
 } from './services/web-push.js';
 import { BUNDLED_FILES } from './services/takeover-envelope.js';
 import { tidyKnocks, joinAnsweredTtl } from './engine/knocks.js';
@@ -328,6 +328,30 @@ async function main(): Promise<void> {
         console.warn = realWarn;
     }
     assert(warned.filter((w) => /refused this server's key \(403\)/.test(w)).length === 1, `a push service's 403 is logged once (${warned.length})`);
+
+    // ── 10. At most 8 at once, a queue behind ───────────────────────────────────────────────────────────────────────
+    let open = 0, most = 0;
+    const releases: (() => void)[] = [];
+    _setWebPushFetchForTests(async () => {
+        open++; most = Math.max(most, open);
+        await new Promise<void>((r) => releases.push(r));
+        open--;
+        return new Response(null, { status: 201 });
+    });
+    const target = { endpoint: 'https://fcm.googleapis.com/fcm/send/q', contact: 'https://test.example', p256dh: b64u(someone.p256dh), auth: b64u(someone.auth) };
+    const many = Array.from({ length: 20 }, () => sendWebPush(target, { payload: { title: 'BeanPool' }, ttlSeconds: 60, urgency: 'normal' }, made));
+    await new Promise((r) => setTimeout(r, 50));
+    const firstWave = { ...(_webPushQueueForTests()), most };
+    // Each finished send hands its place on, while new sends keep arriving.
+    for (let i = 0; i < 25 && releases.length; i++) {
+        releases.shift()!();
+        void sendWebPush(target, { payload: { title: 'BeanPool' }, ttlSeconds: 60, urgency: 'normal' }, made).catch(() => {});
+        await new Promise((r) => setTimeout(r, 5));
+    }
+    while (releases.length || _webPushQueueForTests().inFlight) { releases.splice(0).forEach((r) => r()); await new Promise((r) => setTimeout(r, 5)); }
+    const outcomes = await Promise.all(many);
+    assert(firstWave.inFlight === WEB_PUSH_RULES.inFlight && firstWave.waiting === 12 && most === WEB_PUSH_RULES.inFlight && outcomes.every((o) => o === 'sent'),
+        `at most ${WEB_PUSH_RULES.inFlight} requests at once, the rest in line, all sent in the end (${show(firstWave)}, most ${most})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

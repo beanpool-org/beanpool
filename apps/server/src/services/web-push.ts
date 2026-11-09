@@ -209,15 +209,22 @@ export type WebPushOutcome = 'sent' | 'gone' | 'refused' | 'dropped';
 let inFlight = 0;
 const waiting: (() => void)[] = [];
 
+/** At most WEB_PUSH_RULES.inFlight at once: a finished send hands its place straight to the next in line, so none jumps it. */
 async function inTurn<T>(fn: () => Promise<T>): Promise<T> {
-    if (inFlight >= WEB_PUSH_RULES.inFlight) await new Promise<void>((resolve) => waiting.push(resolve));
-    inFlight++;
+    if (inFlight < WEB_PUSH_RULES.inFlight) inFlight++;
+    else await new Promise<void>((resolve) => waiting.push(resolve));
     try {
         return await fn();
     } finally {
-        inFlight--;
-        waiting.shift()?.();
+        const next = waiting.shift();
+        if (next) next();
+        else inFlight--;
     }
+}
+
+/** Sends being made now, and waiting their turn: for the suite. */
+export function _webPushQueueForTests(): { inFlight: number; waiting: number } {
+    return { inFlight, waiting: waiting.length };
 }
 
 let warnedRefused = false;

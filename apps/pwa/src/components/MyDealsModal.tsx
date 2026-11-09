@@ -422,6 +422,9 @@ export function MyDealsModal({
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
                                                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                                                {/* A standing deal's row out of trust (short: the period last settled) is no finished deal:
+                                                                    its card says 🔁 STANDING only, never "completed" (round 2 of #3000), as on the phone. */}
+                                                                {!(standing && !isPending) && (
                                                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                     isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : (isPending || isRequested) ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
@@ -429,6 +432,7 @@ export function MyDealsModal({
                                                                 }`}>
                                                                     {dealStatusWords(item.status)}
                                                                 </span>
+                                                                )}
                                                                 {standing && (
                                                                     <span data-testid={`standing-chip-${item.id}`} className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink">
                                                                         {standingLines.chip()}

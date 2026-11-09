@@ -30,9 +30,10 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
     const [periods, setPeriods] = useState(6);
     const [later, setLater] = useState(false);
     const [daysAhead, setDaysAhead] = useState(1);
-    const [opened] = useState(() => now ?? Date.now());
-    const startsAt = standingStartAt(opened, later ? daysAhead : 0);
-    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt, periods }, day);
+    // The start is worked out again at Agree: the node refuses one more than 10 minutes old (checkStandingStart), and a member
+    // may tap it long after the screen opened. The lines show the start as of now.
+    const startAt = () => standingStartAt(now ?? Date.now(), later ? daysAhead : 0);
+    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods }, day);
     return (
         <div data-testid="standing-take-up" className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2 flex flex-col gap-3">
             <p className="font-bold text-nature-900 dark:text-white text-center text-sm">{l.title}</p>
@@ -83,7 +84,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
             <div className="flex gap-2">
                 <button type="button" onClick={onCancel} disabled={busy} className={QUIET}>{t('Cancel')}</button>
                 <button type="button" data-testid="standing-agree" disabled={busy}
-                    onClick={() => onAgree({ periods: untilStopped ? null : periods, startsAt })}
+                    onClick={() => onAgree({ periods: untilStopped ? null : periods, startsAt: startAt() })}
                     className="flex-1 min-h-[44px] py-2 px-2 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60 break-words">
                     {l.agree}
                 </button>
@@ -105,7 +106,7 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
     const p = standingPanel(tx, actingAs, day);
     if (!p) return null;
     const ask = () => {
-        const c = standingStopConfirm(p.unit);
+        const c = standingStopConfirm(p.unit, p.phase);
         const question = [c.title, c.body].join('\n\n');
         if (window.confirm(question)) onStop();
     };

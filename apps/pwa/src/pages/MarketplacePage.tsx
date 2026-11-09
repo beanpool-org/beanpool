@@ -35,7 +35,7 @@ import {
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
     MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel,
-    standingFieldsFor, standingUnitOf,
+    standingFieldsFor, standingUnitForListing,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -1737,8 +1737,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
             && t.status === 'pending') : undefined;
         // A finished one: the page says what became of it, as the phone does for an alert's deal (listingDealLines.finished).
+        // A short standing deal's row is the period last settled, but the deal runs on: core says nothing of it (its panel does).
         const pinnedDone = !pinnedTx && selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id) : undefined;
-        const pinnedOver = pinnedDone ? listingDealLines.finished(pinnedDone.status) : null;
+        const pinnedOver = pinnedDone ? listingDealLines.finished(pinnedDone) : null;
         const activeTx = pinnedTx
             ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
@@ -1831,8 +1832,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             }
         };
         // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
-        // week or per month is taken up as one, the payer signing its authorisation. Hourly, daily and fixed stay one-off.
-        const standingUnit = standingUnitOf(selectedPost.priceType);
+        // week or per month is taken up as one, the payer signing its authorisation. Hourly, daily and fixed stay one-off, and so
+        // does a free one (0 Beans: nothing to hold each period), by core's one rule, as on the phone.
+        const standingUnit = standingUnitForListing(selectedPost.priceType, selectedPost.credits);
         const standingOffer = !!standingUnit && selectedPost.type === 'offer' && !selectedPost.lendable;
         const standingNeed = !!standingUnit && selectedPost.type === 'need';
         // While one runs by itself its period is no deal to release (the node releases it at the period's end): its panel shows

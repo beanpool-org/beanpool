@@ -15,10 +15,11 @@ import {
     standingStartAt,
     standingStopConfirm,
     standingTakeUpLines,
+    standingUnitForListing,
     type StandingDealRow,
 } from '../standing-deal.js';
 import { BOUND_SIGNATURE_MARKER, ed25519Signer } from '../request-signing.js';
-import { dealStep } from '../deal-step.js';
+import { dealStep, listingDealLines } from '../deal-step.js';
 
 const PAYER = 'a'.repeat(64);
 const PAYEE = 'b'.repeat(64);
@@ -191,5 +192,67 @@ describe('standingPanel: what each side sees, per phase', () => {
         expect(standingStopConfirm('month')).toEqual({
             title: 'Stop after this month?', body: 'The month under way is still paid. Nothing more is held after it.', yes: 'Stop it', no: 'Keep it',
         });
+    });
+});
+
+// Round 2 of #3000 (deciding review on e07a97d3).
+describe('standingUnitForListing: only a PRICED weekly or monthly listing makes a standing deal (finding 1)', () => {
+    it('a free one (0 Beans a week or a month) stays a one-off deal of 0 Beans, as before S2: there is nothing to hold each period', () => {
+        expect(standingUnitForListing('monthly', 0)).toBeNull();
+        expect(standingUnitForListing('weekly', 0)).toBeNull();
+        expect(standingUnitForListing('monthly', '0')).toBeNull();
+        expect(standingUnitForListing('monthly', null)).toBeNull();
+        expect(standingUnitForListing('monthly', undefined)).toBeNull();
+        expect(standingUnitForListing('monthly', Number.NaN)).toBeNull();
+        expect(standingUnitForListing('monthly', -5)).toBeNull();
+    });
+    it('a priced one is a standing deal by the week or the month; hourly, daily and fixed never are', () => {
+        expect(standingUnitForListing('monthly', 50)).toBe('month');
+        expect(standingUnitForListing('weekly', 12.5)).toBe('week');
+        expect(standingUnitForListing('weekly', '12.5')).toBe('week');
+        expect(standingUnitForListing('fixed', 50)).toBeNull();
+        expect(standingUnitForListing('hourly', 50)).toBeNull();
+        expect(standingUnitForListing('daily', 50)).toBeNull();
+    });
+    it('whatever it calls standing, core can sign: 0.01 Beans a month signs; 0 is the case that threw before signing', async () => {
+        const signed: Uint8Array[] = [];
+        const sign = async (b: Uint8Array) => { signed.push(b); return new Uint8Array(64); };
+        const unit = standingUnitForListing('monthly', 0.01)!;
+        const fields = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod: 0.01, unit, maxPeriods: null, startsAt: NOW }, fixedRand);
+        await signStandingAuthorisation('https://mullum.example', fields, sign);
+        expect(signed).toHaveLength(1);
+        // The defect: a free monthly listing went to the take-up and Agree threw here, before anything was signed.
+        await expect(signStandingAuthorisation('https://mullum.example', { ...fields, beansPerPeriod: 0 }, sign)).rejects.toThrow();
+        expect(signed).toHaveLength(1);
+    });
+});
+
+describe('standingStopConfirm: a short deal stops NOW (non-blocking note)', () => {
+    it('short, or between its periods (due): nothing is held, so Stop ends it at once, and the question says so', () => {
+        for (const phase of ['short', 'due'] as const) {
+            for (const unit of ['month', 'week'] as const) {
+                expect(standingStopConfirm(unit, phase)).toEqual({
+                    title: 'Stop it now?', body: 'It ends now. Nothing is held for it, and nothing more will be.', yes: 'Stop it', no: 'Keep it',
+                });
+            }
+        }
+    });
+    it('held, or held back: the period under way is still paid, as before', () => {
+        expect(standingStopConfirm('month', 'held').title).toBe('Stop after this month?');
+        expect(standingStopConfirm('week', 'held_back').title).toBe('Stop after this week?');
+    });
+});
+
+describe("listingDealLines.finished: a standing deal still running is never 'done' (finding 3)", () => {
+    const shortRow = { status: 'completed', standingId: 'sd-1', standingPhase: 'short' as const };
+    it("a short deal's row is the period last settled (completed), but the deal runs on: no line", () => {
+        expect(listingDealLines.finished(shortRow)).toBeNull();
+        expect(listingDealLines.finished({ ...shortRow, standingPhase: 'due' })).toBeNull();
+    });
+    it('one that has ended, or an older period (no phase), is a finished deal like any other', () => {
+        expect(listingDealLines.finished({ ...shortRow, standingPhase: 'ended' })).toBe('That deal is done.');
+        expect(listingDealLines.finished({ status: 'completed', standingId: 'sd-1', standingPhase: null })).toBe('That deal is done.');
+        expect(listingDealLines.finished({ status: 'cancelled' })).toBe('That deal was cancelled.');
+        expect(listingDealLines.finished('completed')).toBe('That deal is done.');
     });
 });

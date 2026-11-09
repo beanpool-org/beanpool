@@ -89,6 +89,24 @@ describe('Take this up? (§2.2)', () => {
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: 5, startsAt: NOW + 2 * 86_400_000 });
     });
+    // Round 2 of #3000, finding 2: the node refuses a start more than 10 minutes old (checkStandingStart), so the start is the
+    // moment Agree is tapped (the app back from the background), never the moment the screen opened.
+    it('Agree tapped 11 minutes after the screen opened: the start is the tap, today or a day later', async () => {
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+        try {
+            const onAgree = vi.fn();
+            await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree }));
+            clock.mockReturnValue(NOW + 11 * 60_000);
+            await tap(byId('standing-agree'));
+            expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 11 * 60_000 });
+            await tap(byId('standing-start-on'));
+            clock.mockReturnValue(NOW + 40 * 60_000);
+            await tap(byId('standing-agree'));
+            expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 40 * 60_000 + 86_400_000 });
+        } finally {
+            clock.mockRestore();
+        }
+    });
 });
 
 const row = (o: Record<string, unknown> = {}) => ({
@@ -134,6 +152,18 @@ describe('the panel, each phase and each side', () => {
         expect(onStop).toHaveBeenCalledTimes(1);
         await tap(byId('standing-hold-back'));
         expect(onHoldBack).toHaveBeenCalledTimes(1);
+    });
+    // Round 2 of #3000 (non-blocking note): short, nothing is held and Stop ends it at once (the node's endStanding), as the
+    // payee's "Stop now" says; the question says so too, to either side.
+    it('short: the Stop question says it stops now, to the payer and to the payee', async () => {
+        for (const side of [PAYER, PAYEE]) {
+            vi.mocked(Alert.alert).mockClear();
+            await show(createElement(StandingPanel, { tx: row(SHORT), actingAs: side, busy: false, onStop: vi.fn(), onHoldBack: vi.fn() }));
+            await tap(byId('standing-stop'));
+            const [title, body] = vi.mocked(Alert.alert).mock.calls[0] as [string, string];
+            expect([title, body]).toEqual(['Stop it now?', 'It ends now. Nothing is held for it, and nothing more will be.']);
+            host.remove();
+        }
     });
 });
 

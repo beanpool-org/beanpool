@@ -78,9 +78,10 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
     const [periods, setPeriods] = useState(6);
     const [later, setLater] = useState(false);
     const [daysAhead, setDaysAhead] = useState(1);
-    const [opened] = useState(() => now ?? Date.now());
-    const startsAt = standingStartAt(opened, later ? daysAhead : 0);
-    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt, periods }, day);
+    // The start is worked out again at Agree: the node refuses one more than 10 minutes old (checkStandingStart), and a member
+    // may come back to this screen from the background long after it opened. The lines show the start as of now.
+    const startAt = () => standingStartAt(now ?? Date.now(), later ? daysAhead : 0);
+    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods }, day);
     return (
         <View style={s.box} testID="standing-take-up">
             <Text style={s.title}>{l.title}</Text>
@@ -121,7 +122,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
                     <Text style={s.quietText}>{t('Cancel')}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" testID="standing-agree" style={[s.go, busy && { opacity: 0.6 }]} disabled={busy}
-                    onPress={() => onAgree({ periods: untilStopped ? null : periods, startsAt })}>
+                    onPress={() => onAgree({ periods: untilStopped ? null : periods, startsAt: startAt() })}>
                     <Text style={s.goText}>{l.agree}</Text>
                 </Pressable>
             </View>
@@ -143,7 +144,7 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
     const p = standingPanel(tx, actingAs, day);
     if (!p) return null;
     const ask = () => {
-        const c = standingStopConfirm(p.unit);
+        const c = standingStopConfirm(p.unit, p.phase);
         Alert.alert(c.title, c.body, [{ text: c.no, style: 'cancel' }, { text: c.yes, style: 'destructive', onPress: onStop }]);
     };
     return (

@@ -63,6 +63,18 @@ export function standingUnitOf(priceType: string | null | undefined): StandingPe
     return null;
 }
 
+/**
+ * Whether taking this listing up makes a standing deal, and by which period: both apps ask this one rule (the take-up, a
+ * Need's approval). Priced per week or per month, AND for more than 0 Beans: a free one (listing-price.ts: 0 by the week or
+ * the month is free) has nothing to hold each period, and its authorisation could not name 0 Beans (isStandingAuthorisation,
+ * the node's checkStandingStart), so it stays the one-off deal of 0 Beans it was before S2 (round 2 of #3000).
+ */
+export function standingUnitForListing(priceType: string | null | undefined, price: number | string | null | undefined): StandingPeriodUnit | null {
+    const unit = standingUnitOf(priceType);
+    const beans = typeof price === 'string' ? Number(price) : price;
+    return unit && typeof beans === 'number' && Number.isFinite(beans) && beans > 0 ? unit : null;
+}
+
 const WEEK_MS = 7 * 86_400_000;
 
 function daysInMonthUtc(year: number, month0: number): number {
@@ -274,6 +286,9 @@ export const standingLines = {
     stopConfirmBody: (unit: StandingPeriodUnit) => (unit === 'month'
         ? t('The month under way is still paid. Nothing more is held after it.')
         : t('The week under way is still paid. Nothing more is held after it.')),
+    /** Short, or between its periods: nothing is held, and Stop ends it at once (the node's endStanding). */
+    stopNowConfirm: () => t('Stop it now?'),
+    stopNowConfirmBody: () => t('It ends now. Nothing is held for it, and nothing more will be.'),
     periodOf: (unit: StandingPeriodUnit, n: number, k: number) => (unit === 'month'
         ? t('Month {n} of {k}', { n, k })
         : t('Week {n} of {k}', { n, k })),
@@ -546,7 +561,16 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
     };
 }
 
-/** The Stop confirm's words (§1.3), both apps. */
-export function standingStopConfirm(unit: StandingPeriodUnit) {
-    return { title: standingLines.stopConfirm(unit), body: standingLines.stopConfirmBody(unit), yes: t('Stop it'), no: t('Keep it') };
+/**
+ * The Stop confirm's words (§1.3), both apps. Held (or held back), the period under way is still paid; short, or between its
+ * periods (due), nothing is held and the node ends it at once (stopStandingDeal), as the payee's "Stop now" says.
+ */
+export function standingStopConfirm(unit: StandingPeriodUnit, phase?: StandingPhase | null) {
+    const now = phase === 'short' || phase === 'due';
+    return {
+        title: now ? standingLines.stopNowConfirm() : standingLines.stopConfirm(unit),
+        body: now ? standingLines.stopNowConfirmBody() : standingLines.stopConfirmBody(unit),
+        yes: t('Stop it'),
+        no: t('Keep it'),
+    };
 }

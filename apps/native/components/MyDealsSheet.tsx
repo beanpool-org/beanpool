@@ -532,11 +532,15 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             keeps the right edge and never shrinks, so it drops to its own line whole instead of being pushed
                             off the card by the date. */}
                         <View testID={`deal-top-${item.id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2 }}>
+                            {/* A standing deal's row out of trust (short: the period last settled) is no finished deal: its card
+                                says 🔁 STANDING only, never COMPLETED (round 2 of #3000), as on the web. */}
+                            {!(standing && !isPending) && (
                             <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
                                 <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
                                     {dealStatusWords(item.status)}
                                 </Text>
                             </View>
+                            )}
                             {!!standing && (
                                 <View testID={`standing-chip-${item.id}`} style={[styles.statusBadge, styles.statusCompleted]}>
                                     <Text style={[styles.statusText, styles.statusTextCompleted]}>{standingLines.chip()}</Text>
@@ -569,7 +573,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                     <Sentence text={isBuyer ? t('From {name}') : t('To {name}')} parts={{ name: <Text style={styles.partnerName}>{partnerCallsign}</Text> }} />
                                 </Text>
                             </View>
-                            {isCompleted && (
+                            {/* Review (or Edit a review) is for a finished deal; a standing one still running has neither, as on the web. */}
+                            {isCompleted && !standing && (
                                 needsReview ? (
                                     <Pressable
                                         accessibilityRole="button"

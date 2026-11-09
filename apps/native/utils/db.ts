@@ -38,6 +38,7 @@ import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -8136,35 +8137,6 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
 
     // 2. Transmit to server via secure signed request
     return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji });
-}
-
-/**
- * The standing deal's fields of a deal row as the node reads it (@beanpool/engine escrow.ts standingFields), kept as one JSON
- * column on the phone's copy (`standing`), or null on a one-off deal or an older period's row (which carry no phase).
- */
-export function standingJsonOf(tx: any): string | null {
-    if (!tx?.standingId || !tx.standingPhase) return null;
-    return JSON.stringify({
-        phase: tx.standingPhase, beans: tx.standingBeans ?? null, unit: tx.standingUnit ?? null, max: tx.standingMaxPeriods ?? null,
-        nextDueAt: tx.standingNextDueAt ?? null, startsAt: tx.standingStartsAt ?? null, shortSince: tx.standingShortSince ?? null,
-        stopped: !!tx.standingStopped,
-    });
-}
-
-/** A local row's standing deal fields, in the node's read's names (standingJsonOf's inverse). */
-export function standingOfRow(r: { standing_id?: string | null; period_no?: number | null; standing?: string | null }): Record<string, unknown> {
-    if (!r.standing_id) return {};
-    const out: Record<string, unknown> = { standingId: r.standing_id, periodNo: r.period_no ?? null };
-    try {
-        const s = r.standing ? JSON.parse(r.standing) : null;
-        if (s && typeof s === 'object' && typeof s.phase === 'string') {
-            Object.assign(out, {
-                standingPhase: s.phase, standingBeans: s.beans, standingUnit: s.unit, standingMaxPeriods: s.max,
-                standingNextDueAt: s.nextDueAt, standingStartsAt: s.startsAt, standingShortSince: s.shortSince, standingStopped: !!s.stopped,
-            });
-        }
-    } catch {}
-    return out;
 }
 
 /**

@@ -44,6 +44,20 @@ describe('Take this up? (§2.2)', () => {
         fireEvent.click(screen.getByTestId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: 7, startsAt: NOW + 2 * 86_400_000 });
     });
+    // Round 2 of #3000, finding 2: the node refuses a start more than 10 minutes old (checkStandingStart), so the start is the
+    // moment Agree is tapped, never the moment the screen opened.
+    it('Agree tapped 11 minutes after the screen opened: the start is the tap, today or a day later', () => {
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+        const onAgree = vi.fn();
+        render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} />);
+        clock.mockReturnValue(NOW + 11 * 60_000);
+        fireEvent.click(screen.getByTestId('standing-agree'));
+        expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 11 * 60_000 });
+        fireEvent.click(screen.getByLabelText('Up to 30 days ahead'));
+        clock.mockReturnValue(NOW + 40 * 60_000);
+        fireEvent.click(screen.getByTestId('standing-agree'));
+        expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 40 * 60_000 + 86_400_000 });
+    });
 });
 
 const row = (o: Partial<MarketplaceTransaction> = {}): MarketplaceTransaction => ({
@@ -91,6 +105,18 @@ describe('the panel, each phase and each side', () => {
         fireEvent.click(screen.getByTestId('standing-hold-back'));
         expect(onHoldBack).toHaveBeenCalledTimes(1);
     });
+    // Round 2 of #3000 (non-blocking note): short, nothing is held and Stop ends it at once (the node's endStanding), as the
+    // payee's "Stop now" says; the question says so too, to either side.
+    it('short: the Stop question says it stops now, to the payer and to the payee', () => {
+        for (const side of [PAYER, PAYEE]) {
+            const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+            const { unmount } = render(<StandingPanel tx={row(SHORT)} actingAs={side} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
+            fireEvent.click(screen.getByTestId('standing-stop'));
+            expect(ask.mock.calls[0][0]).toBe('Stop it now?\n\nIt ends now. Nothing is held for it, and nothing more will be.');
+            ask.mockRestore();
+            unmount();
+        }
+    });
     it('stopped: no Stop again, and the last month says when it ends', () => {
         render(<StandingPanel tx={row({ standingStopped: true })} actingAs={PAYEE} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
         expect(screen.queryByTestId('standing-stop')).toBeNull();
@@ -113,6 +139,16 @@ describe('Your deals: one card per standing deal', () => {
         expect(screen.getByTestId('deal-state-tx-short').getAttribute('role')).toBe('alert');
         fireEvent.click(screen.getByTestId('deal-card-tx-short'));
         expect(onNavigateToPost).toHaveBeenCalledWith('post-1', 'tx-short');
+    });
+    // Round 2 of #3000 (non-blocking note): a short deal's row is the period last settled; its card is the standing deal,
+    // still running, so it never says "completed", and offers no review.
+    it("a short one's card says 🔁 STANDING, never completed, and offers no review", () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[]} initialTab="pending"
+            transactions={[row({ id: 'tx-short', ...SHORT })]} onNavigateToPost={vi.fn()} />);
+        const card = screen.getByTestId('deal-card-tx-short');
+        expect(within(card).getByTestId('standing-chip-tx-short').textContent).toBe('🔁 STANDING');
+        expect(within(card).queryByText('completed')).toBeNull();
+        expect(within(card).queryByRole('button', { name: /review/i })).toBeNull();
     });
 });
 

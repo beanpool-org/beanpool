@@ -18,6 +18,7 @@ import {
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, holdBackStandingDeal,
 } from '../../utils/db';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
+import { standingOfRow } from '../../utils/standing-row';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
 import { usePinRole } from '../../utils/use-pin-role';
 import { PinSheet } from '../../components/PinSheet';
@@ -51,7 +52,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitOf } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitForListing } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -518,8 +519,10 @@ export default function PostDetailModal() {
     }, []);
     const { identity } = useIdentity();
     const [activeTx, setActiveTx] = useState<any>(null);
-    // The status of the deal a door named (an alert's txId) when that deal is over: said in one line, never the live deal.
-    const [pinnedOver, setPinnedOver] = useState<string | null>(null);
+    // The deal a door named (an alert's txId) when its Beans are not held: its status, and its standing deal's phase on the
+    // phone's copy (a short one's row is the period last settled, but the deal runs on). Said in one line when it is over,
+    // never the live deal (core listingDealLines.finished).
+    const [pinnedOver, setPinnedOver] = useState<Parameters<typeof listingDealLines.finished>[0] | null>(null);
     const [post, setPost] = useState<any>(null);
     // True only once the post is confirmed absent (local miss + the server-side
     // check has had time to land). Until then a local miss renders as loading,
@@ -792,7 +795,7 @@ export default function PostDetailModal() {
                         WHERE t.id = ? AND t.post_id = ?
                     `, [singleTxId, singleId]).catch(() => null) : null;   // a deal shows only on ITS listing (a hand-made link pairs any)
                     const pinHeld = pinned?.status === 'pending';
-                    setPinnedOver(pinned && !pinHeld ? String(pinned.status) : null);
+                    setPinnedOver(pinned && !pinHeld ? { status: String(pinned.status), ...standingOfRow(pinned) } : null);
                     if (pinHeld) {
                         updateActiveTx(pinned);
                     } else if (activeIdentity) {
@@ -1066,7 +1069,8 @@ export default function PostDetailModal() {
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
     // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
     // week or per month is taken up as one, its payer signing the authorisation. A standing Need's helper offers one period.
-    const standingUnit = standingUnitOf(post.price_type);
+    // A free one (0 Beans: nothing to hold each period) stays a one-off deal, by core's one rule, as on the web.
+    const standingUnit = standingUnitForListing(post.price_type, post.credits);
     const standingOffer = !!standingUnit && post.type === 'offer' && !post.lendable;
     const standingNeed = !!standingUnit && post.type === 'need';
     const needQuantity = post.price_type !== 'fixed' ? parseAmount(standingNeed ? '1' : acceptHours, undefined, ANY_DECIMALS) : null;
@@ -2109,7 +2113,9 @@ export default function PostDetailModal() {
                             {t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </Text>
                     </View>
-                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
+                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (myRequest || deals.canTakeUp) && (
+                    // Accept only where core's canTakeUp says (as the web): not while the reader's own deal on it is open,
+                    // a standing one short or between its periods included (its row is no held one, so isAcceptedByMe misses it).
                     <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
                         {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm && standingOffer && standingUnit ? (
                             // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.

@@ -2273,7 +2273,11 @@ export function getInvitesByMember(pubkey: string): MyInviteRead[] {
     const joiners = new Map<string, string | null>();
     return rows.map((r) => {
         if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
-        return { ...r, forKnock: knocked.has(r.code), usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+        // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
+        // columns: while the row lived, redeemInvite admitted only the applicant's key to this code, so a used one has its
+        // note (the applicant's key) equal to the key that used it. A plain invite's note is the maker's own words.
+        const forKnock = knocked.has(r.code) || (!!r.usedBy && r.intendedFor === r.usedBy);
+        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
     });
 }
 

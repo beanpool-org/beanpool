@@ -735,8 +735,12 @@ async function main(): Promise<void> {
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
     assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `13. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
-    assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `13. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+    // Kept for every owner and admin, a phone or not (the bell, DESIGN-web-notifications-fable.md §2.1): the owners and
+    // admins made during the run too, who have no phone here; never the moderator, a reporter or a member reported.
+    const roleHolders = new Set([owner, admin, ...newOwners, newAdmin, histAdmin].map((m) => m.pk));
+    const notFor = notices.filter((x) => !roleHolders.has(x.recipient)).map((x) => String(x.recipient).slice(0, 8));
+    assert(notices.some((x) => x.recipient === admin.pk) && notFor.length === 0 && !notices.some((x) => x.recipient === moderator.pk),
+        `13. ${notices.length} owner.alert notices kept, every one for an owner or an admin (${notFor.length} for anyone else: ${JSON.stringify(notFor.slice(0, 5))})`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),

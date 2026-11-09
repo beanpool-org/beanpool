@@ -26,6 +26,7 @@ import {
 } from '../engine/invite-asks.js';
 import { ADMINS_ONLY } from '../config/door.js';
 import { VoucherError } from '../engine/vouchers.js';
+import { keptNoticeDetails } from '../engine/kept-notices.js';
 import { INVITE_ASK_LIMITS, pushNoticeWords, word, wordsFor } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
@@ -117,10 +118,16 @@ export function createInviteAskRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
 
-    /** Tells the member an ask of theirs was answered: fixed words only, to their own phones. Their kept notice does the rest. */
-    const tellAsker = (asker: string): void => {
+    /**
+     * Tells the member an ask of theirs was answered: fixed words only, to their own phones and their bell. Their kept notice
+     * does the rest; the push names it, so the alert acknowledged takes the bell's row off, and the other way round.
+     */
+    const tellAsker = (asker: string, noticeId: string): void => {
         const { title, body } = pushNoticeWords('community.invite-ask');
-        try { dispatchPushNotification([asker], 'SYSTEM', title, body, { screen: 'people' }, 'marketplace', 'community.invite-ask'); } catch { /* it is kept */ }
+        try {
+            dispatchPushNotification([asker], 'SYSTEM', title, body, { screen: 'people' }, 'marketplace', 'community.invite-ask',
+                false, keptNoticeDetails([{ to: asker, id: noticeId }]));
+        } catch { /* it is kept */ }
     };
 
     router.post('/api/invite/asks', async (ctx) => {
@@ -192,7 +199,7 @@ export function createInviteAskRoutes(deps: RouteDeps): Router {
             throw e;
         }
         if (!outcome.ok) return answer(ctx, 404, NOT_FOUND, outcome.reason);
-        tellAsker(outcome.asker);
+        tellAsker(outcome.asker, outcome.noticeId);
         ctx.body = { ok: true };
     });
 
@@ -204,7 +211,7 @@ export function createInviteAskRoutes(deps: RouteDeps): Router {
         if (reason === null) return answer(ctx, 400, tr('Please keep this to {n} characters.', { n: INVITE_ASK_LIMITS.reason }), 'too_long');
         const outcome = answerNo(String(ctx.params.id), reason);
         if (!outcome.ok) return answer(ctx, 404, NOT_FOUND, outcome.reason);
-        tellAsker(outcome.asker);
+        tellAsker(outcome.asker, outcome.noticeId);
         ctx.body = { ok: true };
     });
 

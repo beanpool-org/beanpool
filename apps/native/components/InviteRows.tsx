@@ -70,7 +70,8 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
     const [openCode, setOpenCode] = useState<string | null>(null);
     const pending = pendingInvites(invites, now);
     const joined = joinedInvites(invites);
-    const needNames = pendingOpen && pending.some((i) => !!i.namesEntryId);
+    // A name is read from the list only for a fold that is open and holds an invite bound to an entry.
+    const needNames = (pendingOpen && pending.some((i) => !!i.namesEntryId)) || (joinedOpen && joined.some((i) => !!i.namesEntryId));
     useEffect(() => { onNeedNames?.(needNames); }, [needNames, onNeedNames]);
     const opened = openCode ? pending.find((i) => i.code === openCode) ?? null : null;
     const nameFor = (inv: InviteRowSource) => (inv.namesEntryId ? names.get(inv.namesEntryId) ?? null : null);

@@ -106,7 +106,7 @@ describe('the Invites page where the node takes no invites (the global node)', (
             await waitFor(() => expect(screen.getByText(/Bring someone here/)).toBeInTheDocument());
             expect(screen.queryByRole('button', { name: /Generate New Invite/ })).toBeNull();
             expect(screen.queryByText(/Invite Someone/)).toBeNull();
-            expect(screen.queryByPlaceholderText(/Who is this invite for/)).toBeNull();
+            expect(screen.queryByPlaceholderText(/A note for you/)).toBeNull();
             expect(screen.queryByText(/INV-OLD1-CODE/)).toBeNull();
             expect(screen.queryByRole('button', { name: /Tree/ })).toBeNull();
             expect(screen.getByText(window.location.origin)).toBeInTheDocument();

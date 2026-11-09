@@ -19,7 +19,7 @@ describe('the one life of an invite', () => {
         expect(inviteExpiryMs(inv(7))).toBe(NOW - 7 * DAY + 30 * DAY);
         expect(inviteExpiryMs({ ...inv(7), expiresAt: '2026-12-31T00:00:00.000Z' })).toBe(Date.parse('2026-12-31T00:00:00.000Z'));
         expect(inviteExpiryMs({ ...inv(7), expiresAt: 'not a date' })).toBe(NOW - 7 * DAY + 30 * DAY);
-        expect(Number.isNaN(inviteExpiryMs({ code: 'x', createdAt: 'nope' }))).toBe(true);
+        expect(Number.isNaN(inviteExpiryMs({ createdAt: 'nope' }))).toBe(true);
     });
 
     it('is lapsed from the moment it ends', () => {

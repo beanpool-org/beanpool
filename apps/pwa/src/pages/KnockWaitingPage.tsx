@@ -100,7 +100,12 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
     if (askAgain) {
         return (
             <main data-testid="knock-waiting-ask-again" className="page-surface min-h-screen p-4 max-w-lg mx-auto text-text-primary">
-                <AskHere name={name} held={identity} onAsked={() => { setAskAgain(false); setCancelled(false); void check(); }} onClose={() => setAskAgain(false)} />
+                <AskHere name={name} held={identity} onAsked={() => {
+                    setAskAgain(false);
+                    setCancelled(false);
+                    void rememberedKnocks(identity.publicKey).then(ks => setKnock(ks.find(x => x.url === origin) ?? null));
+                    void check();
+                }} onClose={() => setAskAgain(false)} />
             </main>
         );
     }

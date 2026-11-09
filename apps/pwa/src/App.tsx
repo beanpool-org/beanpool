@@ -180,10 +180,12 @@ export function App() {
     useEffect(() => {
         if (loading || identity || visitorView.kind !== 'checking') return;
         let cancelled = false;
+        // `/app?door=ask` (a community's own Ask to join, A1) opens the welcome page's form, never the lobby.
+        const askDoor = new URLSearchParams(window.location.search).get('door') === 'ask';
         Promise.all([communityInfoOnce().catch(() => null), joinInFlight().catch(() => true)])
             .then(([info, inFlight]) => {
                 if (cancelled) return;
-                setVisitorView(info && visitorsSeeListings(info) && !inFlight ? { kind: 'lobby', info } : { kind: 'welcome', info });
+                setVisitorView(info && visitorsSeeListings(info) && !inFlight && !askDoor ? { kind: 'lobby', info } : { kind: 'welcome', info });
             });
         return () => { cancelled = true; };
     }, [loading, identity, visitorView.kind]);

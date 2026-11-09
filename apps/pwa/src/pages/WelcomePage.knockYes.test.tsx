@@ -13,7 +13,7 @@ import { commitKnockKey, draftKnockKey, isKnockKey, knockWaitingKey } from '../l
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
-type Call = { path: string; body: any; headers: Record<string, string> };
+type Call = { path: string; body: Record<string, unknown>; headers: Record<string, string> };
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -32,7 +32,7 @@ beforeEach(async () => {
     calls = [];
     redeem = (call) => json(200, { success: true, member: { publicKey: call.body.publicKey, callsign: call.body.callsign } });
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-        const call: Call = { path: String(input), body: init.body ? JSON.parse(String(init.body)) : undefined, headers: (init.headers ?? {}) as Record<string, string> };
+        const call: Call = { path: String(input), body: init.body ? JSON.parse(String(init.body)) : {}, headers: (init.headers ?? {}) as Record<string, string> };
         calls.push(call);
         if (call.path === '/api/community/info') return json(200, LOCAL);
         if (call.path.startsWith('/api/invite/check')) return json(200, { valid: true });

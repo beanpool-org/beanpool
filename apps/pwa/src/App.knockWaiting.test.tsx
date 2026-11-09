@@ -11,10 +11,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 
+const info = vi.hoisted(() => ({ features: { shareOutside: true } as Record<string, unknown> }));
 vi.mock('./lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { shareOutside: true } })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: info.features })),
     joinInFlight: vi.fn(async () => false),
 }));
+vi.mock('./components/GuestLobby', () => ({ GuestLobby: () => <div data-testid="guest-lobby" /> }));
 vi.mock('./lib/sync', () => ({
     connectToAnchor: vi.fn(),
     reconnectToAnchor: vi.fn(),
@@ -82,12 +84,30 @@ beforeEach(async () => {
     held = await commitKnockKey(await draftKnockKey(), 'Sam');
     await rememberKnock(held.publicKey, { url: 'https://castlemaine.beanpool.org', name: 'Castlemaine BeanPool' }, new Date('2026-11-09T01:00:00Z'));
     welcomeProps.last = null;
+    info.features = { shareOutside: true };
 });
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     localStorage.clear();
     sessionStorage.clear();
+});
+
+describe('/app?door=ask', () => {
+    it("a community that shows visitors its listings still opens the welcome page's form, never its lobby", async () => {
+        const { forgetKnockKey } = await import('./lib/knock-key');
+        await forgetKnockKey(held.publicKey);
+        info.features = { shareOutside: true, guestListingsOnly: true };
+        window.history.replaceState(null, '', '/app');
+        render(<App />);
+        await screen.findByTestId('guest-lobby');
+        cleanup();
+        window.history.replaceState(null, '', '/app?door=ask');
+        render(<App />);
+        await screen.findByTestId('welcome-page');
+        expect(screen.queryByTestId('guest-lobby')).toBeNull();
+        expect(typeof welcomeProps.last?.onAsked).toBe('function');
+    });
 });
 
 describe('a browser waiting to be let in', () => {

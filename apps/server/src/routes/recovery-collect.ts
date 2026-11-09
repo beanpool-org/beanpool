@@ -152,7 +152,7 @@ function fail(ctx: any, e: unknown): void {
         ctx.body = { error: e.message, code: e.code };
         return;
     }
-    // One scan at a time for copies made before the find hash (engine/recovery-find.ts): 503, try again in a minute.
+    // One scan at a time for copies made before the find hash (engine/recovery-find.ts): 503 `find_busy`, sign in again in a minute.
     if (e instanceof FindBusy) {
         ctx.status = 503;
         ctx.body = { error: e.message, code: e.code };

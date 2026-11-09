@@ -34,7 +34,7 @@ import {
     RecoverySealKeyMissing,
     RecoverySealUnopenable,
     isNodeWrapped,
-    openRecoveryFields,
+    openRecoveryFieldsNotingRetired,
     sealRecoveryFields,
     shareRowAad,
 } from '../services/recovery-seal-key.js';
@@ -405,9 +405,14 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
  * A stored row as the client deposited it: unwrapped with the node's key. Throws RecoverySealKeyMissing on a server
  * without its key and RecoverySealUnopenable for a row that key does not open. A row stored before the wrap reads as
  * it is until the boot migration wraps it.
+ *
+ * A copy only a key a take-over replaced opens reads with no find hash: that hash was made under the replaced key, which
+ * no take-over carries, and a deposit or a disconnect that carries the copy forward locks it again with the live key,
+ * where the start's relock, which clears such a hash, no longer reaches it (services/recovery-seal-key.ts
+ * rewrapRowsFromRetiredKeys). The scan finds the copy at its member's next restore (engine/recovery-find.ts).
  */
 function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
-    const copy = openRecoveryFields(
+    const { fields: copy, retired } = openRecoveryFieldsNotingRetired(
         {
             encryptedShare: r.encrypted_share as string,
             shareIv: r.share_iv as string,
@@ -428,7 +433,7 @@ function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
         ephemeralPubkey: (r.ephemeral_pubkey as string | null) ?? null,
         ssoLookupHash: (r.sso_lookup_hash as string | null) ?? null,
         ssoLookupSalt: (r.sso_lookup_salt as string | null) ?? null,
-        ssoFindHash: (r.sso_find_hash as string | null) ?? null,
+        ssoFindHash: retired ? null : (r.sso_find_hash as string | null) ?? null,
         kdfParams: copy.kdfParams ?? null,
         generation: r.generation as number,
         createdAt: r.created_at as string,

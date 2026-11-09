@@ -99,7 +99,10 @@ find holds that sign-in for 5 minutes, keyed by the restore's throwaway key, and
 its copy in the same request through the per-row lookup-hash proof above. The find hash is an index,
 never a proof. A copy made before it is found by a one-at-a-time scan (one scrypt per such copy) and
 made findable at its member's first restore; a main server's boot log counts the copies not yet
-findable, and the scan goes once live servers count 0. The apps move to these routes in S1 (web) and
+findable, and the scan goes once live servers count 0. So is a copy deposited while a server ran on
+its own key, before a take-over brought the community's: the start that locks it again with the
+community's key clears its find hash, which was the replaced key's and which no take-over carries, and
+so does a deposit that carries it forward. The apps move to these routes in S1 (web) and
 S2 (phone); the name routes (`/api/recovery/lookup/:callsign`, `callsign` in `/collect`,
 `/collect/sso-nonce`, `/collect/sso`) are deleted in S3, in the same release as the S2 phone build,
 nodes first and the app the same day (Marty, 2026-11-09).

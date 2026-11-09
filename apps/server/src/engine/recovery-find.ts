@@ -26,12 +26,16 @@
  * A copy made before this has no find hash, and its sub is seen again only at a sign-in. So when the index finds nothing,
  * the node scans that provider's current copies with no find hash, one scrypt each on the threadpool, and writes the find
  * hash of every one that matches (stamped, so a delta carries it to a standby). One scan at a time per server; a second
- * caller meanwhile is told to try again in a minute. A main server's boot log counts the copies not yet findable, and the
- * scan goes once live servers count 0 (design §8 S4).
+ * caller meanwhile is told to wait a minute and sign in again. A main server's boot log counts the copies not yet
+ * findable, and the scan goes once live servers count 0 (design §8 S4).
  *
- * A find hash made under a key a take-over replaced (recovery-seal-retired-<id>.key) is looked up too, and written again
- * under the live key: the next take-over bundle carries only the live key, and no scan would reach a row whose find hash
- * is set but made with a key that server does not have.
+ * A find hash made under a key a take-over replaced (recovery-seal-retired-<id>.key) can't be found on the next server:
+ * the take-over bundle carries the live key only, and the hash can't be made again without the sub. So the start that
+ * locks such a copy again with the live key clears its find hash in the same write (services/recovery-seal-key.ts
+ * rewrapRowsFromRetiredKeys), and so does a deposit or a disconnect that carries it forward (engine/recovery-shares.ts
+ * rowToShare): the copy is then the scan's, on this server or the next, and in the boot count until it is found. Until
+ * that start (one whose relock failed runs on as it is), the index looks a retired key's hash up too, and writes it again
+ * under the live key.
  *
  * ## The hold
  *
@@ -84,11 +88,15 @@ export interface FoundAccount {
     callsign: string;
 }
 
-/** A second scan while one runs: 503, try again in a minute. */
+/**
+ * A second scan while one runs: 503 `find_busy`. The sign-in was spent on the find, so the member signs in again. Worded so
+ * no app's match on a node's sentence catches it (test-member-words: the web's join reads "try again in " as a sentence
+ * that already says when); an app reads the code.
+ */
 export class FindBusy extends Error {
     readonly code = 'find_busy';
     constructor() {
-        super(word('Busy finding another account. Try again in a minute.'));
+        super(word('Busy finding another account. Wait a minute, then sign in again.'));
         this.name = 'FindBusy';
     }
 }

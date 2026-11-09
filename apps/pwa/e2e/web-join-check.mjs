@@ -883,6 +883,34 @@ const SCENARIOS = [
         join: joinOk(),
     },
     {
+        name: 'G11-d, recovery S1: a community with an invite door offers the sign-in restore too, and finds the account with nothing typed',
+        async run(page, origin, view, seen) {
+            // Alice joined with Google while the door was open; then the operator shut it (a local community's door).
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            await page.getByTestId('join-provider-google').click();
+            await throughOnboarding(page, view, { signIn: 'Google' });
+            seen.doorShut = true;
+            await clearBrowser(page, origin);
+            await page.goto(`${origin}/app`, { waitUntil: 'load' });
+            await page.getByRole('button', { name: 'Restore existing identity' }).click();
+            await page.getByTestId('member-restore-signin').waitFor({ timeout: 20_000 });
+            await noSideScroll(page, 'restore choices, invite door');
+            await shot(page, view, 'restore-choices-invite-door');
+            await page.getByTestId('member-restore-signin').click();
+            await restoreScreenIs(page, 'providers', 'Recover with Social Sign-In');
+            await page.getByTestId('restore-provider-google').waitFor();
+            if (await page.locator('[data-testid="restore-screen-providers"] input').count()) throw new Failure('the restore asks for something to be typed');
+            await noSideScroll(page, 'restore sign-ins, invite door');
+            await shot(page, view, 'restore-sign-ins-invite-door');
+            await page.getByTestId('restore-provider-google').click();
+            await intoMarket(page, 30_000);
+            if ((await storedIdentityKey(page)) !== key) throw new Failure('restored another key than the join made');
+            checkRestore(seen, 'google', key, 'restore at an invite door');
+        },
+        join: joinOk(),
+    },
+    {
         name: "rate limited: the node's sentence, and the same key kept for later",
         async run(page, origin, view) {
             await toSignIn(page, origin, view, 'Alice');

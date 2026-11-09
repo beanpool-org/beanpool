@@ -421,8 +421,12 @@ export function answerLightsOutRequest(req: LightsOutRequest): LightsOutAnswer {
 
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
+/** How often the node looks for data/lights-out-request.json: the "~2 s" of lights-out-command.ts and the design. The
+ *  boot (index.ts) uses this and passes nothing; test-lights-out.ts checks both, and times the rest on a shorter look. */
+export const LIGHTS_OUT_WATCH_MS = 2000;
+
 /** The node's 2 s look for data/lights-out-request.json, on every role (a standby answers with its refusal). */
-export function startLightsOutRequestWatch(dir = dataDir(), everyMs = 2000): void {
+export function startLightsOutRequestWatch(dir = dataDir(), everyMs = LIGHTS_OUT_WATCH_MS): void {
     if (watchTimer) return;
     watchTimer = setInterval(() => {
         const req = takeLightsOutRequest(dir);

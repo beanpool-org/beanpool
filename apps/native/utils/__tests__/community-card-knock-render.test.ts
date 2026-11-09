@@ -34,6 +34,8 @@ import { createRoot, type Root } from 'react-dom/client';
 // The screen doesn't import React (Metro's automatic JSX runtime); this runner compiles JSX the classic way.
 (globalThis as any).React = ReactAll;
 
+/** React Native's AppState, a switch the test turns (foreground / background), with the screens listening to it. */
+const appState = vi.hoisted(() => ({ now: 'active', listeners: new Set<(s: string) => void>() }));
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, disabled, testID, accessibilityRole, accessibilityLabel, value, onChangeText } = props;
@@ -52,6 +54,13 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
         Alert: { alert: (...a: unknown[]) => alerts.push(a) },
         Linking: { openURL: async () => {} },
+        AppState: {
+            get currentState() { return appState.now; },
+            addEventListener: (_type: string, cb: (s: string) => void) => {
+                appState.listeners.add(cb);
+                return { remove() { appState.listeners.delete(cb); } };
+            },
+        },
     };
 });
 const alerts = vi.hoisted(() => [] as unknown[][]);
@@ -67,6 +76,8 @@ const nav = vi.hoisted(() => ({ pushed: [] as unknown[], replaced: [] as unknown
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.replaced.push(to), back() {}, canGoBack: () => true },
     useLocalSearchParams: () => ({ node: 'https://riverside.example' }),
+    // Never focused or blurred here: the screen stays shown.
+    useFocusEffect: () => {},
     ErrorBoundary: () => null,
 }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -169,6 +180,7 @@ beforeEach(() => {
     alerts.length = 0;
     joins.length = 0;
     scene.answer = { status: 'pending' };
+    appState.now = 'active'; appState.listeners.clear();
     scene.statusReads = 0;
     scene.knocks = 0;
     scene.sent = [];
@@ -676,5 +688,50 @@ describe("the community's rule on its card", () => {
         await open();
         expect(byTestId('community-card')).not.toBeNull();
         expect(byTestId('community-card-rule')).toBeNull();
+    });
+});
+
+describe('a yes shows itself while the card is open (Damo, 9 Nov 2026: it only showed after a manual refresh)', () => {
+    const goTo = async (state: 'active' | 'background') => {
+        appState.now = state;
+        await act(async () => { for (const cb of [...appState.listeners]) cb(state); });
+        await settle();
+    };
+
+    it('asks once as the card opens, and the yes comes in on its own when the app is next in front: Join, nothing pressed (fails before: one read)', async () => {
+        remember();
+        await open();
+        expect(scene.statusReads).toBe(1);
+        expect(byTestId('community-card-join')).toBeNull();
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await goTo('background');
+        await goTo('active');
+        expect(scene.statusReads).toBe(2);
+        expect(asked()).toBe('A member invited you. Join now to become a member.');
+        expect(byTestId('community-card-join')?.textContent).toBe('Join Riverside');
+        // Nothing joined by itself: Join is the member's tap.
+        expect(joins).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('in the background it asks nothing; once there is a yes it asks no more', async () => {
+        remember();
+        await open();
+        await goTo('background');
+        await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
+        expect(scene.statusReads).toBe(1);
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await goTo('active');
+        expect(scene.statusReads).toBe(2);
+        await goTo('background');
+        await goTo('active');
+        expect(scene.statusReads).toBe(2);
+    });
+
+    it('a card that was never asked reads nothing from the community, however often the app comes back', async () => {
+        await open();
+        await goTo('background');
+        await goTo('active');
+        expect(scene.statusReads).toBe(0);
     });
 });

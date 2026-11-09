@@ -196,6 +196,18 @@ describe('the status read and the cancel are signed for the community they name'
         expect(headers['X-Signed-For']).toBe('s.example.org');
     });
 
+    it('a 429 carries its Retry-After to the page, so the page waits as long as it was told', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Slow down.' }), { status: 429, headers: { 'Retry-After': '90' } }));
+        expect(await readKnockStatus('https://s.example.org', IDENTITY)).toEqual({ ok: false, kind: 'refused', status: 429, code: null, message: 'Slow down.', retryAfterSeconds: 90 });
+    });
+
+    it('a refusal with no Retry-After says nothing of one', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'No.' }), { status: 403 }));
+        const res = await readKnockStatus('https://s.example.org', IDENTITY);
+        expect(res).toEqual({ ok: false, kind: 'refused', status: 403, code: null, message: 'No.' });
+        expect('retryAfterSeconds' in res).toBe(false);
+    });
+
     it('a cancel is a signed POST of {} to that community\'s cancel path', async () => {
         await rememberKnock(PUB, { url: 'https://c.example.org', name: 'CancelMe' }, new Date('2026-10-10T00:00:00Z'));
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));

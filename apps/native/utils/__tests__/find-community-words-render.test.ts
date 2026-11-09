@@ -41,7 +41,7 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
-vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), ErrorBoundary: () => null }));
+vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() }, useLocalSearchParams: () => ({}), useFocusEffect: () => {}, ErrorBoundary: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => undefined) }));

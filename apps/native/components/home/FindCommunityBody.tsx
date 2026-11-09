@@ -6,10 +6,11 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, promiseLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, combineKnockTicks, communityAnswersLine, findCommunityState, formatDate, knockTickOf, t, type KnockWatchTick } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { PlaceCircleCard } from '../PlaceCircleCard';
 import { findLineWords } from '../find-community-lines';
+import { useKnockStatusWatch } from '../../utils/use-knock-status-watch';
 import { openLookDoor } from '../../utils/look-door';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
@@ -23,19 +24,28 @@ const LINKS = { typeTown: TYPE_YOUR_TOWN };
  */
 const requestKey = (k: RememberedKnock) => `${k.url} ${k.sentAt}`;
 
+/** A request the community has said yes to. */
+const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok && st.value.status === 'approved';
+/** A yes, or nothing open there: nothing more will come of asking. */
+const answered = (st: KnockStatusResult | null | undefined): boolean => !!st && knockTickOf(st).kind === 'settled';
+
 /**
  * "Find your community" (design §3.1, §7) as a Home card on the global node (slice H4): the way out of the worldwide
  * community to a local one. What the Market drew above its feed before H4, now drawn from Home's own answer (its `find`
  * card is GET /api/global/home's body, assembled in-process), so it costs no request of its own; the screen checks its
  * rows first (utils/community-directory.ts `readGlobalHome`). The answers to this phone's own knocks are still read from
- * the communities it asked, and only those.
+ * the communities it asked, and only those: when the card opens, and then by itself while Home is in front (Damo, 9 Nov 2026:
+ * the yes showed only after a manual refresh), on utils/use-knock-status-watch.ts's schedule: about every 20 s for 10 minutes,
+ * every 60 s to the hour, every 5 minutes after; never while the app is in the background or another screen covers Home; at
+ * once when it is back. A request that has its answer is not asked again. A yes comes into a polite region that is always on
+ * the card, so a screen reader hears it.
  *
  * Three actions, each 48dp tall and wrapping rather than shrinking: communities near you, start one, or be told when one
  * starts here. They report where they rest to Home's floating "+ ADD POST" (FabAware), which steps aside for them.
  * With no place yet, one quiet link under them, "or type your town ›" (Marty, 14 Oct): Home's own trailing link (48dp, and
  * the "+ ADD POST" steps aside for it too), opening the find screen with its town box open.
  */
-export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors, onKnocksChange, onCancelled }: {
+export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors, onKnocksChange, onCancelled, shown = true }: {
     home: GlobalHome;
     /** The knocks this phone sent for the account, newest first (utils/knock.ts `rememberedKnocks`). */
     knocks: readonly RememberedKnock[];
@@ -51,6 +61,8 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
      * loses focus, however often it reads the phone's memory meanwhile (where the knock is no longer listed).
      */
     onCancelled?: (knock: RememberedKnock) => void;
+    /** False while another screen covers Home: the card asks its communities nothing then (default: shown). */
+    shown?: boolean;
 }) {
     const s = homeStyles(colors);
     const [statuses, setStatuses] = useState<Record<string, KnockStatusResult | null>>({});
@@ -82,14 +94,26 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     // Ask to join on the card does (Marty, 1 Nov).
     useEffect(() => setCircle(home.circle ?? null), [home.circle]);
 
-    // Only the communities this phone asked, once per request it remembers (a new request to the same community is read anew).
+    // Only the communities this phone asked: each request when it first shows (a new request to the same community is read
+    // anew), then on the watcher's schedule while Home is in front. One that has its answer, or was cancelled in this visit,
+    // is not asked again.
     const knockKey = activeKnocks.map(requestKey).join(' ');
-    useEffect(() => {
-        if (!identity || !activeKnocks.length) return;
-        let alive = true;
-        activeKnocks.forEach(k => readKnockStatus(k.url, identity).then(r => { if (alive) setStatuses(was => ({ ...was, [requestKey(k)]: r })); }));
-        return () => { alive = false; };
-    }, [knockKey, identity?.publicKey]);
+    const statusesRef = useRef(statuses);
+    statusesRef.current = statuses;
+    const cancelledRef = useRef(cancelledRequests);
+    cancelledRef.current = cancelledRequests;
+    const readRound = async (): Promise<KnockWatchTick> => {
+        if (!identity) return { kind: 'settled' };
+        const ticks = await Promise.all(latestKnocks.current.map(async (k): Promise<KnockWatchTick> => {
+            const rk = requestKey(k);
+            if (cancelledRef.current.has(rk) || answered(statusesRef.current[rk])) return { kind: 'settled' };
+            const r = await readKnockStatus(k.url, identity);
+            setStatuses(was => ({ ...was, [rk]: r }));
+            return knockTickOf(r);
+        }));
+        return combineKnockTicks(ticks);
+    };
+    useKnockStatusWatch(readRound, !!identity && activeKnocks.length > 0, `${identity?.publicKey ?? ''}|${knockKey}`, shown);
 
     const onCancelKnock = (k: RememberedKnock) => {
         if (!identity) return;
@@ -215,6 +239,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {!!nearby && <Text style={[s.rowSub, { marginTop: 4 }]} testID="home-find-nearby">{nearby}</Text>}
             {!!demandLine && <Text style={[s.rowLine, { marginTop: 4 }]} testID="home-find-demand">{demandLine}</Text>}
             {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} onAsked={onCircleAsked} onChange={card => setCircle({ ...card, id: circle.id })} />}
+            {/* Always on the card, polite: a yes put into it is read out to a screen reader. */}
+            <View accessibilityLiveRegion="polite" testID="home-find-yes-live">
+                {activeKnocks.filter(k => !cancelledRequests.has(requestKey(k)) && yesOf(statuses[requestKey(k)])).map(k => (
+                    <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
+                        {'🎉 ' + (cardKnockLines([k], { [k.url]: statuses[requestKey(k)] })[0]?.text ?? '')}
+                    </Text>
+                ))}
+            </View>
             {activeKnocks.map(k => {
                 const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
                 const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
@@ -225,14 +257,8 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 const isCancelling = cancellingRequests.has(rk);
                 const cancelled = cancelledRequests.has(rk);
 
-                if (!cancelled && status?.ok && status.value.status === 'approved') {
-                    const approved = cardKnockLines([k], { [k.url]: status })[0];
-                    return (
-                        <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
-                            {'🎉 ' + (approved?.text ?? '')}
-                        </Text>
-                    );
-                }
+                // A yes is drawn in the region above, not here.
+                if (!cancelled && yesOf(status)) return null;
 
                 // What the community now says, as MyJoinRequests reads it: only a waiting request arrived and can be taken
                 // back. An answer that could not be read is said as it is, with no Cancel. Nothing open there (`none`:

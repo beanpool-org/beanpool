@@ -21,7 +21,8 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
-    bundledAvatarForPubkey, joinRuleLines, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold, type KnownRule,
+    bundledAvatarForPubkey, combineKnockTicks, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold,
+    type KnockWatchTick, type KnownRule,
     shareAddress,
 } from '@beanpool/core';
 import {
@@ -130,6 +131,7 @@ import { useManageNode } from '../components/useManageNode';
 import { Sentence } from '../components/Sentence';
 import { WaitingToJoin } from '../components/welcome/WaitingToJoin';
 import { forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { forgetKnockKey, knockKeyIsNew } from '../utils/knock-key';
 import { phoneIsWaiting, readWaitingFacts, takeKnockYes, waitingLines, type KnockYes, type WaitingLine } from '../utils/waiting-to-join';
 
@@ -574,16 +576,52 @@ export default function WelcomeScreen() {
     /** A community's yes being joined: the invite step's Next, run once its fields hold this invite (the effect below). */
     const [knockJoin, setKnockJoin] = useState<KnockYes | null>(null);
     const waitTurn = useRef(0);
+    /** This screen is the one shown (not covered by another): the waiting mode asks its communities nothing while it is not. */
+    const [waitShown, setWaitShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setWaitShown(true);
+        return () => setWaitShown(false);
+    }, []));
+    const waitStatusesRef = useRef(waitStatuses);
+    waitStatusesRef.current = waitStatuses;
+    /** Check again reads every request again, one that has its answer too (a yes can have expired); a round of the watcher's does not. */
+    const waitReadAll = useRef(false);
 
-    /** What each community this key asked says now: read from those communities only, signed by the key that asked. */
-    const readWaitStatuses = useCallback(async (knocks: readonly RememberedKnock[], identity: BeanPoolIdentity) => {
+    /**
+     * What each community this key asked says now: read from those communities only, signed by the key that asked. A round
+     * of the watcher's (`quiet`) shows no spinner and leaves a request that has its answer alone; it says what it heard,
+     * for the schedule (utils/use-knock-status-watch.ts).
+     */
+    const readWaitStatuses = useCallback(async (knocks: readonly RememberedKnock[], identity: BeanPoolIdentity, quiet = false): Promise<KnockWatchTick> => {
         const turn = ++waitTurn.current;
-        setWaitChecking(true);
-        const read = await Promise.all(knocks.map(async (k) => [k.url, await readKnockStatus(k.url, identity)] as const));
-        if (turn !== waitTurn.current) return;
-        setWaitStatuses(Object.fromEntries(read));
-        setWaitChecking(false);
+        const all = waitReadAll.current || !quiet;
+        waitReadAll.current = false;
+        if (!quiet) setWaitChecking(true);
+        const held = waitStatusesRef.current;
+        const read = await Promise.all(knocks.map(async (k) => {
+            const was = held[k.url];
+            const answered = !all && !!was && knockTickOf(was).kind === 'settled';
+            return [k.url, answered ? was : await readKnockStatus(k.url, identity)] as const;
+        }));
+        if (turn === waitTurn.current) {
+            setWaitStatuses(Object.fromEntries(read));
+            setWaitChecking(false);
+        }
+        return combineKnockTicks(read.map(([, r]) => (r ? knockTickOf(r) : { kind: 'failed' } as KnockWatchTick)));
     }, []);
+    const waitKnocksRef = useRef(waitKnocks);
+    waitKnocksRef.current = waitKnocks;
+    const waitAccountRef = useRef(accountOnPhone);
+    waitAccountRef.current = accountOnPhone;
+    // Asked as the waiting mode opens, then by itself while this screen is in front (Damo, 9 Nov 2026: the yes showed only
+    // after a manual refresh): about every 20 s for 10 minutes, every 60 s to the hour, every 5 minutes after; never while the
+    // app is in the background or another screen covers this one; at once when it is back.
+    const waitWatch = useKnockStatusWatch(
+        () => (waitAccountRef.current ? readWaitStatuses(waitKnocksRef.current, waitAccountRef.current, true) : Promise.resolve({ kind: 'settled' } as KnockWatchTick)),
+        mode === 'home' && waitingToJoin && !!accountOnPhone && waitKnocks.length > 0,
+        `${accountOnPhone?.publicKey ?? ''}|${waitKnocks.map((k) => k.url).join(' ')}`,
+        waitShown,
+    );
 
     useFocusEffect(useCallback(() => {
         if (mode !== 'home' || !accountOnPhone) {
@@ -605,8 +643,8 @@ export default function WelcomeScreen() {
             }
             const knocks = await rememberedKnocks(me.publicKey);
             if (!alive) return;
+            // The watcher reads them as soon as they are here (above), once.
             setWaitKnocks(knocks);
-            await readWaitStatuses(knocks, me);
         }).catch(() => {});
         return () => { alive = false; };
     }, [mode, accountOnPhone?.publicKey]));
@@ -4172,7 +4210,7 @@ export default function WelcomeScreen() {
                             lines={waitingLines(waitKnocks, waitStatuses)}
                             checking={waitChecking}
                             joining={waitJoining}
-                            onCheckAgain={() => { void readWaitStatuses(waitKnocks, accountOnPhone); }}
+                            onCheckAgain={() => { waitReadAll.current = true; setWaitChecking(true); void waitWatch.readNow(); }}
                             onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
                             onGotIt={(line) => { void forgetWaitLine(line); }}
                             onAskAnother={() => router.push('/find-community')}

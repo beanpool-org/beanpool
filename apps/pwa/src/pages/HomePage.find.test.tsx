@@ -1089,3 +1089,47 @@ describe('Find your community stays on Home where the list does not hold it (Lou
         readSpy.mockRestore();
     });
 });
+
+describe('a yes shows itself on the Find card (Damo, 9 Nov 2026: it only showed after a reload)', () => {
+    const SLEEPY = { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8 };
+    const hideTab = (hidden: boolean) => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        document.dispatchEvent(new Event('visibilitychange'));
+    };
+    afterEach(() => { hideTab(false); vi.restoreAllMocks(); });
+
+    it('the card shows "said yes" when the community answers while Home is open, with no reload, in a polite region (fails before: one read at open)', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        expect(readSpy).toHaveBeenCalledTimes(1);
+        const live = screen.getByTestId('home-find-yes-live');
+        expect(live).toHaveAttribute('aria-live', 'polite');
+        expect(live).toBeEmptyDOMElement();
+
+        // The member says yes. The tab goes away and comes back (or the window is focused): the card reads at once.
+        readSpy.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'BP-YES1', expiresAt: null } });
+        hideTab(true);
+        hideTab(false);
+        const yes = await screen.findByTestId('home-find-invited-https://sleepy.example.org');
+        expect(yes).toHaveTextContent('Sleepy Hollow said yes. Join now.');
+        // Put into the region that was already there, so a screen reader hears it; the waiting card is gone.
+        expect(screen.getByTestId('home-find-yes-live')).toBe(live);
+        expect(live).toContainElement(yes);
+        expect(screen.queryByTestId('home-waiting-card-https://sleepy.example.org')).toBeNull();
+    });
+
+    it('a hidden tab asks nothing', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        readSpy.mockClear();
+        hideTab(true);
+        await act(async () => { await new Promise(r => setTimeout(r, 60)); });
+        expect(readSpy).not.toHaveBeenCalled();
+    });
+});

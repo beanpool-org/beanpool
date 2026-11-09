@@ -33,6 +33,8 @@ const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ 
 const prompts = vi.hoisted(() => ({ asked: [] as string[] }));
 /** The phone's back button: its handlers, as React Native keeps them (the latest first). */
 const backs = vi.hoisted(() => ({ handlers: new Set<() => boolean>() }));
+/** React Native's AppState, a switch the test turns (foreground / background), with the screens listening to it. */
+const appState = vi.hoisted(() => ({ now: 'active', listeners: new Set<(s: string) => void>() }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', checkbox: 'checkbox' };
@@ -44,6 +46,7 @@ vi.mock('react-native', () => {
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (props.accessibilityLiveRegion) attrs['aria-live'] = props.accessibilityLiveRegion;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
@@ -71,7 +74,13 @@ vi.mock('react-native', () => {
                 for (const b of buttons ?? []) { if (b.text) alerts.said.push(b.text); alerts.buttons.push(b); }
             },
         },
-        AppState: { currentState: 'active', addEventListener: listener },
+        AppState: {
+            get currentState() { return appState.now; },
+            addEventListener: (_type: string, cb: (s: string) => void) => {
+                appState.listeners.add(cb);
+                return { remove() { appState.listeners.delete(cb); } };
+            },
+        },
         BackHandler: {
             addEventListener: (_event: string, handler: () => boolean) => {
                 backs.handlers.add(handler);
@@ -180,13 +189,13 @@ const phone = vi.hoisted(() => ({
     records: [] as any[],
 }));
 /** The knocks this phone's key sent, what each community says, and the knock's mark on the key (utils/knock-key.ts). */
-const knocking = vi.hoisted(() => ({ asked: [] as any[], statuses: {} as Record<string, any>, mark: null as string | null, forgotten: [] as string[] }));
+const knocking = vi.hoisted(() => ({ asked: [] as any[], statuses: {} as Record<string, any>, mark: null as string | null, forgotten: [] as string[], reads: [] as string[] }));
 vi.mock('../knock', async (importOriginal) => {
     const real = await importOriginal<typeof import('../knock')>();
     return {
         ...real,
         rememberedKnocks: async () => knocking.asked,
-        readKnockStatus: async (url: string) => knocking.statuses[url] ?? { ok: true, value: { status: 'pending' } },
+        readKnockStatus: async (url: string) => { knocking.reads.push(url); return knocking.statuses[url] ?? { ok: true, value: { status: 'pending' } }; },
         forgetKnock: async (_pk: string, url: string) => { knocking.forgotten.push(url); knocking.asked = knocking.asked.filter((k) => k.url !== url); },
     };
 });
@@ -400,6 +409,8 @@ beforeEach(() => {
     knocking.statuses = {};
     knocking.mark = KNOCKER.publicKey;
     knocking.forgotten = [];
+    knocking.reads = [];
+    appState.now = 'active'; appState.listeners.clear();
     door.check = { ok: true, profile: { profile: 'global', features: { openJoin: true, wordsDoor: true } } };
     door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedProfile = null;
     noVault();
@@ -590,5 +601,76 @@ describe('6. an invite link on a waiting phone, handed here by the root layout',
         await mount();
         await type('Your name or nickname', 'Riverside Kid');
         expect(field('Your name or nickname')?.value).toBe('Riverside Kid');
+    });
+});
+
+describe('7. a yes shows itself while the screen is open (Damo, 9 Nov 2026: it only showed after a manual refresh)', () => {
+    const YES = { ok: true, value: { status: 'approved', invite: 'INV-ABCD-EFGH', expiresAt: null } };
+    const goTo = async (state: 'active' | 'background') => {
+        appState.now = state;
+        await act(async () => { for (const cb of [...appState.listeners]) cb(state); });
+        await settle();
+    };
+
+    it('asks once as the screen opens (not twice), and the line says it is waiting', async () => {
+        await mount();
+        expect(knocking.reads).toEqual([RIVERSIDE]);
+        expect(host!.textContent).toContain('Waiting for Riverside: usually a few days.');
+        expect(byId('welcome-waiting-join')).toBeNull();
+    });
+
+    it('the yes comes in on its own when the app is next in front: "said yes. Join now." and a Join button, nothing pressed (fails before: the screen read once)', async () => {
+        await mount();
+        expect(byId('welcome-waiting-join')).toBeNull();
+        knocking.statuses = { [RIVERSIDE]: YES };
+        await goTo('background');
+        await goTo('active');
+        expect(host!.textContent).toContain('Riverside said yes. Join now.');
+        expect(byId('welcome-waiting-join')).not.toBeNull();
+        // Nothing took the phone anywhere by itself: Join is the member's tap.
+        expect(nav.pushed).toEqual([]);
+        expect(store.map.has('beanpool_anchor_url')).toBe(false);
+        // The line sits in a polite region, so TalkBack/VoiceOver say it.
+        expect(byId('welcome-waiting-invited')!.querySelector('[aria-live="polite"]')!.textContent).toContain('said yes');
+    });
+
+    it('in the background it asks nothing', async () => {
+        await mount();
+        await goTo('background');
+        knocking.reads = [];
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        expect(knocking.reads).toEqual([]);
+        await goTo('active');
+        expect(knocking.reads).toEqual([RIVERSIDE]);
+    });
+
+    it('a request that has its answer is not asked again when the app comes back', async () => {
+        knocking.statuses = { [RIVERSIDE]: YES };
+        await mount();
+        expect(host!.textContent).toContain('Riverside said yes. Join now.');
+        knocking.reads = [];
+        await goTo('background');
+        await goTo('active');
+        expect(knocking.reads).toEqual([]);
+    });
+
+    it('Check again reads every request again, an answered one too (a yes that has expired is nothing open)', async () => {
+        knocking.statuses = { [RIVERSIDE]: YES };
+        await mount();
+        knocking.statuses = { [RIVERSIDE]: { ok: true, value: { status: 'none' } } };
+        knocking.reads = [];
+        await press('Check again');
+        expect(knocking.reads).toEqual([RIVERSIDE]);
+        expect(host!.textContent).toContain('This request is no longer open.');
+    });
+
+    it('leaving the screen leaves no listener behind', async () => {
+        await mount();
+        expect(appState.listeners.size).toBeGreaterThan(0);
+        const before = knocking.reads.length;
+        act(() => root?.unmount()); host?.remove(); root = null; host = null;
+        await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+        await act(async () => { for (const cb of [...appState.listeners]) cb('active'); });
+        expect(knocking.reads.length).toBe(before);
     });
 });

@@ -227,9 +227,12 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
 
                 if (!cancelled && status?.ok && status.value.status === 'approved') {
                     const approved = cardKnockLines([k], { [k.url]: status })[0];
+                    // A yes already used (the account joined there, here or through the web's handoff) has no line: no row,
+                    // never a lone "🎉".
+                    if (!approved) return null;
                     return (
                         <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
-                            {'🎉 ' + (approved?.text ?? '')}
+                            {'🎉 ' + approved.text}
                         </Text>
                     );
                 }

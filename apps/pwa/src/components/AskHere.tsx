@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { COMMUNITY_CARD_WORDS as W, t } from '@beanpool/core';
 import { IdentityHeldError, SentJoinWaitingError, type BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGE_CHARS, KNOCK_MESSAGES, communityOrigin, knockFormProblem, rememberKnock, sendKnock } from '../lib/knock';
-import { commitKnockKey, draftKnockKey, KnockKeyHeldError } from '../lib/knock-key';
+import { commitKnockKey, draftKnockKey, knockWaitingKey, KnockKeyHeldError } from '../lib/knock-key';
 import { getNodeApiUrl } from '../lib/api';
 
 /** This community's own address, as a knock names it: the address this web app talks to. */
@@ -19,7 +19,9 @@ export function thisCommunityOrigin(): string | null {
  * waiting page. The community's refusals are shown in its own words.
  *
  * `held`: the key this browser already asked with ("Ask again" on the waiting page, after a request lapsed): it signs,
- * and no other is drafted.
+ * and no other is drafted. Without it, a key this browser saved at an earlier Send that didn't go through (unreachable,
+ * or refused) is found as the form opens and signs again, under the name typed now: one key per browser, and a second
+ * draft would only be refused by the save (review 4508428755).
  */
 export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
     name: string;
@@ -29,17 +31,28 @@ export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
     testId?: string;
 }) {
     const origin = thisCommunityOrigin();
-    const [callsign, setCallsign] = useState(() => Array.from(held?.callsign ?? '').slice(0, KNOCK_CALLSIGN_CHARS).join(''));
+    const clip = (name: string) => Array.from(name).slice(0, KNOCK_CALLSIGN_CHARS).join('');
+    const [callsign, setCallsign] = useState(() => clip(held?.callsign ?? ''));
     const [message, setMessage] = useState('');
     const [problem, setProblem] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const id = useId();
     const nameRef = useRef<HTMLInputElement | null>(null);
-    // The key this form will sign with: drafted as it opens, in memory only, and the same one at every Send.
-    const draft = useRef<Promise<BeanPoolIdentity> | null>(null);
+    // The key this form will sign with, the same one at every Send: the one this browser already asked with, saved and
+    // marked at an earlier Send, when it holds one; else one drafted as the form opens, in memory only.
+    const draft = useRef<Promise<{ identity: BeanPoolIdentity; asked: boolean }> | null>(null);
+    const signingKey = () => draft.current ?? (draft.current = knockWaitingKey()
+        .catch(() => null)
+        .then(async (asked) => (asked ? { identity: asked, asked: true } : { identity: await draftKnockKey(), asked: false })));
     useEffect(() => {
-        if (!held && !draft.current) draft.current = draftKnockKey();
+        if (!held) {
+            void signingKey().then(({ identity, asked }) => {
+                // The name it asked with, unless one is typed already.
+                if (asked) setCallsign((typed) => typed || clip(identity.callsign));
+            });
+        }
         nameRef.current?.focus();
+        // signingKey reads a ref only.
     }, [held]);
 
     const send = async () => {
@@ -50,7 +63,7 @@ export function AskHere({ name, held, onAsked, onClose, testId = 'ask-here' }: {
         setProblem(null);
         let identity: BeanPoolIdentity;
         try {
-            identity = held ? held : await commitKnockKey(await (draft.current ?? (draft.current = draftKnockKey())), callsign);
+            identity = held ? held : await commitKnockKey((await signingKey()).identity, callsign);
         } catch (e) {
             setSending(false);
             if (e instanceof IdentityHeldError) setProblem(t('This browser already has an account, so the request was not sent.'));

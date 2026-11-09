@@ -974,6 +974,15 @@ export function App() {
         // Signed in here, with no reload: the account is this page's own from now (lib/account-epoch.ts), whatever
         // sign-out in another tab this page heard while it held no account.
         const signedInHere = (signedIn: BeanPoolIdentity) => {
+            // The key a request to join made, which no community has let in: the waiting page, never the member app,
+            // whichever screen handed it back (the welcome page's "this browser holds an account" screen offers the key
+            // it holds; review 4508428601). Its mark goes only once a community has it as a member (enterAsInvited).
+            if (isKnockKey(signedIn)) {
+                setKnockYes(null);
+                setWaitingDoor(null);
+                setWaitingKey(signedIn);
+                return;
+            }
             beginAccountEpoch();
             setWaitingKey(null);
             setKnockYes(null);

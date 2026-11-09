@@ -7,7 +7,7 @@
  *   - a yes: Join {name} hands the invite to the welcome page, for the held key.
  * The node is a stubbed fetch; the welcome page stands in.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 
@@ -156,5 +156,39 @@ describe('a browser waiting to be let in', () => {
         await screen.findByTestId('welcome-page');
         const { loadIdentity } = await import('./lib/identity');
         expect(await loadIdentity()).toBeNull();
+    });
+});
+
+describe('a marked key handed back to the root opens the waiting page only (review 4508428601)', () => {
+    const openFromWelcome = (key: BeanPoolIdentity) =>
+        act(() => { (welcomeProps.last!.onComplete as (identity: BeanPoolIdentity) => void)(key); });
+    /** Nothing a member's app does with a key: no register, no membership read, no member read refused. */
+    const noMemberApp = () => {
+        expect(calls.some(c => /register|membership|\/api\/members|\/api\/profile/.test(c.path))).toBe(false);
+        expect(calls.filter(c => c.status === 401)).toEqual([]);
+    };
+
+    it('I have an invite, then the held screen hands back the waiting key: the waiting page again, never the member app', async () => {
+        render(<App />);
+        await screen.findByTestId('knock-waiting');
+        fireEvent.click(screen.getByTestId('knock-waiting-invite'));
+        await screen.findByTestId('welcome-page');
+        // "Already a member or switching devices?" → 12 words refused for the waiting key → the held screen's button.
+        openFromWelcome(held);
+        await screen.findByTestId('knock-waiting');
+        expect(screen.queryByTestId('welcome-page')).toBeNull();
+        noMemberApp();
+    });
+
+    it("after a Send that didn't reach the community (no waiting page yet): the held screen's key waits, never the member app", async () => {
+        const { forgetKnockKey } = await import('./lib/knock-key');
+        await forgetKnockKey(held.publicKey);
+        render(<App />);
+        await screen.findByTestId('welcome-page');
+        // The card's form saved and marked its key at Send, and the knock never arrived: App was told nothing.
+        const unsent = await commitKnockKey(await draftKnockKey(), 'Sam');
+        openFromWelcome(unsent);
+        await screen.findByTestId('knock-waiting');
+        noMemberApp();
     });
 });

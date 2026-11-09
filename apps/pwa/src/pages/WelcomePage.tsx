@@ -53,7 +53,7 @@ import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, inviteNamesAnotherCommunity, normaliseInviteCode } from '../lib/invite-code';
-import { forgetKnockMark, knockWaitingKey } from '../lib/knock-key';
+import { forgetKnockMark, isKnockKey, knockWaitingKey } from '../lib/knock-key';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -491,6 +491,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     const [showHeldWords, setShowHeldWords] = useState(false);
     const heldWordsId = useId();
 
+    // The held key is the one a request to join made here, still waiting (lib/knock-key.ts): read as the screen draws.
+    const heldIsRequest = isKnockKey(heldIdentity);
+
     function showHeld(held: BeanPoolIdentity, sent: { identity: BeanPoolIdentity; joined: boolean } | null) {
         setHeldSentKey(sent);
         setShowHeldWords(false);
@@ -621,6 +624,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
 
     // A yes to this browser's request: joined as the page opens, once nothing else from here waits to be settled first.
     const knockJoinStarted = useRef(false);
+    // The yes was refused (handleCreate): the screen offers Back to my request, not a Try again that is refused the same way.
+    const [knockRefused, setKnockRefused] = useState(false);
     useEffect(() => {
         if (!knockYes || knockJoinStarted.current) return;
         if (door === 'checking' || sentJoin !== 'none' || sentInvite !== 'none') return;
@@ -940,7 +945,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             // any invite here joins with that key, never a second one (one key per browser), and a yes's invite is bound
             // to it. The yes goes in under the name the request gave.
             const held = inviteKey.current ? null : await knockWaitingKey();
-            if (knockInvite !== undefined) trimmedCallsign = held?.callsign.trim() || trimmedCallsign;
+            // On a Try again the key is this page's already (inviteKey), and so is the name it went with: nothing is typed
+            // on the yes screen, so the empty field never names it (review 4508428682).
+            if (knockInvite !== undefined) trimmedCallsign = (inviteKey.current ?? held)?.callsign.trim() || trimmedCallsign;
 
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result
@@ -1028,6 +1035,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     return undefined;
                                 });
                             if (left === null) setSentInvite('none');
+                        }
+                        if (knockInvite !== undefined) {
+                            // A yes is answered in our own words, never the node's sentence. A refusal would say the same
+                            // again, so it goes back to the request (no Try again); anything else may get through on one.
+                            const refused = typeof status === 'number' && status < 500 && status !== 429;
+                            setKnockRefused(refused);
+                            setError(refused
+                                ? t("This yes from {name} couldn't be used. Go back to your request to see where it stands.", { name: knockYes?.name ?? '' })
+                                : t("Can't reach the community right now. Try again in a minute."));
+                            setLoading(false);
+                            return;
                         }
                         setError(typeof status === 'number' && status < 500 && redeemErr.message
                             ? redeemErr.message
@@ -1526,13 +1544,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     )}
                     {/* ===== SEED PHRASE DISPLAY (after create, before confirm) ===== */}
                     {heldIdentity ? (
-                        /* ===== ANOTHER TAB SAVED AN ACCOUNT HERE: never replaced (review 4106962020) ===== */
+                        /* ===== ANOTHER TAB SAVED AN ACCOUNT HERE: never replaced (review 4106962020) =====
+                           Or the key a request to join made here, which no community has let in (lib/knock-key.ts): that
+                           one is the waiting page's, and its button goes back there, never into the app (4508428601). */
                         <>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 {t('This browser already has an account')}
                             </h3>
                             <p role="alert" data-testid="welcome-held" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
-                                {heldIdentity.callsign.trim()
+                                {heldIsRequest
+                                    ? (heldIdentity.callsign.trim()
+                                        ? t('Your request to join as {name} is waiting in this browser, so nothing here replaced it. A browser holds one account.', { name: heldIdentity.callsign.trim() })
+                                        : t('Your request to join is waiting in this browser, so nothing here replaced it. A browser holds one account.'))
+                                    : heldIdentity.callsign.trim()
                                     ? t('{name} was saved in this browser from another tab or window, so nothing here replaced it. A browser holds one account.', { name: heldIdentity.callsign.trim() })
                                     : t('An account was saved in this browser from another tab or window, so nothing here replaced it. A browser holds one account.')}
                             </p>
@@ -1601,10 +1625,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     </>
                                 );
                             })() : (
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
-                                    {t('To use a different account here, sign out of this one in Settings, then restore the other one.')}
+                                <p data-testid="welcome-held-hint" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
+                                    {heldIsRequest
+                                        ? t('To use another account here, go back to your request and choose “Already a member”. That forgets the request first.')
+                                        : t('To use a different account here, sign out of this one in Settings, then restore the other one.')}
                                 </p>
                             )}
+                            {/* The root opens a request's key on the waiting page only (App.tsx signedInHere). */}
                             <button
                                 type="button"
                                 onClick={() => onComplete(heldIdentity)}
@@ -1614,7 +1641,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                 }}
                             >
-                                {heldIdentity.callsign.trim() ? t('Open {name}', { name: heldIdentity.callsign.trim() }) : t('Open it')}
+                                {heldIsRequest
+                                    ? t('← Back to my request')
+                                    : heldIdentity.callsign.trim() ? t('Open {name}', { name: heldIdentity.callsign.trim() }) : t('Open it')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) && renaming ? (
@@ -2750,10 +2779,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             {error && !loading ? (
                                 <>
                                     <p role="alert" data-testid="knock-join-error" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>{error}</p>
-                                    <button type="button" data-testid="knock-join-retry" onClick={() => { setError(null); void handleCreate(knockYes.invite); }}
-                                        className="block w-full min-h-[48px] px-4 py-3 mb-3 rounded-xl text-base font-bold border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer">
-                                        {t('Try again')}
-                                    </button>
+                                    {!knockRefused && (
+                                        <button type="button" data-testid="knock-join-retry" onClick={() => { setError(null); void handleCreate(knockYes.invite); }}
+                                            className="block w-full min-h-[48px] px-4 py-3 mb-3 rounded-xl text-base font-bold border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer">
+                                            {t('Try again')}
+                                        </button>
+                                    )}
                                 </>
                             ) : (
                                 <p role="status" style={{ fontSize: '0.95rem', marginBottom: '1rem' }}>{t('Joining…')}</p>

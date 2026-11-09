@@ -146,6 +146,44 @@ describe('Ask to join from the browser', () => {
         expect(await loadIdentity()).toBeNull();
     });
 
+    it("a Send that didn't go through, then Cancel and Ask to join again: the same key signs, never a second one (review 4508428755)", async () => {
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
+        let first = true;
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+            calls.push({ url: String(url), init });
+            if (String(url).endsWith('/api/join/knock')) {
+                if (first) { first = false; throw new TypeError('Failed to fetch'); }
+                return new Response(JSON.stringify({ knock: { status: 'pending' } }), { status: 201 });
+            }
+            return new Response('{}', { status: 404 });
+        }));
+        const onAsked = vi.fn();
+        render(<CommunityCardPanel card={CARD} onSignIn={noop} ask={{ onAsked }} />);
+        fireEvent.click(screen.getByTestId('community-card-ask'));
+        fireEvent.change(screen.getByTestId('community-card-ask-form-name'), { target: { value: 'Sam' } });
+        fireEvent.change(screen.getByTestId('community-card-ask-form-message'), { target: { value: 'I read the ladder listing.' } });
+        fireEvent.click(screen.getByTestId('community-card-ask-form-send'));
+        await screen.findByTestId('community-card-ask-form-problem');
+        // Saved and marked at Send, and kept: the knock may be sent again with it.
+        const kept = (await loadIdentity())!;
+        expect(localStorage.getItem(KNOCK_KEY_STORE)).toBe(kept.publicKey);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByTestId('community-card-ask'));
+        // The name it asked with is there again; the words are typed again.
+        await waitFor(() => expect((screen.getByTestId('community-card-ask-form-name') as HTMLInputElement).value).toBe('Sam'));
+        fireEvent.change(screen.getByTestId('community-card-ask-form-message'), { target: { value: 'I read the ladder listing.' } });
+        fireEvent.click(screen.getByTestId('community-card-ask-form-send'));
+        await waitFor(() => expect(onAsked).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText('This browser already has an account, so the request was not sent.')).toBeNull();
+        expect(onAsked.mock.calls[0][0].publicKey).toBe(kept.publicKey);
+        const knocks = calls.filter(c => c.url.endsWith('/api/join/knock'));
+        expect(knocks).toHaveLength(2);
+        expect(knocks.map(k => (k.init.headers as Record<string, string>)['X-Public-Key'])).toEqual([kept.publicKey, kept.publicKey]);
+        expect((await loadIdentity())?.publicKey).toBe(kept.publicKey);
+        expect(localStorage.getItem(KNOCK_KEY_STORE)).toBe(kept.publicKey);
+    });
+
     it("a self-hoster's card with no global link: Ask works, at its own address, and nothing links to us", async () => {
         vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
         apiMocks.getNodeApiUrl.mockReturnValue('https://pool.riverbend.example');

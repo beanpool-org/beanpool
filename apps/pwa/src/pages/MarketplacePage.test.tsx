@@ -6,7 +6,7 @@ import path from 'node:path';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
-import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage } from '@beanpool/core';
+import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage, chatAboutDrafts } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab } from '../lib/another-tab';
@@ -1397,6 +1397,19 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
         await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
         expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+        // The chat opens with this listing above its composer (core chat-about.ts).
+        expect(chatAboutDrafts.get('conv-1')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer' });
+    });
+
+    it("Message on a listing leaves its title and price in the chat's chip, for the next message", async () => {
+        chatAboutDrafts.clear();
+        vi.spyOn(api, 'createConversationApi').mockResolvedValue({ conversation: { id: 'conv-9' } } as any);
+        const onNavigate = vi.fn();
+        await open(listing({ title: 'Pottery course', credits: 45 }), [], { onNavigate });
+        fireEvent.click(await screen.findByRole('button', { name: /💬/ }));
+        await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-9'));
+        expect(chatAboutDrafts.get('conv-9')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer', price: '45 Beans' });
+        chatAboutDrafts.clear();
     });
 
     // R1 (engine/request-limits.ts): reports cleared the member's message requests; every screen that starts a chat words the refusal.

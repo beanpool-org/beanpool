@@ -52,7 +52,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitForListing } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitForListing, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -1188,7 +1188,7 @@ export default function PostDetailModal() {
         if (!identity) return;
         try {
             const conv = await createConversationApi('dm', [peer, identity.publicKey], identity.publicKey, undefined, post.id);
-            if (conv) router.push(`/chat/${conv.id}`);
+            if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
         } catch (e: any) {
             Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
         }
@@ -1807,7 +1807,7 @@ export default function PostDetailModal() {
                                     if (!identity) return;
                                     try {
                                         const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                        if (conv) router.push(`/chat/${conv.id}`);
+                                        if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                                     } catch (e: any) {
                                         Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                                     }
@@ -2298,7 +2298,7 @@ export default function PostDetailModal() {
                                                 if (!identity || !reqPubkey) return;
                                                 try {
                                                     const conv = await createConversationApi('dm', [reqPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                                    if (conv) router.push(`/chat/${conv.id}`);
+                                                    if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                                                 } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
                                             }}
                                         >
@@ -2409,7 +2409,7 @@ export default function PostDetailModal() {
                             if (!identity) return;
                             try {
                                 const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                if (conv) router.push(`/chat/${conv.id}`);
+                                if (conv) { chatAboutDrafts.set(conv.id, aboutOfPost(post)); router.push(`/chat/${conv.id}`); }
                             } catch (e: any) {
                                 Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                             }

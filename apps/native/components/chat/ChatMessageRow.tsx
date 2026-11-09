@@ -40,6 +40,8 @@ interface Props {
     onPressUrl?: (url: string) => void;
     authorLabel?: string | null;
     quote?: ChatQuote | null;
+    /** The listing this message is about (ChatAbout.tsx). */
+    about?: React.ReactNode;
     attachment?: React.ReactNode;
     status?: React.ReactNode;
     footer?: React.ReactNode;
@@ -50,7 +52,7 @@ interface Props {
 export function ChatMessageRow({
     item, isMe, styles, kind, actions, showActions, showEmojiPicker, pickerPosition,
     onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport, onPickEmoji, onPressUrl,
-    authorLabel, quote, attachment, status, footer, editing,
+    authorLabel, quote, about, attachment, status, footer, editing,
 }: Props) {
     // Report and Copy sit under the line, so a line that offers only those draws no round-button bar beside it.
     const hasRoundButtons = actions.reply || actions.react || actions.edit || actions.delete || actions.remove;
@@ -86,6 +88,7 @@ export function ChatMessageRow({
                     kind={kind}
                     authorLabel={authorLabel}
                     quote={quote}
+                    about={about}
                     onPress={onPressBubble}
                     // Press and hold opens what a tap opens, never closes it: a second hold must not hide the Copy button.
                     onLongPress={(event: any) => { if (!showActions) onPressBubble(event); }}

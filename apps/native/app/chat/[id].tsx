@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -35,6 +35,8 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { ChatAboutBanner, ChatAboutCard } from '../../components/chat/ChatAbout';
+import { useAboutListings } from '../../utils/about-listings';
 import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
@@ -776,7 +778,11 @@ function ChatScreen({ id }: { id: string }) {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
+                // The listing the member came from (Message on a Need or an Offer) goes with this line, sealed beside its words; the
+                // chip is spent once the line is written, and the line itself holds it from there, so a Resend carries it too.
+                const about = chatAboutDrafts.get(String(id));
+                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata, undefined, about), 15_000, t('Sending is taking too long — please try again.'));
+                if (about) chatAboutDrafts.drop(String(id));
                 setReplyToMessage(null);
                 // Written here and on its way: the chat waits only once the node has taken it (the effect above).
                 if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
@@ -1120,6 +1126,8 @@ function ChatScreen({ id }: { id: string }) {
     // Day pills interleaved, then reversed for the inverted list. Shared with every chat so a group's
     // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
+    // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
+    const aboutListings = useAboutListings(React.useMemo(() => messages.filter((m) => m.about).map((m) => m.about.postId as string), [messages]));
 
     // Who this member is in this chat. The one place the action rules are asked, so a DM and a group chat
     // can never disagree about what tapping a bubble offers.
@@ -1398,6 +1406,9 @@ function ChatScreen({ id }: { id: string }) {
                 onPressUrl={requestMode === 'none' ? openUrl : undefined}
                 editing={editingMessage?.id === item.id}
                 quote={quote}
+                about={item.about ? (
+                    <ChatAboutCard styles={chat} about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
+                ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
                     // (design §4.6, as the web; PR #2540 review 4393642129). Its caption is words, and reads.
@@ -1684,6 +1695,8 @@ function ChatScreen({ id }: { id: string }) {
                         onCancel={() => { setEditingMessage(null); composerRef.current?.reset(); }}
                     />
                 )}
+
+                {!editingMessage && <ChatAboutBanner styles={chat} conversationId={String(id)} />}
 
                 {replyToMessage && !editingMessage && (() => {
                     // What is being answered, as the thread judged it (dmQuoteFor).

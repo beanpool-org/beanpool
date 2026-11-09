@@ -36,6 +36,8 @@ interface Props {
     /** Who said it, above the words. Only set where the chat shows names — see showsAuthorName. */
     authorLabel?: string | null;
     quote?: ChatQuote | null;
+    /** The listing this message is about (ChatAbout.tsx), drawn at the top of the bubble. */
+    about?: React.ReactNode;
     onPress?: (event: any) => void;
     /** Press and hold: opens what a tap opens (WhatsApp's way in), so Copy is one hold away. */
     onLongPress?: (event: any) => void;
@@ -66,7 +68,7 @@ function renderTextWithLinks(text: string, linkStyle: any, onPressUrl?: (url: st
 
 const COPY_ACTION = 'copyMessage';
 
-export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onLongPress, onCopy, onPressUrl, attachment, status, footer, editing }: Props) {
+export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, about, onPress, onLongPress, onCopy, onPressUrl, attachment, status, footer, editing }: Props) {
     const removed = isTombstone(item);
     const fold = useChatFold(item.id, item.text ?? '', !removed && !editing);
     const { emojis, total } = removed ? { emojis: [] as string[], total: 0 } : reactionSummary(item.metadata);
@@ -96,6 +98,8 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
             {!!authorLabel && !removed && !!item.authorHint && (
                 <Text style={styles.messageAuthorHint}>{chatLineWords(item.authorHint)}</Text>
             )}
+
+            {!removed && about}
 
             {!!quote && !removed && (
                 <Pressable

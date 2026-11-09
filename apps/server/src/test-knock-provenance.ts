@@ -17,8 +17,9 @@
  *   6. the tidy-up clears both columns once the knock is off the list; a prune of the applicant does too
  *   7. a standby copies both columns; a re-key of Sarah moves her key on the knock
  *
- * Fail-first: on origin/main sections 1, 2, 3, 5, 6 and 7 fail (no columns, no `via`, one plain push to everyone); 4 passes
- * there already (a knock is never refused for its body's `peek`), and holds that the new resolution keeps it so.
+ * Fail-first: on origin/main 25 checks fail and section 7 stops at "no such column: via_post_id" (no columns, no `via`, no
+ * count, no push of the sharer's own). Section 4's 201s hold there already (a body's `peek` was ignored); its `via: null`
+ * and unmoved counts are new, and hold that the resolution never turns a ticket that opens nothing into a refusal.
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) SERVER_SUITES_ONLY=test-knock-provenance node scripts/run-server-suites.mjs
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -85,6 +86,7 @@ async function main(): Promise<void> {
     const { pinMainServerForTests } = await import('./standby-pin-test-helper.js');
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { updateLocalConfig } = await import('./config/local-config.js');
+    const { setMemberPhoto } = await import('@beanpool/engine');
     const createPost = wrapCreatePost(se.createPost);
     beforeCall = () => { resetGatewayRateLimit(); resetAdminRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
 
@@ -111,6 +113,7 @@ async function main(): Promise<void> {
     const pushesTo = (token: string) => pushed.filter(p => p.to === token);
 
     // ── the community: Ada (owner), Sarah (shares), Paul (wrote the listing), Mo (a member who opted in) ──
+    const FACE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
     const ada = newId('Ada');
     se.seedGenesisMember(ada.pk, ada.name);
     const member = (name: string): Id => {
@@ -118,6 +121,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, ?, ?)`)
             .run(id.pk, name, new Date(Date.now() - 30 * DAY).toISOString(), ada.pk, `INV-${name.toUpperCase()}`);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        setMemberPhoto(db, id.pk, FACE);
         return id;
     };
     const sarah = member('Sarah');
@@ -197,7 +201,9 @@ async function main(): Promise<void> {
     const toSarah = pushesTo('ExponentPushToken[Sarah]');
     assert(toSarah.length === 1 && toSarah[0].body === 'Someone asked to join after a listing you shared.' && toSarah[0].title === 'BeanPool',
         `Sarah: one push, "Someone asked to join after a listing you shared." (${JSON.stringify(toSarah.map(p => p.body))})`);
-    assert(carries(JSON.stringify(toSarah)).length === 0 && !JSON.stringify(toSarah).includes(tess.name), 'it names nobody and no listing');
+    // (Without `to`: the test's own token spells her name.)
+    const sentToSarah = JSON.stringify(toSarah.map(({ to: _to, ...rest }) => rest));
+    assert(carries(sentToSarah).length === 0 && !sentToSarah.includes(tess.name), `it names nobody and no listing (${sentToSarah.slice(0, 200)})`);
     const sarahNotice = db.prepare(`SELECT kind, data FROM push_notices WHERE recipient = ? ORDER BY rowid DESC LIMIT 1`).get(sarah.pk) as any;
     assert(sarahNotice?.kind === 'community.knock-shared' && JSON.parse(sarahNotice?.data ?? '{}')?.screen === 'shared-outside',
         `its details open her Shared outside (${sarahNotice?.kind} ${sarahNotice?.data})`);

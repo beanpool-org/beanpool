@@ -599,7 +599,9 @@ export function knockAnswersForDirectory(now = Date.now()): KnockAnswers | null 
  * Notifies active owners and admins (and opted-in members if door !== 'admins') of an incoming knock. `sharer`: the member
  * whose link shared outside it came with ("Where it came from", above), told by their own push instead, with fixed words
  * and no name, on any door (where only admins answer, they see the count only), and only while still an active member.
- * The post's author is told nothing of it.
+ * It is about a listing they shared, so it goes under their listings' switch (`marketplace`, on unless they turned it
+ * off), not "Requests to join", which a member must opt in to; an owner or admin is told whatever their switch says, as
+ * for any request (state-engine.ts dispatchPushNotification). The post's author is told nothing of it.
  */
 export function notifyKnockReceived(_now = Date.now(), sharer: string | null = null): void {
     const adminRows = db.prepare(`
@@ -627,7 +629,7 @@ export function notifyKnockReceived(_now = Date.now(), sharer: string | null = n
     if (sharerKey) {
         try {
             dispatchPushNotification([sharerKey], 'SYSTEM', 'BeanPool', 'Someone asked to join after a listing you shared.',
-                { screen: 'shared-outside' }, 'knocks', 'community.knock-shared');
+                { screen: 'shared-outside' }, 'marketplace', 'community.knock-shared');
         } catch { }
     }
 

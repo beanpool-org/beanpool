@@ -105,8 +105,10 @@ import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
-/** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. */
-const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed', 'unknown_inviter']);
+/** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
+ *  'unknown_inviter': the node says it of an inviter paused "for now" too (engine members.ts), so that code stays held until
+ *  it lapses. */
+const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';

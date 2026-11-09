@@ -101,7 +101,13 @@ describe('the screens use it (Damo\'s route: a warm start\'s link lands on a new
     it('welcome forgets a held invite the community refuses, so the next launch opens the first screen', () => {
         // Review on 1980395f: a spent or expired invite stayed held and reopened the invite step on every launch for 30 days.
         const refused = welcome.slice(welcome.indexOf("if (spent !== 'carryOn') {"), welcome.indexOf("if (spent !== 'carryOn') {") + 700);
-        expect(refused).toMatch(/forgetHeldInvite\(AsyncStorage, parsedCode\);\s*setError\(inviteProblemMessage\(check\.reason, nodeUrl\)\)/);
+        expect(refused).toMatch(/if \(check\.reason && DEAD_INVITE_REASONS\.has\(check\.reason\)\) void forgetHeldInvite\(AsyncStorage, parsedCode\);\s*setError\(inviteProblemMessage\(check\.reason, nodeUrl\)\)/);
+        // Only a dead code: a good one at the wrong address, or where invites are off for now, stays held.
+        const dead = welcome.match(/const DEAD_INVITE_REASONS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
+        expect(dead.split(',').map(r => r.trim().replace(/'/g, '')).sort()).toEqual(['expired', 'invalid', 'malformed', 'unknown_inviter', 'used']);
+        // A redeem refused for the code itself is asked once more, and the dead code forgotten the same way.
+        const caught = welcome.slice(welcome.indexOf('if (err instanceof StoredKeyUnreadableError)'), welcome.indexOf("setError(t('Failed to register identity: {reason}'"));
+        expect(caught).toMatch(/checkInvite\(heldCode, nodeUrl\)[\s\S]*DEAD_INVITE_REASONS\.has\(again\.reason\)\) void forgetHeldInvite\(AsyncStorage, heldCode\)/);
     });
 
     it('"Join with an invite" on the first screen fills the step from a held invite before any scan', () => {

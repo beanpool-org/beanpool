@@ -104,6 +104,9 @@ import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
+
+/** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. */
+const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed', 'unknown_inviter']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -1326,9 +1329,10 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        // Refused here (used by someone else, expired, not recognised): a link's held invite is never offered
-                        // again, or every launch would reopen this step on a dead code. A newer one held meanwhile stays.
-                        void forgetHeldInvite(AsyncStorage, parsedCode);
+                        // A dead code (used by someone else, expired, not recognised): a link's held invite is never offered
+                        // again, or every launch would reopen this step on it. A good code at the wrong address, or at a community
+                        // whose invites are off for now, stays held. A newer one held meanwhile stays too.
+                        if (check.reason && DEAD_INVITE_REASONS.has(check.reason)) void forgetHeldInvite(AsyncStorage, parsedCode);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
@@ -1445,6 +1449,11 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
+                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, a dead held invite is forgotten
+                // as at the check above. No answer, or a good code: it stays held.
+                const heldCode = normaliseInviteCode(rawInvite);
+                const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
+                if (again && !again.valid && again.reason && DEAD_INVITE_REASONS.has(again.reason)) void forgetHeldInvite(AsyncStorage, heldCode);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
                 setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);

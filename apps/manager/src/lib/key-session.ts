@@ -212,23 +212,6 @@ export async function signInWithPassword(url: string, password: string, totpCode
     };
 }
 
-/**
- * Leftovers of the old password sign-in, which kept the password and its 2FA session in this origin's web storage.
- * Removed on every load, so a browser that signed in before this build holds none of them after its next visit.
- */
-const OLD_SECRET_KEYS = ['bp-admin-token', 'bp-2fa-session', 'bp-csrf-token'];
-const OLD_SECRET_PREFIX = 'bp_tfa_session_';
-
-export function forgetStoredAdminSecrets(store: Pick<Storage, 'length' | 'key' | 'removeItem'> | undefined = typeof window !== 'undefined' ? window.sessionStorage : undefined): void {
-    if (!store) return;
-    try {
-        for (let i = store.length - 1; i >= 0; i--) {
-            const key = store.key(i);
-            if (key && (OLD_SECRET_KEYS.includes(key) || key.startsWith(OLD_SECRET_PREFIX))) store.removeItem(key);
-        }
-    } catch { /* storage unavailable: nothing was kept there either */ }
-}
-
 /** Sign-out, for a key session and a password session alike: the node ends the session and clears the cookie. */
 export async function endKeySession(csrfToken: string | null): Promise<void> {
     try {

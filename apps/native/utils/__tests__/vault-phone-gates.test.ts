@@ -349,7 +349,7 @@ describe('N1: "none" is believed for a week per account per phone, then the app-
         expect([readsBy(member), readsBy(other)]).toEqual([2, 2]);
     });
 
-    it('a "none" with no date (a build before the bound), or dated by a clock since set back, is asked again once', async () => {
+    it('a "none" with no date, or dated by a clock since set back, is asked again once', async () => {
         mem.async.set(COPY_KNOWN(member.publicKey), '0');
         expect(await vaultCopyKnowledge(member.publicKey)).toBe('unknown');
         await openApp(member, 3);

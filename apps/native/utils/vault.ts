@@ -547,7 +547,7 @@ export async function vaultCopyKnowledge(publicKey: string, now: number = Date.n
     try {
         const v = await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey));
         if (v === '1') return 'kept';
-        // "0:<when>". A bare "0" (a build before the week's bound) has no date, so it is asked again.
+        // "0:<when>". Anything else has no date, so it is asked again.
         const at = v?.startsWith('0:') ? Number(v.slice(2)) : NaN;
         return Number.isSafeInteger(at) && at <= now && now - at < VAULT_NONE_KEPT_MS ? 'none' : 'unknown';
     } catch {

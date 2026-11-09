@@ -77,6 +77,21 @@ export function peekAppDoors(postId: string, ticket: string, origin: string, ua:
 }
 
 /**
+ * The app itself, from a phone's browser, with nothing for it to open (the Invite screen's "Open in the BeanPool app"):
+ * `beanpool://foreground`, the app's no-op link that only brings it to the front (apps/native/app/+native-intent.ts; the node's
+ * Settings return link is the same one). On Android by intent, with Google Play as its fallback when the app isn't there; on
+ * an iPhone by the scheme (a scheme link to no app opens nothing, so the App Store goes beside it); on a computer, none.
+ * It carries no key, node, ticket or invite: only the app and a public store listing.
+ */
+export function openAppDoors(ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): { app: string; store: string } | null {
+    if (/\bAndroid\b/i.test(ua)) {
+        return { app: `intent://foreground#Intent;scheme=beanpool;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(PLAY_URL)};end`, store: PLAY_URL };
+    }
+    if (/\b(iPhone|iPad|iPod)\b/i.test(ua)) return { app: 'beanpool://foreground', store: APP_STORE_URL };
+    return null;
+}
+
+/**
  * The peek a stranger is on, kept in this tab: App takes `?post=` and `?peek=` out of the address as the page loads, so a
  * reload (pull to refresh, Reload, or Android bringing back a tab it dropped while they were in the chat app) would land
  * on the welcome page with no post and nothing said. This tab's sessionStorage outlasts that. Only the post id and the

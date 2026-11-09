@@ -3140,16 +3140,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     </button>
 
                                     {/* The sign-in restore at a community with an invite door too (recovery S1): the community finds the
-                                        account from the sign-in, so it needs no open door, as the phone's "Recover with Social Sign-In". */}
-                                    <button
-                                        data-testid="member-restore-signin"
-                                        onClick={() => { setSignInRestore({ provider: null }); setError(null); }}
-                                        disabled={loading}
-                                        style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                        className="w-full rounded-2xl border active:scale-[0.98] font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">🌐</span> {t('Recover with Social Sign-In')}
-                                    </button>
+                                        account from the sign-in, so it needs no open door, as the phone's "Recover with Social Sign-In".
+                                        Not where the community keeps no copies of accounts: a sign-in there could bring nothing back. */}
+                                    {!keepsNoCopies && (
+                                        <button
+                                            data-testid="member-restore-signin"
+                                            onClick={() => { setSignInRestore({ provider: null }); setError(null); }}
+                                            disabled={loading}
+                                            style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                            className="w-full rounded-2xl border active:scale-[0.98] font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                                        >
+                                            <span aria-hidden="true">🌐</span> {t('Recover with Social Sign-In')}
+                                        </button>
+                                    )}
 
                                     <button
                                         onClick={() => { setRekeyCode(''); setError(null); }}

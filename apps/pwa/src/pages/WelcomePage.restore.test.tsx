@@ -209,6 +209,19 @@ describe('where it starts on the open door', () => {
         await screen.findByTestId('member-restore-signin');
     });
 
+    it('a local community that keeps no copies of accounts does not offer it: a sign-in there could bring nothing back', async () => {
+        restoreNode({
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false }, recoveryCopies: 'none' }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        await screen.findByText('Recover with 12 Words', { exact: false });
+        // The node's answer is read once the page has asked: give it the moment, then the way is still not offered.
+        await waitFor(() => expect(screen.queryByTestId('member-restore-signin')).toBeNull());
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('member-restore-signin')).toBeNull();
+    });
+
     it('"Have you used BeanPool before?" offers it too, so nobody makes a second account', async () => {
         restoreNode();
         render(<WelcomePage onComplete={vi.fn()} />);

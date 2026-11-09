@@ -825,6 +825,24 @@ describe('the web waiting card tells the truth about what the community now answ
         expect(document.body.textContent).not.toContain('no open request');
     });
 
+    it("a yes says how to use it from here, never a dead 'Join now': its page with the 12 words, or the phone app (slice Y0)", async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        expect(card).toHaveTextContent('🎉 Byron Shire BeanPool said yes.');
+        expect(card).toHaveTextContent('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join.');
+        expect(card).toHaveTextContent('Settings → Show my 12 words');
+        expect(card).toHaveTextContent('Or on your phone: open the BeanPool app, restore your account, then Find a community → Byron Shire BeanPool → Join.');
+        expect(card.textContent).not.toContain('Join now');
+        // The community's own page, at its ways back; a new tab, with nothing of this page sent.
+        const open = screen.getByTestId(`home-find-invited-open-${BYRON.url}`);
+        expect(open).toHaveTextContent('Open byron.example.org');
+        expect(open.getAttribute('href')).toBe(`${BYRON.url}/app?door=signin`);
+        expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
     it('a cancel that gets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {
         await askedOf(BYRON);
         let down = false;

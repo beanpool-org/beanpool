@@ -19,14 +19,38 @@ vi.mock('./api', () => ({ signedFetchAt: vi.fn() }));
 
 const SW_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
 
-/** public/sw.js in a sandbox: its listeners, and what it asked of the browser. */
+/** An open tab, as the worker sees it: only one under its scope /app/, loaded since it took over, is controlled. */
+interface Tab { url: string; controlled: boolean }
+
+/**
+ * public/sw.js in a sandbox: its listeners, and what it asked of the browser. The browser's rules are kept, not mocked
+ * away (and e2e/sw-click-check.mjs checks them in Chromium): matchAll gives only controlled tabs unless asked for the
+ * others; navigate() fails on a tab the worker doesn't control; a click allows ONE window call, which focus() and
+ * openWindow() each spend ("Not allowed to open a window." after a focus).
+ */
 function loadWorker(scope = 'https://node.example/app/') {
     const listeners: Record<string, (e: any) => void> = {};
     const shown: { title: string; options: any }[] = [];
     const opened: string[] = [];
     const navigated: string[] = [];
+    const focused: string[] = [];
     let unregistered = 0;
-    let tabs: any[] = [];
+    let tabs: Tab[] = [];
+    let allowance = 0;
+    const spend = (what: string) => {
+        if (allowance < 1) throw new DOMException(`Not allowed to ${what} a window.`, 'InvalidAccessError');
+        allowance--;
+    };
+    const client = (tab: Tab): any => ({
+        url: tab.url,
+        focus: async () => { spend('focus'); focused.push(tab.url); return client(tab); },
+        navigate: async (url: string) => {
+            if (!tab.controlled) throw new TypeError('This service worker is not the client\'s active service worker.');
+            navigated.push(url);
+            tab.url = url;
+            return client(tab);
+        },
+    });
     const self: any = {
         location: new URL('https://node.example/sw.js'),
         registration: {
@@ -35,8 +59,8 @@ function loadWorker(scope = 'https://node.example/app/') {
             unregister: async () => { unregistered++; return true; },
         },
         clients: {
-            matchAll: async () => tabs,
-            openWindow: async (url: string) => { opened.push(url); return null; },
+            matchAll: async (o: { includeUncontrolled?: boolean } = {}) => tabs.filter(t => t.controlled || o.includeUncontrolled).map(client),
+            openWindow: async (url: string) => { spend('open'); opened.push(url); return null; },
         },
         skipWaiting: () => {},
         addEventListener: (type: string, fn: (e: any) => void) => { listeners[type] = fn; },
@@ -44,13 +68,16 @@ function loadWorker(scope = 'https://node.example/app/') {
     vm.runInNewContext(SW_SOURCE, { self, URL, JSON, encodeURIComponent, Array });
     const fire = async (type: string, event: any) => {
         let waited: Promise<unknown> = Promise.resolve();
+        // A click on a notification allows one window call, for the click's own handling only.
+        allowance = type === 'notificationclick' ? 1 : 0;
         listeners[type]({ ...event, waitUntil: (p: Promise<unknown>) => { waited = p; } });
-        await waited;
+        await waited.catch(() => {});
+        allowance = 0;
     };
     return {
-        listeners, shown, opened, navigated, fire,
+        listeners, shown, opened, navigated, focused, fire,
         unregistered: () => unregistered,
-        setTabs: (t: any[]) => { tabs = t; },
+        setTabs: (t: Tab[]) => { tabs = t; },
     };
 }
 
@@ -102,18 +129,24 @@ describe('the service worker (public/sw.js)', () => {
         expect(w.opened[1].startsWith('/app#notice=')).toBe(true);
     });
 
-    it('a click focuses an open BeanPool tab and takes it there; one it cannot take elsewhere gets a new tab', async () => {
+    it("with the waiting page open (never controlled: /app is outside /app/), a click opens /app?door=ask with the notice, focusing nothing first", async () => {
         const w = loadWorker();
-        const went: string[] = [];
-        w.setTabs([{ url: 'https://other.example/app', focus: async () => {}, navigate: async () => {} },
-            { url: 'https://node.example/app?door=ask', focus: async () => {}, navigate: async (u: string) => { went.push(u); } }]);
+        const n = notice();
+        w.setTabs([{ url: 'https://node.example/app?door=ask', controlled: false }]);
+        await w.fire('notificationclick', { notification: { close() {}, data: { notice: n } } });
+        expect(w.focused).toEqual([]);
+        expect(w.navigated).toEqual([]);
+        expect(w.opened).toEqual([`/app?door=ask#notice=${encodeURIComponent(JSON.stringify(n))}`]);
+    });
+
+    it('a tab this worker controls (under /app/) is taken there and brought forward, with no second tab', async () => {
+        const w = loadWorker();
+        w.setTabs([{ url: 'https://node.example/app?door=ask', controlled: false }, { url: 'https://node.example/app/', controlled: true }]);
         await w.fire('notificationclick', { notification: { close() {}, data: { notice: notice() } } });
-        expect(went).toHaveLength(1);
-        expect(went[0].startsWith('https://node.example/app?door=ask#notice=')).toBe(true);
+        expect(w.navigated).toHaveLength(1);
+        expect(w.navigated[0].startsWith('https://node.example/app?door=ask#notice=')).toBe(true);
+        expect(w.focused).toEqual([w.navigated[0]]);
         expect(w.opened).toEqual([]);
-        w.setTabs([{ url: 'https://node.example/app', focus: async () => {}, navigate: async () => { throw new TypeError('not controlled'); } }]);
-        await w.fire('notificationclick', { notification: { close() {}, data: { notice: notice() } } });
-        expect(w.opened).toHaveLength(1);
     });
 
     it('registered anywhere but /app/, it removes itself and shows nothing', async () => {

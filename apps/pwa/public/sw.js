@@ -11,10 +11,10 @@
  * sentence shows as no text); the icon is BeanPool's; no image, action, link or sound from the payload. The tag is the
  * kind, so a second notice of one kind takes the first one's place.
  *
- * A click focuses an open BeanPool tab and takes it to /app?door=ask for `join.answered` (/app for anything else), or opens
- * one there, with the signed notice in the address's fragment, which no server is sent: the waiting page checks the
- * notice's signature with the community key it pinned (src/lib/web-push.ts noticeInLocation) and opens nothing for a
- * forgery.
+ * A click opens /app?door=ask for `join.answered` (/app for anything else), with the signed notice in the address's
+ * fragment, which no server is sent: the waiting page checks the notice's signature with the community key it pinned
+ * (src/lib/web-push.ts noticeInLocation) and opens nothing for a forgery. Only a tab this worker controls (under /app/) is
+ * taken there instead; the waiting page's own tab never is (see landOn).
  *
  * Registered anywhere but /app/ (a browser that kept the old self-removing worker's registration at /), it removes itself.
  */
@@ -72,24 +72,35 @@ function landingOf(notice) {
     return notice ? `${path}#notice=${encodeURIComponent(JSON.stringify(notice))}` : path;
 }
 
+/**
+ * Takes a click to `target`. A tab this worker controls (one under /app/) is taken there, then brought forward: navigate()
+ * spends nothing, focus() spends the click's one window call. Any other tab can't be taken anywhere: the waiting page
+ * itself, /app?door=ask, is outside the scope /app/, so this worker never controls it and its navigate() always fails. So
+ * a new tab opens there at once, with nothing focused first: a click allows one window call, and in Chromium focus() spends
+ * it exactly as openWindow() does (e2e/sw-click-check.mjs). The old tab reads the status itself within 5 minutes.
+ */
+async function landOn(target) {
+    const tabs = await self.clients.matchAll({ type: 'window' });
+    const tab = tabs.find((c) => {
+        const u = new URL(c.url);
+        return u.origin === self.location.origin && u.pathname.startsWith('/app/');
+    });
+    if (tab) {
+        let moved = null;
+        try {
+            moved = await tab.navigate(new URL(target, self.location.origin).href);
+        } catch {
+            moved = null;
+        }
+        if (moved) {
+            await moved.focus().catch(() => {});
+            return;
+        }
+    }
+    await self.clients.openWindow(target);
+}
+
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const target = landingOf(event.notification.data && event.notification.data.notice);
-    event.waitUntil((async () => {
-        const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        const tab = tabs.find((c) => {
-            const u = new URL(c.url);
-            return u.origin === self.location.origin && (u.pathname === '/app' || u.pathname.startsWith('/app/'));
-        });
-        if (tab) {
-            try {
-                await tab.focus();
-                await tab.navigate(new URL(target, self.location.origin).href);
-                return;
-            } catch {
-                // A tab this worker doesn't control can't be taken elsewhere: a new one opens instead.
-            }
-        }
-        await self.clients.openWindow(target);
-    })());
+    event.waitUntil(landOn(landingOf(event.notification.data && event.notification.data.notice)));
 });

@@ -145,6 +145,9 @@ describe('the member key signs only through core\'s builders and the listed old-
             // A re-key ask (utils/rekey-redeem.ts): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`, the host from
             // audienceOf of a plain address, the code the member typed or scanned, cleaned to the admin's spelling.
             'utils/member-statements.ts signReEnrollStatement',
+            // A standing deal's authorisation (S2): core's signStandingAuthorisation, `0xFF ‖ beanpool-standing-v1\nHOST\n…`, the
+            // text built by core from the take-up screen's own choice, the host the phone's requests are signed for.
+            'utils/member-statements.ts signStandingStatement',
             // The claim (utils/node-claim.ts): core's claimText through signedRequestBytes, `0xFF ‖ beanpool-claim/2\nHOST\n…`,
             // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
             // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.

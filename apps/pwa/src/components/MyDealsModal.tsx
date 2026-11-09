@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -371,8 +371,12 @@ export function MyDealsModal({
                                     const isCompleted = item.status === 'completed';
                                     const isPending = item.status === 'pending';
                                     const isRequested = item.status === 'requested';
-                                    const isInteractive = isPending || (dealsTab === 'pending' && isRequested);
-                                    const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+                                    // A standing deal still running, on its current period's row (DESIGN-standing-deals-fable §2.2): one card
+                                    // with 🔁 STANDING and its panel's line; short of the next period, its row is the period last settled,
+                                    // and the card still opens the listing, where Stop is.
+                                    const standing = dealsTab === 'pending' ? standingPanel(item, currentPubkey, (iso) => formatDate(new Date(iso), 'day-month')) : null;
+                                    const isInteractive = isPending || !!standing || (dealsTab === 'pending' && isRequested);
+                                    const needsReview = !standing && isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
 
                                     if (!preview) {
@@ -425,6 +429,11 @@ export function MyDealsModal({
                                                                 }`}>
                                                                     {dealStatusWords(item.status)}
                                                                 </span>
+                                                                {standing && (
+                                                                    <span data-testid={`standing-chip-${item.id}`} className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink">
+                                                                        {standingLines.chip()}
+                                                                    </span>
+                                                                )}
                                                                 <span className="text-[10px] text-nature-400 font-bold">
                                                                     {dealDate(item.createdAt)}
                                                                 </span>
@@ -440,8 +449,9 @@ export function MyDealsModal({
                                                             {item.postTitle}
                                                         </h4>
                                                         {dealsTab === 'pending' && (
-                                                            <p className="text-xs text-nature-600 dark:text-nature-400 mt-1">
-                                                                {dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
+                                                            <p data-testid={`deal-state-${item.id}`} role={standing?.warning ? 'alert' : undefined}
+                                                                className={`text-xs mt-1 break-words ${standing?.warning ? 'font-bold text-amber-800 dark:text-amber-300' : 'text-nature-600 dark:text-nature-400'}`}>
+                                                                {standing ? standing.status : dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
                                                             </p>
                                                         )}
                                                     </div>

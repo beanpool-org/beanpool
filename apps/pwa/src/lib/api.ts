@@ -18,6 +18,11 @@ import {
     ed25519Signer,
     type Signer,
     signReEnroll,
+    signStandingAuthorisation,
+    type StandingAuthorisationFields,
+    type StandingPeriodUnit,
+    type StandingPhase,
+    type StandingStartBody,
     audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
@@ -1673,6 +1678,21 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /**
+     * A period of a standing deal (DESIGN-standing-deals-fable §2.3; the node's read, @beanpool/engine escrow.ts): which one
+     * and its number; on its CURRENT period's row only, its phase, Beans per period, unit, count (null: until stopped), when
+     * the node next acts, its start, since when it is short, and whether either side has tapped Stop.
+     */
+    standingId?: string;
+    periodNo?: number;
+    standingPhase?: StandingPhase;
+    standingBeans?: number;
+    standingUnit?: StandingPeriodUnit;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string;
+    standingStartsAt?: string;
+    standingShortSince?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplacePosts(filter?: {
@@ -2221,10 +2241,34 @@ export async function getEventZones(): Promise<{ zones: EventZone[] }> {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` carries the payer's signed authorisation (signStandingStart) and no hours.
+ */
 export async function acceptMarketplacePost(
-    postId: string, buyerPublicKey: string, hours?: number
+    postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+    return request('POST', '/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
+}
+
+/**
+ * The payer's standing authorisation for the community this web app talks to (§6), signed by core's builder: the host is
+ * the one every request here is signed for, and the bytes are 0xFF and the text, as every member statement's.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const identity = await loadIdentity();
+    if (!identity?.privateKey) throw new Error('Cannot sign a standing deal: this browser holds no key');
+    return signStandingAuthorisation(nodeAddress(), fields, memberSigner(identity.privateKey));
+}
+
+/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
+export async function holdBackStandingDeal(standingId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function requestMarketplacePost(
@@ -2247,10 +2291,11 @@ export function openDealIn(e: unknown): { transactionId?: string } | null {
     return typeof err.transactionId === 'string' ? { transactionId: err.transactionId } : {};
 }
 
+/** Approve a request. On a Need priced per week or per month the author pays: `standing` is their signed authorisation (§4). */
 export async function approveMarketplaceRequest(
-    transactionId: string, authorPublicKey: string
+    transactionId: string, authorPublicKey: string, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+    return request('POST', '/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
 }
 
 export async function rejectMarketplaceRequest(

@@ -15,8 +15,9 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, holdBackStandingDeal,
 } from '../../utils/db';
+import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
 import { usePinRole } from '../../utils/use-pin-role';
 import { PinSheet } from '../../components/PinSheet';
@@ -50,7 +51,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitOf } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -584,6 +585,8 @@ export default function PostDetailModal() {
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
     const [acceptHours, setAcceptHours] = useState('1');
+    // The request on a standing Need whose author is agreeing to pay for it (DESIGN-standing-deals-fable §4): its payer screen shows.
+    const [approvingStanding, setApprovingStanding] = useState<string | null>(null);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
     const [completeHours, setCompleteHours] = useState('');
     const [showRatingForm, setShowRatingForm] = useState(false);
@@ -1061,7 +1064,12 @@ export default function PostDetailModal() {
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
-    const needQuantity = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+    // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
+    // week or per month is taken up as one, its payer signing the authorisation. A standing Need's helper offers one period.
+    const standingUnit = standingUnitOf(post.price_type);
+    const standingOffer = !!standingUnit && post.type === 'offer' && !post.lendable;
+    const standingNeed = !!standingUnit && post.type === 'need';
+    const needQuantity = post.price_type !== 'fixed' ? parseAmount(standingNeed ? '1' : acceptHours, undefined, ANY_DECIMALS) : null;
     // A quantity of 0 is no usable quantity (as the web's acceptHoursValue > 0): it would read "for free" on a priced Need.
     const needTotal = needQuantity === null ? Number(post.credits) : needQuantity.ok && needQuantity.value > 0 ? Number(post.credits) * needQuantity.value : null;
     const needAnswerWords = !isOffer && needTotal !== null ? needAnswerLine(needTotal, post.author_callsign) : null;
@@ -1082,6 +1090,46 @@ export default function PostDetailModal() {
     }, me, operatedTreasuries);
     const toAnswer = requests.filter(r => !requestMoves(r)?.withdraw);
     const afterDealStep = () => { DeviceEventEmitter.emit('sync_data_updated'); };
+    // While a standing deal runs by itself its period is no deal to release (the node releases it at the period's end): its
+    // panel shows instead of the held one. One held back is a plain held deal again, and shows both.
+    const standingRunning = deals.standing.some(m => m.tx.standingPhase !== 'held_back');
+    const standingStep = async (step: () => Promise<unknown>) => {
+        setAccepting(true);
+        try {
+            await step();
+            requestSync().catch(console.error);
+            afterDealStep();
+        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
+    };
+    // Agree (§2.2, §6): the payer's phone signs the authorisation (core builds the text and its bytes) and sends it with the
+    // accept (an Offer) or the approval (a Need's author, paying the helper the request names).
+    const takeUpStanding = async (choice: StandingChoice, payee: string, approveTxId?: string) => {
+        if (!identity || !standingUnit || accepting) return;
+        setAccepting(true);
+        try {
+            const standing = await signStandingStart(standingFieldsFor({
+                listingId: post.id, payee, beansPerPeriod: Number(post.credits), unit: standingUnit, maxPeriods: choice.periods, startsAt: choice.startsAt,
+            }));
+            if (approveTxId) await approveMarketplaceRequest(approveTxId, identity.publicKey, standing);
+            else await acceptMarketplacePost(post.id, identity.publicKey, undefined, standing);
+            hapticSuccess();
+            setShowAcceptConfirm(false);
+            setApprovingStanding(null);
+            if (approveTxId) setRequests(prev => prev.filter(r => r.id !== approveTxId));
+            requestSync().catch(console.error);
+            afterDealStep();
+        } catch (e: any) {
+            hapticWarning();
+            if (changedElsewhere(e, 'deal_open')) {
+                Alert.alert(t('Already under way'), t('You already have a deal under way on this. Finish or cancel it first.'));
+                requestSync().catch(console.error);
+                setShowAcceptConfirm(false);
+            } else {
+                const x = explainTradeError(e);
+                Alert.alert(x.title, x.message);
+            }
+        } finally { setAccepting(false); }
+    };
     // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
     const releaseRow = async (m: DealMoves) => {
         if (!identity) return;
@@ -1628,8 +1676,21 @@ export default function PostDetailModal() {
                     </Text>
                 )}
 
+                {/* A standing deal running on it, one panel for each the reader stands on (§2.2): Hold back, Stop and Message. */}
+                {deals.standing.map(m => {
+                    const other = m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerPublicKey : m.tx.buyerPublicKey;
+                    const otherName = (m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerCallsign : m.tx.buyerCallsign) || t('Peer');
+                    return (
+                        <StandingPanel key={m.tx.id} tx={m.tx as any} actingAs={m.actingAs} busy={accepting}
+                            onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
+                            onHoldBack={() => standingStep(() => holdBackStandingDeal(m.tx.standingId!))}
+                            onMessage={m.asKeeper ? undefined : () => messageRow(other)}
+                            messageLabel={t('Message {name}', { name: otherName })} />
+                    );
+                })}
+
                 {/* 1. Pending Escrow State (Applies to both Payer and Payee) */}
-                {ownRows.length === 0 && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
+                {ownRows.length === 0 && !standingRunning && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
@@ -2043,7 +2104,12 @@ export default function PostDetailModal() {
                     </View>
                 ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
                     <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
-                        {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm ? (
+                        {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm && standingOffer && standingUnit ? (
+                            // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
+                            <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={post.author_callsign || t('Peer')}
+                                busy={accepting} onCancel={() => setShowAcceptConfirm(false)}
+                                onAgree={(choice) => takeUpStanding(choice, post.author_pubkey)} />
+                        ) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
                                 <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}</Text>
 
@@ -2068,7 +2134,8 @@ export default function PostDetailModal() {
                                     // deal itself, the request card and the Payee's line, not here.
                                     <Text testID="need-answer-line" style={styles.needAnswerLine}>{needAnswerWords}</Text>
                                 )}
-                                {post.price_type !== 'fixed' && (
+                                {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
+                                {post.price_type !== 'fixed' && !standingNeed && (
                                     <View style={{ marginBottom: 12 }}>
                                         <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
                                         <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={post.price_type !== 'fixed'} />
@@ -2083,7 +2150,7 @@ export default function PostDetailModal() {
                                         if (accepting) return;
                                         if (!identity || !post.id) return;
                                         // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
-                                        const hoursRead = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+                                        const hoursRead = post.price_type !== 'fixed' ? needQuantity : null;
                                         if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
                                         setAccepting(true);
                                         try {
@@ -2234,10 +2301,17 @@ export default function PostDetailModal() {
                                         <Pressable accessibilityRole="button" style={[styles.rejectBtn, accepting && {opacity: 0.5}, { flex: 1, alignItems: 'center' }]} disabled={accepting} onPress={() => handleReject(req.id)}>
                                             <Text style={styles.rejectBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Deny')}</Text>
                                         </Pressable>
-                                        <Pressable accessibilityRole="button" style={[styles.approveBtn, accepting && {opacity: 0.5}, { flex: 2, alignItems: 'center' }]} disabled={accepting} onPress={() => handleApprove(req.id)}>
+                                        <Pressable accessibilityRole="button" style={[styles.approveBtn, accepting && {opacity: 0.5}, { flex: 2, alignItems: 'center' }]} disabled={accepting}
+                                            onPress={() => (standingNeed && !isOperatorOfAuthor ? setApprovingStanding(req.id) : handleApprove(req.id))}>
                                             <Text style={styles.approveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Approve & Commit')}</Text>
                                         </Pressable>
                                     </View>
+                                    {/* A standing Need: its author pays, and agrees to the run on the payer's screen first (§4). */}
+                                    {approvingStanding === req.id && standingUnit && (
+                                        <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={reqCallsign}
+                                            busy={accepting} onCancel={() => setApprovingStanding(null)}
+                                            onAgree={(choice) => takeUpStanding(choice, req.seller_pubkey, req.id)} />
+                                    )}
                                 </View>
                             );
                         })}

@@ -4,7 +4,8 @@ import { join, relative } from 'node:path';
 
 /**
  * The web app signs nothing itself. Every signature a member makes here is built by one of @beanpool/core's builders
- * (request-signing.ts: buildBoundRequestHeaders, buildBoundWsParams, buildInviteTicket), over bytes core built, in
+ * (request-signing.ts: buildBoundRequestHeaders, buildBoundWsParams, buildInviteTicket; standing-deal.ts:
+ * signStandingAuthorisation), over bytes core built, in
  * format 2, which names the community it was signed for. A hand-written signature is how the old, unbound format came
  * about (good at every community for five minutes), and signing text a node sent is how the phone's "Manage" button
  * could be made to forge a request for another community. So: no signing call anywhere in the app's source, and the
@@ -25,7 +26,7 @@ function sourceFiles(dir: string): string[] {
 const FILES = sourceFiles(SRC);
 const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
 
-const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket', 'signReEnroll', 'copyIdOf'];
+const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket', 'signReEnroll', 'copyIdOf', 'signStandingAuthorisation'];
 
 describe('the web app signs only through core\'s builders', () => {
     it('finds the app\'s source', () => {
@@ -50,8 +51,9 @@ describe('the web app signs only through core\'s builders', () => {
         const uses = [...api.matchAll(/\bmemberSigner\s*\(/g)]
             .map(m => m.index!)
             .filter(at => !api.slice(0, at).endsWith('function '));
-        // The request headers, the socket, an offline ticket, a re-key ask's statement (lib/web-rekey.ts) and a copy's id (lib/show-on-global.ts).
-        expect(uses).toHaveLength(5);
+        // The request headers, the socket, an offline ticket, a re-key ask's statement (lib/web-rekey.ts), a copy's id
+        // (lib/show-on-global.ts) and a standing deal's authorisation (signStandingStart: core builds the text and its bytes).
+        expect(uses).toHaveLength(6);
         for (const at of uses) {
             // Made inside the arguments of a call to one of core's builders: the nearest such call before it, with no
             // `;` between (so not a signer kept in a variable, and not one handed to anything else).

@@ -40,8 +40,9 @@
  * ## The hold
  *
  * A find keeps what it verified (provider, sub, the accounts it named) in memory for {@link FIND_HOLD_TTL_MS}, keyed by the
- * restore's throwaway key, so the collect that follows needs no second sign-in. Never persisted, never replicated, swept
- * once a minute as nonces are (sso.ts issueNonce), replaced by that key's next find, and spent by one collect.
+ * restore's throwaway key, so the collect that follows needs no second sign-in. Never persisted, never replicated, dropped
+ * by its own timer when its time is up (unref'd, so it never keeps the process running), replaced by that key's next find,
+ * and spent by one collect.
  */
 
 import crypto from 'node:crypto';
@@ -212,7 +213,10 @@ export function noteUnfindableSignInCopiesAtBoot(opts: { standby: boolean }): vo
 /** How long a find's verified sign-in is held for the collect that follows it. */
 export const FIND_HOLD_TTL_MS = 5 * 60 * 1000;
 
-/** What a find verified, held for its collect. The sub stays in memory, as a verification's does, and is never logged. */
+/**
+ * What a find verified, held for its collect. The sub stays in memory, as a verification's does, until the hold is spent,
+ * replaced or out of time, and is never logged.
+ */
 export interface FindHold {
     provider: SsoProvider;
     sub: string;
@@ -220,17 +224,26 @@ export interface FindHold {
     expiresAt: number;
 }
 
-const holds = new Map<string, FindHold>();
-let lastHoldSweep = 0;
+const holds = new Map<string, { hold: FindHold; timer: ReturnType<typeof setTimeout> }>();
 
 /**
- * Expired holds dropped, at most once a minute, as the nonces' sweep is throttled (sso.ts issueNonce), but whatever the
- * map's size: a hold keeps a verified sub, so none outlives its 5 minutes by much more than a minute of finds and collects.
+ * The timer that drops this key's hold when its time is up. A hold keeps a verified sub, so it leaves memory then, on a
+ * quiet server too, whether or not a find or a collect comes by. Unref'd: it never keeps the process running.
  */
-function sweepHolds(now: number): void {
-    if (now - lastHoldSweep <= 60_000) return;
-    lastHoldSweep = now;
-    for (const [k, h] of holds) if (h.expiresAt <= now) holds.delete(k);
+function expiryTimer(throwawayKey: string, hold: FindHold): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(() => {
+        if (holds.get(throwawayKey)?.hold === hold) holds.delete(throwawayKey);
+    }, Math.max(0, hold.expiresAt - Date.now()));
+    timer.unref();
+    return timer;
+}
+
+/** This key's hold dropped, and its timer stopped. */
+function dropHold(throwawayKey: string): void {
+    const held = holds.get(throwawayKey);
+    if (!held) return;
+    clearTimeout(held.timer);
+    holds.delete(throwawayKey);
 }
 
 /**
@@ -238,32 +251,36 @@ function sweepHolds(now: number): void {
  * nothing, and ends the older one too: the hold is always that key's latest sign-in.
  */
 export function holdFind(throwawayKey: string, provider: SsoProvider, sub: string, accounts: FoundAccount[]): void {
-    const now = Date.now();
-    sweepHolds(now);
-    if (accounts.length === 0) { holds.delete(throwawayKey); return; }
-    holds.set(throwawayKey, { provider, sub, accounts, expiresAt: now + FIND_HOLD_TTL_MS });
+    dropHold(throwawayKey);
+    if (accounts.length === 0) return;
+    const hold: FindHold = { provider, sub, accounts, expiresAt: Date.now() + FIND_HOLD_TTL_MS };
+    holds.set(throwawayKey, { hold, timer: expiryTimer(throwawayKey, hold) });
 }
 
 /**
  * The live hold of this throwaway key, when its find named `publicKey`: taken, so one collect spends it, success or not.
- * Null, and nothing taken, for no hold or an account the find did not name; an expired hold is dropped.
+ * Null, and nothing taken, for no hold or an account the find did not name; an expired hold is dropped (in the moment
+ * before its timer runs).
  */
 export function takeFindHold(throwawayKey: string, publicKey: string): FindHold | null {
-    const now = Date.now();
-    sweepHolds(now);
-    const h = holds.get(throwawayKey);
-    if (!h) return null;
-    if (h.expiresAt <= now) { holds.delete(throwawayKey); return null; }
-    if (!h.accounts.some((a) => a.publicKey === publicKey)) return null;
-    holds.delete(throwawayKey);
-    return h;
+    const held = holds.get(throwawayKey);
+    if (!held) return null;
+    if (held.hold.expiresAt <= Date.now()) { dropHold(throwawayKey); return null; }
+    if (!held.hold.accounts.some((a) => a.publicKey === publicKey)) return null;
+    dropHold(throwawayKey);
+    return held.hold;
 }
 
-/** Tests: move a hold's clock on by `byMs`, as if its find were that much older. False when the key holds none. */
+/**
+ * Tests: move a hold's clock on by `byMs`, as if its find were that much older, its timer too. False when the key holds
+ * none.
+ */
 export function _ageFindHoldForTests(throwawayKey: string, byMs: number): boolean {
-    const h = holds.get(throwawayKey);
-    if (!h) return false;
-    h.expiresAt -= byMs;
+    const held = holds.get(throwawayKey);
+    if (!held) return false;
+    held.hold.expiresAt -= byMs;
+    clearTimeout(held.timer);
+    held.timer = expiryTimer(throwawayKey, held.hold);
     return true;
 }
 

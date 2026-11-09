@@ -26,6 +26,16 @@ describe('communityOrigin on web', () => {
     });
 });
 
+describe("the knock body carries the shared link's ticket (shared-listing door A3)", () => {
+    const T = 'AbCdEfGhIjKlMnOpQrSt_-';
+    it("in a ticket's shape only, inside what is signed", () => {
+        expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: T }, 'byron.beanpool.org')).toMatchObject({ peek: T, toNode: 'byron.beanpool.org' });
+        for (const bad of [undefined, null, '', 'not-a-ticket', `${T}A`]) {
+            expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: bad as any })).not.toHaveProperty('peek');
+        }
+    });
+});
+
 describe('readStatus', () => {
     it('parses status payloads correctly', () => {
         expect(readStatus({ status: 'none' })).toEqual({ status: 'none' });

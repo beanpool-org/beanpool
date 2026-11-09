@@ -14,6 +14,8 @@ export interface PanelAsk {
     named?: boolean;
     /** A phone's browser under the page's own Open in the BeanPool app: "or ask here in your browser", no app link. */
     appAbove?: boolean;
+    /** The shared post's link ticket, sent with the request (shared-listing door A3): who answers reads where it came from. */
+    peek?: string;
 }
 
 /**
@@ -57,7 +59,7 @@ export function CommunityCardPanel({ card, onSignIn, onInvite, inviteTestId = 'c
             {!compact && (
                 <div className="grid gap-3">
                     {door && ask && (formOpen ? (
-                        <AskHere name={name} onAsked={ask.onAsked} onClose={() => setFormOpen(false)} testId="community-card-ask-form" />
+                        <AskHere name={name} peek={ask.peek} onAsked={ask.onAsked} onClose={() => setFormOpen(false)} testId="community-card-ask-form" />
                     ) : (
                         <>
                             {appLink && (

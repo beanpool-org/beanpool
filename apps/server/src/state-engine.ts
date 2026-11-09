@@ -2084,7 +2084,6 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let sent = 0;
     // A listing's push by area visits only the sockets it may reach (ws-area-index.ts), each still measured below.
     const sockets: Iterable<any> = reach && listingPushIndex ? wsClients.reachable(reach.parties, reach.place, reach.radiusKm) : wsClients;
-    const bellEvent = BELL_SOCKET_EVENTS.has(event?.type);
     for (const ws of sockets) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
@@ -2100,7 +2099,6 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             }
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
-        if (bellEvent && !ws._bell) continue;
         if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
         if (reach && !reach.reaches(ws._memberPubkey)) continue;
         let out = msg;
@@ -7307,17 +7305,24 @@ export function markConversationRead(pubkey: string, conversationId: string): vo
 }
 
 /**
- * The bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS): sent only to a socket whose app said it reads them
- * (`bell=1` on its connect, https-server.ts `_bell`). An app from before them takes any event it doesn't know for a
- * doorbell, and an old phone runs a full sync for each: a push to a member would then cost every old phone of theirs a sync.
+ * One of the bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS) to the member's own sockets, found by the
+ * socket index's key (an announcement to every member is one lookup each, never every socket per member), and only those
+ * whose app said it reads them (`bell=1` on its connect, https-server.ts `_bell`): an app from before them takes any event
+ * it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's socket. Never throws.
  */
-const BELL_SOCKET_EVENTS: ReadonlySet<string> = new Set(['push_notice', 'push_notices_seen']);
+function tellBell(pubkey: string, event: { type: string } & Record<string, unknown>): void {
+    try {
+        const msg = JSON.stringify(event);
+        for (const ws of wsClients.reachable([pubkey], null, 0)) {
+            if (!ws._bell || ws._visitor || ws._memberPubkey !== pubkey) continue;
+            try { ws.send(msg); } catch { wsClients.delete(ws); }
+        }
+    } catch { /* the app's next read catches up */ }
+}
 
 /** The bell's marks told to the member's own sockets, so every open app's count follows. */
 function toldBellSeen(pubkey: string, ids: string[]): string[] {
-    if (ids.length > 0) {
-        try { broadcast({ type: 'push_notices_seen', ids }, [pubkey]); } catch { /* the next read catches up */ }
-    }
+    if (ids.length > 0) tellBell(pubkey, { type: 'push_notices_seen', ids });
     return ids;
 }
 
@@ -10840,9 +10845,7 @@ export function dispatchPushNotification(
     if (rehearsal || notices.length === 0) return 0;
     keepPushNotices(notices);
     // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
-    for (const n of notices) {
-        try { broadcast({ type: 'push_notice', id: n.id, kind: n.kind }, [n.recipient]); } catch { /* the 120 s read catches up */ }
-    }
+    for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
     if (allMessages.length === 0) return 0;
 
     // Batch send to Expo (max 100 per request)

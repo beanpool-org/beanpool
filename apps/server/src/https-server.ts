@@ -1100,7 +1100,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 ws._memberFeed = connect.kind === 'member' && connect.feed;
                 ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
                 ws._openFeed = WS_AUTH_MODE === 'open';
-                // The app reads the bell's events (`bell=1`, state-engine.ts BELL_SOCKET_EVENTS): an older one took them for
+                // The app reads the bell's events (`bell=1`, state-engine.ts tellBell): an older one took them for
                 // a doorbell, and an old phone ran a full sync for each.
                 ws._bell = parsedUrl.searchParams.get('bell') === '1';
 

@@ -130,6 +130,7 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('../../../server/src/https-server.js');
     const { startHttpServer } = await import('../../../server/src/http-server.js');
     const { db } = await import('../../../server/src/db/db.js');
+    const { updateLocalConfig } = await import('../../../server/src/config/local-config.js');
     const { pruneAuthAttempts } = await import('../../../server/src/auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('../../../server/src/gateway-rate-limit.js');
     const { setMemberPhoto } = await import('../../../../packages/beanpool-engine/dist/index.js');
@@ -205,6 +206,11 @@ async function main(): Promise<void> {
         if (!v) throw new Error(`riverbend.json names a member that is not seeded: ${key}`);
         return v;
     };
+
+    // ── the community's own name and place: what the app's map opens on (GET /api/node/config serviceRadius) and its pages say ──
+    // Without these the node answers as "BeanPool Node" and the map opens on the app's built-in default, a real town.
+    updateLocalConfig({ communityName: R.community.name });
+    se.updateNodeConfig({ serviceRadius: { lat: centre.lat, lng: centre.lng, radiusKm: 8 }, areaName: R.community.name });
 
     // ── listings, oldest first, then their clocks set to their age ──
     const createdAt = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3_600_000).toISOString();

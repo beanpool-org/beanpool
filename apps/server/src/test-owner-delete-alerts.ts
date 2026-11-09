@@ -301,14 +301,17 @@ async function main(): Promise<void> {
      * web notifications W0, DESIGN-web-notifications-fable.md §2.1 a), so the table holds one row per member per telling:
      * the tellings are the owner's rows (their phone is the one buzzed, the only rows before the bell), and every other
      * member told must hold exactly the same. One who doesn't (told twice, told what the owner wasn't, told without the
-     * owner) answers the whole table instead, which fails every count here. test-rename-main-name reads its tellings so.
+     * owner) answers the whole table and one row more, saying so, which fails every count here (the row more: one member
+     * told once without the owner is a table of one). test-rename-main-name reads its tellings so.
      */
     const notices = () => {
         const told = (db.prepare(`SELECT DISTINCT recipient FROM push_notices WHERE kind = 'community.notice'`).all() as Array<{ recipient: string }>)
             .map((r) => r.recipient);
         const owners = rowsOf(owner);
         const alike = told.every((pk) => JSON.stringify(rowsOf(pk)) === JSON.stringify(owners));
-        return alike ? owners : db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>;
+        if (alike) return owners;
+        const all = db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>;
+        return [...all, { title: 'the members were not told alike', body: '' }];
     };
     let n0 = notices().length;
     const plainA0 = rowsOf(plainA).length;

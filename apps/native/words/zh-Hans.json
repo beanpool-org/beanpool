@@ -5075,11 +5075,6 @@
     "other": "👥 {n} 位共同联系人"
   },
   "Ask about them ›": "打听了解他们 ›",
-  "{tier} tier · tap to reach out": "{tier} 等级 · 点击联系",
-  "Founding member": "创始成员",
-  "Invited directly by the system admin": "由系统管理员直接邀请",
-  "Here since the community began": "自社区创建起即在此",
-  "Vetted by the admin at sign-up": "注册时经管理员审核",
   "{n} trust points|{n} trust points": {
     "other": "{n} 个信任积分"
   },
@@ -6724,7 +6719,6 @@
   "Your budget to vouch from": "你的担保预算",
   "{left} of {total} left": "剩余 {left} / 总计 {total}",
   "✓ Given!": "✓ 已赠予！",
-  "🌱 Invited by {name}": "🌱 由 {name} 邀请",
   "+{amount} back, budget stopped, {date}": "+{amount} 退回，预算已停止，{date}",
   "+{amount} back, invite expired, {date}": "+{amount} 退回，邀请已过期，{date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} 退回，担保未生效，{date}",

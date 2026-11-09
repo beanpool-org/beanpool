@@ -5088,11 +5088,6 @@
     "other": "👥 {n} koneksi bersama"
   },
   "Ask about them ›": "Tanyakan tentang mereka ›",
-  "{tier} tier · tap to reach out": "Tingkat {tier} · ketuk untuk menghubungi",
-  "Founding member": "Anggota pendiri",
-  "Invited directly by the system admin": "Diundang langsung oleh admin sistem",
-  "Here since the community began": "Di sini sejak komunitas dimulai",
-  "Vetted by the admin at sign-up": "Diverifikasi oleh admin saat pendaftaran",
   "{n} trust points|{n} trust points": {
     "other": "{n} poin kepercayaan"
   },
@@ -6724,7 +6719,6 @@
   "Your budget to vouch from": "Anggaran Anda untuk menjamin",
   "{left} of {total} left": "tersisa {left} dari {total}",
   "✓ Given!": "✓ Diberikan!",
-  "🌱 Invited by {name}": "🌱 Diundang oleh {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} kembali, anggaran dihentikan, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} kembali, undangan kedaluwarsa, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} kembali, jaminan tidak berhasil, {date}",

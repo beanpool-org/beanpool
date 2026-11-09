@@ -5293,11 +5293,6 @@
     "other": "👥 {n} ارتباط مشترک"
   },
   "Ask about them ›": "پرس‌وجو درباره آن‌ها ›",
-  "{tier} tier · tap to reach out": "سطح {tier} · برای ارتباط ضربه بزنید",
-  "Founding member": "عضو مؤسس",
-  "Invited directly by the system admin": "دعوت‌شده مستقیم توسط مدیر سیستم",
-  "Here since the community began": "حاضر از ابتدای شکل‌گیری جامعه",
-  "Vetted by the admin at sign-up": "بررسی‌شده توسط مدیر هنگام ثبت‌نام",
   "{n} trust points|{n} trust points": {
     "one": "{n} امتیاز اعتماد",
     "other": "{n} امتیاز اعتماد"
@@ -6977,7 +6972,6 @@
   "Could not vouch": "امکان ضمانت وجود نداشت",
   "Offline": "آفلاین",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "پیوندهای دعوت یک‌بارمصرف هستند و به مدت 30 روز اعتبار دارند. اگر آفلاین باشید، در عوض یک بلیت آفلاین ایجاد می‌شود.",
-  "🌱 Invited by {name}": "🌱 دعوت‌شده توسط {name}",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "شما قبلاً {prior} لوبیا برای @{name} ضمانت کرده‌اید. می‌توانید آن را تا {max} لوبیا افزایش دهید.",
   "Raised vouch for @{name} to {total} Beans.": "ضمانت برای @{name} به {total} لوبیا افزایش یافت.",
   "Could not vouch.": "امکان ضمانت وجود نداشت.",

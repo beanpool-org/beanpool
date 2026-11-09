@@ -5290,11 +5290,6 @@
     "other": "👥 Ortak {n} bağlantı"
   },
   "Ask about them ›": "Onlar hakkında sor ›",
-  "{tier} tier · tap to reach out": "{tier} kademesi · iletişime geçmek için dokun",
-  "Founding member": "Kurucu üye",
-  "Invited directly by the system admin": "Doğrudan sistem yöneticisi tarafından davet edildi",
-  "Here since the community began": "Topluluk başladığından beri burada",
-  "Vetted by the admin at sign-up": "Kayıt sırasında yönetici tarafından incelendi",
   "{n} trust points|{n} trust points": {
     "one": "{n} güven puanı",
     "other": "{n} güven puanı"
@@ -6977,7 +6972,6 @@
   "Your budget to vouch from": "Kefil olmak için bütçen",
   "{left} of {total} left": "{total} içinden {left} kaldı",
   "✓ Given!": "✓ Verildi!",
-  "🌱 Invited by {name}": "🌱 {name} tarafından davet edildi",
   "+{amount} back, budget stopped, {date}": "+{amount} geri aktarıldı, bütçe durduruldu, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} geri aktarıldı, davet süresi doldu, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} geri aktarıldı, kefalet gerçekleşmedi, {date}",

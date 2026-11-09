@@ -66,7 +66,7 @@ describe('InvitedByCard (web)', () => {
         fireEvent.click(row);
         await waitFor(() => expect(container.textContent).toContain('Ben'));
         expect(tree.calls).toEqual([MIA]);
-        expect(container.textContent).toContain('Still here');
-        expect(container.textContent).toContain('No longer a member');
+        expect(container.textContent).toMatch(/Joined .+ · still here/);
+        expect(container.textContent).toMatch(/Joined .+ · no longer a member/);
     });
 });

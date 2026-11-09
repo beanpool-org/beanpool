@@ -2546,5 +2546,9 @@
   "Your budget: No limit": "Ваш бюджет: Без обмежень",
   "No limit · {vouched} vouched · {below} below zero": "Без обмежень · під порукою {vouched} · нижче нуля {below}",
   "Clear all": "Очистити все",
-  "Clear this notice": "Прибрати це сповіщення"
+  "Clear this notice": "Прибрати це сповіщення",
+  "Founding member": "Засновник спільноти",
+  "Here since the community began": "Тут від початку заснування спільноти",
+  "{tier} tier · tap to reach out": "Рівень {tier} · торкніться, щоб зв'язатися",
+  "🌱 Invited by {name}": "🌱 Запрошено {name}"
 }

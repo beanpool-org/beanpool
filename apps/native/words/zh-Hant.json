@@ -5075,11 +5075,6 @@
     "other": "👥 共同認識 {n} 人"
   },
   "Ask about them ›": "打聽評價 ›",
-  "{tier} tier · tap to reach out": "{tier} 等級 · 輕觸以聯絡",
-  "Founding member": "創始成員",
-  "Invited directly by the system admin": "由系統管理員直接邀請",
-  "Here since the community began": "社群成立時即加入",
-  "Vetted by the admin at sign-up": "註冊時經由管理員審核",
   "{n} trust points|{n} trust points": {
     "other": "{n} 個信任點數"
   },
@@ -6724,7 +6719,6 @@
   "Your budget to vouch from": "你的擔保預算",
   "{left} of {total} left": "剩餘 {left} / 總計 {total}",
   "✓ Given!": "✓ 已贈予！",
-  "🌱 Invited by {name}": "🌱 由 {name} 邀請",
   "+{amount} back, budget stopped, {date}": "+{amount} 退回，預算已停止，{date}",
   "+{amount} back, invite expired, {date}": "+{amount} 退回，邀請已過期，{date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} 退回，擔保未生效，{date}",

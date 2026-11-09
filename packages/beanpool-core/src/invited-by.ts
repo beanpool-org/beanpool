@@ -11,7 +11,7 @@
  *
  * There is no "invited by the system admin" any more: an owner or admin who invites someone is named like anyone else.
  */
-import { t, tn } from './words.js';
+import { formatDate, t, tn } from './words.js';
 
 export interface InvitedBy {
     kind: 'member' | 'founder' | 'card';
@@ -60,6 +60,14 @@ export function broughtInWords(n: number): string {
 /** One person in a Brought in list: still a member here, or not. */
 export function broughtInStatusWords(status: string | null | undefined): string {
     return status === 'pruned' ? t('No longer a member') : t('Still here');
+}
+
+/** A Brought in row's second line: when they joined, and whether they are still here, in one sentence. */
+export function broughtInRowWords(joinedAt: string | null | undefined, status: string | null | undefined): string {
+    const when = joinedAt ? new Date(joinedAt) : null;
+    if (!when || !Number.isFinite(when.getTime())) return broughtInStatusWords(status);
+    const date = formatDate(when, 'day-month-year');
+    return status === 'pruned' ? t('Joined {date} · no longer a member', { date }) : t('Joined {date} · still here', { date });
 }
 
 /** The switch in Settings → Privacy, and what it does, the same on both apps. */

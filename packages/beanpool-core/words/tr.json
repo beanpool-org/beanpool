@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "Bütçen: Sınırsız",
   "No limit · {vouched} vouched · {below} below zero": "Sınırsız · {vouched} kefil olundu · {below} sıfırın altında",
   "Clear all": "Tümünü temizle",
-  "Clear this notice": "Bu bildirimi temizle"
+  "Clear this notice": "Bu bildirimi temizle",
+  "Founding member": "Kurucu üye",
+  "Here since the community began": "Topluluk başladığından beri burada",
+  "{tier} tier · tap to reach out": "{tier} kademesi · iletişime geçmek için dokun",
+  "🌱 Invited by {name}": "🌱 {name} tarafından davet edildi"
 }

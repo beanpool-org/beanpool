@@ -6087,11 +6087,6 @@
     "other": "👥 {n} من المعارف المشتركين"
   },
   "Ask about them ›": "اسأل عنهم ›",
-  "{tier} tier · tap to reach out": "مستوى {tier} · اضغط للتواصل",
-  "Founding member": "عضو مؤسس",
-  "Invited directly by the system admin": "تمت دعوته مباشرة من مشرف النظام",
-  "Here since the community began": "هنا منذ بداية المجتمع",
-  "Vetted by the admin at sign-up": "تم التحقق منه بواسطة المشرف عند التسجيل",
   "{n} trust points|{n} trust points": {
     "zero": "{n} نقطة ثقة",
     "one": "نقطة ثقة واحدة ({n})",
@@ -7989,7 +7984,6 @@
   "Could not vouch": "تعذرت التزكية",
   "Offline": "غير متصل",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "روابط الدعوة صالحة للاستخدام مرة واحدة لمدة 30 يومًا. إذا كنت غير متصل، فسيتم إنشاء تذكرة دون اتصال بدلًا من ذلك.",
-  "🌱 Invited by {name}": "🌱 بدعوة من {name}",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "لقد زكّيت @{name} بالفعل بمقدار {prior} فاصوليا. يمكنك زيادتها حتى {max} فاصوليا.",
   "Raised vouch for @{name} to {total} Beans.": "تمت زيادة التزكية لـ @{name} إلى {total} فاصوليا.",
   "Could not vouch.": "تعذرت التزكية.",

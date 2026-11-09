@@ -9,7 +9,7 @@
  * Brought in is opened.
  */
 import { useState } from 'react';
-import { invitedByLines, broughtInWords, broughtInStatusWords, formatDate, t, type InvitedBy } from '@beanpool/core';
+import { invitedByLines, broughtInWords, broughtInRowWords, t, type InvitedBy } from '@beanpool/core';
 import { getInviteTree } from '../lib/api';
 import { tierWords } from '../lib/trust-tier';
 import { MemberAvatar } from './MemberAvatar';
@@ -89,7 +89,7 @@ export function InvitedByCard({ vouchedInBy, broughtIn, isSelf, targetPubkey, on
                                     <span className="flex-1 min-w-0">
                                         <span className="block text-sm font-bold text-nature-950 dark:text-white truncate">{p.callsign}</span>
                                         <span className="block text-xs font-semibold text-nature-600 dark:text-nature-300 break-words">
-                                            {p.joinedAt ? `${t('Joined {date}', { date: formatDate(new Date(p.joinedAt), 'day-month-year') })} · ` : ''}{broughtInStatusWords(p.status)}
+                                            {broughtInRowWords(p.joinedAt, p.status)}
                                         </span>
                                     </span>
                                 );

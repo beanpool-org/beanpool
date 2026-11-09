@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "Bajeti yako: Hakuna kikomo",
   "No limit · {vouched} vouched · {below} below zero": "Hakuna kikomo · {vouched} wamedhaminiwa · {below} chini ya sifuri",
   "Clear all": "Futa zote",
-  "Clear this notice": "Futa arifa hii"
+  "Clear this notice": "Futa arifa hii",
+  "Founding member": "Mwanachama mwanzilishi",
+  "Here since the community began": "Yuko hapa tangu jumuiya ianze",
+  "{tier} tier · tap to reach out": "Kiwango cha {tier} · gusa ili kuwasiliana",
+  "🌱 Invited by {name}": "🌱 Amealikwa na {name}"
 }

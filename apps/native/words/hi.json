@@ -5293,11 +5293,6 @@
     "other": "👥 {n} साझा संपर्क"
   },
   "Ask about them ›": "उनके बारे में पूछें ›",
-  "{tier} tier · tap to reach out": "{tier} स्तर · संपर्क करने के लिए टैप करें",
-  "Founding member": "संस्थापक सदस्य",
-  "Invited directly by the system admin": "सिस्टम व्यवस्थापक द्वारा सीधे आमंत्रित",
-  "Here since the community began": "समुदाय की शुरुआत से यहीं हैं",
-  "Vetted by the admin at sign-up": "साइन-अप के समय व्यवस्थापक द्वारा जांचे गए",
   "{n} trust points|{n} trust points": {
     "one": "{n} विश्वास अंक",
     "other": "{n} विश्वास अंक"
@@ -6977,7 +6972,6 @@
   "Could not vouch": "गारंटी नहीं दी जा सकी",
   "Offline": "ऑफ़लाइन",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "आमंत्रण लिंक केवल एक बार उपयोग के लिए हैं और 30 दिनों के लिए मान्य हैं। यदि आप ऑफ़लाइन हैं, तो इसके बजाय एक ऑफ़लाइन टिकट बनाया जाएगा।",
-  "🌱 Invited by {name}": "🌱 {name} द्वारा आमंत्रित",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "आप पहले ही @{name} के लिए {prior} फलियाँ की गारंटी दे चुके हैं। आप इसे {max} फलियाँ तक बढ़ा सकते हैं।",
   "Raised vouch for @{name} to {total} Beans.": "@{name} के लिए गारंटी बढ़ाकर {total} फलियाँ कर दी गई।",
   "Could not vouch.": "गारंटी नहीं दी जा सकी।",

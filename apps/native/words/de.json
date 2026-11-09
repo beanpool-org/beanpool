@@ -5292,11 +5292,6 @@
     "other": "👥 {n} gemeinsame Verbindungen"
   },
   "Ask about them ›": "Über sie nachfragen ›",
-  "{tier} tier · tap to reach out": "Stufe {tier} · tippen zum Kontaktieren",
-  "Founding member": "Gründungsmitglied",
-  "Invited directly by the system admin": "Direkt vom System-Admin eingeladen",
-  "Here since the community began": "Dabei seit Gründung der Community",
-  "Vetted by the admin at sign-up": "Bei Anmeldung vom Admin geprüft",
   "{n} trust points|{n} trust points": {
     "one": "{n} Vertrauenspunkt",
     "other": "{n} Vertrauenspunkte"
@@ -6977,7 +6972,6 @@
   "Your budget to vouch from": "Dein Bürgschaftsbudget",
   "{left} of {total} left": "{left} von {total} übrig",
   "✓ Given!": "✓ Weitergegeben!",
-  "🌱 Invited by {name}": "🌱 Eingeladen von {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} zurück, Budget gestoppt, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} zurück, Einladung abgelaufen, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} zurück, Bürgschaft kam nicht zustande, {date}",

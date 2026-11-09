@@ -5077,11 +5077,6 @@
     "other": "👥 함께 아는 사람 {n}명"
   },
   "Ask about them ›": "이분에 대해 물어보기 ›",
-  "{tier} tier · tap to reach out": "{tier} 등급 · 탭하여 연락하기",
-  "Founding member": "창립 멤버",
-  "Invited directly by the system admin": "시스템 관리자가 직접 초대함",
-  "Here since the community began": "커뮤니티 시작부터 함께함",
-  "Vetted by the admin at sign-up": "가입 시 관리자 승인을 받음",
   "{n} trust points|{n} trust points": {
     "other": "신뢰 점수 {n}점"
   },
@@ -6724,7 +6719,6 @@
   "Your budget to vouch from": "보증에 사용할 내 예산",
   "{left} of {total} left": "총 {total} 중 {left} 남음",
   "✓ Given!": "✓ 선물 완료!",
-  "🌱 Invited by {name}": "🌱 {name} 님의 초대",
   "+{amount} back, budget stopped, {date}": "+{amount} 환원, 예산 중단, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} 환원, 초대 만료, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} 환원, 보증이 성립하지 않음, {date}",

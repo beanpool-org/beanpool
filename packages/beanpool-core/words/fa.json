@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "بودجه شما: بدون سقف",
   "No limit · {vouched} vouched · {below} below zero": "بدون سقف · {vouched} ضمانت‌شده · {below} زیر صفر",
   "Clear all": "پاک کردن همه",
-  "Clear this notice": "پاک کردن این اعلان"
+  "Clear this notice": "پاک کردن این اعلان",
+  "Founding member": "عضو مؤسس",
+  "Here since the community began": "حاضر از ابتدای شکل‌گیری جامعه",
+  "{tier} tier · tap to reach out": "سطح {tier} · برای ارتباط ضربه بزنید",
+  "🌱 Invited by {name}": "🌱 دعوت‌شده توسط {name}"
 }

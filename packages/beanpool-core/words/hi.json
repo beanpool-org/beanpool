@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "आपका बजट: कोई सीमा नहीं",
   "No limit · {vouched} vouched · {below} below zero": "कोई सीमा नहीं · {vouched} गारंटीकृत · {below} शून्य से नीचे",
   "Clear all": "सभी साफ़ करें",
-  "Clear this notice": "यह सूचना साफ़ करें"
+  "Clear this notice": "यह सूचना साफ़ करें",
+  "Founding member": "संस्थापक सदस्य",
+  "Here since the community began": "समुदाय की शुरुआत से यहीं हैं",
+  "{tier} tier · tap to reach out": "{tier} स्तर · संपर्क करने के लिए टैप करें",
+  "🌱 Invited by {name}": "🌱 {name} द्वारा आमंत्रित"
 }

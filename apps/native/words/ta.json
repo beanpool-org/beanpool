@@ -5292,11 +5292,6 @@
     "other": "👥 பொதுவான {n} இணைப்புகள்"
   },
   "Ask about them ›": "இவர்களைப் பற்றிக் கேட்க ›",
-  "{tier} tier · tap to reach out": "{tier} நிலை · தொடர்பு கொள்ளத் தட்டவும்",
-  "Founding member": "நிறுவன உறுப்பினர்",
-  "Invited directly by the system admin": "கணினி நிர்வாகியால் நேரடியாக அழைக்கப்பட்டவர்",
-  "Here since the community began": "சமூகம் தொடங்கியதிலிருந்து இங்கே உள்ளார்",
-  "Vetted by the admin at sign-up": "பதிவின் போது நிர்வாகியால் சரிபார்க்கப்பட்டவர்",
   "{n} trust points|{n} trust points": {
     "one": "{n} நம்பிக்கை புள்ளி",
     "other": "{n} நம்பிக்கை புள்ளிகள்"
@@ -6977,7 +6972,6 @@
   "Your budget to vouch from": "உறுதியளிப்பதற்கான உங்கள் பட்ஜெட்",
   "{left} of {total} left": "{total}-ல் {left} மீதமுள்ளது",
   "✓ Given!": "✓ வழங்கப்பட்டது!",
-  "🌱 Invited by {name}": "🌱 {name} அழைத்தார்",
   "+{amount} back, budget stopped, {date}": "+{amount} திரும்பியது, பட்ஜெட் நிறுத்தப்பட்டது, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} திரும்பியது, அழைப்பு காலாவதியானது, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} திரும்பியது, உத்தரவாதம் நிறைவேறவில்லை, {date}",

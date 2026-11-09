@@ -2312,5 +2312,9 @@
   "Your budget: No limit": "Ngân sách của bạn: Không giới hạn",
   "No limit · {vouched} vouched · {below} below zero": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {below}",
   "Clear all": "Xóa tất cả",
-  "Clear this notice": "Xóa thông báo này"
+  "Clear this notice": "Xóa thông báo này",
+  "Founding member": "Thành viên sáng lập",
+  "Here since the community began": "Có mặt từ khi cộng đồng mới bắt đầu",
+  "{tier} tier · tap to reach out": "Cấp {tier} · nhấn để liên hệ",
+  "🌱 Invited by {name}": "🌱 Được mời bởi {name}"
 }

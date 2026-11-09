@@ -5276,11 +5276,6 @@
     "other": "👥 miunganisho {n} mnayoshiriki"
   },
   "Ask about them ›": "Uliza kuwahusu ›",
-  "{tier} tier · tap to reach out": "Kiwango cha {tier} · gusa ili kuwasiliana",
-  "Founding member": "Mwanachama mwanzilishi",
-  "Invited directly by the system admin": "Alialikwa moja kwa moja na msimamizi wa mfumo",
-  "Here since the community began": "Yuko hapa tangu jumuiya ianze",
-  "Vetted by the admin at sign-up": "Alikaguliwa na msimamizi alipojiandikisha",
   "{n} trust points|{n} trust points": {
     "one": "pointi {n} ya uaminifu",
     "other": "pointi {n} za uaminifu"
@@ -6977,7 +6972,6 @@
   "Could not vouch": "Haikuweza kudhamini",
   "Offline": "Nje ya mtandao",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "Viungo vya mwaliko ni vya matumizi moja na ni halali kwa siku 30. Ikiwa uko nje ya mtandao, tiketi ya nje ya mtandao itatengenezwa badala yake.",
-  "🌱 Invited by {name}": "🌱 Amealikwa na {name}",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "Tayari ulimdhamini @{name} kwa maharagwe {prior}. Unaweza kuiongeza hadi maharagwe {max}.",
   "Raised vouch for @{name} to {total} Beans.": "Dhamana kwa @{name} imeongezwa hadi maharagwe {total}.",
   "Could not vouch.": "Haikuweza kudhamini.",

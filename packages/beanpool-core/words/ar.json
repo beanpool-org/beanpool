@@ -2702,5 +2702,9 @@
   "Your budget: No limit": "ميزانيتك: بلا حد",
   "No limit · {vouched} vouched · {below} below zero": "بلا حد · تمت تزكية {vouched} · {below} تحت الصفر",
   "Clear all": "مسح الكل",
-  "Clear this notice": "مسح هذا الإشعار"
+  "Clear this notice": "مسح هذا الإشعار",
+  "Founding member": "عضو مؤسس",
+  "Here since the community began": "هنا منذ بداية المجتمع",
+  "{tier} tier · tap to reach out": "مستوى {tier} · اضغط للتواصل",
+  "🌱 Invited by {name}": "🌱 بدعوة من {name}"
 }

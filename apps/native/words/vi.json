@@ -5076,11 +5076,6 @@
     "other": "👥 {n} kết nối chung"
   },
   "Ask about them ›": "Hỏi về họ ›",
-  "{tier} tier · tap to reach out": "Cấp {tier} · nhấn để liên hệ",
-  "Founding member": "Thành viên sáng lập",
-  "Invited directly by the system admin": "Được quản trị viên hệ thống mời trực tiếp",
-  "Here since the community began": "Có mặt từ khi cộng đồng mới bắt đầu",
-  "Vetted by the admin at sign-up": "Được quản trị viên duyệt khi đăng ký",
   "{n} trust points|{n} trust points": {
     "other": "{n} điểm tin cậy"
   },
@@ -6724,7 +6719,6 @@
   "Your budget to vouch from": "Ngân sách bảo lãnh của bạn",
   "{left} of {total} left": "còn {left} trên {total}",
   "✓ Given!": "✓ Đã tặng!",
-  "🌱 Invited by {name}": "🌱 Được mời bởi {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} hoàn lại, ngân sách đã dừng, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} hoàn lại, lời mời hết hạn, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} hoàn lại, bảo lãnh không thành, {date}",

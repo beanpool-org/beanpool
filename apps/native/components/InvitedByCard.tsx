@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { invitedByLines, broughtInWords, broughtInStatusWords, formatDate, t, type InvitedBy } from '@beanpool/core';
+import { invitedByLines, broughtInWords, broughtInRowWords, t, type InvitedBy } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { signedGet } from '../utils/db';
@@ -120,7 +120,7 @@ export function InvitedByCard({ vouchedInBy, broughtIn, isSelf, targetPubkey, ti
                             <View style={{ flex: 1, minWidth: 0 }}>
                                 <Text style={styles.branchName} numberOfLines={1}>{p.callsign}</Text>
                                 <Text style={styles.branchSub} numberOfLines={2}>
-                                    {p.joinedAt ? `${t('Joined {date}', { date: formatDate(new Date(p.joinedAt), 'day-month-year') })} · ` : ''}{broughtInStatusWords(p.status)}
+                                    {broughtInRowWords(p.joinedAt, p.status)}
                                 </Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />

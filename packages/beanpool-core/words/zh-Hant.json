@@ -2312,5 +2312,9 @@
   "Your budget: No limit": "你的預算：無上限",
   "No limit · {vouched} vouched · {below} below zero": "無上限 · 已擔保 {vouched} · {below} 為負",
   "Clear all": "全部清除",
-  "Clear this notice": "清除此通知"
+  "Clear this notice": "清除此通知",
+  "Founding member": "創始成員",
+  "Here since the community began": "社群成立時即加入",
+  "{tier} tier · tap to reach out": "{tier} 等級 · 輕觸以聯絡",
+  "🌱 Invited by {name}": "🌱 由 {name} 邀請"
 }

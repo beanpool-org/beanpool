@@ -3,7 +3,7 @@
  * DESIGN-invites-vouching-review-fable.md slice I3).
  */
 import { describe, expect, it } from 'vitest';
-import { invitedByLines, broughtInWords, broughtInStatusWords, showInviterSwitchWords, ledgerCreditLine } from '../index.js';
+import { invitedByLines, broughtInWords, broughtInStatusWords, broughtInRowWords, showInviterSwitchWords, ledgerCreditLine } from '../index.js';
 
 const member = (role: 'owner' | 'admin' | null) => ({ kind: 'member' as const, publicKey: 'b'.repeat(64), callsign: 'marty', avatarUrl: null, tier: 'Elder', role });
 const words = (l: { title: string; sub: string | null }) => `${l.title} ${l.sub ?? ''}`;
@@ -41,6 +41,9 @@ describe('Brought in, the switch, the Ledger line', () => {
         expect(broughtInWords(3)).toBe('Brought in 3 people ›');
         expect(broughtInStatusWords('active')).toBe('Still here');
         expect(broughtInStatusWords('pruned')).toBe('No longer a member');
+        expect(broughtInRowWords('2026-10-01T00:00:00.000Z', 'active')).toMatch(/^Joined .*2026 · still here$/);
+        expect(broughtInRowWords('2026-10-01T00:00:00.000Z', 'pruned')).toMatch(/^Joined .*2026 · no longer a member$/);
+        expect(broughtInRowWords(null, 'active')).toBe('Still here');
     });
     it('the switch says who always sees it', () => {
         expect(showInviterSwitchWords()).toEqual({

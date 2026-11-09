@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "Ο προϋπολογισμός σας: Χωρίς όριο",
   "No limit · {vouched} vouched · {below} below zero": "Χωρίς όριο · {vouched} με εγγύηση · {below} κάτω από το μηδέν",
   "Clear all": "Διαγραφή όλων",
-  "Clear this notice": "Διαγραφή αυτής της ειδοποίησης"
+  "Clear this notice": "Διαγραφή αυτής της ειδοποίησης",
+  "Founding member": "Ιδρυτικό μέλος",
+  "Here since the community began": "Εδώ από την ίδρυση της κοινότητας",
+  "{tier} tier · tap to reach out": "Επίπεδο {tier} · πάτα για επικοινωνία",
+  "🌱 Invited by {name}": "🌱 Προσκλήθηκε από {name}"
 }

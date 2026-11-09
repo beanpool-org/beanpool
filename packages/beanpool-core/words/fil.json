@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "Iyong badyet: Walang limitasyon",
   "No limit · {vouched} vouched · {below} below zero": "Walang limitasyon · {vouched} napatunayan · {below} mababa sa zero",
   "Clear all": "I-clear lahat",
-  "Clear this notice": "I-clear ang abisong ito"
+  "Clear this notice": "I-clear ang abisong ito",
+  "Founding member": "Nagtatag na miyembro",
+  "Here since the community began": "Narito mula noong magsimula ang komunidad",
+  "{tier} tier · tap to reach out": "{tier} antas · i-tap para makipag-ugnayan",
+  "🌱 Invited by {name}": "🌱 Inimbitahan ni {name}"
 }

@@ -134,9 +134,9 @@ describe('InvitedByCard', () => {
         await act(async () => { await Promise.resolve(); });
         expect(asked.paths).toEqual([`/api/invite/tree?root=${MIA}`]);
         expect(host.textContent).toContain('Ben');
-        expect(host.textContent).toContain('Still here');
+        expect(host.textContent).toMatch(/Joined .+ · still here/);
         expect(host.textContent).toContain('Gil');
-        expect(host.textContent).toContain('No longer a member');
+        expect(host.textContent).toMatch(/Joined .+ · no longer a member/);
         await draw({ vouchedInBy: null, broughtIn: 1 });
         expect(host.textContent).toContain('Brought in 1 person ›');
     });

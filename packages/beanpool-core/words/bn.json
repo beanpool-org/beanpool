@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "আপনার বাজেট: কোনো সীমা নেই",
   "No limit · {vouched} vouched · {below} below zero": "কোনো সীমা নেই · {vouched} নিশ্চয়তাপ্রাপ্ত · {below} শূন্যের নিচে",
   "Clear all": "সব মুছুন",
-  "Clear this notice": "এই বিজ্ঞপ্তিটি মুছুন"
+  "Clear this notice": "এই বিজ্ঞপ্তিটি মুছুন",
+  "Founding member": "প্রতিষ্ঠাতা সদস্য",
+  "Here since the community began": "কমিউনিটির শুরু থেকেই আছেন",
+  "{tier} tier · tap to reach out": "{tier} স্তর · যোগাযোগ করতে ট্যাপ করুন",
+  "🌱 Invited by {name}": "🌱 {name} কর্তৃক আমন্ত্রিত"
 }

@@ -2390,5 +2390,9 @@
   "Your budget: No limit": "Dein Budget: Kein Limit",
   "No limit · {vouched} vouched · {below} below zero": "Kein Limit · {vouched} verbürgt · {below} im Minus",
   "Clear all": "Alle löschen",
-  "Clear this notice": "Diese Benachrichtigung löschen"
+  "Clear this notice": "Diese Benachrichtigung löschen",
+  "Founding member": "Gründungsmitglied",
+  "Here since the community began": "Dabei seit Gründung der Community",
+  "{tier} tier · tap to reach out": "Stufe {tier} · tippen zum Kontaktieren",
+  "🌱 Invited by {name}": "🌱 Eingeladen von {name}"
 }

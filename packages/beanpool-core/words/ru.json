@@ -2546,5 +2546,9 @@
   "Your budget: No limit": "Ваш бюджет: Без ограничений",
   "No limit · {vouched} vouched · {below} below zero": "Без ограничений · поручительств на {vouched} · ниже нуля на {below}",
   "Clear all": "Очистить всё",
-  "Clear this notice": "Убрать это уведомление"
+  "Clear this notice": "Убрать это уведомление",
+  "Founding member": "Участник-основатель",
+  "Here since the community began": "В сообществе с момента основания",
+  "{tier} tier · tap to reach out": "Уровень «{tier}» · нажмите, чтобы связаться",
+  "🌱 Invited by {name}": "🌱 Приглашение от {name}"
 }

@@ -102,6 +102,13 @@ import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } f
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { StepFooter } from '../components/welcome/StepFooter';
+import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
+
+/** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
+ *  'unknown_inviter': the node says it of an inviter paused "for now" too (engine members.ts), so that code stays held until
+ *  it lapses. */
+const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -394,6 +401,10 @@ export default function WelcomeScreen() {
     const pendingWordsAreNew = !!pendingIdentity && pendingNewKey === pendingIdentity.publicKey;
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
+    /** The join steps' footer's measured height (components/welcome/StepFooter.tsx): the invite step's fields stay clear of it. */
+    const [stepFooterHeight, setStepFooterHeight] = useState(0);
+    // Next is in the footer now, and its answer's words are in the step, a few lines above its end: shown when they arrive.
+    const inviteStepScroll = useRef<React.ElementRef<typeof KeyboardAwareScrollView>>(null);
     // The listing the invite was sent from (invite-and-share), with the invite it came with: kept from the link, the params or the
     // install referrer until the join, then held for the landing (utils/post-after-join.ts). Not shown, not read, not asked for.
     const [landingPost, setLandingPost] = useState<{ code: string; id: string } | null>(null);
@@ -1001,15 +1012,61 @@ export default function WelcomeScreen() {
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
 
+    // The invite a link brought, held on the phone until it is redeemed (utils/held-invite.ts): applied when this copy of
+    // welcome opens with no other invite, and whenever a newer link is held while it is open. A warm start's link lands on a
+    // new welcome with no params; before, it opened on the first screen with no code (Damo, 9 Nov). Only on the first screen
+    // or the invite step: a recovery or the steps after the join are never switched to it.
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const inviteCodeRef = useRef(inviteCode);
+    inviteCodeRef.current = inviteCode;
+    const accountRef = useRef(accountOnPhone);
+    accountRef.current = accountOnPhone;
+    const applyHeldInvite = useCallback((held: HeldInvite) => {
+        const key = heldInviteKey(held);
+        if (appliedInvites.current.has(key)) return;
+        if (modeRef.current !== 'home' && modeRef.current !== 'create') return;
+        appliedInvites.current.add(key);
+        setInviteCode(held.invite);
+        noteLandingPost(held.invite, held.post);
+        if (held.server) setCreateAnchorUrl(held.server);
+        setMode('create');
+    }, []);
+    useEffect(() => {
+        let live = true;
+        const off = onHeldInvite((held) => { if (live) applyHeldInvite(held); });
+        void readHeldInvite(AsyncStorage).then((held) => {
+            // A link or params this screen opened with are that same tap, or newer: they have filled the step already. A phone
+            // with an account passes through welcome on every switch of community: never sent to the invite step by it.
+            if (!live || !held || appliedInvites.current.size > 0 || accountRef.current) return;
+            applyHeldInvite(held);
+        });
+        return () => { live = false; off(); };
+    }, [applyHeldInvite]);
+    /** "Join with an invite": the step opens filled from a held invite, never asking to scan a code the phone has. */
+    const openInviteStep = useCallback(() => {
+        void readHeldInvite(AsyncStorage).then((held) => {
+            if (held && !inviteCodeRef.current) {
+                setInviteCode(held.invite);
+                noteLandingPost(held.invite, held.post);
+                if (held.server) setCreateAnchorUrl(held.server);
+            }
+        }).catch(() => {});
+        setMode('create');
+    }, []);
+
+    useEffect(() => {
+        if (mode !== 'create' || !error) return;
+        const id = setTimeout(() => inviteStepScroll.current?.scrollToEnd({ animated: true }), 50);
+        return () => clearTimeout(id);
+    }, [mode, error]);
+
     // --- The global community's link (utils/global-link.ts): `/welcome?door=global&at=…` from app/+native-intent.ts, once
     // per arrival, and the install referrer's `global=1` above. Read through refs: the answer about a half-done wizard
     // comes back after the screen may have moved on, and what it is doing then is what counts. ---
     const screenMountedRef = useRef(true);
     useEffect(() => () => { screenMountedRef.current = false; }, []);
-    const modeRef = useRef(mode);
-    modeRef.current = mode;
-    const inviteCodeRef = useRef(inviteCode);
-    inviteCodeRef.current = inviteCode;
+    // modeRef and inviteCodeRef: declared above, with the held invite.
     const appliedDoorLinks = useRef(new Set<string>());
 
     /** The door, held for the member's first tap, unless the screen is doing something a link mustn't interrupt. */
@@ -1280,6 +1337,10 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
+                        // A dead code (used by someone else, expired, not recognised): a link's held invite is never offered
+                        // again, or every launch would reopen this step on it. A good code at the wrong address, or at a community
+                        // whose invites are off for now, stays held. A newer one held meanwhile stays too.
+                        if (check.reason && DEAD_INVITE_REASONS.has(check.reason)) void forgetHeldInvite(AsyncStorage, parsedCode);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
@@ -1356,6 +1417,8 @@ export default function WelcomeScreen() {
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
                 undoCommunity = false;
+                // Used: a link's held invite is never offered again (utils/held-invite.ts).
+                void forgetHeldInvite(AsyncStorage, parsedCode);
 
                 // Sent from a listing (invite-and-share): it opens when this member lands on Home, and this is the join. Only an id,
                 // and only for this invite; the pasted link itself may carry it too.
@@ -1393,6 +1456,11 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
+                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, a dead held invite is forgotten
+                // as at the check above. No answer, or a good code: it stays held.
+                const heldCode = normaliseInviteCode(rawInvite);
+                const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
+                if (again && !again.valid && again.reason && DEAD_INVITE_REASONS.has(again.reason)) void forgetHeldInvite(AsyncStorage, heldCode);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
                 setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);
@@ -2418,19 +2486,6 @@ export default function WelcomeScreen() {
                             <Text style={styles.subtitle} testID="photo-step-note">{photoStepNote(joinBeansOn)}</Text>
                         )}
 
-                        <Pressable
-                            style={styles.primaryBtn}
-                            disabled={loading}
-                            onPress={handleCompleteProfile}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                            )}
-                        </Pressable>
-
                         {/* A global join or a claim is done by this step (the node has the member), so there is
                             nothing to go back to: the door would only say "already a member", the claim "already owned". */}
                         {joinFlow === 'invite' && (
@@ -2449,6 +2504,21 @@ export default function WelcomeScreen() {
                         )}
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-profile">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn]}
+                        disabled={loading}
+                        onPress={handleCompleteProfile}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
                 
                 <AvatarPickerSheet
                     visible={showAvatarPicker}
@@ -2702,19 +2772,6 @@ export default function WelcomeScreen() {
                         {error && <Text style={styles.error}>{error}</Text>}
 
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={() => {
-                                recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
-                                setMode('onboardingGuide');
-                            }}
-                            accessibilityRole="button"
-                        >
-                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={handleSeedBackPress}
                             disabled={loading}
@@ -2725,6 +2782,21 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-words">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={() => {
+                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                            updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
+                            setMode('onboardingGuide');
+                        }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
@@ -2949,23 +3021,6 @@ export default function WelcomeScreen() {
 
                         {/* A claim's last step is the owner's card, after these: its own Let's Begin. */}
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={joinFlow === 'claim' ? () => {
-                                updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
-                                setMode('ownerCard');
-                                setError(null);
-                            } : handleConfirmSeed}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
-                            )}
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={() => {
                                 updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
@@ -2979,6 +3034,25 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-guide">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={joinFlow === 'claim' ? () => {
+                            updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
+                            setMode('ownerCard');
+                            setError(null);
+                        } : handleConfirmSeed}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
@@ -3020,19 +3094,6 @@ export default function WelcomeScreen() {
                         {error && <Text style={styles.error}>{error}</Text>}
 
                         <Pressable
-                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                            disabled={loading}
-                            onPress={handleConfirmSeed}
-                            accessibilityRole="button"
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={colors.text.inverse} />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
-                            )}
-                        </Pressable>
-
-                        <Pressable
                             style={styles.backBtn}
                             onPress={() => {
                                 updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
@@ -3047,6 +3108,21 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-owner">
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
+                        disabled={loading}
+                        onPress={handleConfirmSeed}
+                        accessibilityRole="button"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>{t("Let's Begin! 🚀")}</Text>
+                        )}
+                    </Pressable>
+                </StepFooter>
             </SafeAreaView>
         );
     }
@@ -3065,7 +3141,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">{createStepName ? t('Join {name}', { name: createStepName }) : t('🎟️ Join with an invite')}</Text>
@@ -3196,17 +3272,6 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        <Pressable
-                            style={styles.primaryBtn}
-                            onPress={handleCreate}
-                            disabled={loading}
-                            accessibilityRole="button"
-                            accessibilityLabel={loading ? t('Joining network...') : t('Next')}
-                            accessibilityState={{ disabled: loading, busy: loading }}
-                        >
-                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
-                        </Pressable>
-
                         {/* Restore Existing Identity CTA for returning members (#98). This and Back to Home wait while
                             Next is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                         <View style={styles.restorePromptBox}>
@@ -3243,6 +3308,19 @@ export default function WelcomeScreen() {
                         </Text>
                     </View>
                 </KeyboardAwareScrollView>
+                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
+                <StepFooter testID="step-footer-invite" onHeight={setStepFooterHeight}>
+                    <Pressable
+                        style={[styles.primaryBtn, styles.footerBtn]}
+                        onPress={handleCreate}
+                        disabled={loading}
+                        accessibilityRole="button"
+                        accessibilityLabel={loading ? t('Joining network...') : t('Next')}
+                        accessibilityState={{ disabled: loading, busy: loading }}
+                    >
+                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
+                    </Pressable>
+                </StepFooter>
                 {Scanner && (
                     <Scanner
                         hint={t('Point the camera at the QR code on your invite.')}
@@ -4127,7 +4205,7 @@ export default function WelcomeScreen() {
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
-                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
+                    <WelcomeDoors door={globalDoor} joinWithInvite={openInviteStep} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
@@ -4305,6 +4383,8 @@ const styles = StyleSheet.create({
 
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
+    // In a step's footer (components/welcome/StepFooter.tsx): the footer's own padding spaces it.
+    footerBtn: { marginTop: 0 },
     disabledBtn: { backgroundColor: dark ? palette.neutral700 : palette.slate300 },
     // Identity-overwrite guard (confirm-replace screen)
     emphasis: { fontWeight: '700', color: colors.text.heading },

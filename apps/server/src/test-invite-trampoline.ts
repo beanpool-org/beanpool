@@ -65,16 +65,21 @@ async function main() {
     const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/605.1';
     const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
     const referrerOf = (href: string) => decodeURIComponent(new URL(href).searchParams.get('referrer') || '');
+    // Android's main button is an `intent://` link: the app with the invite when installed, else its Play fallback.
+    const fallbackOf = (href: string) => decodeURIComponent(/;S\.browser_fallback_url=([^;]*);/.exec(href)?.[1] ?? '');
+    const MULLUM = encodeURIComponent('https://mullum.beanpool.org');
     {
         const withPost = runTrampoline(`?invite=INV-AB12-CD34&post=${POST}`, ANDROID);
-        assert(referrerOf(withPost.el('installBtn').href) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the Play referrer carries the listing after the server');
-        assert(withPost.el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${encodeURIComponent('https://mullum.beanpool.org')}&post=${POST}`, 'trampoline: Open BeanPool carries the listing');
+        assert(referrerOf(fallbackOf(withPost.el('installBtn').href)) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the Play referrer carries the listing after the server');
+        assert(referrerOf(withPost.el('playBtn').href) === `invite=INV-AB12-CD34&server=https://mullum.beanpool.org&post=${POST}`, 'trampoline: the plain Google Play link carries the listing');
+        assert(withPost.el('installBtn').href.startsWith(`intent://welcome?invite=INV-AB12-CD34&server=${MULLUM}&post=${POST}#Intent;`), 'trampoline: the app\'s link carries the listing');
         withPost.click('copyBtn');
         assert(withPost.copied[0] === `https://mullum.beanpool.org/?invite=INV-AB12-CD34&post=${POST}`, 'trampoline: Copy code copies the invite link with the listing');
         withPost.click('proceedWeb');
         assert(withPost.loc.href === `/app?invite=INV-AB12-CD34&webjoin=1&post=${POST}`, 'trampoline: Continue in browser carries the listing');
 
         const ios = runTrampoline(`?invite=INV-AB12-CD34&post=${POST}`, IPHONE);
+        assert(ios.el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${MULLUM}&post=${POST}`, 'trampoline: Open BeanPool carries the listing');
         ios.click('installBtn');
         assert(ios.copied[0] === `https://mullum.beanpool.org/?invite=INV-AB12-CD34&post=${POST}`, 'trampoline: on iOS the copied link carries the listing');
 
@@ -82,8 +87,8 @@ async function main() {
         assert(referrerOf(desktop.el('androidStore').href).endsWith(`&post=${POST}`), 'trampoline: the desktop page\'s Google Play link carries the listing');
 
         const plain = runTrampoline('?invite=INV-AB12-CD34', ANDROID);
-        assert(referrerOf(plain.el('installBtn').href) === 'invite=INV-AB12-CD34&server=https://mullum.beanpool.org', 'trampoline: with no listing the Play referrer is as it always was');
-        assert(plain.el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${encodeURIComponent('https://mullum.beanpool.org')}`, 'trampoline: with no listing Open BeanPool is as it always was');
+        assert(referrerOf(fallbackOf(plain.el('installBtn').href)) === 'invite=INV-AB12-CD34&server=https://mullum.beanpool.org', 'trampoline: with no listing the Play referrer is as it always was');
+        assert(runTrampoline('?invite=INV-AB12-CD34', IPHONE).el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${MULLUM}`, 'trampoline: with no listing Open BeanPool is as it always was');
         plain.click('copyBtn');
         assert(plain.copied[0] === 'https://mullum.beanpool.org/?invite=INV-AB12-CD34', 'trampoline: with no listing the copied link is as it always was');
         plain.click('proceedWeb');
@@ -93,9 +98,31 @@ async function main() {
             const r = runTrampoline(`?invite=INV-AB12-CD34&post=${bad}`, ANDROID);
             r.click('copyBtn');
             r.click('proceedWeb');
-            assert(!referrerOf(r.el('installBtn').href).includes('post=') && !r.el('openAppBtn').href.includes('post=') && !r.copied[0].includes('post=') && !r.loc.href.includes('post='),
+            const rIos = runTrampoline(`?invite=INV-AB12-CD34&post=${bad}`, IPHONE);
+            assert(!r.el('installBtn').href.includes('post') && !referrerOf(r.el('playBtn').href).includes('post=') && !rIos.el('openAppBtn').href.includes('post=') && !r.copied[0].includes('post=') && !r.loc.href.includes('post='),
                 `trampoline: a post that is not an id (${bad.slice(0, 20)}) is left out everywhere`);
         }
+    }
+
+    // 1c. An installed app on Android (Damo, 9 Nov): a camera scan that the phone hands to the browser instead of the app
+    // reaches this page, and its Play page offers only "Open", which starts the app with no link and no referrer: the invite
+    // was lost, and the member had to scan it again. The main button now opens the app itself with the invite, and falls
+    // back to the Play link (its referrer intact) only where the app isn't installed. Every way off the page copies the link.
+    {
+        const and = runTrampoline('?invite=INV-AB12-CD34', ANDROID);
+        const href = and.el('installBtn').href as string;
+        assert(href.startsWith(`intent://welcome?invite=INV-AB12-CD34&server=${MULLUM}#Intent;`), 'trampoline (Android): the main button opens the app\'s own invite link');
+        assert(/;scheme=beanpool;/.test(href) && /;package=org\.beanpool\.pillar;/.test(href) && href.endsWith(';end'), 'trampoline (Android): the link names the app\'s scheme and package, so only BeanPool opens it');
+        assert(fallbackOf(href).startsWith('https://play.google.com/store/apps/details?id=org.beanpool.pillar&referrer='), 'trampoline (Android): without the app, the link falls back to Google Play');
+        assert(and.el('installBtn').textContent === 'Open your invite in BeanPool', 'trampoline (Android): the main button says it opens the invite in BeanPool');
+        and.click('installBtn');
+        assert(and.copied[0] === 'https://mullum.beanpool.org/?invite=INV-AB12-CD34', 'trampoline (Android): the main button copies the invite link too');
+        assert(and.el('playBtn').style.display === 'block', 'trampoline (Android): the plain Google Play link is still there');
+        and.click('playBtn');
+        assert(and.copied[1] === 'https://mullum.beanpool.org/?invite=INV-AB12-CD34', 'trampoline (Android): the Google Play link copies the invite link, for the app\'s Paste after "Open"');
+        assert(and.el('openAppBtn').style.display !== 'block', 'trampoline (Android): no second Open button, the main one opens the app');
+        const desk = runTrampoline('?invite=INV-AB12-CD34', 'Mozilla/5.0 (X11; Linux x86_64)');
+        assert(!desk.el('installBtn').href.startsWith('intent:') && desk.el('playBtn').style.display !== 'block', 'trampoline (desktop): no app link and no extra store button');
     }
 
     // 2. Integration HTTP tests with running HTTPS server

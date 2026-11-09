@@ -4,9 +4,16 @@
 //
 // Its job is deliberately narrow: get the user to install the native app and
 // carry the invite code across the install, WITHOUT joining/redeeming here.
-//   - Android: sends them to the Play Store with the code packed into the
-//     `referrer` param, which the app reads on first launch (see
-//     apps/native/app/welcome.tsx — the Install Referrer consumer).
+//   - Android: one button that opens the app WITH the invite when it is
+//     installed (an `intent://` link to `beanpool://welcome?invite=…&server=…`
+//     for org.beanpool.pillar), and otherwise falls back to the Play Store with
+//     the code packed into the `referrer` param, which the app reads on first
+//     launch (see apps/native/app/welcome.tsx — the Install Referrer consumer).
+//     An installed app reaches this page when the link didn't hand over (App
+//     Links not verified on that phone, a camera's own browser): its Play page
+//     only offers "Open", which starts the app with no link and no referrer, so
+//     the invite was lost (Damo, 9 Nov). Every button also copies the link, so
+//     the app's Paste offer has it whichever way the member gets there.
 //   - iOS: copies the code to the clipboard on tap (no Play-referrer equivalent
 //     on iOS) so the app can offer paste on first launch; the code is also shown
 //     with a Copy button as the floor that always works.
@@ -127,6 +134,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
       <a class="cta secondary" id="iosStore" href="#" rel="noopener">App Store</a>
       <a class="cta secondary" id="androidStore" href="#" rel="noopener">Google Play</a>
     </div>
+    <a class="cta secondary" id="playBtn" href="#" rel="noopener" style="display:none;">Get BeanPool on Google Play</a>
     <a class="cta secondary" id="openAppBtn" href="#" style="margin-top:10px; display:none;">Already have the app? Open BeanPool →</a>
     <div class="desktop-note" id="desktopNote">Open this invite link on your phone to install the app.</div>
   </div>
@@ -170,6 +178,10 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   var APP_STORE = ${JSON.stringify(APP_STORE_URL)};
   var PLAY_BASE = ${JSON.stringify(PLAY_BASE_URL)};
   function playUrl(){ return PLAY_BASE + '&referrer=' + encodeURIComponent('invite=' + code + '&server=' + origin + (post ? '&post=' + post : '')); }
+  // The app's own link for this invite (app/welcome.tsx reads invite, server and post from it).
+  var appQuery = 'welcome?invite=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin) + (post ? '&post=' + post : '');
+  // Android: the app itself when installed, with the invite; when it isn't, the browser goes to the Play link with its referrer.
+  function androidAppUrl(){ return 'intent://' + appQuery + '#Intent;scheme=beanpool;package=org.beanpool.pillar;S.browser_fallback_url=' + encodeURIComponent(playUrl()) + ';end'; }
 
   var codeEl = document.getElementById('code');
   codeEl.textContent = code || '—';
@@ -193,11 +205,11 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
     });
   });
 
-  // Open App button for existing installs
+  // Open App button for existing installs (iPhone; on Android the main button opens the app itself)
   var openAppBtn = document.getElementById('openAppBtn');
-  if (isAndroid || isIOS) {
+  if (isIOS) {
     openAppBtn.style.display = 'block';
-    openAppBtn.href = 'beanpool://welcome?invite=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin) + (post ? '&post=' + post : '');
+    openAppBtn.href = 'beanpool://' + appQuery;
     openAppBtn.addEventListener('click', function(){
       copyInvite().catch(function(){});
     });
@@ -215,10 +227,17 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   }
 
   if (isAndroid) {
-    installBtn.textContent = 'Get BeanPool on Google Play';
-    installBtn.href = playUrl();
-    step('1', 'Install BeanPool from Google Play');
-    step('2', 'Open the app', 'Your invite code comes across automatically — nothing to type.');
+    // App first: with BeanPool installed the invite opens in it; without, Google Play opens to install it, referrer and all.
+    installBtn.textContent = 'Open your invite in BeanPool';
+    installBtn.href = androidAppUrl();
+    installBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
+    // The plain store link, for a browser that can't open the app's link.
+    var playBtn = document.getElementById('playBtn');
+    playBtn.style.display = 'block';
+    playBtn.href = playUrl();
+    playBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
+    step('1', 'Tap Open your invite in BeanPool', 'If the app isn\\u2019t on this phone yet, Google Play opens to install it.');
+    step('2', 'Your invite comes across in the app', 'Nothing to type and nothing to scan again.');
     step('3', 'Choose a callsign and you\\u2019re in');
   } else if (isIOS) {
     installBtn.textContent = 'Get BeanPool on the App Store';

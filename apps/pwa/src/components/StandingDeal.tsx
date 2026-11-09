@@ -16,7 +16,7 @@ export interface StandingChoice { periods: number | null; startsAt: number }
 
 const RADIO = 'flex items-center gap-2 min-h-[44px] text-sm text-nature-900 dark:text-white';
 const STEP = 'w-11 h-11 shrink-0 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100 font-bold disabled:opacity-40';
-const QUIET = 'flex-1 min-h-[44px] py-2 px-2 rounded-lg border border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-200 font-bold text-sm hover:bg-nature-100 dark:hover:bg-nature-800 disabled:opacity-60 break-words';
+const QUIET = 'flex-1 min-h-[44px] py-2 px-2 rounded-lg border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-200 font-bold text-sm hover:bg-nature-100 dark:hover:bg-nature-800 disabled:opacity-60 break-words';
 
 /**
  * Take this up? (§2.2): how long (until stopped, or for k periods) and when it starts (today, or up to 30 days ahead), what is
@@ -113,7 +113,7 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
         <div data-testid={`standing-panel-${tx.id}`} data-phase={p.phase} data-role={p.role}
             className={`mt-4 rounded-xl p-4 border flex flex-col gap-2 ${p.warning
                 ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700'
-                : 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'}`}>
+                : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'}`}>
             <p className="font-bold text-sm text-nature-900 dark:text-white break-words">{p.title}</p>
             <p data-testid="standing-status" role={p.warning ? 'alert' : undefined}
                 className={`text-sm break-words ${p.warning ? 'font-bold text-amber-800 dark:text-amber-300' : 'text-nature-700 dark:text-nature-300'}`}>

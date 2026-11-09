@@ -113,7 +113,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
                 </View>
             </View>
             <View style={s.note}>
-                <Text style={s.noteBold} testID="standing-held-now">{l.heldNow}</Text>
+                <Text style={s.noteBold} testID="standing-held-now">{l.paidNow}</Text>
                 <Text style={s.noteText}>{l.howItRuns}</Text>
                 <Text style={s.noteText}>{l.shortAhead}</Text>
             </View>
@@ -132,19 +132,19 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
 
 /**
  * One standing deal still running, for one of its sides (`actingAs`: the member, or the enterprise they keep): since when and
- * for how much, where it is now (the payer's short-funds banner names the end of the week of grace), and Hold back, Stop and
- * Message where core says so. Stop asks first (§1.3). A period held back is also a plain held deal, whose Release and Cancel
- * hold the screen draws as for any deal.
+ * for how much, where it is now (the payer's short-funds banner names the day the grace ends), and Stop and Message where
+ * core says so. Stop asks first, in core's words for this side and phase. Nothing of a standing deal is held, so it has no
+ * Release, Cancel or Hold back (DESIGN-standing-deals-upfront-fable §3).
  */
-export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessage, messageLabel }: {
+export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLabel }: {
     tx: StandingDealRow; actingAs: string; busy: boolean;
-    onStop: () => void; onHoldBack: () => void; onMessage?: () => void; messageLabel?: string;
+    onStop: () => void; onMessage?: () => void; messageLabel?: string;
 }) {
     const s = useStandingStyles();
     const p = standingPanel(tx, actingAs, day);
     if (!p) return null;
     const ask = () => {
-        const c = standingStopConfirm(p.unit, p.phase);
+        const c = standingStopConfirm(tx, actingAs, day);
         Alert.alert(c.title, c.body, [{ text: c.no, style: 'cancel' }, { text: c.yes, style: 'destructive', onPress: onStop }]);
     };
     return (
@@ -153,13 +153,8 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
             <Text testID="standing-status" accessibilityRole={p.warning ? 'alert' : undefined} style={[s.panelStatus, p.warning && s.panelWarn]}>{p.status}</Text>
             {!!p.lastLine && <Text style={s.small}>{p.lastLine}</Text>}
             {!!p.periodOf && <Text style={s.small}>{p.periodOf}</Text>}
-            {(p.holdBack || p.stop || !!onMessage) && (
+            {(p.stop || !!onMessage) && (
                 <View style={[s.buttons, { marginTop: 4 }]}>
-                    {p.holdBack && (
-                        <Pressable accessibilityRole="button" testID="standing-hold-back" style={s.quiet} disabled={busy} onPress={onHoldBack}>
-                            <Text style={s.quietText}>{p.holdBackLabel}</Text>
-                        </Pressable>
-                    )}
                     {p.stop && (
                         <Pressable accessibilityRole="button" testID="standing-stop" style={s.quiet} disabled={busy} onPress={ask}>
                             <Text style={s.quietText}>{p.stopLabel}</Text>

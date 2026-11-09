@@ -74,7 +74,7 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     treasuryApprove, treasuryReject, treasuryComplete,
-    signStandingStart, stopStandingDeal, holdBackStandingDeal,
+    signStandingStart, stopStandingDeal,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -1840,9 +1840,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const standingUnit = standingUnitForListing(selectedPost.priceType, selectedPost.credits);
         const standingOffer = !!standingUnit && selectedPost.type === 'offer' && !selectedPost.lendable;
         const standingNeed = !!standingUnit && selectedPost.type === 'need';
-        // While one runs by itself its period is no deal to release (the node releases it at the period's end): its panel shows
-        // instead of the held one. One held back is a plain held deal again, and shows both.
-        const standingRunning = deals.standing.some(m => m.tx.standingPhase !== 'held_back');
+        // A standing deal running on it shows its panel: nothing of it is held, so it is never a deal to release.
+        const standingRunning = deals.standing.length > 0;
         const standingStep = async (step: () => Promise<unknown>) => {
             setAccepting(true);
             try {
@@ -2159,14 +2158,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      <p data-testid="pinned-deal-over" className="mt-4 text-sm font-semibold text-center text-nature-600 dark:text-nature-400">{pinnedOver}</p>
                  )}
 
-                 {/* A standing deal running on it, one panel for each the reader stands on (§2.2): Hold back, Stop and Message. */}
+                 {/* A standing deal running on it, one panel for each the reader stands on (design §3): Stop and Message. */}
                  {deals.standing.map(m => {
                      const other = m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerPublicKey : m.tx.buyerPublicKey;
                      const otherName = (m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerCallsign : m.tx.buyerCallsign) || t('Peer');
                      return (
                          <StandingPanel key={m.tx.id} tx={m.tx} actingAs={m.actingAs} busy={accepting}
                              onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
-                             onHoldBack={() => standingStep(() => holdBackStandingDeal(m.tx.standingId!))}
                              onMessage={m.asKeeper ? undefined : () => messageRow(other)}
                              messageLabel={t('Message {name}', { name: otherName })} />
                      );

@@ -2,7 +2,8 @@
  * "About this listing" in a chat, on the web (@beanpool/core chat-about.ts; Marty, 9 Nov): Message on a listing leaves a chip
  * above the composer, in a new thread and in one already there; the next line carries the listing sealed beside its words,
  * and the card shows in the bubble, for the sender and for the reader, with real crypto against a node that stores what it
- * is sent. A listing the reader can't see is said so and opens nothing; a line from before is unchanged.
+ * is sent. A listing the reader can't see is said so and opens nothing; a line from before is unchanged. A deleted line
+ * and a line whose words did not open show no card; a refused send keeps its listing; each card is opened once per load.
  */
 import { render, screen, act, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -20,6 +21,11 @@ import { person } from '../lib/group-chat-fake-node.test-support';
 
 window.HTMLElement.prototype.scrollIntoView = (() => {}) as never;
 
+// Pass-through: the real opener runs; the spy only counts how often a card is opened.
+vi.mock('@beanpool/core', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@beanpool/core')>();
+    return { ...actual, chatAboutOfLine: vi.fn(actual.chatAboutOfLine) };
+});
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), socketIsAlive: vi.fn(() => true) }));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false), blockUser: vi.fn(), unblockUser: vi.fn(), getBlockedUsers: vi.fn(() => []), onBlocklistUpdated: vi.fn(() => () => {}),
@@ -72,6 +78,8 @@ async function openDm() {
     return { ...page, composer: composer as HTMLTextAreaElement };
 }
 const navigate = vi.fn();
+const pressSend = async (composer: HTMLElement) => { await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); }); };
+const limit = () => Object.assign(new Error('You can send 5 messages a day for now.'), { status: 429, code: 'probation_limit' });
 const typed = async (composer: HTMLElement, text: string) => {
     fireEvent.change(composer, { target: { value: text } });
     await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
@@ -218,5 +226,106 @@ describe('the card in a bubble', () => {
         expect(await screen.findByText('Something else')).toBeTruthy();
         expect(screen.queryByTestId('chat-about-card')).toBeNull();
         expect(screen.queryByTestId('chat-about-gone')).toBeNull();
+    });
+});
+
+describe('a deleted line', () => {
+    it('shows no card, though an older row on the node still holds the sealed reference', async () => {
+        const row = fromBen('Is this still available?', EGGS);
+        // A "Delete for everyone" from before the node dropped the reference with the line: the marker words, the tombstone keys, and `about` still there.
+        node.rows = [{
+            ...row, type: 'removed', ciphertext: btoa('This message was deleted'), nonce: 'plaintext-v1',
+            metadata: JSON.stringify({ ...JSON.parse(row.metadata!), removed: true, removedBy: ben.publicKey, removedAt: stamp() }),
+        }];
+        await openDm();
+        expect(await screen.findByText('This message was deleted')).toBeTruthy();
+        expect(screen.queryByTestId('chat-about-card')).toBeNull();
+        expect(screen.queryByTestId('chat-about-gone')).toBeNull();
+        expect(screen.queryByText('Fresh eggs')).toBeNull();
+    });
+});
+
+describe('a send the node refuses', () => {
+    it('puts the listing back with the words, so a Send from the composer still goes with it', async () => {
+        chatAboutDrafts.set(DM, aboutOfPost(EGGS));
+        const { composer } = await openDm();
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
+        await typed(composer, 'Is this still available?');
+        await screen.findByText('You can send 5 messages a day for now.');
+        expect(composer.value).toBe('Is this still available?');
+        expect(screen.getByTestId('chat-about-chip').textContent).toContain('About: Fresh eggs · 6 Beans');
+
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await pressSend(composer);
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        const [, again] = vi.mocked(sendMessageApi).mock.calls as unknown as string[][];
+        const [conversationId, , , , , , metadata, id] = again;
+        expect(chatAboutOfLine({ myEdPrivHex: ben.privateKey, peerEdPubHex: ana.publicKey }, { conversationId, senderPubHex: ana.publicKey, messageId: id, metadata }))
+            .toEqual({ postId: 'post-eggs-1', title: 'Fresh eggs', kind: 'offer' });
+        // The refused copy is replaced by this one, and the chip is spent once more.
+        expect(screen.queryByTestId('chat-about-chip')).toBeNull();
+        expect(chatAboutDrafts.get(DM)).toBeNull();
+        expect(screen.getAllByTestId('chat-about-card')).toHaveLength(1);
+    });
+
+    it('its Retry sends the same line under the same id with the listing, and the chip does not stay for the next line', async () => {
+        chatAboutDrafts.set(DM, aboutOfPost(EGGS));
+        const { composer } = await openDm();
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
+        await typed(composer, 'Is this still available?');
+        await screen.findByText('You can send 5 messages a day for now.');
+        expect(screen.getByTestId('chat-about-chip')).toBeTruthy();
+
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        const [first, again] = vi.mocked(sendMessageApi).mock.calls as unknown as string[][];
+        expect(again[7]).toBe(first[7]);
+        expect(Object.keys(JSON.parse(again[6]))).toContain('about');
+        expect(screen.queryByTestId('chat-about-chip')).toBeNull();
+        expect(chatAboutDrafts.get(DM)).toBeNull();
+        expect(composer.value).toBe('');
+
+        await typed(composer, 'And the price?');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(3));
+        const third = vi.mocked(sendMessageApi).mock.calls[2][6];
+        expect(third === undefined || !('about' in JSON.parse(third as string))).toBe(true);
+    });
+
+    it('words typed since stay as they are, no listing lands under them, and the line\'s Retry still carries its own', async () => {
+        chatAboutDrafts.set(DM, aboutOfPost(EGGS));
+        const { composer } = await openDm();
+        let refuse!: (e: Error) => void;
+        vi.mocked(sendMessageApi).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
+        await typed(composer, 'Is this still available?');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        fireEvent.change(composer, { target: { value: 'Never mind the colour' } });
+        await act(async () => { refuse(limit()); });
+        await screen.findByTestId('chat-line-failed');
+        expect(composer.value).toBe('Never mind the colour');
+        expect(screen.queryByTestId('chat-about-chip')).toBeNull();
+
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        const [first, again] = vi.mocked(sendMessageApi).mock.calls as unknown as string[][];
+        expect(again[7]).toBe(first[7]);
+        expect(Object.keys(JSON.parse(again[6]))).toContain('about');
+        expect(composer.value).toBe('Never mind the colour');
+    });
+});
+
+describe('opening the cards', () => {
+    it('opens each card once per load, not on every key the member types', async () => {
+        node.rows = [fromBen('Is this still available?', EGGS), fromBen('And the second dozen?', EGGS), fromBen('Hello Ana')];
+        const { composer } = await openDm();
+        expect(await screen.findAllByTestId('chat-about-card')).toHaveLength(2);
+        await act(async () => {});
+        const opened = vi.mocked(chatAboutOfLine).mock.calls.length;
+        expect(opened).toBeGreaterThan(0);
+        for (const value of ['I', 'I w', 'I wo', 'I wou', 'I woul', 'I would']) fireEvent.change(composer, { target: { value } });
+        await act(async () => {});
+        expect(vi.mocked(chatAboutOfLine).mock.calls.length).toBe(opened);
+        expect(screen.getAllByTestId('chat-about-card')).toHaveLength(2);
     });
 });

@@ -10,9 +10,9 @@
 // `metadata.removedBy`: the author's own key reads "This message was deleted", anyone else's "Removed by a
 // convenor"; `metadata.accountDeleted` marks the third, which reads "This message was deleted" in an event or
 // enterprise chat too, where every other tombstone is the host's or a keeper's removal. Everything hung off the
-// message goes with it — reactions, mentions, the reply it quoted, and any attachment, whose row is hard-deleted with a
-// tombstone (a standby copies chat photos, a plain table: engine/replication-manifest.ts message_attachments, gap G4), so
-// the standby deletes the row and its object too.
+// message goes with it — reactions, mentions, the reply it quoted, the listing it was about (the sealed `about` part), and
+// any attachment, whose row is hard-deleted with a tombstone (a standby copies chat photos, a plain table:
+// engine/replication-manifest.ts message_attachments, gap G4), so the standby deletes the row and its object too.
 
 import type Database from 'better-sqlite3';
 import { db, afterTransactionCommit, writeTombstone } from '../db/db.js';
@@ -55,6 +55,8 @@ export function tombstoneFields(row: any, removedBy: string, markerText: string,
     delete metaObj.mentions;
     delete metaObj.reactions;
     delete metaObj.replyToId;
+    // The listing a line was about, sealed beside its words (core chat-about.ts DM_ABOUT_KEY): it goes with the line too.
+    delete metaObj.about;
     metaObj.removed = true;
     metaObj.removedBy = removedBy;
     const removedAt = new Date().toISOString();

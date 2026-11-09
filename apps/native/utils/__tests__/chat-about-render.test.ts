@@ -71,7 +71,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 
     it('shows the listing\'s own kind, title and price, and a tap opens the listing', () => {
         const opened: string[] = [];
-        const dom = draw(createElement(ChatAboutCard, { styles, about, live: { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
+        const dom = draw(createElement(ChatAboutCard, { about, live: { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
         const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
         expect(card.textContent).toBe('OfferFresh eggs, a dozen8 Beans');
         // Named by what it shows (WCAG 2.5.3: no label of its own to differ from the visible words); the sentence is its hint.
@@ -82,7 +82,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
     });
 
     it('holds at the floor: at least 44 dp to hit, no line limit anywhere, a long title wraps whole', () => {
-        const dom = draw(createElement(ChatAboutCard, { styles, about: { ...about, title: LONG }, live: undefined, isMe: true, onOpen: () => {} }));
+        const dom = draw(createElement(ChatAboutCard, { about: { ...about, title: LONG }, live: undefined, isMe: true, onOpen: () => {} }));
         const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
         expect(Number(card.getAttribute('data-min-height'))).toBeGreaterThanOrEqual(44);
         expect(dom.querySelectorAll('[data-lines]').length).toBe(0);
@@ -92,7 +92,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 
     it('takes its colours from the chat tokens: ink and ground differ, in my bubble and in theirs', () => {
         for (const isMe of [true, false]) {
-            const dom = draw(createElement(ChatAboutCard, { styles, about, live: undefined, isMe, onOpen: () => {} }));
+            const dom = draw(createElement(ChatAboutCard, { about, live: undefined, isMe, onOpen: () => {} }));
             const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
             expect(card.getAttribute('data-ground')).toBe(isMe ? styles.quoteMe.backgroundColor : styles.quoteOther.backgroundColor);
             const title = Array.from(dom.querySelectorAll('span')).find((s) => s.textContent === 'Fresh eggs')!;
@@ -104,7 +104,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 
     it('says "This listing is no longer up." for one this reader can\'t see, with no title, and opens nothing', () => {
         const opened: string[] = [];
-        const dom = draw(createElement(ChatAboutCard, { styles, about, live: null, isMe: false, onOpen: (id: string) => opened.push(id) }));
+        const dom = draw(createElement(ChatAboutCard, { about, live: null, isMe: false, onOpen: (id: string) => opened.push(id) }));
         const gone = dom.querySelector('[data-testid="chat-about-gone"]') as HTMLElement;
         expect(gone.textContent).toBe('This listing is no longer up.');
         expect(dom.textContent).not.toContain('Fresh eggs');
@@ -117,7 +117,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
         const item = { id: 'm1', senderId: 'peer', text: 'Is this still available?', type: 'text', timestamp: '12:14' } as any;
         const dom = draw(createElement(ChatBubble, {
             item, isMe: false, styles, kind: 'dm',
-            about: createElement(ChatAboutCard, { styles, about, live: undefined, isMe: false, onOpen: () => {} }),
+            about: createElement(ChatAboutCard, { about, live: undefined, isMe: false, onOpen: () => {} }),
         } as any));
         const html = dom.innerHTML;
         expect(html.indexOf('Fresh eggs')).toBeGreaterThan(-1);
@@ -126,17 +126,16 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 });
 
 describe.each([['light' as const], ['dark' as const]])('the chip above the composer (%s, 320 dp, text 1.3x)', (mode) => {
-    const styles = stylesFor(mode);
     beforeEach(() => { theme.colors = mode === 'light' ? lightColors : darkColors; });
 
     it('is not there until a listing is waiting', () => {
-        const dom = draw(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }));
+        const dom = draw(createElement(ChatAboutBanner, { conversationId: 'c1' }));
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).toBeNull();
     });
 
     it('reads "About: title · price", wraps whole, and the ✕ is at least 44 dp', () => {
         chatAboutDrafts.set('c1', aboutOfPost({ ...EGGS, title: LONG }));
-        const dom = draw(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }));
+        const dom = draw(createElement(ChatAboutBanner, { conversationId: 'c1' }));
         const chip = dom.querySelector('[data-testid="chat-about-chip"]') as HTMLElement;
         expect(chip.textContent).toBe(`About: ${LONG.slice(0, 120)} · 6 Beans`);
         expect(dom.querySelectorAll('[data-lines]').length).toBe(0);
@@ -148,8 +147,8 @@ describe.each([['light' as const], ['dark' as const]])('the chip above the compo
 
     it('goes with the ✕, and stays while the screen is redrawn (typing)', () => {
         chatAboutDrafts.set('c1', aboutOfPost(EGGS));
-        const dom = draw(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }));
-        act(() => root!.render(createElement(ChatAboutBanner, { styles, conversationId: 'c1' }) as any));
+        const dom = draw(createElement(ChatAboutBanner, { conversationId: 'c1' }));
+        act(() => root!.render(createElement(ChatAboutBanner, { conversationId: 'c1' }) as any));
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).not.toBeNull();
         act(() => { (dom.querySelector('[data-testid="chat-about-chip-drop"]') as HTMLElement).click(); });
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).toBeNull();
@@ -158,7 +157,7 @@ describe.each([['light' as const], ['dark' as const]])('the chip above the compo
 
     it('is one chat\'s: another conversation shows none', () => {
         chatAboutDrafts.set('c1', aboutOfPost(EGGS));
-        const dom = draw(createElement(ChatAboutBanner, { styles, conversationId: 'c2' }));
+        const dom = draw(createElement(ChatAboutBanner, { conversationId: 'c2' }));
         expect(dom.querySelector('[data-testid="chat-about-chip"]')).toBeNull();
     });
 });

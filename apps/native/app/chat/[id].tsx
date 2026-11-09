@@ -1407,7 +1407,7 @@ function ChatScreen({ id }: { id: string }) {
                 editing={editingMessage?.id === item.id}
                 quote={quote}
                 about={item.about ? (
-                    <ChatAboutCard styles={chat} about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
+                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
                 ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
@@ -1696,7 +1696,7 @@ function ChatScreen({ id }: { id: string }) {
                     />
                 )}
 
-                {!editingMessage && <ChatAboutBanner styles={chat} conversationId={String(id)} />}
+                {!editingMessage && <ChatAboutBanner conversationId={String(id)} />}
 
                 {replyToMessage && !editingMessage && (() => {
                     // What is being answered, as the thread judged it (dmQuoteFor).

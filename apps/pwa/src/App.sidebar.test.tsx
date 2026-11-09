@@ -479,19 +479,21 @@ describe('the whole app: one set of controls at every width', () => {
         standing.isMember = false;
         windowOf(1280);
         await landed();
+        // Invite shows until the node says this key is no member (two membership reads and a register): wait for that.
+        await waitFor(() => expect(within(sidebar()).queryByTestId('sidebar-invite')).toBeNull());
         expect(screen.queryByTestId('header-pill')).toBeNull();
         expect(within(sidebar()).getByTestId('sidebar-help')).toBeInTheDocument();
         expect(cog()).toBeInTheDocument();
-        expect(within(sidebar()).queryByTestId('sidebar-invite')).toBeNull();
     });
 
     it('a guest of the community, at 375 px: the pill has "?" and Settings, no Invite', async () => {
         standing.isMember = false;
         windowOf(375);
         await landed();
+        // As at 1280 px: Invite goes once the node's "no member" answer lands.
+        await waitFor(() => expect(within(screen.getByTestId('header-pill')).queryByTestId('header-invite')).toBeNull());
         const pill = within(screen.getByTestId('header-pill'));
         expect(pill.getByTestId('header-help')).toBeInTheDocument();
         expect(pill.getByTestId('header-settings')).toBeInTheDocument();
-        expect(pill.queryByTestId('header-invite')).toBeNull();
     });
 });

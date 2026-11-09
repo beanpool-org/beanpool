@@ -1077,6 +1077,9 @@ async function main(): Promise<void> {
             'POST /api/join', 'POST /api/join/work', 'POST /api/join/sso-nonce', 'POST /api/join/knock',
             // Taking back its own open knock (front doors S1): the route finds only the signer's own.
             'POST /api/join/knock/cancel',
+            // Tell me when they answer (web push W1), on its own open knock's waiting page: the route keeps a browser only for a
+            // key members can still answer (403 no_open_request otherwise), and lets go of only the signer's own row.
+            'POST /api/web-push', 'DELETE /api/web-push',
             // A re-key ask (#1768), which the route itself refuses for any key with a row here, with its own plain sentence.
             'POST /api/member/re-enroll',
             // What anyone may do, signed or not.

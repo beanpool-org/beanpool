@@ -157,6 +157,7 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
+import { createWebPushRoutes } from './routes/web-push.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
@@ -379,6 +380,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
     '/api/global/demand',            // global node (Lounge L2): how many are waiting around a point, a fixed tile, nothing below 3
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
+    '/api/web-push/key',             // web push (W1): the node's public web push key, which a browser subscribes with (routes/web-push.ts)
     '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
 ]);
 /**
@@ -2009,6 +2011,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),
         createKnockRoutes(deps),
+        createWebPushRoutes(deps),
         createInviteAskRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
@@ -2211,6 +2214,8 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],
     [/^\/api\/join\/knocks\//, 4 * 1024],
+    // A browser's push subscription (routes/web-push.ts): an endpoint of at most 1,000 characters and two short keys.
+    [/^\/api\/web-push$/, 4 * 1024],
     // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).
     [/^\/api\/names\/copy$/, 1.5 * 1024 * 1024],
     // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it

@@ -143,6 +143,8 @@ import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { dispatchPushNotification } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { pushTtl } from '../services/web-push.js';
+import { dropAskerSubscriptionsOf } from './web-push-subscriptions.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -182,6 +184,14 @@ export const KNOCK_RULES = {
 
 /** How long an invite lasts: `redeemInvite` refuses one older than this. */
 const INVITE_LIFETIME_MS = 30 * DAY_MS;
+
+/**
+ * The TTL of the `join.answered` web push (DESIGN-web-notifications-fable.md §2.2): the seconds left on the invite, so a
+ * browser shut for a week still hears of a yes it can use, and none it can't; capped by the push services (28 days).
+ */
+export function joinAnsweredTtl(inviteExpiresAt: number, now = Date.now()): number {
+    return pushTtl((inviteExpiresAt - now) / 1000);
+}
 
 export type KnockStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 
@@ -418,6 +428,20 @@ export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAns
 }
 
 /**
+ * Whether this key may keep a browser for "Tell me when they answer" (routes/web-push.ts, DESIGN-web-notifications-fable.md
+ * §2.2): `open`, a request members can still answer; `held`, a decline still in its block, which the applicant is answered
+ * exactly as an open one (a no is never a message) and for which nothing is kept, since nothing will be sent; `none`,
+ * anything else (no request, lapsed, cancelled, approved, a member, a closed account or a replaced key).
+ */
+export function askerStanding(pubkey: string, now = Date.now()): 'open' | 'held' | 'none' {
+    const key = pubkey.toLowerCase();
+    if (knockerRefusal(key)) return 'none';
+    const standing = standingOf(latestKnock(key), now);
+    if (standing.kind !== 'waiting') return 'none';
+    return standing.row.status === 'pending' ? 'open' : 'held';
+}
+
+/**
  * The applicant takes back their request ("Cancel my request", POST /api/join/knock/cancel). An open one is closed:
  * members no longer see it, and the key may ask again `cancelBlockHours` after (standingOf). A declined one still in its
  * block is answered the same and left as it is: the applicant can't tell it from an open one (a decline is never a
@@ -431,6 +455,8 @@ export function cancelKnock(pubkey: string, now = Date.now()): { ok: true } | { 
         db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
             .run(at, at, standing.row.id);
     }
+    // The browser it asked to be told on goes with it (engine/web-push-subscriptions.ts).
+    dropAskerSubscriptionsOf(standing.row.pubkey);
     return { ok: true };
 }
 
@@ -709,7 +735,8 @@ export interface KnockNamesBinding {
  * floor and the vouch, which add up on their floor.
  */
 export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding, vouchAmount?: unknown): AnswerOutcome {
-    return db.transaction((): AnswerOutcome => {
+    let asker: string | null = null;
+    const outcome = db.transaction((): AnswerOutcome => {
         // Where only admins invite (config/door.ts), a member who is no owner or admin answers nothing, before the
         // knock is looked at: the invite below would be refused just the same.
         if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
@@ -729,10 +756,27 @@ export function approveKnock(id: string, member: string, now = Date.now(), names
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?
                     WHERE id = ? AND status = 'pending'`)
             .run(member, invite.createdAt, invite.code, invite.createdAt, id);
+        asker = found.row.pubkey;
         const expires = Date.parse(invite.createdAt) + INVITE_LIFETIME_MS;
         // The vouch the invite carries, only when it carries one: the answer says what was made, never what was asked.
         return { ok: true, knockId: id, status: 'approved', invite: { code: invite.code, expiresAt: iso(expires), ...(invite.vouchAmount ? { vouchAmount: invite.vouchAmount } : {}) } };
     })();
+    if (outcome.ok && outcome.status === 'approved' && asker) tellAskerAnswered(asker, member, Date.parse(outcome.invite.expiresAt));
+    return outcome;
+}
+
+/**
+ * After a yes is committed: `join.answered` to the browser the applicant asked to be told on, if any (W1; the phone's waiting
+ * mode is W4), with the fixed sentence and a signed notice, for as long as the invite works (joinAnsweredTtl). A decline
+ * sends nothing: it reads as waiting, by design. Never throws: the yes stands, and the waiting page reads it anyway.
+ */
+function tellAskerAnswered(asker: string, member: string, inviteExpiresAt: number): void {
+    try {
+        dispatchPushNotification([asker], member, 'Your request to join was answered', '', { door: 'ask' }, 'knocks', 'join.answered', false,
+            { ttlSeconds: joinAnsweredTtl(inviteExpiresAt) });
+    } catch (e) {
+        console.warn('[Knocks] Could not tell the applicant of the yes (it stands):', (e as Error)?.message || e);
+    }
 }
 
 /** "Not now": declined, by `member`. Nothing reaches the applicant; their status reads `pending` for the block. */
@@ -745,6 +789,8 @@ export function declineKnock(id: string, member: string, now = Date.now()): Answ
         const at = iso(now);
         db.prepare(`UPDATE join_requests SET status = 'declined', decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
             .run(member, at, at, id);
+        // Nothing will be sent to it now: the browser it asked to be told on goes (engine/web-push-subscriptions.ts).
+        dropAskerSubscriptionsOf(found.row.pubkey);
         return { ok: true, knockId: id, status: 'declined' };
     })();
 }
@@ -847,6 +893,14 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
                                       decided_by = CASE WHEN status = 'approved' THEN decided_by END, updated_at = ?
                                   WHERE id = ?`);
         for (const row of unread) clear.run(laterStamp(row.updated_at, now), row.id);
+        // "Tell me when they answer" (engine/web-push-subscriptions.ts): a browser whose key has neither a request members
+        // can still answer, nor a yes whose invite still works, nor joined is let go (a lapse; a replaced key too).
+        db.prepare(`DELETE FROM web_push_subscriptions WHERE kind = 'asker' AND (
+                        EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = web_push_subscriptions.public_key)
+                        OR (NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = web_push_subscriptions.public_key AND m.is_visitor = 0 AND m.status != 'pruned')
+                            AND NOT EXISTS (SELECT 1 FROM join_requests j WHERE j.pubkey = web_push_subscriptions.public_key
+                                AND ((j.status = 'pending' AND j.created_at >= ?) OR (j.status = 'approved' AND j.decided_at >= ?)))))`)
+            .run(openSince(now), iso(now - INVITE_LIFETIME_MS));
         return { cleared: unread.length + keepNewestPhotos(now), deleted: past.length };
     })();
 }

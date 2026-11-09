@@ -17,6 +17,7 @@ import {
     assertNotRunningStandingPeriod, checkStandingStart, insertStandingDeal, standingPeriodSettled, tellStanding,
     type StandingNotice, type StandingStart,
 } from './standing-deals.js';
+import type { KeptNoticePushOptions } from './kept-notices.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -36,7 +37,8 @@ type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbel
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind,
+    rehearsal?: boolean, options?: KeptNoticePushOptions) => void;
 
 export interface EscrowCallbacks {
     broadcast: BroadcastFn;

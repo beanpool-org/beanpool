@@ -8,7 +8,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
-import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
+import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -548,6 +548,17 @@ export interface KeptNotice {
 export async function getUnseenNotices(): Promise<KeptNotice[]> {
     const res = await request<{ notices?: KeptNotice[] }>('GET', '/api/notices?unseen=1');
     return Array.isArray(res?.notices) ? res.notices : [];
+}
+
+/** The bell: the signer's own push notices not yet opened, newest first (GET /api/notices/push?unseen=1). */
+export async function getBellNotices(): Promise<BellNotice[]> {
+    return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
+}
+
+/** Takes these of the signer's own notices off the bell (a tap on the row); the node ignores an id that is not theirs. */
+export async function markBellNoticesSeen(ids: string[]): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
 }
 
 /**

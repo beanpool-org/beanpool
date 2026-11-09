@@ -316,13 +316,17 @@ async function main() {
         `Dave's details open Decide too, without the case or who brought it (${daveDetails.status})`);
     const strangersRead = await signed('GET', `/api/notices/push/${toDave[0]?.data?.i}`, vi);
     assert(strangersRead.status === 404, `Vi can't read Dave's notice (${strangersRead.status})`);
-    // On the web, which has no push: a kept notice the web app reads when it opens.
+    // On the web, which has no push: a kept notice the web app reads when it opens. Dave's details read above is his phone's
+    // tap on the push (only a tap reads them), which opened it: the kept copy is marked seen with its row on the bell, so the
+    // web app doesn't show him the same alert again (web notifications W0, review of #3006). The full list still holds it.
     fresh();
-    const kept = await signed('GET', '/api/notices?unseen=1', dave);
+    const kept = await signed('GET', '/api/notices', dave);
     const keptNotice = (kept.body?.notices ?? []).find((n: any) => n.title === de.REMOVAL_VOTE_NOTICE_TITLE);
     assert(kept.status === 200 && !!keptNotice && keptNotice.body.includes(row(daveVote).closes_at.slice(0, 10))
         && !kept.text.includes(DAVE_CASE) && !kept.text.includes(ada.callsign),
         `Dave is told on the web too: a kept notice says a vote on his account runs until it closes, without the case (${kept.status} ${keptNotice?.body})`);
+    assert(daveDetails.body?.data?.noticeId === keptNotice?.id && typeof keptNotice?.seenAt === 'string',
+        `his push's details name that kept copy, and his phone's tap marked it seen (${daveDetails.body?.data?.noticeId} ${keptNotice?.id} ${keptNotice?.seenAt})`);
     const viKept = await signed('GET', '/api/notices?unseen=1', vi);
     assert(!(viKept.body?.notices ?? []).some((n: any) => n.title === de.REMOVAL_VOTE_NOTICE_TITLE), "no such notice is kept for a voter");
 
@@ -767,10 +771,14 @@ async function main() {
         && toKai[0].body === PUSH_NOTICE_KINDS['account.reply-taken-down'].body && expo.every(m => m.to === kai.token),
         `Kai gets one push, account.reply-taken-down, with its fixed words; nobody else is pushed (${expo.map(kindOf).join(', ')})`);
     fresh();
+    // The details read is his phone's tap: it marks the kept copy it names (`noticeId`, an id of his own and nothing else),
+    // so the full list holds it, seen (web notifications W0, review of #3006).
     const kaiPushDetails = await signed('GET', `/api/notices/push/${toKai[0]?.data?.i}`, kai);
-    const kaiKept = await signed('GET', '/api/notices?unseen=1', kai);
+    const kaiKept = await signed('GET', '/api/notices', kai);
     const keptTakeDown = (kaiKept.body?.notices ?? []).find((n: any) => n.title === de.REPLY_TAKEN_DOWN_NOTICE_TITLE);
-    assert(kaiPushDetails.status === 200 && kaiPushDetails.body?.data?.screen === 'decide' && Object.keys(kaiPushDetails.body.data).length === 1 && !!keptTakeDown
+    assert(kaiPushDetails.status === 200 && kaiPushDetails.body?.data?.screen === 'decide'
+        && Object.keys(kaiPushDetails.body.data).sort().join(',') === 'noticeId,screen' && kaiPushDetails.body.data.noticeId === keptTakeDown?.id
+        && typeof keptTakeDown?.seenAt === 'string'
         && ![TAKE_DOWN_WHY, abe.callsign, ...DOXX].some(w => kaiPushDetails.text.includes(w) || kaiKept.text.includes(w)),
         `its details open Decide, and the web app keeps him a notice; neither says why or who (${kaiPushDetails.status} ${keptTakeDown?.body})`);
     // Kai can't put it back: not by writing another, open or closed, nor can it be taken down twice.

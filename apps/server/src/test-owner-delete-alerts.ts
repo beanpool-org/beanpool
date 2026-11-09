@@ -294,17 +294,39 @@ async function main(): Promise<void> {
 
     // ── 2. sec.name widened ────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 2. sec.address —');
-    const notices = () => (db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>);
+    const rowsOf = (pk: string) => db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' AND recipient = ? ORDER BY rowid`)
+        .all(pk) as Array<{ title: string; body: string }>;
+    /**
+     * What the members were told, one row per telling. Every member told keeps their own copy, a phone or not (the bell,
+     * web notifications W0, DESIGN-web-notifications-fable.md §2.1 a), so the table holds one row per member per telling:
+     * the tellings are the owner's rows (their phone is the one buzzed, the only rows before the bell), and every other
+     * member told must hold exactly the same. One who doesn't (told twice, told what the owner wasn't, told without the
+     * owner) answers the whole table and one row more, saying so, which fails every count here (the row more: one member
+     * told once without the owner is a table of one). test-rename-main-name reads its tellings so.
+     */
+    const notices = () => {
+        const told = (db.prepare(`SELECT DISTINCT recipient FROM push_notices WHERE kind = 'community.notice'`).all() as Array<{ recipient: string }>)
+            .map((r) => r.recipient);
+        const owners = rowsOf(owner);
+        const alike = told.every((pk) => JSON.stringify(rowsOf(pk)) === JSON.stringify(owners));
+        if (alike) return owners;
+        const all = db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>;
+        return [...all, { title: 'the members were not told alike', body: '' }];
+    };
     let n0 = notices().length;
+    const plainA0 = rowsOf(plainA).length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'tunnel', hostname: null, status: 'live' } } as any);
     const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
     let n = lines('sec.address');
     const told2a = notices().slice(n0);
+    const toldPlainA = rowsOf(plainA).slice(plainA0);
     assert(claimed.status === 200 && n.length === 1 && /address was changed, by an owner/.test(n[0].detail) && (n[0].high === true || n[0].priority >= 4),
         `2a. a new name claimed over the live one: sec.address told once, high, "changed, by an owner" (${claimed.status} ${JSON.stringify(claimed.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
     assert(lines('sec.name').length === 0, `2a. not on sec.name, the hijack's row (${lines('sec.name').length})`);
     assert(told2a.length === 1 && told2a[0].body === "This community's address changed. Open the app to follow it.",
         `2c. the members get the critical announcement "This community's address changed. Open the app to follow it." (${JSON.stringify(told2a)})`);
+    assert(toldPlainA.length === 1 && toldPlainA[0].body === "This community's address changed. Open the app to follow it.",
+        `2c. a member with no phone has it on their bell too, once (${JSON.stringify(toldPlainA)})`);
     fresh();
     // A live direct name replaced keeps working (rename S1, services/address-notice.ts): the softer words, and the owners
     // told as before. test-rename-main-name has the rest.

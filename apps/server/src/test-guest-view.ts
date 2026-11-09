@@ -1471,7 +1471,7 @@ async function main(): Promise<void> {
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',
-            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
+            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push', 'GET /api/notices/push/:id', 'POST /api/notices/push/seen', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/init', 'POST /api/pair/offer', 'GET /api/pair/poll',
             'POST /api/pair/saved', 'POST /api/pair/send', 'POST /api/pair/transfer',
             'POST /api/peek', 'GET /api/peek/mine', 'POST /api/peek/stop',

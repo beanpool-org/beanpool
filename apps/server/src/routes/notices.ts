@@ -5,7 +5,19 @@
  *
  *   GET  /api/notices[?unseen=1]   → { notices: [{ id, title, body, severity, data, createdAt, seenAt }] }, oldest first
  *   POST /api/notices/seen  { ids } → { success: true, marked }
- *   GET  /api/notices/push/:id     → { id, kind, title, body, data, sentAt }: one push's details (engine/push-notices.ts)
+ *   GET  /api/notices/push/:id     → { id, kind, title, body, data, sentAt }: one push's details (engine/push-notices.ts),
+ *                                    read by a tap on it: off the bell
+ *   GET  /api/notices/push[?unseen=1] → { notices: [{ id, kind, title, body, data, sentAt, seenAt }] }, newest first: the bell
+ *   POST /api/notices/push/seen  { ids } → { success: true, marked }: rows off the bell (a tap on one)
+ *
+ * ## The bell (DESIGN-web-notifications-fable.md §2.1)
+ *
+ * Both apps' bell reads the push notices this server kept for its member, a phone or not: at most 100, 7 days, newest
+ * first. A row leaves only when the member taps it (the mark here), taps its notification on their phone (which reads its
+ * details, `GET /api/notices/push/:id`: only that tap does), or opens its thing (a chat they read; an alert they
+ * acknowledge, which `POST /api/notices/seen` passes on: every kept notice that is pushed names its kept copy,
+ * engine/kept-notices.ts keptNoticeDetails); reading the list marks nothing. Under the same gate as every route here, the
+ * signer's own only; a standby answers the read (it keeps no push notices: an empty list) and refuses the mark.
  *
  * ## Only ever the signer's own
  *
@@ -30,9 +42,9 @@
  * the main server's, which would not have the mark. The community's address reaches the main server.
  */
 import Router from '@koa/router';
-import { passesReadGate, getNodeRole } from '../state-engine.js';
+import { passesReadGate, getNodeRole, markBellNoticesSeen, markBellNoticesSeenWhere } from '../state-engine.js';
 import { listKeptNotices, markKeptNoticesSeen, MARK_SEEN_MAX_IDS } from '../engine/kept-notices.js';
-import { readPushNotice } from '../engine/push-notices.js';
+import { readPushNotice, listPushNotices, BELL_MARK_MAX_IDS } from '../engine/push-notices.js';
 import { isPushNoticeId, word } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
@@ -52,8 +64,42 @@ function member(ctx: any): string | undefined {
     return actor;
 }
 
+/** The mark's ids, or undefined once the refusal is written: a standby's 503, a bad body's 400. */
+function idsToMark(ctx: any, max: number): string[] | undefined {
+    if (getNodeRole() !== 'primary') {
+        ctx.status = 503;
+        ctx.body = { error: word('This server is a standby copy of the community, not its main server. Notices are marked seen on the main server.'), code: 'standby' };
+        return undefined;
+    }
+    const ids = (ctx.requestBody || {}).ids;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > max
+        || !ids.every((id: unknown) => typeof id === 'string' && id.length > 0 && id.length <= 64)) {
+        ctx.status = 400;
+        ctx.body = { error: `Send ids: a list of 1 to ${max} of your notices' ids.` };
+        return undefined;
+    }
+    return ids;
+}
+
 export function createNoticeRoutes(_deps: RouteDeps): Router {
     const router = new Router();
+
+    router.get('/api/notices/push', async (ctx) => {
+        const actor = member(ctx);
+        if (!actor) return;
+        const unseen = ctx.query.unseen === '1' || ctx.query.unseen === 'true';
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = { notices: listPushNotices(actor, { unseenOnly: unseen }) };
+    });
+
+    router.post('/api/notices/push/seen', async (ctx) => {
+        const actor = member(ctx);
+        if (!actor) return;
+        const ids = idsToMark(ctx, BELL_MARK_MAX_IDS);
+        if (!ids) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = { success: true, marked: markBellNoticesSeen(actor, ids).length };
+    });
 
     router.get('/api/notices', async (ctx) => {
         const actor = member(ctx);
@@ -73,26 +119,22 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: word('This server has no such notice for you. Notices are kept for 7 days.'), code: 'no_notice' };
             return;
         }
+        // Only a tap on its notification reads one notice's details (the phone's followTap): it is opened, so off the bell,
+        // and its alert's kept copy marked, as a tap on the bell's row does. On the main server only: a standby holds none.
+        if (getNodeRole() === 'primary') markBellNoticesSeen(actor, [notice.id]);
         ctx.body = notice;
     });
 
     router.post('/api/notices/seen', async (ctx) => {
         const actor = member(ctx);
         if (!actor) return;
-        if (getNodeRole() !== 'primary') {
-            ctx.status = 503;
-            ctx.body = { error: word('This server is a standby copy of the community, not its main server. Notices are marked seen on the main server.'), code: 'standby' };
-            return;
-        }
-        const ids = ((ctx as any).requestBody || {}).ids;
-        if (!Array.isArray(ids) || ids.length === 0 || ids.length > MARK_SEEN_MAX_IDS
-            || !ids.every((id: unknown) => typeof id === 'string' && id.length > 0 && id.length <= 64)) {
-            ctx.status = 400;
-            ctx.body = { error: `Send ids: a list of 1 to ${MARK_SEEN_MAX_IDS} of your notices' ids.` };
-            return;
-        }
+        const ids = idsToMark(ctx, MARK_SEEN_MAX_IDS);
+        if (!ids) return;
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = { success: true, marked: markKeptNoticesSeen(actor, ids) };
+        const marked = markKeptNoticesSeen(actor, ids);
+        // The alert acknowledged: its row leaves the bell too.
+        markBellNoticesSeenWhere(actor, 'noticeId', ids);
+        ctx.body = { success: true, marked };
     });
 
     return router;

@@ -165,7 +165,11 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                         <h1 dir="auto" data-testid="knock-waiting-sent" className="m-0 mb-2 text-xl font-bold leading-tight break-words">
                             {knock
                                 ? t(FW.askedOnDate, { name, date: formatDate(new Date(knock.sentAt), 'day-month-year') })
-                                : t(CW.askName, { name })}
+                                : pending
+                                    // Asked from another community (global's Find card) and restored here (slice Y0):
+                                    // this browser never saw it sent, so no date.
+                                    ? t('You asked to join {name}.', { name })
+                                    : t(CW.askName, { name })}
                         </h1>
                     )}
                     {/* Always in the page, polite: a yes put into it is read out to a screen reader, and nothing moves the focus. */}

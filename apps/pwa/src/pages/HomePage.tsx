@@ -46,7 +46,7 @@ import {
     starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
@@ -2664,6 +2664,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
                 const helping = helped || !!f.watches?.some(w => w.wouldHelp);
                 const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
+                // The community a remembered request went to, and the name to call it by: the yes region above the waiting
+                // cards and the waiting cards below say the same name.
+                const knockCommunity = (k: RememberedKnock) => f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                const knockName = (k: RememberedKnock) => k.name ?? knockCommunity(k)?.name ?? k.url.replace(/^https:\/\//, '');
                 return (
                     <HomeCard key={id} {...common}>
                         {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
@@ -2687,17 +2691,36 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             );
                         })}
                         {/* Always on the card, polite: a yes put into it is read out to a screen reader (a region added with its
-                            words in it is not always announced). */}
+                            words in it is not always announced). A yes says the two ways to use it that work from here
+                            (DESIGN-global-yes-join-fable.md §2.2, slice Y0): the account's key lives at this address, and the
+                            community's page is another, which this browser keeps apart. Its page, where the 12 words bring the
+                            account and the yes is Join; or the phone app. No handoff yet (slice Y1). */}
                         <div role="status" aria-live="polite" data-testid="home-find-yes-live">
-                            {knocks.filter(k => !cancelledKnocks.has(k.url) && yesOf(knockStatuses[k.url])).map(k => (
-                                <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
-                                    {'🎉 ' + (cardKnockLines([k], knockStatuses)[0]?.text ?? '')}
-                                </p>
-                            ))}
+                            {knocks.filter(k => !cancelledKnocks.has(k.url) && yesOf(knockStatuses[k.url])).map(k => {
+                                const yesName = knockName(k);
+                                const address = k.url.replace(/^https:\/\//, '');
+                                return (
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name: yesName })}</p>
+                                        <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.')}
+                                        </p>
+                                        <div className="mt-2">
+                                            <a href={`${k.url}/app?door=signin`} target="_blank" rel="noopener noreferrer" data-testid={`home-find-invited-open-${k.url}`}
+                                                className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                {t('Open {address}', { address })}
+                                            </a>
+                                        </div>
+                                        <p dir="auto" className="m-0 mt-2 text-sm text-nature-700 dark:text-nature-200 break-words">
+                                            {t('Or on your phone: open the BeanPool app, restore your account, then Find a community → {name} → Join.', { name: yesName })}
+                                        </p>
+                                    </div>
+                                );
+                            })}
                         </div>
                         {knocks.map(k => {
-                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
-                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const comm = knockCommunity(k);
+                            const name = knockName(k);
                             const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);

@@ -63,10 +63,14 @@ import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notify
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
-import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import {
+    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere,
+    keptNoticeIdsOf, type PushNoticeRow,
+} from './engine/push-notices.js';
 import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -7297,7 +7301,48 @@ export function getConversation(id: string): Conversation | undefined {
 }
 
 export function markConversationRead(pubkey: string, conversationId: string): void {
-    return markConversationReadEngine(pubkey, conversationId);
+    markConversationReadEngine(pubkey, conversationId);
+    // Opening a chat takes its notices off the bell, on every app the member has open.
+    markBellNoticesSeenWhere(pubkey, 'conversationId', [conversationId]);
+}
+
+/**
+ * One of the bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS) to the member's own sockets, found by the
+ * socket index's key (an announcement to every member is one lookup each, never every socket per member), and only those
+ * whose app said it reads them (`bell=1` on its connect, https-server.ts `_bell`): an app from before them takes any event
+ * it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's socket. Never throws.
+ */
+function tellBell(pubkey: string, event: { type: string } & Record<string, unknown>): void {
+    try {
+        const msg = JSON.stringify(event);
+        for (const ws of wsClients.reachable([pubkey], null, 0)) {
+            if (!ws._bell || ws._visitor || ws._memberPubkey !== pubkey) continue;
+            try { ws.send(msg); } catch { wsClients.delete(ws); }
+        }
+    } catch { /* the app's next read catches up */ }
+}
+
+/** The bell's marks told to the member's own sockets, so every open app's count follows. */
+function toldBellSeen(pubkey: string, ids: string[]): string[] {
+    if (ids.length > 0) tellBell(pubkey, { type: 'push_notices_seen', ids });
+    return ids;
+}
+
+/**
+ * A member takes these of their own notices off the bell (a tap on the row: POST /api/notices/push/seen; a tap on its phone
+ * notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
+ * keptNoticeDetails), so the web app never shows that alert after.
+ */
+export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
+    const marked = markPushNoticesSeen(pubkey, ids);
+    const kept = keptNoticeIdsOf(pubkey, marked);
+    if (kept.length > 0) markKeptNoticesSeen(pubkey, kept);
+    return toldBellSeen(pubkey, marked);
+}
+
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
+    return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 
 export function getUnreadCounts(pubkey: string): Record<string, number> {
@@ -10685,8 +10730,20 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
  * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
  * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ *
+ * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
+ * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
  */
-export function dispatchPushNotification(
+export function dispatchPushNotification(...args: Parameters<typeof deliverPushNotices>): number {
+    return deliverPushNotices(...args).sent;
+}
+
+/**
+ * {@link dispatchPushNotification}, answering both counts: `sent`, the messages handed to Expo and to web push, and `told`,
+ * the members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A
+ * sender that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
+ */
+export function deliverPushNotices(
     targetPubkeys: string[],
     actorPubkey: string,
     title: string,
@@ -10700,9 +10757,14 @@ export function dispatchPushNotification(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
-    options: { ttlSeconds?: number } = {},
-): number {
-    if (getNodeRole() === 'backup') return 0;
+    /**
+     * `ttlSeconds`: how long a browser's push may wait (web push W1). `detailsFor`: what one recipient's details carry beside
+     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push.
+     */
+    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor } = {},
+): { sent: number; told: number } {
+    const none = { sent: 0, told: 0 };
+    if (getNodeRole() === 'backup') return none;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
     // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
     // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
@@ -10711,7 +10773,7 @@ export function dispatchPushNotification(
     // every other notice still go, whoever caused them (#1403 review).
     const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
-    if (recipients.length === 0) return 0;
+    if (recipients.length === 0) return none;
 
     const prefKey = `notify_${categoryId}`;
     
@@ -10763,16 +10825,21 @@ export function dispatchPushNotification(
             continue;
         }
 
+        // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
+        // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
         const browsers = webPushTargetsFor(pk, kind);
+        if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
+
+        // One notice per recipient, the same on each of their phones and browsers.
+        const notice = newPushNotice(kind, pk, sentAt);
+        const extra = options.detailsFor?.(pk);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data: extra ? { ...data, ...extra } : data, sentAt });
         if (tokens.length === 0 && browsers.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
-
-        // One notice per recipient, the same on each of their phones.
-        const notice = newPushNotice(kind, pk, sentAt);
-        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
         for (const { tokenId, token, platform, lang } of tokens) {
             const words = phoneWords(lang);
@@ -10809,9 +10876,12 @@ export function dispatchPushNotification(
         }
     }
 
-    if (allMessages.length === 0 && webSends.length === 0) return 0;
-    if (rehearsal) return 0;
+    if (rehearsal || notices.length === 0) return none;
     keepPushNotices(notices);
+    // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
+    for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
+    const told = notices.length;
+    if (allMessages.length === 0 && webSends.length === 0) return { sent: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {
@@ -10831,7 +10901,7 @@ export function dispatchPushNotification(
         });
     }
     sendWebPushes(webSends);
-    return allMessages.length + webSends.length;
+    return { sent: allMessages.length + webSends.length, told };
 }
 
 /**

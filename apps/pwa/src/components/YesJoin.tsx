@@ -26,6 +26,7 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
     knock: RememberedKnock;
     name: string;
     identity: BeanPoolIdentity;
+    /** The test ids' stem: `${testId}-join-${url}`, `-running-`, `-fallback-`, `-open-`, `-joined-`, `-open-joined-`. */
     testId: string;
     /** Join was tapped (the banner goes: Marty, 9 Nov, "until tapped"). */
     onTapped?: () => void;
@@ -38,6 +39,7 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
     const run = useRef<HandoffRun | null>(null);
     useEffect(() => () => run.current?.cancel(), []);
     const address = knock.url.replace(/^https:\/\//, '');
+    const id = (part: string) => `${testId}-${part}-${knock.url}`;
 
     const join = () => {
         run.current?.cancel();
@@ -83,10 +85,10 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
 
     if (state === 'joined') {
         return (
-            <div data-testid={`${testId}-joined`} role="status">
+            <div data-testid={id('joined')} role="status">
                 <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('You joined {name}.', { name })}</p>
                 <div className="mt-2">
-                    <a href={`${knock.url}/app`} target="_blank" rel="noopener noreferrer" className={SECONDARY} data-testid={`${testId}-open-joined`}>
+                    <a href={`${knock.url}/app`} target="_blank" rel="noopener noreferrer" className={SECONDARY} data-testid={id('open-joined')}>
                         {t('Open {name}', { name })}
                     </a>
                 </div>
@@ -96,29 +98,30 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
 
     return (
         <div>
-            <button type="button" onClick={join} disabled={state === 'running'} data-testid={`${testId}-join`} className={PRIMARY}>
+            <button type="button" onClick={join} disabled={state === 'running'} data-testid={id('join')} className={PRIMARY}>
                 {t('Join {name}', { name })}
             </button>
             <div role="status">
                 {state === 'running'
-                    ? <p dir="auto" className={NOTE} data-testid={`${testId}-running`}>{t('Carry on in the new tab.')}</p>
+                    ? <p dir="auto" className={NOTE} data-testid={id('running')}>{t('Carry on in the new tab.')}</p>
                     : state === 'idle' && (
                         <p dir="auto" className={NOTE}>{t("Opens {name}'s page in this browser and brings your account with you. Same 12 words.", { name })}</p>
                     )}
             </div>
             {state === 'fallback' && (
-                <div data-testid={`${testId}-fallback`} className="mt-2">
+                <div data-testid={id('fallback')} className="mt-2">
                     <p dir="auto" role="alert" className={NOTE}>{t("Couldn't open {name}'s page here. Allow pop-ups for this site and try again.", { name })}</p>
+                    {/* Slice Y0's two routes, in its words: the 12 words at the community's page, or the phone. */}
                     <p dir="auto" className={NOTE}>
-                        {t('Or: open {address}, tap Already a member and restore with your 12 words (Settings → Show my 12 words, first), then Join.', { address })}
+                        {t('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join. Your 12 words are under Settings → Show my 12 words.')}
                     </p>
                     <div className="mt-2">
-                        <a href={`${knock.url}/app?door=signin`} target="_blank" rel="noopener noreferrer" className={SECONDARY} data-testid={`${testId}-open`}>
+                        <a href={`${knock.url}/app?door=signin`} target="_blank" rel="noopener noreferrer" className={SECONDARY} data-testid={id('open')}>
                             {t('Open {address}', { address })}
                         </a>
                     </div>
                     <p dir="auto" className={NOTE}>
-                        {t('Or on your phone: the BeanPool app, restore your account, then Find a community → {name} → Join.', { name })}
+                        {t('Or on your phone: open the BeanPool app, restore your account, then Find a community → {name} → Join.', { name })}
                     </p>
                 </div>
             )}

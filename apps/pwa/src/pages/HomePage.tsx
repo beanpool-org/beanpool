@@ -1308,7 +1308,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setBannerThisVisit(was => new Set(was).add(k.url));
         seeYes(k, invite);
     };
-    // The banner (Marty, 9 Nov): each yes not yet tapped, above everything else on Home, until its Join is tapped.
+    // The banner (Marty, 9 Nov): each yes not yet tapped, above everything else on Home, until its Join is tapped. Drawn in
+    // Home's one loaded page only: a second place (the loading page) would mount it twice, and a handoff started from the
+    // first would be cut off when Home's answer came.
     const yesBanners = identity ? knocks.flatMap((k) => {
         const st = knockStatuses[k.url];
         if (!st?.ok || st.value.status !== 'approved' || st.value.member || cancelledKnocks.has(k.url)) return [];
@@ -1319,7 +1321,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             <section key={k.url} data-testid={`home-yes-banner-${k.url}`} aria-label={t('🎉 {name} said yes.', { name })}
                 className="mb-3 p-4 rounded-2xl border-2 border-bp-commit-fill bg-white dark:bg-nature-900 shadow-sm">
                 <p dir="auto" className="m-0 mb-2 text-lg font-bold leading-tight text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
-                <YesJoin knock={k} name={name} identity={identity} testId={`home-yes-banner-${k.url}`}
+                <YesJoin knock={k} name={name} identity={identity} testId="home-yes-banner"
                     onTapped={() => tapYesBanner(k, invite)} onJoined={() => joinedHere(k)} />
             </section>
         )];
@@ -2436,7 +2438,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         return (
             <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
                 <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
-                    {yesBanners}
                     {visitor?.joinCard}
                     {status === 'signed-out' ? (
                         <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
@@ -2769,7 +2770,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                     <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
                                         <p dir="auto" className="m-0 mb-2 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
                                         {identity && (
-                                            <YesJoin knock={k} name={name} identity={identity} testId={`home-find-invited-${k.url}`}
+                                            <YesJoin knock={k} name={name} identity={identity} testId="home-find-invited"
                                                 onTapped={() => seeYes(k, (st.value as { invite: string }).invite)} onJoined={() => joinedHere(k)} />
                                         )}
                                     </div>

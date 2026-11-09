@@ -825,22 +825,83 @@ describe('the web waiting card tells the truth about what the community now answ
         expect(document.body.textContent).not.toContain('no open request');
     });
 
-    it("a yes says how to use it from here, never a dead 'Join now': its page with the 12 words, or the phone app (slice Y0)", async () => {
+    it("a yes is a real Join (slice Y1), never a dead 'Join now'; when the tap can't open the page, slice Y0's routes: its page with the 12 words, or the phone app", async () => {
         await askedOf(BYRON);
         vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        // A pop-up blocker, or a Home Screen app: window.open gives nothing back.
+        const open = vi.spyOn(window, 'open').mockReturnValue(null);
 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId(`home-find-invited-${BYRON.url}`);
         expect(card).toHaveTextContent('🎉 Byron Shire BeanPool said yes.');
-        expect(card).toHaveTextContent('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join.');
-        expect(card).toHaveTextContent('Settings → Show my 12 words');
-        expect(card).toHaveTextContent('Or on your phone: open the BeanPool app, restore your account, then Find a community → Byron Shire BeanPool → Join.');
+        expect(card).toHaveTextContent("Opens Byron Shire BeanPool's page in this browser and brings your account with you. Same 12 words.");
+        expect(card.textContent).not.toContain('Join now');
+        // The 12 words are the way when the tap can't work, not before it.
+        expect(card.textContent).not.toContain('restore with your 12 words');
+
+        fireEvent.click(within(card).getByTestId(`home-find-invited-join-${BYRON.url}`));
+        // Opened inside the tap, with no key in the address: the community's handoff door, a nonce and who asks.
+        expect(open).toHaveBeenCalledTimes(1);
+        const [url, target] = open.mock.calls[0];
+        expect(target).toBe('_blank');
+        expect(String(url)).toMatch(new RegExp(`^${BYRON.url}/app\\?door=handoff&n=[0-9a-f]{32}&from=`));
+        expect(String(url)).not.toContain(ME.privateKey);
+
+        const fallback = await within(card).findByTestId(`home-find-invited-fallback-${BYRON.url}`);
+        expect(fallback).toHaveTextContent("Couldn't open Byron Shire BeanPool's page here. Allow pop-ups for this site and try again.");
+        expect(fallback).toHaveTextContent('To join, open its page in this browser, tap Already a member and restore with your 12 words, then Join.');
+        expect(fallback).toHaveTextContent('Settings → Show my 12 words');
+        expect(fallback).toHaveTextContent('Or on your phone: open the BeanPool app, restore your account, then Find a community → Byron Shire BeanPool → Join.');
         expect(card.textContent).not.toContain('Join now');
         // The community's own page, at its ways back; a new tab, with nothing of this page sent.
-        const open = screen.getByTestId(`home-find-invited-open-${BYRON.url}`);
-        expect(open).toHaveTextContent('Open byron.example.org');
-        expect(open.getAttribute('href')).toBe(`${BYRON.url}/app?door=signin`);
-        expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+        const link = screen.getByTestId(`home-find-invited-open-${BYRON.url}`);
+        expect(link).toHaveTextContent('Open byron.example.org');
+        expect(link.getAttribute('href')).toBe(`${BYRON.url}/app?door=signin`);
+        expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+        // Join stays, to try again once pop-ups are allowed.
+        expect(within(card).getByTestId(`home-find-invited-join-${BYRON.url}`)).toBeEnabled();
+    });
+
+    it('a yes the key has used (member: true) says "You joined", with its page and no Join, and the request is forgotten here (slice Y1)', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null, member: true } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const joined = await screen.findByTestId(`home-find-joined-${BYRON.url}`);
+        expect(joined).toHaveTextContent('You joined Byron Shire BeanPool.');
+        expect(within(joined).getByRole('link').getAttribute('href')).toBe(`${BYRON.url}/app`);
+        expect(screen.queryByTestId(`home-find-invited-join-${BYRON.url}`)).toBeNull();
+        expect(screen.queryByTestId(`home-yes-banner-${BYRON.url}`)).toBeNull();
+        await waitFor(async () => expect(await knockModule.rememberedKnocks(ME.publicKey)).toEqual([]));
+    });
+
+    it('an unseen yes is a banner at the top of Home, with Join, until its Join is tapped; the Find card keeps the yes (Marty, 9 Nov)', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        vi.spyOn(window, 'open').mockReturnValue(null);
+        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const banner = await screen.findByTestId(`home-yes-banner-${BYRON.url}`);
+        expect(banner).toHaveTextContent('🎉 Byron Shire BeanPool said yes.');
+        // Above everything else on Home: before the cards.
+        expect(banner.compareDocumentPosition(await screen.findByTestId('home-grid')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(within(banner).getByTestId(`home-yes-banner-join-${BYRON.url}`));
+        // It stays for this visit, with what the tap came to (here the fallback card).
+        expect(await within(banner).findByTestId(`home-yes-banner-fallback-${BYRON.url}`)).toBeInTheDocument();
+        first.unmount();
+
+        // The next visit: no banner; the Find card still has the yes and its Join.
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId(`home-find-invited-join-${BYRON.url}`)).toBeInTheDocument();
+        expect(screen.queryByTestId(`home-yes-banner-${BYRON.url}`)).toBeNull();
+    });
+
+    it("a new yes (another invite) from the same community is a banner again; another account's taps don't count (slice Y1)", async () => {
+        knockModule.markYesSeen(ME.publicKey, knockModule.yesMark(BYRON.url, 'OLD-CODE'));
+        knockModule.markYesSeen('b'.repeat(64), knockModule.yesMark(BYRON.url, 'ABCD-EFGH'));
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId(`home-yes-banner-${BYRON.url}`)).toBeInTheDocument();
     });
 
     it('a cancel that gets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {

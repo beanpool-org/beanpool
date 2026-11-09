@@ -3208,6 +3208,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
                                         {t('Choose how to restore your identity on this device:')}
                                     </p>
+                                    {/* A global member whose request here was answered yes (slice Y1): their account is at global's
+                                        address, which this page can't read. The Join on global's yes brings it here. A page that
+                                        asked global's page itself was judged unsafe: see DESIGN-global-yes-join-fable.md, Y1's PR. */}
+                                    {localCommunity && (
+                                        <p data-testid="member-asked-from-global" className="m-0 mb-4 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
+                                            {t('Already asked from global? Go back there and tap Join.')}
+                                        </p>
+                                    )}
 
                                     {error && (
                                         <div

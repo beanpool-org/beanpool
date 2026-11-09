@@ -1,3 +1,4 @@
+/* global Buffer, setTimeout, clearTimeout */
 /**
  * A name server that answers for Google's map servers and for nothing else (DESIGN-app-screenshots-fable.md §3: the Map shot
  * needs real map tiles, and a phone with no DNS draws a grey page). The capture driver starts the emulator with this as its
@@ -65,6 +66,9 @@ export async function startDnsFilter({ port = 53, upstream = { host: systemResol
     const server = dgram.createSocket('udp4');
     const asked = [];
     server.on('message', (packet, from) => {
+        // The port is open on every interface (macOS lets a user bind port 53 only that way), but only this machine's own
+        // emulator is its client: a packet from the network is not answered.
+        if (from.address !== '127.0.0.1') return;
         const name = questionName(packet);
         const allowed = isAllowed(name);
         asked.push({ name: name ?? '(unreadable)', allowed });

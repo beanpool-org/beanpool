@@ -1,3 +1,4 @@
+/* global process, console, document, getComputedStyle -- Node, and the page's side of evaluate() */
 /**
  * The caption band for the store pictures (DESIGN-app-screenshots-fable.md §4, lane L2): a raw phone capture under one short
  * line on the brand's ground, with rounded corners and a one-pixel edge, and no bezel. Nothing about the phone is drawn.

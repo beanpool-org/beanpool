@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global process, console, fetch, setTimeout, Buffer, URL, AbortSignal */
+/* global process, console, fetch, setTimeout, clearTimeout, AbortSignal */
 /**
  * The capture driver for the store and website pictures (DESIGN-app-screenshots-fable.md §3, lane L2): the Riverbend demo node
  * (demo-node.ts) on a fresh data dir, the real app on a phone that is Sam, and the seven screens of §1 taken in light AND dark:
@@ -78,7 +78,7 @@ const EXPLORE = arg('--explore');
 const NEVER = /can't reach|cannot reach|something went wrong|unable to load|network request failed|invariant violation|unhandled js exception|couldn't connect|no connection/i;
 /** Slow drags, in px, after a screen opens (Android). */
 // The Ledger (Wallet tab): the balance card's top just under the header, with Beans, the stats, Send Beans and the first lines of history.
-const SCROLL = { market: [500, 500], ledger: [520, 510] };
+const SCROLL = { market: [500, 500], ledger: [500, 480] };
 /** The pin whose preview card the Map shot opens: a single pin (not a bubble) on the 1080x1920 view the Map opens on. */
 const MAP_PIN = { x: 238, y: 1512 };
 const EXPECT = {
@@ -122,7 +122,10 @@ async function startNode() {
         });
         lineReader(child.stderr, (l) => tail.push(l));
     });
-    const info = await Promise.race([ready, sleep(240_000).then(() => { throw new Error(`the demo node was not ready in 4 minutes:\n${tail.slice(-25).join('\n')}`); })]);
+    let timer;
+    const info = await Promise.race([ready, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`the demo node was not ready in 4 minutes:\n${tail.slice(-25).join('\n')}`)), 240_000);
+    })]).finally(() => clearTimeout(timer));
     child.removeAllListeners('exit');
     let n = 0;
     const ask = (req) => new Promise((resolve, reject) => {
@@ -431,7 +434,7 @@ function iosDevice() {
         dump: () => '',
         stop() { /* the app is left to the simulator */ },
         open(uri) { simctl('openurl', dev.udid, uri); },
-        launch() { simctl('openurl', dev.udid, `exp+beanpool://expo-development-client/?url=${encodeURIComponent(`http://localhost:${METRO_PORT}`)}`); },
+        launch() { simctl('openurl', dev.udid, `beanpool://expo-development-client/?url=${encodeURIComponent(`http://localhost:${METRO_PORT}`)}`); },
         shot(file) {
             simctl('io', dev.udid, 'screenshot', '--type=png', file);
             const png = fs.readFileSync(file);
@@ -661,4 +664,8 @@ async function main() {
     }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    await main();
+    // Nothing may keep the run alive after its cleanup (a timer, a reader on a killed child's pipe).
+    process.exit(process.exitCode ?? 0);
+}

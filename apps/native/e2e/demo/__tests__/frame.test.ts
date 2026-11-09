@@ -10,9 +10,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import crypto from 'node:crypto';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
-// @ts-expect-error -- plain ES modules (no types): the tools the store pictures are made with
 import { DARK_GROUND, STORE_SIZES, frameHtml, frameLayout, frameShots, readBrand } from '../frame.mjs';
-// @ts-expect-error -- plain ES module
 import { SHOTS, rawName, storeName, webName } from '../shots.mjs';
 
 // Whether Chromium starts here (not whether a path exists: Playwright runs a headless shell build by default).

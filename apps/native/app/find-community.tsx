@@ -23,11 +23,12 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
 import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-invite';
 import type { JoinKey } from '../utils/door-key';
-import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
+import { claimProbeOrigin } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
 import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult, PLACE_CIRCLE_WORDS } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
+import { NoOwnerCard, type OwnerlessServer } from '../components/NoOwnerCard';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { copiesAtFor } from '../utils/copies-rule';
@@ -201,7 +202,7 @@ export default function FindCommunityScreen() {
     // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
     // community with an owner never shows it.
     // The name is the server's, cleaned (node-claim.ts cleanClaimName), or the address's host when it gave none.
-    const [claimable, setClaimable] = useState<{ origin: string; name: string; codeId: string } | null>(null);
+    const [claimable, setClaimable] = useState<OwnerlessServer | null>(null);
     useEffect(() => {
         const origin = claimProbeOrigin(query);
         setClaimable(null);
@@ -692,7 +693,7 @@ export default function FindCommunityScreen() {
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder={pubkey ? t('Community name') : t('Its address, like riverside.example.org')}
+                        placeholder={pubkey ? t('Community name or address') : t('Its address, like riverside.example.org')}
                         placeholderTextColor={colors.text.muted}
                         returnKeyType={pubkey ? 'search' : 'done'}
                         autoCorrect={false}
@@ -712,22 +713,7 @@ export default function FindCommunityScreen() {
                         {renderKnock(typedCommunity.url, typedCommunity.name, typedCommunity)}
                     </View>
                 )}
-                {claimable && (
-                    <View style={[styles.card, { marginTop: 10 }]}>
-                        <Text style={styles.name}>{t('{name} has no owner yet', { name: claimable.name })}</Text>
-                        <Text style={styles.facts} selectable>{claimable.origin}</Text>
-                        <Text style={styles.note}>{t('If you installed it, claim it with the one-time code on the server.')}</Text>
-                        <View style={styles.actions}>
-                            <Pressable
-                                style={styles.primary}
-                                onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.primaryText}>{t('Claim {name}', { name: claimable.name })}</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                )}
+                {claimable && <NoOwnerCard server={claimable} style={{ marginTop: 10 }} testID="find-no-owner" />}
 
                 {!!pubkey && <View style={{ marginTop: 12 }}>
                     {loading && communities === null ? (

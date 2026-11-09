@@ -16,7 +16,9 @@ import {
     closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
+    stopStandingDeal, holdBackStandingDeal, extendStandingDeal,
 } from '../state-engine.js';
+import { STANDING_AUTH_CODE, STANDING_RUNS_ITSELF_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -1493,9 +1495,34 @@ function respondDealOpen(ctx: any, err: any): boolean {
     return true;
 }
 
+/**
+ * A standing deal's `standing` from a body (DESIGN-standing-deals-fable §2.3), with the host this request came to: never the
+ * body's own, and only the fields the engine reads. Undefined when the body has none (today's one-off deal).
+ */
+function standingFromBody(ctx: any, standing: any): StandingStart | undefined {
+    if (standing === undefined || standing === null) return undefined;
+    const s = typeof standing === 'object' ? standing : {};
+    return {
+        authorisation: { payload: s.authorisation?.payload, signature: s.authorisation?.signature },
+        untilStopped: s.untilStopped === true ? true : undefined,
+        periods: typeof s.periods === 'number' ? s.periods : undefined,
+        startsAt: typeof s.startsAt === 'string' ? s.startsAt : undefined,
+        requestHost: typeof ctx.request?.host === 'string' ? ctx.request.host : undefined,
+    };
+}
+
+/** A standing deal's own refusals: their status and code with their words (engine/standing-deals.ts, engine/escrow.ts). */
+const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', STANDING_RUNS_ITSELF_CODE, 'standing_gone', 'standing_payer_only', 'standing_not_running']);
+function respondStandingRefusal(ctx: any, err: any): boolean {
+    if (!STANDING_CODES.has(err?.code)) return false;
+    ctx.status = typeof err.status === 'number' ? err.status : 400;
+    ctx.body = { error: err.message, code: err.code };
+    return true;
+}
+
 router.post('/api/marketplace/posts/accept', async (ctx) => {
     try {
-        const { postId, buyerPublicKey, hours } = (ctx as any).requestBody || {};
+        const { postId, buyerPublicKey, hours, standing } = (ctx as any).requestBody || {};
         if (!postId || !buyerPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'postId and buyerPublicKey are required' };
@@ -1503,7 +1530,9 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const actor = ctx.state?.actor as string | undefined;
-        const tx = acceptPost(postId, buyerPublicKey, dealQuantityFromBody(hours), actor ? { authSigner: actor } : undefined);
+        const standingStart = standingFromBody(ctx, standing);
+        const tx = acceptPost(postId, buyerPublicKey, standingStart ? undefined : dealQuantityFromBody(hours),
+            actor || standingStart ? { authSigner: actor, standing: standingStart } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -1517,6 +1546,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             return;
         }
         if (respondCopyNoDeal(ctx, err)) return;
+        if (respondStandingRefusal(ctx, err)) return;
         // A post taken or changed since the app showed it: the 400 it always was, with its code (engine/escrow.ts).
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1556,7 +1586,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
 
 router.post('/api/marketplace/transactions/approve', async (ctx) => {
     try {
-        const { transactionId, authorPublicKey } = (ctx as any).requestBody || {};
+        const { transactionId, authorPublicKey, standing } = (ctx as any).requestBody || {};
         if (!transactionId || !authorPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
@@ -1564,7 +1594,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
         const actor = ctx.state?.actor as string;
-        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
+        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor, standing: standingFromBody(ctx, standing) });
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: word('Cannot approve — request not found or unauthorized') };
@@ -1573,6 +1603,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         if (respondCopyNoDeal(ctx, err)) return;
+        if (respondStandingRefusal(ctx, err)) return;
         respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });
@@ -1648,9 +1679,32 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ? rawCode
             : 400;
         ctx.status = statusCode;
-        ctx.body = { error: memberErrorText(e, word('Escrow release failed')) };
+        ctx.body = { error: memberErrorText(e, word('Escrow release failed')), ...(e?.code === STANDING_RUNS_ITSELF_CODE ? { code: e.code } : {}) };
     }
 });
+
+// A standing deal's Stop (either side), Hold back (the payer) and Extend (the payer, a new signed authorisation): signed
+// requests, the signer named by the middleware; a keeper acts for an enterprise side (engine/standing-deals.ts).
+async function standingStep(ctx: any, step: (id: string, actor: string, body: any) => Record<string, unknown>): Promise<void> {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    try {
+        ctx.body = { success: true, standing: step(String(ctx.params.id), actor, (ctx as any).requestBody || {}) };
+    } catch (err: any) {
+        if (respondStandingRefusal(ctx, err)) return;
+        respondSettlementAware(ctx, err, 'Failed to change the standing deal');
+    }
+}
+
+router.post('/api/marketplace/standing/:id/stop', (ctx) => standingStep(ctx, (id, actor) => stopStandingDeal(id, actor)));
+router.post('/api/marketplace/standing/:id/hold-back', (ctx) => standingStep(ctx, (id, actor) => holdBackStandingDeal(id, actor)));
+router.post('/api/marketplace/standing/:id/extend', (ctx) => standingStep(ctx, (id, actor, body) =>
+    extendStandingDeal(id, actor, standingFromBody(ctx, body.standing ?? body) ?? { authorisation: { payload: '', signature: '' } })));
 
 router.post('/api/marketplace/transactions/cancel', async (ctx) => {
     try {

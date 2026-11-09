@@ -27,7 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
-    knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
+    knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
 } from '@beanpool/core';
@@ -1034,7 +1034,7 @@ export function askedUnit(priceType: string | null | undefined): string {
  */
 export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
     const price = showsBeans && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (p.credits > 0 ? [beansAmount(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' ') : t('Free', undefined, 'a listing with no price'))
+        ? (freePriceWords(p.credits, 'need') ?? [beansAmount(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' '))
         : null;
     return [price, timeAgoInWords(p.createdAt, nowMs)].filter(Boolean).join(' · ');
 }

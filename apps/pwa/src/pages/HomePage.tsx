@@ -89,7 +89,7 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWords, shapeFeaturesOf } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -379,7 +379,7 @@ function MarketListingItem({
     const copy = eventCopyOf(item);
     const price = copy ? copyPriceLine(copy)
         : !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-        : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
+        : typeof item.credits === 'number' ? (freePriceWords(item.credits, item.type) ?? priceWords(item.credits)) : null;
     const km = distanceText(item.distanceKm);
     const kind = item.type === 'need' ? 'NEED' : 'OFFER';
     const label = [

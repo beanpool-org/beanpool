@@ -12,7 +12,7 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, typeWords, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t, upperCase, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, freePriceWords, listingChipWords, pinLive, t, upperCase, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
@@ -123,6 +123,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`). A copy's `credits`
     // is 0 and no price: its line says what it is at home.
     const showPrice = !isPulse && !beansMarked && !copy;
+    // A listing priced at 0 reads "Free" (core listing-price.ts, the one rule both apps read), in the price's own place: no Beans
+    // sign and no unit, and a screen reader reads "Free", not "0 B".
+    const freePrice = showPrice ? freePriceWords(post.credits, post.type) : null;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
     // On the photo: at most ONE status chip, by precedence PENDING > YOU.
@@ -242,11 +245,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Compact Price */}
                     {showPrice && (
                         <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
-                            {priceAmount(post.credits)}
-                            <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                            <span className="text-[9px] text-nature-500 font-normal">
-                                {priceUnit(post.priceType)}
-                            </span>
+                            {freePrice ?? (<>
+                                {priceAmount(post.credits)}
+                                <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                <span className="text-[9px] text-nature-500 font-normal">
+                                    {priceUnit(post.priceType)}
+                                </span>
+                            </>)}
                         </span>
                     )}
 
@@ -294,11 +299,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <div data-testid="listing-list-head" className={`flow-root min-w-0 leading-none -mb-1${popUp ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
                         {showPrice && (
                             <span data-testid="listing-list-price" className={`float-right rtl:float-left ms-2 mb-1 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
-                                {priceAmount(post.credits)}
-                                <img src="/assets/bean.png" className="mx-0.5" style={{ width: `${LIST_BEAN_PX}px`, height: `${LIST_BEAN_PX}px`, flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                <span className={`${LIST_TYPE.priceUnit} ${CARD_INK.secondary}`}>
-                                    {priceUnit(post.priceType)}
-                                </span>
+                                {freePrice ?? (<>
+                                    {priceAmount(post.credits)}
+                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: `${LIST_BEAN_PX}px`, height: `${LIST_BEAN_PX}px`, flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                    <span className={`${LIST_TYPE.priceUnit} ${CARD_INK.secondary}`}>
+                                        {priceUnit(post.priceType)}
+                                    </span>
+                                </>)}
                             </span>
                         )}
                         <span data-testid="listing-list-chips" className="[&>span]:me-1 [&>span]:mb-1 [&>span]:align-top">
@@ -429,11 +436,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {showPrice && (
                         <div className="ml-auto bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm pointer-events-auto">
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{priceAmount(post.credits)}</span>
-                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                    {priceUnit(post.priceType)}
-                                </span>
+                                {freePrice ? <span>{freePrice}</span> : (<>
+                                    <span>{priceAmount(post.credits)}</span>
+                                    <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
+                                        <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                        {priceUnit(post.priceType)}
+                                    </span>
+                                </>)}
                             </span>
                         </div>
                     )}

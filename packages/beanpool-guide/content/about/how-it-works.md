@@ -15,9 +15,11 @@ A rough guide: 40 beans is about one hour of someone's time. You and the other p
 
 ## Offers and Needs
 
-An **Offer** is something you can do or give: bread, a lift, an hour of gardening, a repair.
+An **Offer** is something you'll give or do for others: bread, a lift, an hour of gardening, a repair.
 
-A **Need** is something you are looking for.
+A **Need** is something you're looking for.
+
+Either can be free. Free is a price of 0, not a third kind of post, so it reads **Free** wherever the price is shown.
 
 In a community with Beans, before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something. Where there are no Beans, as on the global community, your first post can be a Need.
 

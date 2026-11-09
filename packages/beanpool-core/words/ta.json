@@ -1306,7 +1306,7 @@
   "Five tags at most": "அதிகபட்சம் 5 குறிச்சொற்கள்",
   "Flour\u0004tag": "மாவு",
   "Flowers\u0004tag": "பூக்கள்",
-  "Free\u0004price": "இலவசம்",
+  "Free\u0004a listing with no price": "இலவசம்",
   "Free\u0004tag": "இலவசம்",
   "Freight\u0004tag": "சரக்கு போக்குவரத்து",
   "From this phone's last known place.": "இந்த தொலைபேசியின் கடைசியாக அறியப்பட்ட இடத்திலிருந்து.",
@@ -2248,5 +2248,7 @@
   "Busy right now. Try again in a moment.": "தற்போது பிஸியாக உள்ளது. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.",
   "Add them to the names list": "பெயர்கள் பட்டியலில் சேர்",
   "Make them a voucher": "அவர்களை உறுதியளிப்பவராக்கு",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "இப்போதைக்கு தொலைபேசியில்: பெயர்கள் பட்டியலின் சாவிகள் நிர்வாகிகளின் தொலைபேசிகளில் உள்ளன."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "இப்போதைக்கு தொலைபேசியில்: பெயர்கள் பட்டியலின் சாவிகள் நிர்வாகிகளின் தொலைபேசிகளில் உள்ளன.",
+  "Ask a question with 2–4 options in the feed": "ஊட்டத்தில் 2–4 விருப்பங்களுடன் ஒரு கேள்வியைக் கேளுங்கள்",
+  "A gathering with a time and a place": "நேரமும் இடமும் கொண்ட ஒரு சந்திப்பு"
 }

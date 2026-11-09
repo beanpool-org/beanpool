@@ -33,6 +33,7 @@ import {
 } from '../lib/api';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
+import { inviteHeading } from '../lib/join-names';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchKnownRule } from '../lib/known-rule';
@@ -49,7 +50,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
+import { AVATAR_PICTURE, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -365,14 +366,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // when the page draws neither the card nor the old "No invite?" box, whose Look around links BeanPool's global
     // community, which a node that names none (GLOBAL_COMMUNITY_URL=off) must never show.
     const [communityCard, setCommunityCard] = useState<CommunityCard | null | 'loading'>('loading');
+    // Read for a local community (drawn above the form) and, once the node has said what it is, for a self-hoster's open
+    // community too (global profile, not the app's global): there it only gives the first screen its name (join names N1).
+    // The app's own global needs no card to say "Join the global community".
+    const readCard = localCommunity || (!appsGlobal && door !== 'checking');
     useEffect(() => {
-        if (!localCommunity) return;
+        if (!readCard) return;
         let cancelled = false;
         getCommunityCard()
             .then((card) => { if (!cancelled) setCommunityCard(card); })
             .catch(() => { if (!cancelled) setCommunityCard(null); });
         return () => { cancelled = true; };
-    }, [localCommunity]);
+    }, [readCard]);
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
@@ -2654,6 +2659,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onJoined={handleJoined}
                                 wordsDoor={wordsDoor}
                                 keepsNoCopies={keepsNoCopies}
+                                appsGlobal={appsGlobal}
+                                communityName={communityCard && communityCard !== 'loading' ? communityCardName(communityCard, { t }) : null}
                                 onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);
@@ -2725,8 +2732,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 />
                             )}
                             <OnboardingStepper area={byArea} step={1} />
-                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                                {t('🎟️ Join with Invite Code')}
+                            <h3 dir="auto" data-testid="welcome-invite-heading" style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', overflowWrap: 'anywhere' }}>
+                                {/* The form says which community the code is for (join names N1), by the card the page read (a local
+                                    community's, drawn above it; a self-hoster's that takes new members by invite, read for this). A node
+                                    with no card (or none yet), and the app's own global, keep the form's own heading. */}
+                                {communityCard && communityCard !== 'loading'
+                                    ? inviteHeading(communityCardName(communityCard, { t }))
+                                    : t('🎟️ Join with Invite Code')}
                             </h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
                                 {t('Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.')}

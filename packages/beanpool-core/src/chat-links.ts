@@ -1,6 +1,10 @@
 /**
- * Tappable links in a chat bubble. Pulled out of the DM screen so a group chat gets them too, and so the
- * splitting rule is testable without a renderer.
+ * Links in a chat message, for both apps (Marty, 9 Nov: a link was underlined and tappable on the phone and plain words on the
+ * web). One copy here, so the two cannot disagree about what is a link or where it goes.
+ *
+ * A link is `http://…`, `https://…` or a bare `www.…`, up to the next space. Nothing else is one: no `ftp:`, no `mailto:`, no
+ * `javascript:`, and no bare `example.org` (it is just words). The phone draws each link run as a tappable `Text`
+ * (apps/native/components/chat/ChatBubble.tsx); the web draws it as an `<a>` (apps/pwa/src/components/ChatLinkedText.tsx).
  */
 
 // The capturing group keeps the matched URLs in the split output so they can be rendered inline.

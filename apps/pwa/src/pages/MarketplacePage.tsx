@@ -33,7 +33,7 @@ import {
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
-    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine,
+    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -2061,15 +2061,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
                         {!isPulsePost && !priceMarked && (
                             <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-price">
+                                {/* A listing priced at 0 reads Free (core listing-price.ts, as on every card): a Need says "Free help wanted", and
+                                    its label is "Price", not "Willing to pay" over a figure that pays nothing. The words are the figure: no Beans
+                                    sign, no unit, and a screen reader reads "Free", not "0 B". */}
                                 <p className={BOX_LABEL.muted}>
-                                    {selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay')}
+                                    {freePriceLabel(selectedPost.credits, selectedPost.type) ?? (selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay'))}
                                 </p>
                                 <div className={`flex flex-row flex-wrap items-center gap-x-1 min-w-0 ${PAGE_TYPE.price} text-nature-950 dark:text-white`}>
-                                    <span>{formatNumber(selectedPost.credits)}</span>
-                                    <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
-                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                        {priceUnit(selectedPost.priceType)}
-                                    </span>
+                                    {freePriceWords(selectedPost.credits, selectedPost.type, 'box') ?? (<>
+                                        <span>{formatNumber(selectedPost.credits)}</span>
+                                        <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
+                                            <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                            {priceUnit(selectedPost.priceType)}
+                                        </span>
+                                    </>)}
                                 </div>
                                 {selectedPost.credits > 0 && (
                                     <p className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>

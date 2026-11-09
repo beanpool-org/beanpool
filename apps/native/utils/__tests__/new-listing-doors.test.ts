@@ -50,8 +50,9 @@ describe('the doors to the listing form', () => {
         expect(doors).toEqual({
             // The map's + (the chooser), and its own `?newPost=` link, passed on as it came.
             'app/(tabs)/map.tsx': ['params.newPost', "'true'"],
-            // "Post your first Offer", the activity list's create, the empty Market's "+ Post a Deal", and the chooser's pick.
-            'app/(tabs)/market.tsx': ["'true'", "'true'", "'true'", 'type'],
+            // Only the chooser's pick. "Post your first Offer", the activity list's create and the empty Market's "+ Post a Deal"
+            // open the Market's own chooser instead of pushing this screen with `newPost=true` (iOS froze on that, 9 Nov).
+            'app/(tabs)/market.tsx': ['type'],
             // First steps' "Ask for one thing" (N2), Home's "post an Offer" steps (their sheet's "Something else"), and Home's chooser's pick.
             'app/(tabs)/index.tsx': ["'need'", "'offer'", 'type'],
             // A month with no events: "No events coming up yet. Start one ›"

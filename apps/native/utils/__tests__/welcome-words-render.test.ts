@@ -782,7 +782,7 @@ describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, n
             await atTheJoinStep('en', node(rule, status));
             expect(box()).toBeNull();
             expect(host!.textContent).not.toContain('admins can see');
-            expect(host!.textContent).toContain('Join BeanPool');
+            expect(host!.textContent).toContain('🎟️ Join with an invite');
         });
     }
 });
@@ -1137,5 +1137,87 @@ describe("another community's door sent the member here to restore", () => {
         phone.pending = { ...doorRecord, freshKey: SALLY.publicKey, joinsOut: 1 };
         await mount('en');
         expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+    });
+});
+
+/*
+ * Every join screen says which community (join names N1, DESIGN-shared-listing-door-fable.md §2.5). The phone's invite step is
+ * headed "🎟️ Join with an invite" until the node has checked the code, then "Join {name}" with the community's own name; the
+ * global community's door is headed "🌍 Join the global community" (the first screen's "Explore BeanPool worldwide" row is a
+ * look first and keeps its words).
+ */
+describe('which community the join screens name (N1)', () => {
+    const titles = () => all('[role="heading"]').map((h) => h.textContent);
+    const atTheInviteStep = async (lang: UiLang) => {
+        await mount(lang);
+        await press('🎟️ Join with an invite', lang);
+    };
+    const fill = async (lang: UiLang, address = 'mullum') => {
+        await type('Paste your invite link or code', 'BP-ABCD-1234', lang);
+        await type('Community name or address (e.g. mullum)', address, lang);
+        await type('Your name or nickname', 'Sally', lang);
+    };
+
+    it('the invite step: "🎟️ Join with an invite" before the code is checked, never "Join BeanPool"', async () => {
+        await atTheInviteStep('en');
+        expect(titles()).toContain('🎟️ Join with an invite');
+        expect(host!.textContent).not.toContain('Join BeanPool');
+    });
+
+    it('once the node has checked the code and named its community: "Join {name}", even when it refused the code', async () => {
+        await atTheInviteStep('en');
+        await fill('en');
+        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        await press('Next →', 'en');
+        expect(titles()).toContain('Join Mullum Community');
+        expect(titles()).not.toContain('🎟️ Join with an invite');
+    });
+
+    it('a name read at one address is never claimed for another: the address changes, the heading goes back to the generic one', async () => {
+        await atTheInviteStep('en');
+        await fill('en');
+        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        await press('Next →', 'en');
+        expect(titles()).toContain('Join Mullum Community');
+        await type('Community name or address (e.g. mullum)', 'castlemaine', 'en');
+        expect(titles()).toContain('🎟️ Join with an invite');
+        expect(titles()).not.toContain('Join Mullum Community');
+        // And back at the address it was read for, the name is true again.
+        await type('Community name or address (e.g. mullum)', 'mullum', 'en');
+        expect(titles()).toContain('Join Mullum Community');
+    });
+
+    it('a node that names no community (an older one): the generic heading stays', async () => {
+        await atTheInviteStep('en');
+        await fill('en');
+        phone.invite = { valid: false, reason: 'used' };
+        await press('Next →', 'en');
+        expect(titles()).toContain('🎟️ Join with an invite');
+    });
+
+    it('in the pseudo-locale both headings go through t(), and hold at 320 dp with 1.3× text', async () => {
+        await atTheInviteStep('xx');
+        expect(titles()).toContain(pseudoLocalise('🎟️ Join with an invite'));
+        check('the invite step, before the check');
+        await fill('xx');
+        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        await press('Next →', 'xx');
+        expect(titles()).toContain(pseudoLocalise('Join {name}').replace('{name}', 'Mullum Community'));
+        check('the invite step, named');
+    });
+
+    it("the global community's door: \"🌍 Join the global community\", while the first screen's row still says Explore BeanPool worldwide", async () => {
+        await mount('en');
+        expect(button('🌍 Explore BeanPool worldwide', 'en')).toBeTruthy();
+        await explore('en');
+        expect(titles()).toContain('🌍 Join the global community');
+        expect(titles()).not.toContain('🌍 Explore BeanPool worldwide');
+    });
+
+    it("the global community's door in the pseudo-locale: the title through t()", async () => {
+        await mount('xx');
+        await explore('xx');
+        expect(titles()).toContain(pseudoLocalise('🌍 Join the global community'));
+        check('the global door, titled');
     });
 });

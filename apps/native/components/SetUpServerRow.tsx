@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
@@ -8,13 +8,16 @@ import { CLAIM_NEW_SERVER_ROUTE } from '../utils/claim-link';
 
 /**
  * "Set up a new community server": the way in for someone who has just installed BeanPool on a server, where they look
- * for one (Find a community, Start a community). It opens the claim screen with no server yet (app/claim-community.tsx),
- * whose Scan the code reads the QR `beanpool claim` shows. Before it, only the phone's camera (the QR's beanpool://claim
- * link) or Settings → Link a device reached that scanner (Marty's claim, 17 Oct).
+ * for one (Find a community, Start a community) and on the BeanPool sheet under Add a community, on every phone
+ * (DESIGN-new-operator-path-fable.md, decision 2: a member on a local community had no way to it but the camera). It
+ * opens the claim screen with no server yet (app/claim-community.tsx), whose Scan the code reads the QR `beanpool claim`
+ * shows. Before it, only the phone's camera (the QR's beanpool://claim link) or Settings → Link a device reached that
+ * scanner (Marty's claim, 17 Oct).
  *
- * A row as Find a community's others: icon, title, a line under it, chevron; the words wrap at 320 dp and 1.3×.
+ * A row as Find a community's others: icon, title, a line under it, chevron; the words wrap at 320 dp and 1.3×. `style`
+ * is for a list whose rows carry their own side padding (the BeanPool sheet's).
  */
-export function SetUpServerRow({ divider = false }: { divider?: boolean }) {
+export function SetUpServerRow({ divider = false, style }: { divider?: boolean; style?: StyleProp<ViewStyle> }) {
     const { colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 10 },
@@ -24,7 +27,7 @@ export function SetUpServerRow({ divider = false }: { divider?: boolean }) {
         rowSub: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
     }));
     return (
-        <Pressable style={[styles.row, divider && styles.divider]} onPress={() => router.push(CLAIM_NEW_SERVER_ROUTE)} accessibilityRole="button" testID="set-up-server">
+        <Pressable style={[styles.row, divider && styles.divider, style]} onPress={() => router.push(CLAIM_NEW_SERVER_ROUTE)} accessibilityRole="button" testID="set-up-server">
             <MaterialCommunityIcons name="server-plus" size={24} color={colors.brand.primary} />
             <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>{t('Set up a new community server')}</Text>

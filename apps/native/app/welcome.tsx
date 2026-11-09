@@ -437,6 +437,8 @@ export default function WelcomeScreen() {
     const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+    /** The community address `inviteCommunityName` was read at (join names N1): the step's heading names it only while the fields still point there. */
+    const [inviteNamedAt, setInviteNamedAt] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
 
@@ -1308,6 +1310,10 @@ export default function WelcomeScreen() {
                 undoCommunity = !!storedIdentity && !(await AsyncStorage.getItem('beanpool_anchor_url'));
 
                 const check = await checkInvite(parsedCode, nodeUrl);
+                // Which community this code is for, said in the step's heading from here on (join names N1), whatever the node
+                // thinks of the code: a refused one is still a code for that community. Kept with the address it was read at.
+                setInviteCommunityName(check?.communityName || null);
+                setInviteNamedAt(nodeUrl);
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
@@ -1341,7 +1347,6 @@ export default function WelcomeScreen() {
                     inAlready = true;
                 }
                 setInviterName(check?.inviterCallsign || null);
-                setInviteCommunityName(check?.communityName || null);
 
                 // Per-node callsign uniqueness: check against the target node BEFORE we
                 // create the identity or register, so a brand-new member picks a name
@@ -3122,13 +3127,22 @@ export default function WelcomeScreen() {
 
     // --- CREATE NEW IDENTITY ---
     if (mode === 'create') {
+        // "Join with an invite", then "Join {name}" once the node has checked the code and said whose community it is (join
+        // names N1): only while the code and address fields still name the community it was checked at, as Next reads them.
+        let createStepName: string | null = null;
+        if (inviteCommunityName && inviteNamedAt) {
+            try {
+                const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
+                if (at && at === inviteNamedAt) createStepName = inviteCommunityName;
+            } catch { /* an address that is not plain host[:port]: Next says so; no name is claimed for it */ }
+        }
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>{t('🎟️ Join BeanPool')}</Text>
+                        <Text style={styles.title} accessibilityRole="header">{createStepName ? t('Join {name}', { name: createStepName }) : t('🎟️ Join with an invite')}</Text>
 
                         {clipboardMayHaveInvite && !inviteCode && (
                             <View style={styles.pasteCard}>
@@ -3340,7 +3354,7 @@ export default function WelcomeScreen() {
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
+                            <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">

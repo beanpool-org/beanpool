@@ -1264,7 +1264,7 @@
   "Five tags at most": "Tối đa 5 thẻ",
   "Flour\u0004tag": "Bột mì",
   "Flowers\u0004tag": "Hoa",
-  "Free\u0004price": "Miễn phí",
+  "Free\u0004a listing with no price": "Miễn phí",
   "Free\u0004tag": "Miễn phí",
   "Freight\u0004tag": "Vận chuyển hàng",
   "From this phone's last known place.": "Từ nơi cuối cùng mà điện thoại này biết.",
@@ -2177,5 +2177,7 @@
   "Busy right now. Try again in a moment.": "Hiện đang bận. Hãy thử lại sau giây lát nhé.",
   "Add them to the names list": "Thêm họ vào danh sách tên",
   "Make them a voucher": "Chỉ định họ làm người bảo lãnh",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "Hiện chỉ trên điện thoại: khóa của danh sách tên nằm trên điện thoại của các quản trị viên."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "Hiện chỉ trên điện thoại: khóa của danh sách tên nằm trên điện thoại của các quản trị viên.",
+  "Ask a question with 2–4 options in the feed": "Đặt câu hỏi với 2–4 lựa chọn trên bảng tin",
+  "A gathering with a time and a place": "Một buổi gặp gỡ có thời gian và địa điểm"
 }

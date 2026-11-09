@@ -3948,3 +3948,55 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         });
     });
 });
+
+describe("the New Post form's choices each say what they are (core post-type-lines.ts; Marty, 9 Nov: \"should it have been a need or an offer?\")", () => {
+    const draft = { type: 'need' as const, title: 'Harvest help', description: 'Pick with us.', category: 'food', credits: 0, priceType: 'fixed' as const, repeatable: false, cashAlsoNeeded: false };
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        window.alert = vi.fn();
+    });
+
+    it('one short line under each of Offer, Need, Poll and Event, the Offer and Need ones as the phone says them', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const line = (kind: string) => within(panel).getByTestId(`new-post-type-line-${kind}`).textContent;
+        expect(line('offer')).toBe("Something you'll give or do for others");
+        expect(line('need')).toBe("Something you're looking for");
+        expect(line('poll')).toBe('Ask a question with 2–4 options in the feed');
+        expect(line('event')).toBe('A gathering with a time and a place');
+    });
+
+    it("a button's name stays its title and its line is its description, so a screen reader says both", async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        for (const [name, kind] of [['🟢 Offer', 'offer'], ['🟠 Need', 'need'], ['🗳️ Poll', 'poll'], ['Event', 'event']] as const) {
+            const button = within(panel).getByRole('button', { name });
+            expect(button).toHaveAccessibleDescription(within(panel).getByTestId(`new-post-type-line-${kind}`).textContent!);
+        }
+        expect(within(panel).getByRole('button', { name: '🟠 Need' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('two columns, so each line has room at 320 px with 1.3x text; the line wraps whole and takes the central ink tokens in light and dark', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const hint = within(panel).getByTestId('new-post-type-line-offer');
+        expect(hint.parentElement!.parentElement!.className).toContain('grid-cols-2');
+        expect(hint.parentElement!.parentElement!.className).not.toContain('grid-cols-4');
+        expect(hint.className).toEqual(expect.stringContaining('text-nature-600'));
+        expect(hint.className).toEqual(expect.stringContaining('dark:text-nature-300'));
+        expect(hint.className).toEqual(expect.stringContaining('break-words'));
+        expect(hint.className).not.toMatch(/truncate|line-clamp|whitespace-nowrap/);
+    });
+});

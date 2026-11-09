@@ -1306,7 +1306,7 @@
   "Five tags at most": "Lebo tano kwa upeo",
   "Flour\u0004tag": "Unga",
   "Flowers\u0004tag": "Maua",
-  "Free\u0004price": "Bure",
+  "Free\u0004a listing with no price": "Bure",
   "Free\u0004tag": "Bure",
   "Freight\u0004tag": "Mizigo",
   "From this phone's last known place.": "Kutoka mahali pa mwisho panapojulikana pa simu hii.",
@@ -2248,5 +2248,7 @@
   "Busy right now. Try again in a moment.": "Kuna shughuli nyingi sasa. Jaribu tena baada ya muda mfupi.",
   "Add them to the names list": "Mwongeze kwenye orodha ya majina",
   "Make them a voucher": "Mteue kuwa mdhamini",
-  "On the phone for now: the names list’s keys live on the admins’ phones.": "Kwenye simu kwa sasa: funguo za orodha ya majina ziko kwenye simu za wasimamizi."
+  "On the phone for now: the names list’s keys live on the admins’ phones.": "Kwenye simu kwa sasa: funguo za orodha ya majina ziko kwenye simu za wasimamizi.",
+  "Ask a question with 2–4 options in the feed": "Uliza swali lenye chaguo 2–4 kwenye mlisho",
+  "A gathering with a time and a place": "Mkusanyiko wenye wakati na mahali"
 }

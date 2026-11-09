@@ -2025,6 +2025,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_by TEXT`).run(); } catch { }
+    // A period of a standing deal (schema.sql standing_deals; engine/standing-deals.ts).
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT REFERENCES standing_deals(id)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER`).run(); } catch { }
 
     // activity_feed: ensure check constraint allows 'dispute_resolved'
     try {

@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
 import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -43,7 +43,6 @@ import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, requestDecisionFailureWords, requestIsGone, type ChatViewer,
 } from '../../utils/chat-actions';
-import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
 // db.ts and the DM line checks never reach the words layer: the sentences they write are translated where shown.
 import { chatLineWords } from '../../utils/chat-line-words';
@@ -56,7 +55,7 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
-// the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
+// the composer all moved to utils/chat-actions, components/chat/* and core's chat-links (chat parity,
 // 2026-09-23), so a group chat behaves the same way rather than nearly the same way.
 
 // History window (WhatsApp-style): open with the newest page, grow by a page each
@@ -1573,9 +1572,10 @@ function ChatScreen({ id }: { id: string }) {
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {/* English writes one form for both; a language with more forms has them. */}
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.priceType === 'hourly'
+                            {/* Priced at 0 it reads Free (core listing-price.ts), as on every card, whatever the unit. */}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.credits, null) ?? (postContext.priceType === 'hourly'
                                 ? tn(Number(postContext.credits) || 0, '{n} Beans / hr', '{n} Beans / hr')
-                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans')}</Text>}
+                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans'))}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,

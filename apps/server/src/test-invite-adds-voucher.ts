@@ -389,7 +389,9 @@ async function main(): Promise<void> {
 
     // ── 12. Replication ──────────────────────────────────────────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);
-    assert(cols.includes('voucher_level') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION === 23, `12. the manifest carries both columns as plain, hashes version 23 (${TABLE_HASHES_VERSION})`);
+    // 23 raised the version for these two columns; a later raise (24: standing deals) still hashes them. Which columns each
+    // version hashes is pinned exactly in test-replica-hashes (COLUMNS_OF_VERSION), as test-vouch-reset reads "21 or later".
+    assert(cols.includes('voucher_level') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION >= 23, `12. the manifest carries both columns as plain, hashes version 23 or later (${TABLE_HASHES_VERSION})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Il tuo budget: Nessun limite",
   "No limit · {vouched} vouched · {below} below zero": "Nessun limite · {vouched} garantiti · {below} sotto zero",
   "Clear all": "Cancella tutto",
-  "Clear this notice": "Cancella questa notifica"
+  "Clear this notice": "Cancella questa notifica",
+  "Pending ({count})": "In sospeso ({count})",
+  "Joined ({count})": "Si sono uniti ({count})",
+  "For someone who asked to join": "Per chi ha chiesto di unirsi",
+  "Name on the phone": "Nome sul telefono",
+  "{amount} vouch": "garanzia di {amount}",
+  "voucher budget {amount}": "budget da garante {amount}",
+  "confirms them as known": "li conferma come conosciuti",
+  "Plain invite": "Invito semplice",
+  "{time} left": "{time} rimanenti",
+  "Invite for {name}": "Invito per {name}",
+  "Invite made": "Invito creato"
 }

@@ -2312,5 +2312,16 @@
   "Your budget: No limit": "あなたの予算：上限なし",
   "No limit · {vouched} vouched · {below} below zero": "上限なし · 保証済み {vouched} · マイナス {below}",
   "Clear all": "すべてクリア",
-  "Clear this notice": "この通知をクリア"
+  "Clear this notice": "この通知をクリア",
+  "Pending ({count})": "保留中（{count}）",
+  "Joined ({count})": "参加済み（{count}）",
+  "For someone who asked to join": "参加を希望した人向け",
+  "Name on the phone": "名前はスマートフォンにあります",
+  "{amount} vouch": "保証 {amount}",
+  "voucher budget {amount}": "保証人の予算 {amount}",
+  "confirms them as known": "知り合いとして確認します",
+  "Plain invite": "通常の招待",
+  "{time} left": "残り{time}",
+  "Invite for {name}": "{name}さんへの招待",
+  "Invite made": "招待を作成しました"
 }

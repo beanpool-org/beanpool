@@ -2635,7 +2635,6 @@
   "Who can see this?": "谁可以看到？",
   "Who hosts it": "谁来托管",
   "Who invited whom. The tree shows how your community grows.": "展示谁邀请了谁。该树状图呈现了社区的成长脉络。",
-  "Who is this invite for? (For your records)": "此邀请发给谁？（供你备忘）",
   "Who should be able to join?": "谁可以加入？",
   "Who should lead?": "谁来牵头？",
   "Who you work well with": "与你协作顺畅的人群",
@@ -4530,5 +4529,7 @@
   "Your name here": "在此输入你的名字",
   "your browser": "你的浏览器",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} 的服务器比这个应用旧，目前还无法通过登录找到你的账户。请让它的管理员更新，或使用你的 12 个助记词。",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} 回复时，我们会在这里通知你。"
+  "✓ We'll tell you here when {name} answers.": "✓ {name} 回复时，我们会在这里通知你。",
+  "Make another invite": "再创建一个邀请",
+  "A note for you, kept on your community's server": "给你自己的备注，保存在你所在社区的服务器上"
 }

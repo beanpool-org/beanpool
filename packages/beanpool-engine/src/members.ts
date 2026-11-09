@@ -7,7 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, INVITE_LIFE_MS, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
 import { prepared } from './statements.js';
 import { foldName } from './names.js';
 
@@ -94,6 +94,19 @@ export interface InviteCode {
     usedBy: string | null;
     usedAt: string | null;
     intendedFor?: string;
+}
+
+/**
+ * An invite as its maker reads it (GET /api/invite/mine/:publicKey, to that member alone): the code and everything it carries.
+ * `namesEntryId`, `vouchAmount` and `voucherLevel` are null on a plain invite; `expiresAt` is made from the one 30-day life
+ * (core INVITE_LIFE_DAYS), the same time `checkInvite` and the hourly prune go by.
+ */
+export interface MyInvite extends InviteCode {
+    namesEntryId: string | null;
+    vouchAmount: number | null;
+    voucherLevel: number | null;
+    /** Null only for a row whose made-at time can't be read. */
+    expiresAt: string | null;
 }
 
 export interface MemberProfile {
@@ -590,7 +603,7 @@ export function checkInvite(db: Db, codeOrTicket: string, binding?: TicketBindin
 
     // standard online codes generated more than 30 days ago expire
     const ageMs = Date.now() - new Date(row.created_at).getTime();
-    if (ageMs > 30 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
+    if (ageMs > INVITE_LIFE_MS) return { valid: false, reason: 'expired' };
     // Its maker has since been pruned or re-keyed, or is a visitor's row (a code made before visitors couldn't make
     // them): redeemInvite refuses it (apps/server engine/invites.ts), so say so now.
     if (!mayBringSomeoneIn(db, row.created_by)) return { valid: false, reason: 'unknown_inviter' };
@@ -599,16 +612,23 @@ export function checkInvite(db: Db, codeOrTicket: string, binding?: TicketBindin
     return { valid: true, inviterCallsign: inviter?.callsign || null };
 }
 
-export function getInvitesByMember(db: Db, pubkey: string): InviteCode[] {
+export function getInvitesByMember(db: Db, pubkey: string): MyInvite[] {
     const rows = db.prepare("SELECT * FROM invite_codes WHERE created_by = ?").all(pubkey) as any[];
-    return rows.map(r => ({
-        code: r.code,
-        createdBy: r.created_by,
-        createdAt: r.created_at,
-        usedBy: r.used_by,
-        usedAt: r.used_at,
-        intendedFor: r.intended_for || undefined,
-    }));
+    return rows.map(r => {
+        const madeAt = Date.parse(r.created_at);
+        return {
+            code: r.code,
+            createdBy: r.created_by,
+            createdAt: r.created_at,
+            usedBy: r.used_by,
+            usedAt: r.used_at,
+            intendedFor: r.intended_for || undefined,
+            namesEntryId: r.names_entry_id || null,
+            vouchAmount: r.vouch_amount || null,
+            voucherLevel: r.voucher_level || null,
+            expiresAt: Number.isFinite(madeAt) ? new Date(madeAt + INVITE_LIFE_MS).toISOString() : null,
+        };
+    });
 }
 
 export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {

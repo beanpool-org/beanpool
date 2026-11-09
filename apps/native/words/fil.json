@@ -1421,9 +1421,7 @@
   "Share this community's link": "Ibahagi ang link ng komunidad na ito",
   "📤 Share the link": "📤 Ibahagi ang link",
   "📤 Invite Someone": "📤 Mag-imbita ng Iba",
-  "Who is this invite for? (For your records)": "Para kanino ang imbitasyong ito? (Para sa iyong tala)",
   "Generating...": "Bumubuo...",
-  "Share this cryptographic code": "Ibahagi ang cryptographic code na ito",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ NAKABINBIN ({n})",
     "other": "⏳ NAKABINBIN ({n})"
@@ -7105,5 +7103,7 @@
   "Nothing new.": "Walang bago.",
   "Older notices are gone after 7 days.": "Nawawala ang mas lumang mga abiso pagkalipas ng 7 araw.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Walang limitasyon · {vouched} napatunayan · {belowZero} mababa sa zero ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Walang limitasyon · {vouched} napatunayan · {belowZero} mababa sa zero · {writtenOff} na-write off · {passedOn} ipinasa"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Walang limitasyon · {vouched} napatunayan · {belowZero} mababa sa zero · {writtenOff} na-write off · {passedOn} ipinasa",
+  "Make another invite": "Gumawa ng isa pang imbitasyon",
+  "A note for you, kept on your community's server": "Isang tala para sa iyo, nakatago sa server ng iyong komunidad"
 }

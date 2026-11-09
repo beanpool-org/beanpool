@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Tu presupuesto: Sin límite",
   "No limit · {vouched} vouched · {below} below zero": "Sin límite · {vouched} avalados · {below} bajo cero",
   "Clear all": "Borrar todo",
-  "Clear this notice": "Borrar esta notificación"
+  "Clear this notice": "Borrar esta notificación",
+  "Pending ({count})": "Pendientes ({count})",
+  "Joined ({count})": "Se unieron ({count})",
+  "For someone who asked to join": "Para alguien que pidió unirse",
+  "Name on the phone": "Nombre en el teléfono",
+  "{amount} vouch": "aval de {amount}",
+  "voucher budget {amount}": "presupuesto de avalista {amount}",
+  "confirms them as known": "los confirma como conocidos",
+  "Plain invite": "Invitación sencilla",
+  "{time} left": "quedan {time}",
+  "Invite for {name}": "Invitación para {name}",
+  "Invite made": "Invitación creada"
 }

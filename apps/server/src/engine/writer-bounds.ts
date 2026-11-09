@@ -34,6 +34,7 @@
  * enterprises a day and running, invites a day and unused, and Pulse links by hand a day (engine/owner-admin-limit.ts;
  * Marty, 31 Oct), and its refusals name it.
  */
+import { INVITE_LIFE_DAYS } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -42,8 +43,6 @@ import { returnLapsedHolds } from './vouchers.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-/** An invite's life: redeemInvite and checkInvite refuse a code older than this (engine/invites.ts, the engine's). */
-const INVITE_LIFE_DAYS = 30;
 
 export type WriterLimitCode =
     | 'message_too_long'

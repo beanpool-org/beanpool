@@ -2312,5 +2312,16 @@
   "Your budget: No limit": "你的預算：無上限",
   "No limit · {vouched} vouched · {below} below zero": "無上限 · 已擔保 {vouched} · {below} 為負",
   "Clear all": "全部清除",
-  "Clear this notice": "清除此通知"
+  "Clear this notice": "清除此通知",
+  "Pending ({count})": "待處理（{count}）",
+  "Joined ({count})": "已加入（{count}）",
+  "For someone who asked to join": "給申請加入的人",
+  "Name on the phone": "姓名在手機上",
+  "{amount} vouch": "擔保 {amount}",
+  "voucher budget {amount}": "擔保人預算 {amount}",
+  "confirms them as known": "確認其為熟人",
+  "Plain invite": "普通邀請",
+  "{time} left": "剩餘{time}",
+  "Invite for {name}": "給{name}的邀請",
+  "Invite made": "邀請已建立"
 }

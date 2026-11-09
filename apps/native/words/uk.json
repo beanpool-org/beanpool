@@ -1557,9 +1557,7 @@
   "Share this community's link": "Поділіться посиланням на цю спільноту",
   "📤 Share the link": "📤 Поділитися посиланням",
   "📤 Invite Someone": "📤 Запросити когось",
-  "Who is this invite for? (For your records)": "Для кого це запрошення? (Для ваших записів)",
   "Generating...": "Створення...",
-  "Share this cryptographic code": "Поділіться цим криптографічним кодом",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ ОЧІКУЄ ({n})",
     "few": "⏳ ОЧІКУЮТЬ ({n})",
@@ -7623,5 +7621,7 @@
   "Nothing new.": "Нічого нового.",
   "Older notices are gone after 7 days.": "Старіші сповіщення зникають через 7 днів.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Без обмежень · під порукою {vouched} · нижче нуля {belowZero} ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Без обмежень · під порукою {vouched} · нижче нуля {belowZero} · списано {writtenOff} · передано {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Без обмежень · під порукою {vouched} · нижче нуля {belowZero} · списано {writtenOff} · передано {passedOn}",
+  "Make another invite": "Створити ще одне запрошення",
+  "A note for you, kept on your community's server": "Нотатка для вас, зберігається на сервері вашої спільноти"
 }

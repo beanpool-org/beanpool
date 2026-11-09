@@ -2691,7 +2691,6 @@
   "Who can see this?": "Bunu kimler görebilir?",
   "Who hosts it": "Kim barındırır",
   "Who invited whom. The tree shows how your community grows.": "Kimin kimi davet ettiği. Ağaç, topluluğunun nasıl büyüdüğünü gösterir.",
-  "Who is this invite for? (For your records)": "Bu davet kimin için? (Kendi kaydın için)",
   "Who should be able to join?": "Kimler katılabilsin?",
   "Who should lead?": "Kim lider olmalı?",
   "Who you work well with": "Birlikte iyi çalıştığınız kişiler",
@@ -4706,5 +4705,7 @@
   "Your name here": "Adınız buraya",
   "your browser": "tarayıcın",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} topluluğunun sunucusu bu uygulamadan eski ve hesabını henüz bir girişten bulamıyor. Yöneticisinden güncellemesini iste ya da 12 kelimeni kullan.",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} yanıtladığında sana burada haber veririz."
+  "✓ We'll tell you here when {name} answers.": "✓ {name} yanıtladığında sana burada haber veririz.",
+  "Make another invite": "Başka bir davet oluştur",
+  "A note for you, kept on your community's server": "Sana bir not, topluluğunun sunucusunda saklanır"
 }

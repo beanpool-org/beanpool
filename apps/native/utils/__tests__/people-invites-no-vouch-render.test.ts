@@ -179,6 +179,8 @@ describe('People → Invites offers no vouch (the vouching reset, R0)', () => {
     it('an invite\'s body is the member\'s key and nothing else, the first time and the next', async () => {
         await open();
         await generate();
+        // The form folds once an invite is made; a second code is a deliberate tap on "Make another invite".
+        await act(async () => { (host.querySelector('[data-testid="invite-make-another"]') as HTMLElement).click(); });
         await generate();
         expect(node.made).toHaveLength(2);
         for (const body of node.made) expect(Object.keys(body).sort()).toEqual(['publicKey']);

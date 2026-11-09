@@ -25,8 +25,9 @@ import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
+import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -82,6 +83,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     }, []);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
+    // What the invite just made is for and carries, for the card under Generate; the form folds behind "Make another invite" once
+    // one is made, so a second code is a deliberate tap (Marty, 10 Nov: a plain invite was made beside the bound one).
+    const [madeCard, setMadeCard] = useState<{ who: string | null; invite: InviteRowSource } | null>(null);
+    const [makeAnother, setMakeAnother] = useState(false);
     const [intendedFor, setIntendedFor] = useState('');
     const [copied, setCopied] = useState(false);
     const [showQR, setShowQR] = useState(false);
@@ -263,6 +268,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     : await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
                 if (res?.invite?.code) {
                     setNewCode(res.invite.code);
+                    setMadeCard({ who: intendedFor.trim() || null, invite: res.invite });
+                    setMakeAnother(false);
                     setIntendedFor('');
                     setShowQR(true);
                     setVouchPreset(null);
@@ -338,6 +345,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
 
             // Optimistically stick it in the UI since the server doesn't know about it yet!
             setInvites(prev => [inviteObj, ...prev]);
+            setMadeCard({ who: forWhom ?? null, invite: inviteObj });
+            setMakeAnother(false);
             
         } catch (err: any) {
             alert(err.message || t('Failed to generate offline ticket'));
@@ -408,6 +417,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     const offlineCodes = (!isPreview && adminsOnly) ? localOfflineCodes(identity.publicKey) : new Set<string>();
     const unusedInvites = invites.filter(i => !i.usedBy && !offlineCodes.has(i.code));
     const usedInvites = invites.filter(i => i.usedBy);
+    // The form is folded away once an invite is made; a second code is a deliberate tap on "Make another invite".
+    const formOpen = isPreview || !newCode || makeAnother;
 
     // The community's plain link, to copy or share: where nobody makes invites, or where only admins do and the
     // community takes requests to join (someone with the link asks in the app, and an admin answers).
@@ -575,179 +586,211 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         {t('Each invite code is single-use and valid for 30 days. Generate a new code for each person you invite.')}
                     </p>
 
-                    <input
-                        type="text"
-                        placeholder={t('Who is this invite for? (For your records)')}
-                        value={intendedFor}
-                        onChange={e => setIntendedFor(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
-                    />
-
-                    {myVouching?.voucher && (
-                        <VouchPresetChoice
-                            value={vouchPreset}
-                            onChange={setVouchPreset}
-                            budgetLeft={myVouching.budget?.left ?? 0}
-                            budgetTotal={myVouching.budget?.level ?? 0}
-                            noLimit={myVouching.noLimit === true}
+                    {formOpen && (
+                        <>
+                        <input
+                            type="text"
+                            placeholder={t("A note for you, kept on your community's server")}
+                            value={intendedFor}
+                            onChange={e => setIntendedFor(e.target.value)}
+                            className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                         />
-                    )}
 
-                    {showsNamesBoxes && <InviteAddsBoxes />}
+                        {myVouching?.voucher && (
+                            <VouchPresetChoice
+                                value={vouchPreset}
+                                onChange={setVouchPreset}
+                                budgetLeft={myVouching.budget?.left ?? 0}
+                                budgetTotal={myVouching.budget?.level ?? 0}
+                                noLimit={myVouching.noLimit === true}
+                            />
+                        )}
 
-                    {isPreview ? (
-                        <LocalCommunityAction feature="invites" label={t('✨ Generate New Invite')} className="w-full p-4 mb-6 text-[15px] shadow-md" {...waysForward} />
-                    ) : (
-                        <button
-                            onClick={handleGenerate}
-                            disabled={generating}
-                            className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
-                                generating 
-                                    ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                    : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
-                            }`}
-                        >
-                            {generating ? t('Generating...') : t('✨ Generate New Invite')}
-                        </button>
-                    )}
-                    {notice && (
-                        <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{refusalWords(notice)}</p>
-                    )}
+                        {showsNamesBoxes && <InviteAddsBoxes />}
 
-                    {newCode && showQR && (
-                        <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all" data-testid={isPreview ? 'invite-qr-card' : undefined}>
+                        {isPreview ? (
+                            <LocalCommunityAction feature="invites" label={t('✨ Generate New Invite')} className="w-full p-4 mb-6 text-[15px] shadow-md" {...waysForward} />
+                        ) : (
+                            <button
+                                onClick={handleGenerate}
+                                disabled={generating}
+                                className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
+                                    generating 
+                                        ? 'bg-nature-400 text-white cursor-not-allowed' 
+                                        : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
+                                }`}
+                            >
+                                {generating ? t('Generating...') : t('✨ Generate New Invite')}
+                            </button>
+                        )}
+                        {notice && (
+                            <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{refusalWords(notice)}</p>
+                        )}
+
+                        </>
+                    )}
+                    {isPreview && newCode && showQR && (
+                        // The showcase's sample card (Example Valley): the marker actions, as it always was.
+                        <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all" data-testid="invite-qr-card">
                             <p className="text-nature-600 dark:text-nature-400 text-[14px] font-medium mb-3">{t('Share this code with someone you trust')}</p>
-                            <p className={`font-mono font-bold text-nature-950 dark:text-white break-all mb-4 ${isPreview ? 'text-base sm:text-xl tracking-wider sm:tracking-widest' : 'text-xl tracking-widest'}`} title={newCode}>
+                            <p className="font-mono font-bold text-nature-950 dark:text-white break-all mb-4 text-base sm:text-xl tracking-wider sm:tracking-widest" title={newCode}>
                                 {newCode.length > 20 ? `${newCode.substring(0, 16)}...` : newCode.toUpperCase()}
                             </p>
-                            {/* Preview: the QR and both markers fit the card at 320 px with 1.3x text (review of #2057, B2). */}
-                            <div className={`bg-white rounded-xl p-4 inline-block mb-5 shadow-sm${isPreview ? ' max-w-full' : ''}`}>
-                                <QRCodeSVGComponent value={isPreview ? newCode : `${window.location.origin}/?invite=${newCode}`} size={200} className={isPreview ? 'block max-w-full h-auto' : undefined} />
+                            <div className="bg-white rounded-xl p-4 inline-block mb-5 shadow-sm max-w-full">
+                                <QRCodeSVGComponent value={newCode} size={200} className="block max-w-full h-auto" />
                             </div>
-                            <div className={isPreview ? 'flex flex-col gap-2' : 'flex gap-3 justify-center'}>
-                                {isPreview ? (
-                                    <LocalCommunityAction feature="invites" label={t('📋 Copy')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
-                                ) : (
-                                    <button 
-                                        onClick={() => newCode && handleCopyProxy(newCode)} 
-                                        className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
-                                            copied 
-                                                ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400' 
-                                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
-                                        }`}
-                                        aria-label={t('Copy invite link')}
-                                        title={t('Copy invite link')}
-                                    >
-                                        {copied ? t('✓ Copied!') : t('📋 Copy')}
-                                    </button>
-                                )}
-                                {isPreview ? (
-                                    <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
-                                ) : (
-                                    <button 
-                                        onClick={() => newCode && handleShare(newCode)} 
-                                        className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
-                                        aria-label={t('Share invite link')}
-                                        title={t('Share invite link')}
-                                    >
-                                        {t('📤 Share')}
-                                    </button>
-                                )}
+                            <div className="flex flex-col gap-2">
+                                <LocalCommunityAction feature="invites" label={t('📋 Copy')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
+                                <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
                             </div>
                         </div>
+                    )}
+                    {!isPreview && newCode && madeCard && madeCard.invite.code === newCode && (
+                        <InviteMadeCard
+                            who={madeCard.who}
+                            invite={madeCard.invite}
+                            now={Date.now()}
+                            link={`${window.location.origin}/?invite=${newCode}`}
+                            actions={
+                                <>
+                                        <button
+                                            onClick={() => newCode && handleCopyProxy(newCode)}
+                                            className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                                                copied
+                                                    ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
+                                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                                            }`}
+                                            aria-label={t('Copy invite link')}
+                                            title={t('Copy invite link')}
+                                        >
+                                            {copied ? t('✓ Copied!') : t('📋 Copy')}
+                                        </button>
+                                        <button
+                                            onClick={() => newCode && handleShare(newCode)}
+                                            className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
+                                            aria-label={t('Share invite link')}
+                                            title={t('Share invite link')}
+                                        >
+                                            {t('📤 Share')}
+                                        </button>
+                                </>
+                            }
+                        />
+                    )}
+                    {!formOpen && (
+                        <button
+                            type="button"
+                            onClick={() => setMakeAnother(true)}
+                            className="w-full min-h-[44px] p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] font-bold cursor-pointer mb-6 shadow-sm"
+                            data-testid="invite-make-another"
+                        >
+                            {t('Make another invite')}
+                        </button>
                     )}
                         </>
                     )}
 
-                    {unusedInvites.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">{t('⏳ Pending ({count})', { count: unusedInvites.length })}</h3>
-                            {adminsOnly && (
+                    {isPreview ? (
+                        // The showcase's sample list (Example Valley), flat as it always was: every sample row, with its markers.
+                        <>
+                            {unusedInvites.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">{t('⏳ Pending ({count})', { count: unusedInvites.length })}</h3>
+                                    {unusedInvites.map(inv => (
+                                        <div key={inv.code} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 shadow-sm transition-transform hover:-translate-y-0.5">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex flex-col gap-1">
+                                                    {inv.intendedFor && (
+                                                        <span className="text-[13px] font-bold text-nature-600 dark:text-nature-400">
+                                                            {t('For: {name}', { name: inv.intendedFor })}
+                                                        </span>
+                                                    )}
+                                                    <span className="font-mono text-[14px] font-bold tracking-wider text-nature-950 dark:text-white break-all" title={inv.code}>
+                                                        {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
+                                                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                        aria-label={t('Show QR code')}
+                                                        title={t('Show QR code')}
+                                                    >
+                                                        📱
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 flex flex-col gap-2">
+                                                <LocalCommunityAction feature="invites" label={t('📋 Copy')} aria-label={t('Copy invite link')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
+                                                <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
+                                            </div>
+                                            <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                                {t('Created {date}', { date: dayWords(inv.createdAt) })}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {usedInvites.length > 0 && (
+                                <div>
+                                    <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider mt-6">{t('✅ Redeemed ({count})', { count: usedInvites.length })}</h3>
+                                    {usedInvites.map(inv => (
+                                        <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
+                                            <div className="flex flex-col gap-1">
+                                                {inv.intendedFor && (
+                                                    <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
+                                                        {t('For: {name}', { name: inv.intendedFor })}
+                                                    </span>
+                                                )}
+                                                <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
+                                                    {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                                {inv.usedAt ? t('Used {date}', { date: dayWords(inv.usedAt) }) : t('Used')}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            {adminsOnly && unusedInvites.length > 0 && (
                                 <p className="text-nature-500 dark:text-nature-400 text-[13px] mb-3 leading-relaxed">
                                     {t('Codes you made earlier still work until they lapse, 30 days after they were made.')}
                                 </p>
                             )}
-                            {unusedInvites.map(inv => (
-                                <div key={inv.code} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 shadow-sm transition-transform hover:-translate-y-0.5">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex flex-col gap-1">
-                                            {inv.intendedFor && (
-                                                <span className="text-[13px] font-bold text-nature-600 dark:text-nature-400">
-                                                    {t('For: {name}', { name: inv.intendedFor })}
-                                                </span>
-                                            )}
-                                            <span className="font-mono text-[14px] font-bold tracking-wider text-nature-950 dark:text-white break-all" title={inv.code}>
-                                                {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {isPreview && (
-                                                <button 
-                                                    onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
-                                                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                    aria-label={t('Show QR code')}
-                                                    title={t('Show QR code')}
-                                                >
-                                                    📱
-                                                </button>
-                                            )}
-                                            {!isPreview && (
-                                                <>
-                                                    <button 
-                                                        onClick={() => handleCopyProxy(inv.code)} 
-                                                        className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                        aria-label={t('Copy invite link')}
-                                                        title={t('Copy invite link')}
-                                                    >
-                                                        📋
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleShare(inv.code)} 
-                                                        className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
-                                                        aria-label={t('Share invite link')}
-                                                        title={t('Share invite link')}
-                                                    >
-                                                        📤
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
+                            <PendingInvites
+                                invites={[...unusedInvites, ...usedInvites]}
+                                now={Date.now()}
+                                linkFor={(code) => `${window.location.origin}/?invite=${code}`}
+                                shareFor={(code) => (
+                                    <div className="flex gap-3 justify-center flex-wrap">
+                                        <button
+                                            onClick={() => code && handleCopyProxy(code)}
+                                            className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                                                copied
+                                                    ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
+                                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                                            }`}
+                                            aria-label={t('Copy invite link')}
+                                            title={t('Copy invite link')}
+                                        >
+                                            {copied ? t('✓ Copied!') : t('📋 Copy')}
+                                        </button>
+                                        <button
+                                            onClick={() => code && handleShare(code)}
+                                            className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
+                                            aria-label={t('Share invite link')}
+                                            title={t('Share invite link')}
+                                        >
+                                            {t('📤 Share')}
+                                        </button>
                                     </div>
-                                    {isPreview && (
-                                        <div className="mt-3 flex flex-col gap-2">
-                                            <LocalCommunityAction feature="invites" label={t('📋 Copy')} aria-label={t('Copy invite link')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
-                                            <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
-                                        </div>
-                                    )}
-                                    <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
-                                        {t('Created {date}', { date: dayWords(inv.createdAt) })}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {usedInvites.length > 0 && (
-                        <div>
-                            <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider mt-6">{t('✅ Redeemed ({count})', { count: usedInvites.length })}</h3>
-                            {usedInvites.map(inv => (
-                                <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
-                                    <div className="flex flex-col gap-1">
-                                        {inv.intendedFor && (
-                                            <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
-                                                {t('For: {name}', { name: inv.intendedFor })}
-                                            </span>
-                                        )}
-                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
-                                            {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
-                                        {inv.usedAt ? t('Used {date}', { date: dayWords(inv.usedAt) }) : t('Used')}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
+                                )}
+                            />
+                        </>
                     )}
                 </div>
             )}

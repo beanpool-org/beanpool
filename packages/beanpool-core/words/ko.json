@@ -2312,5 +2312,16 @@
   "Your budget: No limit": "내 예산: 한도 없음",
   "No limit · {vouched} vouched · {below} below zero": "한도 없음 · {vouched} 보증됨 · {below} 0 아래",
   "Clear all": "모두 지우기",
-  "Clear this notice": "이 알림 지우기"
+  "Clear this notice": "이 알림 지우기",
+  "Pending ({count})": "대기 중 ({count})",
+  "Joined ({count})": "가입함 ({count})",
+  "For someone who asked to join": "가입을 요청한 사람을 위한 초대",
+  "Name on the phone": "이름은 휴대폰에 있습니다",
+  "{amount} vouch": "보증 {amount}",
+  "voucher budget {amount}": "보증인 예산 {amount}",
+  "confirms them as known": "아는 사람으로 확인됩니다",
+  "Plain invite": "일반 초대",
+  "{time} left": "{time} 남음",
+  "Invite for {name}": "{name}님을 위한 초대",
+  "Invite made": "초대를 만들었습니다"
 }

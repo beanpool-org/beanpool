@@ -1353,9 +1353,7 @@
   "Share this community's link": "Chia sẻ liên kết của cộng đồng này",
   "📤 Share the link": "📤 Chia sẻ liên kết",
   "📤 Invite Someone": "📤 Mời ai đó",
-  "Who is this invite for? (For your records)": "Lời mời này dành cho ai? (Để bạn tiện theo dõi)",
   "Generating...": "Đang tạo...",
-  "Share this cryptographic code": "Chia sẻ mã mật mã này",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ ĐANG CHỜ ({n})"
   },
@@ -6846,5 +6844,7 @@
   "Nothing new.": "Không có gì mới.",
   "Older notices are gone after 7 days.": "Thông báo cũ sẽ biến mất sau 7 ngày.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {belowZero} ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {belowZero} · đã xóa nợ {writtenOff} · đã chuyển giao {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Không giới hạn · đã bảo lãnh {vouched} · dưới 0 {belowZero} · đã xóa nợ {writtenOff} · đã chuyển giao {passedOn}",
+  "Make another invite": "Tạo lời mời khác",
+  "A note for you, kept on your community's server": "Ghi chú cho bạn, được lưu trên máy chủ của cộng đồng bạn"
 }

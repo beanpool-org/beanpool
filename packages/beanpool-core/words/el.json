@@ -2390,5 +2390,16 @@
   "Your budget: No limit": "Ο προϋπολογισμός σας: Χωρίς όριο",
   "No limit · {vouched} vouched · {below} below zero": "Χωρίς όριο · {vouched} με εγγύηση · {below} κάτω από το μηδέν",
   "Clear all": "Διαγραφή όλων",
-  "Clear this notice": "Διαγραφή αυτής της ειδοποίησης"
+  "Clear this notice": "Διαγραφή αυτής της ειδοποίησης",
+  "Pending ({count})": "Σε αναμονή ({count})",
+  "Joined ({count})": "Έγιναν μέλη ({count})",
+  "For someone who asked to join": "Για κάποιον που ζήτησε να συμμετάσχει",
+  "Name on the phone": "Το όνομα είναι στο τηλέφωνο",
+  "{amount} vouch": "εγγύηση {amount}",
+  "voucher budget {amount}": "προϋπολογισμός εγγυητή {amount}",
+  "confirms them as known": "τους επιβεβαιώνει ως γνωστούς",
+  "Plain invite": "Απλή πρόσκληση",
+  "{time} left": "απομένουν {time}",
+  "Invite for {name}": "Πρόσκληση για {name}",
+  "Invite made": "Η πρόσκληση δημιουργήθηκε"
 }

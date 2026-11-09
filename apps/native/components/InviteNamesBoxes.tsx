@@ -79,6 +79,8 @@ export interface InviteNames {
     /** "Open the names list": the list's screen, and the notices are done with. */
     openList: () => void;
     same: ReturnType<typeof sameNameOnList>;
+    /** The names the list opened here, by entry id: what Pending shows for an invite bound to an entry. Empty until the list is open. */
+    entryNames: ReadonlyMap<string, string>;
     /** Generate with the names box ticked: the entry, then the invite bound to it (or to `existingEntryId`). */
     make: (vouchAmount: number | null, existingEntryId?: string) => Promise<NamesInviteResult>;
     /** After an invite was made: the boxes and the name start again. */
@@ -93,12 +95,14 @@ const sameText = (a: { name: string; note: string }, b: { name: string; note: st
  * The boxes' state for People → Invites. `offered`: an owner or admin of a local community where invites are made (the caller
  * decides, utils/invite-names.ts offersNamesBoxes). `here`: Invites is the view on screen (People keeps this mounted across
  * its views). `committee`: the node answered GET /api/names/vouchers (only owners and committee admins get an answer; a 403 is
- * false; undefined while not heard). `voucherBudget`: the community's default budget, where the stepper starts.
+ * false; undefined while not heard). `voucherBudget`: the community's default budget, where the stepper starts. `needList`: Pending
+ * is open with an invite bound to an entry in it, so the list is opened (as the tick opens it) to read that entry's name.
  */
 export function useInviteNames(o: {
     anchorUrl: string; identity: BeanPoolIdentity | null; offered: boolean; here: boolean; committee: boolean | undefined; online: boolean; voucherBudget?: number | null;
+    needList?: boolean;
 }): InviteNames {
-    const { anchorUrl, identity, offered, here, committee, online } = o;
+    const { anchorUrl, identity, offered, here, committee, online, needList = false } = o;
     const [namesTicked, setNamesTickedState] = useState(false);
     const [name, setNameState] = useState('');
     const [voucherTicked, setVoucherTicked] = useState(false);
@@ -167,7 +171,7 @@ export function useInviteNames(o: {
         kept.current = null;
     }, [anchorUrl, identity?.publicKey]);
     useEffect(() => {
-        if (!offered || !namesTicked || !identity || !anchorUrl || opened || opening.current) return;
+        if (!offered || !(namesTicked || (needList && here)) || !identity || !anchorUrl || opened || opening.current) return;
         opening.current = true;
         const forAnchor = anchorUrl;
         const forWhere = `${identity.publicKey}|${anchorUrl}`;
@@ -188,9 +192,14 @@ export function useInviteNames(o: {
             if (anchorNow.current !== forAnchor) setRetry((n) => n + 1);
             else setList({ kind: 'refused', message: say(NAMES_COPY.notReady) });
         });
-    }, [offered, namesTicked, identity, anchorUrl, opened, retry, hear]);
+    }, [offered, namesTicked, needList, here, identity, anchorUrl, opened, retry, hear]);
 
     const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
+    const entryNames = useMemo(() => {
+        const byId = new Map<string, string>();
+        for (const e of entries) if (e.text?.name) byId.set(e.id, e.text.name);
+        return byId;
+    }, [entries]);
     const same = useMemo(() => (namesTicked ? sameNameOnList(name, entries, opened) : null), [namesTicked, name, entries, opened]);
     const voucherWhy = voucherBoxWhy({ committee, online, namesTicked });
 
@@ -236,7 +245,7 @@ export function useInviteNames(o: {
 
     return {
         offered, namesTicked, setNamesTicked, name, setName, voucherTicked, setVoucherTicked, level, setLevel, voucherWhy, list, notices, dismissNotices,
-        openList, same, make, reset,
+        openList, same, entryNames, make, reset,
     };
 }
 

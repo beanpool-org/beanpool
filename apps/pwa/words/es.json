@@ -2691,7 +2691,6 @@
   "Who can see this?": "¿Quién puede ver esto?",
   "Who hosts it": "Quién lo aloja",
   "Who invited whom. The tree shows how your community grows.": "Quién invitó a quién. El árbol muestra cómo crece tu comunidad.",
-  "Who is this invite for? (For your records)": "¿Para quién es esta invitación? (Para tu registro)",
   "Who should be able to join?": "¿Quién debería poder unirse?",
   "Who should lead?": "¿Quién debería liderar?",
   "Who you work well with": "Con quién trabajas bien",
@@ -4707,5 +4706,7 @@
   "Your name here": "Tu nombre aquí",
   "your browser": "tu navegador",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "El servidor de {community} es más antiguo que esta app y aún no puede encontrar tu cuenta a partir de un inicio de sesión. Pide a quien administra {community} que lo actualice, o usa tus 12 palabras.",
-  "✓ We'll tell you here when {name} answers.": "✓ Te avisaremos aquí cuando {name} responda."
+  "✓ We'll tell you here when {name} answers.": "✓ Te avisaremos aquí cuando {name} responda.",
+  "Make another invite": "Crear otra invitación",
+  "A note for you, kept on your community's server": "Una nota para ti, guardada en el servidor de tu comunidad"
 }

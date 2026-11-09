@@ -1353,9 +1353,7 @@
   "Share this community's link": "分享此社群的連結",
   "📤 Share the link": "📤 分享連結",
   "📤 Invite Someone": "📤 邀請朋友加入",
-  "Who is this invite for? (For your records)": "這張邀請函要給誰？（供你個人記錄）",
   "Generating...": "正在產生...",
-  "Share this cryptographic code": "分享此加密代碼",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ 待處理 ({n})"
   },
@@ -6846,5 +6844,7 @@
   "Nothing new.": "沒有新內容。",
   "Older notices are gone after 7 days.": "較早的通知會在 7 天後消失。",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · 無上限 · 已擔保 {vouched} · {belowZero} 為負 ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "無上限 · 已擔保 {vouched} · {belowZero} 為負 · 已沖銷 {writtenOff} · 已轉贈 {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "無上限 · 已擔保 {vouched} · {belowZero} 為負 · 已沖銷 {writtenOff} · 已轉贈 {passedOn}",
+  "Make another invite": "再建立一個邀請",
+  "A note for you, kept on your community's server": "給你自己的備註，儲存在你所在社群的伺服器上"
 }

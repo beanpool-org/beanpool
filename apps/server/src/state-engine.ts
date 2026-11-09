@@ -300,6 +300,7 @@ import {
     type Member,
     type DirectoryRow,
     type InviteCode,
+    type MyInvite,
     type MemberProfile,
     type InviteCheckResult,
     type InviteTreeNode,
@@ -2254,8 +2255,26 @@ export function checkInvite(codeOrTicket: string): ServerInviteCheckResult {
     return result;
 }
 
-export function getInvitesByMember(pubkey: string): InviteCode[] {
-    return getInvitesByMemberEngine(db, pubkey);
+/** An invite as its maker reads it: the engine's row, and two things only this node can add. */
+export interface MyInviteRead extends MyInvite {
+    /** Made when this member said yes to someone's request to join: its note (`intendedFor`) is then the applicant's key, not a name. */
+    forKnock: boolean;
+    /** The callsign of whoever joined with it, once used. */
+    usedByCallsign: string | null;
+}
+
+/** A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker). */
+export function getInvitesByMember(pubkey: string): MyInviteRead[] {
+    const rows = getInvitesByMemberEngine(db, pubkey);
+    if (rows.length === 0) return [];
+    const knocked = new Set((db.prepare('SELECT invite_code FROM join_requests WHERE decided_by = ? AND invite_code IS NOT NULL').all(pubkey) as { invite_code: string }[])
+        .map((r) => r.invite_code));
+    const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    const joiners = new Map<string, string | null>();
+    return rows.map((r) => {
+        if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
+        return { ...r, forKnock: knocked.has(r.code), usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+    });
 }
 
 export function getInviteTree(rootPubkey?: string): InviteTreeNode[] {

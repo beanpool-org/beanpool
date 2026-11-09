@@ -46,12 +46,14 @@ async function signedOverPath(req: Sent, publicKey: string): Promise<boolean> {
 }
 
 const knock = { id: 'k1', pubkey: 'ab'.repeat(32), callsign: 'Robin', message: 'I grow tomatoes.', avatar: null, fromNode: 'global.beanpool.org', createdAt: '2026-09-25T10:00:00.000Z' };
+/** The row as the phone keeps it: a request that came from no shared listing reads `via: null` (shared-listing door A3). */
+const kept = { ...knock, via: null };
 
 describe('the list', () => {
     it('is a signed GET of the member’s own community, signed over the path without the query', async () => {
         const me = await member();
         answer = () => ({ status: 200, body: { knocks: [knock], total: 1, limit: 20, offset: 0 } });
-        expect(await fetchJoinRequests(NODE, me)).toEqual({ ok: true, knocks: [knock], total: 1 });
+        expect(await fetchJoinRequests(NODE, me)).toEqual({ ok: true, knocks: [kept], total: 1 });
         expect(sent[0].url).toBe(`${NODE}/api/join/knocks?limit=20&offset=0`);
         expect(await signedOverPath(sent[0], me.publicKey)).toBe(true);
     });
@@ -77,7 +79,7 @@ describe('the list', () => {
 
     it('drops a row that is not a request', async () => {
         answer = () => ({ status: 200, body: { knocks: [knock, { id: 'k2' }], total: 2 } });
-        expect(await fetchJoinRequests(NODE, await member())).toEqual({ ok: true, knocks: [knock], total: 2 });
+        expect(await fetchJoinRequests(NODE, await member())).toEqual({ ok: true, knocks: [kept], total: 2 });
     });
 });
 

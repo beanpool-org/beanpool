@@ -23,11 +23,12 @@
  *
  * ## Copies made before it, and keys a take-over replaced
  *
- * A copy made before this has no find hash, and its sub is seen again only at a sign-in. So when the index finds nothing,
- * the node scans that provider's current copies with no find hash, one scrypt each on the threadpool, and writes the find
- * hash of every one that matches (stamped, so a delta carries it to a standby). One scan at a time per server; a second
- * caller meanwhile is told to wait a minute and sign in again. A main server's boot log counts the copies not yet
- * findable, and the scan goes once live servers count 0 (design §8 S4).
+ * A copy made before this has no find hash, and its sub is seen again only at a sign-in. So at every find, whatever the
+ * index found (Marty's decision 3, 9 Nov: one sign-in may protect an older copy and a newer one), the node also scans that
+ * provider's current copies with no find hash, one scrypt each on the threadpool, and writes the find hash of every one
+ * that matches (stamped, so a delta carries it to a standby). One scan at a time per server; a second caller meanwhile is
+ * told to wait a minute and sign in again. A main server's boot log counts the copies not yet findable, and the scan goes
+ * once live servers count 0 (design §8 S4); until then every find of that provider pays it.
  *
  * A find hash made under a key a take-over replaced (recovery-seal-retired-<id>.key) can't be found on the next server:
  * the take-over bundle carries the live key only, and the hash can't be made again without the sub. So the start that
@@ -163,18 +164,25 @@ async function scanUnfindable(provider: SsoProvider, sub: string, live: string):
 }
 
 /**
- * Every account this verified sign-in protects here: by the index, else by the scan of copies made before it. `sub` must be
- * from a sign-in this node verified in the same request (sso.ts verifySignIn). Several accounts are each named, by name
- * and key, in name order. Throws {@link RecoverySealKeyMissing} without the key, and {@link FindBusy}.
+ * Every account this verified sign-in protects here: by the index AND by the scan of copies made before it, both at every
+ * find (Marty's decision 3, 9 Nov). One sign-in can protect a copy made before the find hash and another made after it:
+ * the index alone would name only the newer one, at every restore, and once the name routes go the older one would be
+ * lost to it. The scan takes no turn once that provider has no copy left without a find hash. While another scan runs
+ * this throws {@link FindBusy} even when the index found accounts: a find names both sets or none, because half a list
+ * could hide the account the member came for. `sub` must be from a sign-in this node verified in the same request (sso.ts
+ * verifySignIn). Several accounts are each named, by name and key, in name order. Throws {@link RecoverySealKeyMissing}
+ * without the key.
  */
 export async function findAccountsBySignIn(provider: SsoProvider, sub: string): Promise<FoundAccount[]> {
     if (!sub) return [];
     const live = ssoFindHash(provider, sub);
-    let hits = findByIndex(provider, sub, live);
-    if (hits.length === 0) hits = await scanUnfindable(provider, sub, live);
-    // One copy per provider per owner in a generation (the table's UNIQUE), so one entry per account.
-    return hits.map((h) => ({ publicKey: h.owner_pubkey, callsign: h.callsign }))
-        .sort((a, b) => a.callsign.localeCompare(b.callsign) || a.publicKey.localeCompare(b.publicKey));
+    const indexed = findByIndex(provider, sub, live);
+    // Read in the same tick as the index (no await between them), so a copy is in one set or the other, never both.
+    const scanned = await scanUnfindable(provider, sub, live);
+    // One copy per provider per owner in a generation (the table's UNIQUE), so one entry per account; keyed all the same.
+    const byOwner = new Map<string, FoundAccount>();
+    for (const h of [...indexed, ...scanned]) byOwner.set(h.owner_pubkey, { publicKey: h.owner_pubkey, callsign: h.callsign });
+    return [...byOwner.values()].sort((a, b) => a.callsign.localeCompare(b.callsign) || a.publicKey.localeCompare(b.publicKey));
 }
 
 /**

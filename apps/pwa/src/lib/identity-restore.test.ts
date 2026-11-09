@@ -26,7 +26,6 @@ import {
 import { memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 
 const EPHEMERAL = { publicKey: 'e'.repeat(64), privateKey: 'f'.repeat(96) };
-const ACCOUNT = { publicKey: 'a'.repeat(64), callsign: 'Alice' };
 
 const JOINER: BeanPoolIdentity = {
     publicKey: '1'.repeat(64),
@@ -39,7 +38,7 @@ const JOINER: BeanPoolIdentity = {
 function restore(overrides: Partial<PendingRestore> = {}): PendingRestore {
     const now = Date.now();
     return {
-        kind: 'restore', ephemeral: EPHEMERAL, account: ACCOUNT, collectionId: 'col-1', provider: 'google', nonce: 'nonce-r',
+        kind: 'restore', ephemeral: EPHEMERAL, provider: 'google', nonce: 'nonce-r',
         startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS, ...overrides,
     };
 }
@@ -90,7 +89,7 @@ describe('the pending restore', () => {
         expect(await takePendingRestore('someone-elses')).toBeNull();
         expect(await takePendingRestore('')).toBeNull();
         expect(peek('pending-restore')).toBeTruthy();
-        expect((await takePendingRestore('nonce-r'))?.collectionId).toBe('col-1');
+        expect((await takePendingRestore('nonce-r'))?.ephemeral.publicKey).toBe(EPHEMERAL.publicKey);
         expect(peek('pending-restore')).toBeUndefined();
         expect(await takePendingRestore('nonce-r')).toBeNull();
     });
@@ -111,8 +110,8 @@ describe('the pending restore', () => {
         expect(peek('pending-restore')).toMatchObject({ kind: 'restore' });
         const stored = peek('pending-restore') as PendingRestore;
         expect(JSON.stringify(stored)).not.toContain(JOINER.privateKey);
-        expect(Object.keys(stored).sort()).toEqual(['account', 'collectionId', 'ephemeral', 'expiresAt', 'kind', 'nonce', 'provider', 'startedAt']);
-        expect(Object.keys(stored.account).sort()).toEqual(['callsign', 'publicKey']);
+        // No account is known before the sign-in (recovery S1): the find names it after the return.
+        expect(Object.keys(stored).sort()).toEqual(['ephemeral', 'expiresAt', 'kind', 'nonce', 'provider', 'startedAt']);
     });
 
     it('wiping the device clears it too', async () => {

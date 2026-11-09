@@ -74,7 +74,7 @@ const pageLog = [];
 const openContexts = [];
 
 /** One context: a browser with nothing kept, the three origins mapped, the stubs it answers with. */
-async function scenario({ dark = false, redirectToSpy = false, byronStore = null } = {}) {
+async function scenario({ dark = false, redirectToSpy = false, readyThenSpy = false, byronStore = null } = {}) {
     const state = { yesKeys: new Set(), members: new Set(), redeems: [], statusReads: [], profileWrites: [], otherHosts: new Set() };
     const context = await browser.newContext({ viewport: { width: 320, height: 720 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', deviceScaleFactor: 2 });
     context.on('request', (req) => network.push({ url: req.url(), headers: req.headers(), body: req.postData() ?? '' }));
@@ -107,6 +107,8 @@ async function scenario({ dark = false, redirectToSpy = false, byronStore = null
         if (u.pathname.startsWith('/api/')) {
             const signer = req.headers()['x-public-key'] ?? null;
             if (u.origin === GLOBAL) {
+                // readyThenSpy: the photo read is slow, so the account goes well after Byron's page has gone.
+                if (readyThenSpy && u.pathname.startsWith('/api/profile/')) await new Promise((r) => setTimeout(r, 1500));
                 if (u.pathname.startsWith('/api/profile/')) return json(route, { publicKey: decodeURIComponent(u.pathname.split('/')[3]), callsign: 'CJ Global', avatar: PHOTO });
                 return json(route, {});
             }
@@ -128,6 +130,14 @@ async function scenario({ dark = false, redirectToSpy = false, byronStore = null
             }
             if (/^\/api\/members\/[^/]+\/profile$/.test(u.pathname) || u.pathname === '/api/profile') state.profileWrites.push(req.postData() ?? '');
             return json(route, {});
+        }
+        if (readyThenSpy && u.origin === BYRON && u.pathname === '/app') {
+            // Byron's page says ready, rightly (its origin, its nonce), then the window goes to another origin before the
+            // account is sent: only the post's target origin keeps the key from the page that is there now.
+            return route.fulfill({ contentType: 'text/html', body: `<!doctype html><script>
+                const n = new URLSearchParams(location.search).get('n');
+                window.opener.postMessage({ tag: 'beanpool-handoff', v: 1, type: 'ready', nonce: n }, '*');
+                setTimeout(() => location.replace(${JSON.stringify(SPY)} + '/app' + location.search), 50);</script>` });
         }
         if (redirectToSpy && u.origin === BYRON && u.pathname === '/app') {
             // The window the holder opened leaves Byron for another origin (a hijacked or compromised redirect).
@@ -388,6 +398,25 @@ try {
         await context.close();
     }
 
+    // ── 4b. Byron's page said ready, then the window went to a spy before the account went ──
+    console.log('\n4b. Ready from Byron, then the window goes to a spy');
+    {
+        const { context, state } = await scenario({ readyThenSpy: true });
+        const holder = await context.newPage();
+        await holder.goto(`${GLOBAL}/e2e/global-yes-y1-harness.html?mode=join&readyMs=4000`, { waitUntil: 'load' });
+        await holder.getByTestId(JOIN).waitFor({ timeout: 90_000 });
+        const id = await holder.evaluate(() => window.__identity);
+        identities.push(id);
+        state.yesKeys.add(id.publicKey);
+        const [popup] = await Promise.all([context.waitForEvent('page'), holder.getByTestId(JOIN).click()]);
+        await popup.waitForURL(`${SPY}/**`, { timeout: 30_000 });
+        // The account is sent about 1.5 s after the ready (the slow photo read); give it time to arrive anywhere.
+        await popup.waitForTimeout(3000);
+        const got = await popup.evaluate(() => window.__got.filter((m) => m.data?.type === 'account').length);
+        check(got === 0, `the account was sent to Byron's origin only, so the spy now in that window got none (${got})`);
+        await context.close();
+    }
+
     // ── 5. window.open gives nothing back ──
     console.log('\n5. A pop-up blocker');
     {
@@ -412,7 +441,7 @@ try {
         const text = `${r.url}\n${JSON.stringify(r.headers)}\n${r.body}`;
         return secrets.some((s) => s && text.includes(s));
     });
-    check(identities.length >= 7 && leaks.length === 0, `no private key, seed or 12 words in any of them (${leaks.length} found: ${leaks.map((r) => r.url).join(', ').slice(0, 300)})`);
+    check(identities.length >= 8 && leaks.length === 0, `no private key, seed or 12 words in any of them (${leaks.length} found: ${leaks.map((r) => r.url).join(', ').slice(0, 300)})`);
     check(network.some((r) => r.url.startsWith(`${BYRON}/api/join/knock/status`)), 'and the check saw the signed status reads it was looking through');
 
     for (const p of problems) check(false, p);

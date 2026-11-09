@@ -177,6 +177,8 @@ export function parseShares(raw: unknown): KeeperShareInput[] {
             ephemeralPubkey: optionalString(s.ephemeralPubkey, `shares[${i}].ephemeralPubkey`, MAX_FIELD_CHARS),
             ssoLookupHash: optionalString(s.ssoLookupHash, `shares[${i}].ssoLookupHash`, MAX_FIELD_CHARS),
             ssoLookupSalt: optionalString(s.ssoLookupSalt, `shares[${i}].ssoLookupSalt`, MAX_FIELD_CHARS),
+            // Read only so a deposit that sends one is refused (engine/keeper-deposit.ts): the node derives it.
+            ssoFindHash: optionalString(s.ssoFindHash, `shares[${i}].ssoFindHash`, MAX_FIELD_CHARS),
             kdfParams: optionalString(s.kdfParams, `shares[${i}].kdfParams`, MAX_FIELD_CHARS),
         };
     });
@@ -524,6 +526,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 shareTag: s.shareTag,
                 ssoLookupHash: s.ssoLookupHash,
                 ssoLookupSalt: s.ssoLookupSalt,
+                // Carried, so the sign-in that stays is still found by a restore (engine/recovery-find.ts).
+                ssoFindHash: s.ssoFindHash,
                 kdfParams: s.kdfParams,
             });
         }

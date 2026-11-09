@@ -36,7 +36,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { KEEPER_ALG_RELEASE, openReleaseOnDevice, openSeedFromSso, sealSeedToSso } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine } from './state-engine.js';
+import { initStateEngine, registerPushToken } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
@@ -176,6 +176,8 @@ const releasesFor = (pk: string): number => (db.prepare('SELECT COUNT(*) AS n FR
 const allSessions = (): number => (db.prepare('SELECT COUNT(*) AS n FROM recovery_collections').get() as { n: number }).n;
 const allPushes = (): number => (db.prepare('SELECT COUNT(*) AS n FROM push_notices').get() as { n: number }).n;
 const pushesTo = (pk: string): string[] => (db.prepare('SELECT kind FROM push_notices WHERE recipient = ? ORDER BY rowid').all(pk) as { kind: string }[]).map((r) => r.kind);
+/** A phone registered for the member, so a push to them is kept (push_notices) and one that should not come would show. */
+const withPhone = (id: Id): void => { registerPushToken(id.pk, `ExponentPushToken[find-${id.pk.slice(0, 8)}]`, 'android'); };
 /** The member's current sign-in row for `provider`: its find hash and stamp (undefined before the column exists). */
 function rowOf(pk: string, provider: Provider): { id: number; findHash: string | null | undefined; lookupHash: string | null; updatedAt: string } | null {
     const r = db.prepare(`SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'sso' AND holder_ref = ?
@@ -233,6 +235,7 @@ async function main(): Promise<void> {
         const connected = await connect(damo, 'google', DAMO_SUB);
         check(connected.status === 200, `local: ${damoName} connects Google in Settings (${connected.status} ${brief(connected.body)})`);
     }
+    withPhone(damo);
     const damoRow = rowOf(damo.pk, 'google');
     check(!!damoRow?.findHash && damoRow.findHash === expectedFindHash('google', DAMO_SUB) && damoRow.findHash !== damoRow.lookupHash,
         `the deposit wrote the find hash: HMAC-SHA-256 of "google|sub" under the seal file's find key, beside the per-row lookup hash (${damoRow?.findHash ? 'set' : String(damoRow?.findHash)})`);
@@ -304,6 +307,8 @@ async function main(): Promise<void> {
     addMember(kit, GLOBAL ? 'Kit2342' : 'Kit');
     check((await connect(kit, 'google', PARENT_SUB)).status === 200, 'Kit connects the same Google in Settings (Connect checks no other owner)');
     const patName = GLOBAL ? 'Pat481516' : 'Pat', kitName = GLOBAL ? 'Kit2342' : 'Kit';
+    withPhone(pat);
+    withPhone(kit);
     const family = newId();
     const both = await findBy(family, 'google', PARENT_SUB);
     check(both.found.status === 200 && brief(names(both.found)) === brief([`${kitName}:${kit.pk}`, `${patName}:${pat.pk}`].sort()),
@@ -499,6 +504,7 @@ async function main(): Promise<void> {
     const ivy = newId();
     addMember(ivy, GLOBAL ? 'Ivy8080' : 'Ivy');
     check((await connect(ivy, 'google', IVY_SUB)).status === 200, 'Ivy connects Google');
+    withPhone(ivy);
     // Someone who can write the database files Mallory's find hash on Ivy's copy. The copy and its lookup hash stay Ivy's.
     try { db.prepare(`UPDATE recovery_shares SET sso_find_hash = ? WHERE owner_pubkey = ? AND holder_type = 'sso'`).run(expectedFindHash('google', MALLORY_SUB), ivy.pk); } catch { /* no column yet */ }
     const mallory = newId();

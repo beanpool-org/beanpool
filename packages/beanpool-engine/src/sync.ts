@@ -259,6 +259,8 @@ export interface SyncRecoveryShare {
     ephemeralPubkey: string | null;
     ssoLookupHash: string | null;
     ssoLookupSalt: string | null;
+    /** The keyed find hash a restore by sign-in finds the copy by (server engine/recovery-find.ts); absent from a main server before it. */
+    ssoFindHash?: string | null;
     kdfParams: string | null;
     generation: number;
     createdAt: string;
@@ -1357,6 +1359,7 @@ function recoveryShareOfRow(row: any): SyncRecoveryShare {
         ephemeralPubkey: row.ephemeral_pubkey ?? null,
         ssoLookupHash: row.sso_lookup_hash ?? null,
         ssoLookupSalt: row.sso_lookup_salt ?? null,
+        ssoFindHash: row.sso_find_hash ?? null,
         kdfParams: row.kdf_params ?? null,
         generation: row.generation,
         createdAt: row.created_at,

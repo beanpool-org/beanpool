@@ -242,6 +242,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 **Learning:** In `apps/native/app/treasury-post.tsx`, the post submit button rendered an `ActivityIndicator` during async operations and had `disabled: submitting || photos.length === 0`, but lacked `busy: submitting` in its `accessibilityState`.
 **Action:** Supply `accessibilityState={{ disabled: submitting || photos.length === 0, busy: submitting }}` on action buttons that render an `ActivityIndicator` when busy.
 
+## 2027-03-13 - Add accessibilityState to join-open-door primary button
+**Learning:** In `apps/native/app/join-open-door.tsx`, the primary join action button conditionally rendered an `ActivityIndicator` and had `disabled={loading}`, but lacked `accessibilityState={{ disabled: loading, busy: loading }}`, leaving screen readers without state feedback during async door joins.
+**Action:** Supply `accessibilityState={{ disabled: loading, busy: loading }}` on open-door join action buttons that render an `ActivityIndicator` when busy.
 ## 2027-03-13 - Add accessibilityState busy and disabled to stop sharing button in SharedOutsideScreen
 **Learning:** In `apps/native/app/shared-outside.tsx`, the "Stop sharing" action button disables during async link revocation (`disabled={stopping === s.id}`), but lacked an `accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }}`, leaving screen readers without feedback that an async operation is in progress on that item.
 **Action:** Supply `accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }}` on action buttons that disable during asynchronous list item actions.

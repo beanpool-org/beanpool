@@ -91,6 +91,7 @@ export * from './door-work.js';
 export * from './blocked-beans-note.js';
 export * from './dm-crypto.js';
 export * from './dm-line-report.js';
+export * from './chat-about.js';
 export * from './poll-vote-origins.js';
 export * from './poll-other.js';
 export * from './poll-grid-tile.js';

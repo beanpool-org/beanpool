@@ -283,15 +283,6 @@ describe('getting an account back with a sign-in (WebRestore) in the pseudo-loca
         allThroughWords([...OTHERS, 'A', 'B']);
     });
 
-    it("a server from before the find: the sentence translated, with the community's name as it is", async () => {
-        await showIn('xx');
-        recoveryNode({ '/api/recovery/find-nonce': () => json(404, { error: 'Not Found' }) });
-        renderRestore();
-        const said = await screen.findByTestId('restore-too-old-server');
-        expect(said.textContent).toBe(xx("{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.")
-            .replace('{community}', COMMUNITY));
-        allThroughWords([...OTHERS, COMMUNITY]);
-    });
 });
 
 describe('a re-key code (WebRekey) in the pseudo-locale', () => {

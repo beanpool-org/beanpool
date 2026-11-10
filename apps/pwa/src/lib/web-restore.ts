@@ -11,8 +11,7 @@
  *   1. A throwaway key is made for this restore (`makeEphemeralKey`). It is not an account and is never saved as one.
  *      It signs every call below, and the node binds the find, its hold and the recovery session to it.
  *   2. `POST /api/recovery/find-nonce` gives the sign-in nonce for the throwaway key, with the ids a browser puts in its
- *      request to each provider (`clientIds`). A server from before the find answers 404: it can't find an account from a
- *      sign-in yet, and the member is told so (design §4).
+ *      request to each provider (`clientIds`).
  *   3. The sign-in: Google, Apple and Facebook leave the page exactly as the join does (lib/web-join.ts builds the same
  *      requests, and they come back to the same `/app/auth/<provider>` page); the throwaway key waits as a pending
  *      restore (identity.ts).
@@ -87,13 +86,9 @@ export interface RestoreNonce {
     clientIds: Partial<Record<JoinProvider, string | null>>;
 }
 
-/**
- * A sign-in nonce for finding the account, bound to `eph` (`POST /api/recovery/find-nonce`). `tooOld`: the community's
- * server answers 404, so it has no find yet and can't find an account from a sign-in (design §4).
- */
-export async function requestFindNonce(eph: EphemeralKey): Promise<{ nonce: RestoreNonce } | { tooOld: true } | { answer: DoorAnswer }> {
+/** A sign-in nonce for finding the account, bound to `eph` (`POST /api/recovery/find-nonce`). */
+export async function requestFindNonce(eph: EphemeralKey): Promise<{ nonce: RestoreNonce } | { answer: DoorAnswer }> {
     const answer = await door('POST', '/api/recovery/find-nonce', {}, signer(eph));
-    if (answer.status === 404) return { tooOld: true };
     const b = answer.body;
     if (answer.status !== 200 || typeof b.nonce !== 'string' || !b.nonce) return { answer };
     return {
@@ -261,11 +256,6 @@ export async function openRestoredAccount(
 /** No account at this community uses this sign-in (design §5). */
 export function noAccountMessage(community: string, provider: JoinProvider): string {
     return `No account at ${community} uses this ${providerLabel(provider)} account. Try another community, or your 12 words.`;
-}
-
-/** The community's server has no find yet (design §4): it answered the find nonce with 404. */
-export function serverTooOldMessage(community: string): string {
-    return `${community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.`;
 }
 
 /**

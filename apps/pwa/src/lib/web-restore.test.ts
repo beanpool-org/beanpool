@@ -28,7 +28,6 @@ import {
     openRestoredAccount,
     requestFindNonce,
     restoreProviders,
-    serverTooOldMessage,
     type EphemeralKey,
 } from './web-restore';
 import { generateIdentity, identityFromMnemonic, type BeanPoolIdentity } from './identity';
@@ -125,14 +124,14 @@ describe('the throwaway key signs every call in the restore', () => {
         expect(calls.some((c) => c.path.includes('/lookup/') || c.path.endsWith('/collect/sso') || c.path.endsWith('/collect/sso-nonce'))).toBe(false);
     });
 
-    it('a refused nonce, find or collect hands the answer back; a server from before the find answers 404 and says so', async () => {
+    it('a refused nonce, find or collect hands the answer back, a 404 included', async () => {
         const eph = makeEphemeralKey();
         stubNode({
             '/api/recovery/find-nonce': () => json(404, { error: 'Not Found' }),
             '/api/recovery/find': () => json(503, { error: 'Busy finding another account. Wait a minute, then sign in again.', code: 'find_busy' }),
             '/api/recovery/collect': () => json(400, { error: "Sign in with your account's sign-in first." }),
         });
-        expect(await requestFindNonce(eph)).toEqual({ tooOld: true });
+        expect(await requestFindNonce(eph)).toMatchObject({ answer: { status: 404 } });
         expect(await findAccounts(eph, { provider: 'google', idToken: 'a.b.c', nonce: 'n-1', sub: 's' })).toMatchObject({ answer: { status: 503 } });
         expect(await collectAccount(eph, { publicKey: account.publicKey, callsign: 'Alice' })).toMatchObject({ answer: { status: 400 } });
     });
@@ -284,9 +283,8 @@ describe('the copy is saved only when it opens to the account the find named', (
 });
 
 describe('what the member reads', () => {
-    it('no account here, and a server from before the find, in the words of design §5', () => {
+    it('no account here, in the words of design §5', () => {
         expect(noAccountMessage('Mullumbimby', 'google')).toBe('No account at Mullumbimby uses this Google account. Try another community, or your 12 words.');
-        expect(serverTooOldMessage('Mullumbimby')).toBe("Mullumbimby's server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.");
     });
 
     it("the node's own sentence where it gave one (a busy scan, a spent hold); plain words where it gave none", () => {

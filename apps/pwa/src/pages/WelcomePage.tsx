@@ -29,7 +29,7 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityCard, getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
+    getCommunityCard, getCommunityInfo, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
@@ -374,7 +374,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         setDoor('checking');
         getCommunityInfo()
             .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); setAppsGlobal(isAppsGlobal(info, webAppHost())); setKeepsNoCopies(info?.recoveryCopies === 'none'); } })
-            .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
+            .catch(() => { if (!cancelled) setDoor('unreachable'); });
         return () => { cancelled = true; };
     }, [doorCheck]);
     // A local community's public card (front doors S15), drawn above the invite form: what a stranger may read about it,

@@ -195,14 +195,11 @@ describe('from this community to the provider, with nothing typed', () => {
         expect(buttons[0]).toBe('restore-provider-apple');
     });
 
-    it("a community whose server is older than the find: said, with the other ways, and no sign-in is offered", async () => {
+    it("a find nonce the community refuses (404 included) is said in plain words, never as an 'older server' screen", async () => {
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), { '/api/recovery/find-nonce': () => json(404, { error: 'Not Found' }) });
         renderRestore();
-        expect(await screen.findByTestId('restore-too-old-server')).toHaveTextContent(
-            "Mullumbimby's server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.");
-        screen.getByRole('button', { name: 'Use my 12 words' });
-        screen.getByRole('button', { name: 'Link with my phone' });
-        expect(screen.queryByTestId('restore-provider-google')).toBeNull();
+        expect(await screen.findByText('Not Found')).toBeInTheDocument();
+        expect(screen.queryByTestId('restore-too-old-server')).toBeNull();
     });
 
     it("the sign-ins couldn't be got ready, and Try again gets them: the can't-reach notice goes with the trouble (review 4109590845)", async () => {

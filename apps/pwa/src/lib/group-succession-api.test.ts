@@ -35,7 +35,7 @@ describe('getGroupSuccession', () => {
         expect(init.body).toBeUndefined();
     });
 
-    it('carries the 404 through, so an older node hides the section instead of erroring', async () => {
+    it('carries a refusal\'s status through (a 404 reads as isRouteMissing)', async () => {
         fetchMock.mockResolvedValueOnce(reply(404, { error: 'Not Found' }));
         await expect(getGroupSuccession('g1')).rejects.toSatisfy(isRouteMissing);
     });

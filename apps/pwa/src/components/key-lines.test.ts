@@ -19,7 +19,7 @@ import {
 } from '../lib/web-join';
 import { NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, type JoinProvider } from '../lib/identity';
 import { aboutTime, busySentence, signInBusySentence, WORK_CANT_RUN } from '../lib/door-work';
-import { collectRefusalMessage, findRefusalMessage, noAccountMessage, serverTooOldMessage } from '../lib/web-restore';
+import { collectRefusalMessage, findRefusalMessage, noAccountMessage } from '../lib/web-restore';
 import { leaveForLink, linkRefusalMessage, linkResultMessage } from '../lib/link-signin';
 import { WEB_REKEY_TEXT } from '../lib/web-rekey';
 import { approveUnlock, lookupUnlock, pasteProblemMessage, unlockRefusalMessage } from '../lib/takeover-unlock';
@@ -97,7 +97,6 @@ function libSentences(): string[] {
         out.push(findRefusalMessage(a, null));
         out.push(collectRefusalMessage(a));
     }
-    out.push(serverTooOldMessage(HOME));
     for (const a of [answer(404), answer(429), answer(429, {}, 120), answer(500)]) {
         out.push(doorRefusalMessage(a));
         out.push(linkRefusalMessage(a, null));

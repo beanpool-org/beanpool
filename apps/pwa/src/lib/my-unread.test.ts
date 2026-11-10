@@ -59,15 +59,6 @@ describe("the Chat badge's read", () => {
         expect(asked()).toEqual([COUNTS, LIST]);
     });
 
-    it('a node older than the route: its number from the list, with no requests where it has none', async () => {
-        node({
-            [COUNTS]: reply(404, { error: 'Not found' }),
-            [LIST]: reply(200, { conversations: [], totalUnread: 2 }),
-        });
-
-        await expect(getMyUnread(ME)).resolves.toMatchObject({ unread: 2, requests: 0 });
-    });
-
     it('a key that may read neither is refused, as the poll has always been', async () => {
         node({
             [COUNTS]: reply(403, { error: 'Read access requires a member identity', code: 'not_a_member' }),

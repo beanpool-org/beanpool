@@ -70,14 +70,14 @@ describe('GroupSuccessionPanel — a healthy group sees nothing', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('draws nothing, and reports nothing, when the node is too old for the route (404)', async () => {
+    it('draws nothing when the read fails (a 404 is no different from any refusal), and says so on the console', async () => {
         const missing = Object.assign(new Error('Not found'), { status: 404 });
         vi.mocked(getGroupSuccession).mockRejectedValue(missing);
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const { container } = panel();
         await waitFor(() => expect(getGroupSuccession).toHaveBeenCalled());
         expect(container).toBeEmptyDOMElement();
-        expect(warn).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
         warn.mockRestore();
     });
 });

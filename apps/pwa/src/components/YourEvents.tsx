@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { t } from '@beanpool/core';
-import { getMyEvents, isRouteMissing, type MarketplacePost } from '../lib/api';
+import { getMyEvents, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sortMyEvents, type MyEvent } from '../lib/event-extras';
 import { EventCard } from './EventCard';
@@ -69,12 +69,12 @@ export function YourEvents({ identity, onOpen, refreshKey = 0 }: YourEventsProps
             .then(list => { if (!cancelled) setRows(sortMyEvents(list)); })
             .catch(e => {
                 if (!cancelled) setRows([]);
-                if (!isRouteMissing(e)) console.warn('[YourEvents] Could not read your events:', e);
+                console.warn('[YourEvents] Could not read your events:', e);
             });
         return () => { cancelled = true; };
     }, [identity?.publicKey, refreshKey]);
 
-    // Nothing to say: no identity, still loading, nothing coming up, or a node without the route.
+    // Nothing to say: no identity, still loading, or nothing coming up.
     if (!rows || rows.length === 0) return null;
 
     return (

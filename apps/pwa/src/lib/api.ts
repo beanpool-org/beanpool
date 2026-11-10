@@ -270,7 +270,7 @@ async function refusalError(res: Response): Promise<Error> {
     return error;
 }
 
-/** True when a route does not exist on this node — an older node, not a failure worth showing anyone. */
+/** True when the node answered 404: nothing is there (a decision with no jury, say), not a failure worth showing anyone. */
 export function isRouteMissing(e: unknown): boolean {
     return (e as { status?: number } | null)?.status === 404;
 }
@@ -1461,13 +1461,13 @@ export async function getConversations(publicKey: string): Promise<Conversations
 /**
  * What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, without the
  * whole list. A visitor's row never joined, so the counts route refuses it, yet what is sent to it still waits, in the one
- * list it may read; an older node at a pasted address has no such route. Both read their number from the list.
+ * list it may read. Both read their number from the list.
  */
 export async function getMyUnread(publicKey: string): Promise<UnreadAnswer> {
     try {
         return await request('GET', '/api/me/unread');
     } catch (e) {
-        if (!isRouteMissing(e) && (e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
+        if ((e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
         const list = await getConversations(publicKey);
         return { unread: list.totalUnread, requests: list.requests?.count ?? 0, asOf: new Date().toISOString() };
     }

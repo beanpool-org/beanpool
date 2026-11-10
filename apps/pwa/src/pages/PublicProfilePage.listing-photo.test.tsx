@@ -23,7 +23,7 @@ vi.mock('../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => n
 vi.mock('../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false), blockUser: vi.fn(), unblockUser: vi.fn(),
-    onBlocklistUpdated: vi.fn(() => () => {}), getBlocklistFullNote: vi.fn(() => null),
+    onBlocklistUpdated: vi.fn(() => () => {}),
 }));
 
 const PHOTOS = ['/api/marketplace/posts/p1/photos/0?v=1&k=KEY0', '/api/marketplace/posts/p1/photos/1?v=1&k=KEY1'];

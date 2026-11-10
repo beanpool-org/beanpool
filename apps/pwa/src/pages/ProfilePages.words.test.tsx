@@ -24,7 +24,6 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(async () => {}),
     unblockUser: vi.fn(async () => {}),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 const ME: any = { publicKey: 'my-user-pubkey', privateKey: 'priv', callsign: 'Alice', createdAt: '2026-01-01T00:00:00.000Z' };

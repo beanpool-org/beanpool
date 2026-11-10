@@ -29,7 +29,7 @@ vi.mock('../lib/api', async () => {
 });
 vi.mock('../lib/blocklist', async () => {
     const actual = await vi.importActual('../lib/blocklist');
-    return { ...actual, loadBlocklist: vi.fn(async () => []), getBlocklistFullNote: vi.fn(() => null) };
+    return { ...actual, loadBlocklist: vi.fn(async () => []) };
 });
 vi.mock('../lib/member-area', async () => {
     const actual = await vi.importActual('../lib/member-area');

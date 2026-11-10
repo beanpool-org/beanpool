@@ -974,9 +974,9 @@ function passedOnOf(pk: string): { amount_c: number; people: number; belowZero: 
     };
 }
 
-/** What this voucher's vouches that landed since `sinceMs` add up to (room_gifts of kind 'vouch'): the card's last-30-days figure. */
+/** What this voucher's vouches that landed since `sinceMs` add up to, in hundredths (room_gifts of kind 'vouch'): the card's last-30-days figure. */
 function vouchedSince(pk: string, sinceMs: number): number {
-    return (db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND at > ?")
+    return (db.prepare("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND at > ?")
         .get(pk, new Date(sinceMs).toISOString()) as { n: number }).n;
 }
 
@@ -1006,7 +1006,8 @@ export function voucherSummary(pk: string) {
  * A voucher budget promised on an invite nobody has used yet (invites-vouching I4, DESIGN §3 ask 5(b)): it lands when the
  * invited person joins and is confirmed, so until then they are "waiting to join". By entry id: the name is sealed in the
  * names list, which this server never reads, so the committee's phone opens it. Never the code (a live code in another
- * admin's hands could be self-redeemed; names-list.ts readBoundInvites says the same), and never a balance.
+ * admin's hands could be self-redeemed; names-list.ts readBoundInvites says the same), and never a balance. `level` and
+ * `vouchAmount` are whole hundredths, as every voucher budget figure is.
  */
 export interface WaitingVoucher {
     entryId: string; level: number; vouchAmount: number | null;
@@ -1015,8 +1016,8 @@ export interface WaitingVoucher {
 
 /** Every unused, in-date invite bound to an entry that promises a voucher budget, newest first, one per entry. */
 export function waitingToJoin(at = Date.now()): WaitingVoucher[] {
-    const rows = db.prepare(`SELECT names_entry_id AS entryId, voucher_level AS level, vouch_amount AS vouchAmount, created_by AS madeBy, created_at AS madeAt
-        FROM invite_codes WHERE used_by IS NULL AND voucher_level IS NOT NULL AND names_entry_id IS NOT NULL AND created_at > ?
+    const rows = db.prepare(`SELECT names_entry_id AS entryId, voucher_level_c AS level, vouch_amount_c AS vouchAmount, created_by AS madeBy, created_at AS madeAt
+        FROM invite_codes WHERE used_by IS NULL AND voucher_level_c IS NOT NULL AND names_entry_id IS NOT NULL AND created_at > ?
         ORDER BY created_at DESC, code ASC`).all(lifeCutoff(at)) as { entryId: string; level: number; vouchAmount: number | null; madeBy: string; madeAt: string }[];
     const seen = new Set<string>();
     const out: WaitingVoucher[] = [];

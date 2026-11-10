@@ -14,10 +14,13 @@
  *
  * Nothing here reads the node: the callers pass what GET /api/names/vouchers and the trust profile said. No balance figure
  * anywhere: a budget left is not a balance, "below zero" is a count, and a vouch is a gift of credit line, not a Bean.
+ * Every budget figure (left, level, vouched, the last 30 days, written off) is whole hundredths of a Bean, as all credit
+ * room is (DESIGN-atomic-beans-fable.md Q3), and is written by formatHundredths: 40000 reads "400".
  */
 import { t, tn, formatCount } from './words.js';
+import { formatHundredths, isHundredths } from './hundredths.js';
 
-/** A promised voucher budget on an invite not used yet (GET /api/names/vouchers `waiting`). */
+/** A promised voucher budget on an invite not used yet (GET /api/names/vouchers `waiting`); `level` and `vouchAmount` in hundredths. */
 export interface WaitingVoucherRow {
     entryId: string;
     level: number;
@@ -48,10 +51,10 @@ export function ownerRowWords(callsign: string, peopleVouched: number): string {
     return t('{name} · {count} vouched ›', { name, count: formatCount(peopleVouched) });
 }
 
-/** Any other voucher's row: "@Rob · 400 left ›". */
+/** Any other voucher's row: "@Rob · 400 left ›" (`left` in hundredths). */
 export function voucherRowWords(callsign: string, left: number): string {
     const name = callsign ? `@${callsign}` : t('a voucher');
-    return t('{name} · {left} left ›', { name, left: formatCount(left) });
+    return t('{name} · {left} left ›', { name, left: formatHundredths(left) });
 }
 
 /**
@@ -60,10 +63,10 @@ export function voucherRowWords(callsign: string, left: number): string {
  */
 export function waitingRowWords(w: Pick<WaitingVoucherRow, 'level'>, name: string | null | undefined): string {
     const who = name?.trim() || t('Name on the phone');
-    return t('{who} · waiting to join · budget {level} ›', { who, level: formatCount(w.level) });
+    return t('{who} · waiting to join · budget {level} ›', { who, level: formatHundredths(w.level) });
 }
 
-/** The numbers a voucher's card puts first (engine/vouchers.ts voucherSummary). */
+/** The numbers a voucher's card puts first (engine/vouchers.ts voucherSummary): the figures in hundredths, the people and belowZero counts. */
 export interface VoucherHeadlineSource {
     vouched: number;
     peopleVouched: number;
@@ -79,10 +82,10 @@ export function voucherCardHeadline(c: VoucherHeadlineSource): string {
         'Vouched {amount} to {n} person · {recent} in the last 30 days · {belowZero} below zero · written off {writtenOff}',
         'Vouched {amount} to {n} people · {recent} in the last 30 days · {belowZero} below zero · written off {writtenOff}',
         {
-            amount: formatCount(c.vouched),
-            recent: formatCount(c.vouchedLast30Days ?? 0),
+            amount: formatHundredths(c.vouched),
+            recent: formatHundredths(c.vouchedLast30Days ?? 0),
             belowZero: formatCount(c.belowZero),
-            writtenOff: formatCount(c.writtenOff),
+            writtenOff: formatHundredths(c.writtenOff),
         },
     );
 }
@@ -100,7 +103,7 @@ export type ProfileVoucherButton =
 export function profileVoucherButtonWords(b: ProfileVoucherButton): string {
     if (b.state === 'add') return t('Add to the names list');
     if (b.state === 'make') return t('Make a voucher');
-    return b.noLimit ? t('Voucher · No limit ›') : t('Voucher · {left} left ›', { left: formatCount(b.left) });
+    return b.noLimit ? t('Voucher · No limit ›') : t('Voucher · {left} left ›', { left: formatHundredths(b.left) });
 }
 
 /** Whether a value from the node is a button state this version knows (an older or newer node may say something else). */
@@ -108,5 +111,5 @@ export function isProfileVoucherButton(v: unknown): v is ProfileVoucherButton {
     if (!v || typeof v !== 'object') return false;
     const b = v as Record<string, unknown>;
     if (b.state === 'add' || b.state === 'make') return true;
-    return b.state === 'voucher' && typeof b.left === 'number' && typeof b.noLimit === 'boolean';
+    return b.state === 'voucher' && isHundredths(b.left) && typeof b.noLimit === 'boolean';
 }

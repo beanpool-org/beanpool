@@ -26,7 +26,7 @@
  *   workingOff {key, beans, owed}  a member holding `beans`, confirmed by an admin to work off an `owed`-Bean debt left on
  *                               their names-list entry (fixture rows, as test-names-debts-http's); answers the debt's id
  *   receive {key, beans}        a direct payment to the member (transfer()), whose after-commit hook runs the repayment sweep
- *   debt {key, debtId}          the member's balance and the debt record (repaid, status, how it was settled)
+ *   debt {key, debtId}          the member's balance_c and the debt record (repaid_c, status, how it was settled), in hundredths
  *   members {members}           member rows (each {key, callsign}, joined 30 days ago), as workingOff writes one: for the
  *                               phone's group chat e2e (utils/__tests__/group-chat-e2e.test.ts)
  *   groupRows {groupId, keys}   active group_members rows written straight in, with no epoch: members a node let in
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
             return true;
         },
         debt: ({ key, debtId }: { key?: string; debtId?: string }) => ({
-            balance: getBalance(String(key)).balance,
+            balance_c: getBalance(String(key)).balance_c,
             record: db.prepare('SELECT amount_c, repaid_c, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
             links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),

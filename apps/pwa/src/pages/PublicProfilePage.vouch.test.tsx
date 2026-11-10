@@ -179,12 +179,12 @@ describe('PublicProfilePage Vouching (§9)', () => {
                 actor: IDENTITY.publicKey,
                 actorCallsign: 'ana',
                 at: '2026-11-01T00:00:00.000Z',
-                for: 'profile',
+                for: 'profile' as const,
                 person: { memberPubkey: TARGET_PK, callsign: 'sam' },
             },
         ],
     });
-    const chips = () => screen.getAllByRole('radio').map((r) => r.getAttribute('data-testid')?.replace('invite-vouch-', ''));
+    const chips =() => screen.getAllByRole('radio').map((r) => r.getAttribute('data-testid')?.replace('invite-vouch-', ''));
 
     it('a raise from 50 offers Raise to 75 · 100, never None or an amount to add, with nothing greyed (slice I6)', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(50));

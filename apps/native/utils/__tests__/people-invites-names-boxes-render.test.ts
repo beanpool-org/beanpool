@@ -873,6 +873,24 @@ describe('People → Invites: the made card says who it is for, what it carries 
     });
 });
 
+// The words sweep (invites-vouching I6): three sentences the design retired, asserted absent from what the screen draws.
+const RETIRED_INVITE_WORDS = ['Invited directly by the system admin', 'Vetted by the admin at sign-up', 'Share this cryptographic code'];
+
+describe('People → Invites: the retired sentences are drawn nowhere (invites-vouching I6)', () => {
+    it('an owner after Generate, and again once the form is back, with Pending and Joined open: none of the three', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        node.mine = [mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 }), mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' })];
+        await open();
+        await generate();
+        for (const gone of RETIRED_INVITE_WORDS) expect(host.textContent).not.toContain(gone);
+        await press('invite-make-another');
+        await press('invites-pending-fold');
+        await press('invites-joined-fold');
+        for (const gone of RETIRED_INVITE_WORDS) expect(host.textContent).not.toContain(gone);
+    });
+});
+
 describe('People → Invites: waiting to join, and the other way into the names list (invites-vouching I4)', () => {
     const WAITING = { entryId: 'entry-jane', level: 1000, vouchAmount: 25, madeBy: 'a-member-key', madeByCallsign: 'Robin', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
 

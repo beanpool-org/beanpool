@@ -69,7 +69,7 @@ import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refu
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from '../components/ShowOnGlobalRow';
-import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
@@ -974,18 +974,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             .map((t: any) => t.publicKey)
                     );
                     setInactiveEnterpriseKeys(inactiveKeys);
-                }).catch((e) => {
-                    // Never where enterprises are a preview or off (lib/features treasuriesFallback).
-                    treasuriesFallback(e).then(res => {
-                        if (!res) return;
-                        const inactiveKeys = new Set(
-                            (res?.treasuries || [])
-                                .filter((t: any) => t.paused || t.status === 'winding_up' || t.status === 'completed')
-                                .map((t: any) => t.publicKey)
-                        );
-                        setInactiveEnterpriseKeys(inactiveKeys);
-                    }).catch(() => {});
-                });
+                }).catch(() => { /* nothing is hidden when the statuses can't be read */ });
                 const [pinsRes, localData, ownData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node

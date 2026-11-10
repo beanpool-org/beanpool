@@ -472,20 +472,18 @@ export type DoorWorkAnswer =
     | { kind: 'work'; work: DoorWorkChallenge }
     /** The door is busy: this key needs the person check first, and no work was handed out. */
     | { kind: 'check'; check: DoorCheck }
-    /** None is needed (a sign-in at ordinary rates, or a node from before the work). */
+    /** None is needed (a sign-in at ordinary rates). */
     | { kind: 'none' }
     /** Refused (a network's ceiling, the 12-words door shut here, …): `answer` says why. */
     | { kind: 'refused'; answer: DoorAnswer };
 
 /**
- * Ask the node for work for `which` door, signed by the joining key. A node from before the work (no such route: a 404
- * without the door's own code) needs none. `token`: the person check's, back from its page. Throws
+ * Ask the node for work for `which` door, signed by the joining key. `token`: the person check's, back from its page. Throws
  * DoorUnreachableError when there is no answer.
  */
 export async function requestDoorWork(identity: BeanPoolIdentity, which: DoorWorkDoor, now: () => number = Date.now, token?: string): Promise<DoorWorkAnswer> {
     const answer = await door('POST', '/api/join/work', token ? { door: which, turnstile: token } : { door: which }, identity);
     const b = answer.body;
-    if (answer.status === 404 && b.code !== 'invite_only') return { kind: 'none' };
     const check = readDoorCheck(b);
     if (check) return { kind: 'check', check };
     if (answer.status !== 200) return { kind: 'refused', answer };

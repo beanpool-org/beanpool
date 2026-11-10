@@ -3541,27 +3541,13 @@ export async function cancelRecoveryCollection(collectionId: string): Promise<bo
  * Owner side: Stop It Now. Stops every live recovery session against the account and returns how many are still live,
  * by the node's own count, so "all cancelled" is said only when it is true.
  *
- * One request: the node stops them all however many there are, and answers with `live`. A node from before that
- * refuses a Stop naming no session: then one request per listed session (such a node lists every one, at most ten),
- * and what is left is the number that failed.
+ * One request: the node stops them all however many there are, and answers with `live`. Throws when the node gave no
+ * number: "all cancelled" is never said on a guess.
  */
-export async function stopEveryRecoveryCollection(listed: { collectionId: string }[]): Promise<number> {
-    try {
-        const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
-        if (typeof res?.live === 'number') return res.live;
-    } catch {
-        // An older node ('Which session?'), or no answer: one by one below.
-    }
-    let failed = 0;
-    for (const session of listed) {
-        try {
-            await cancelRecoveryCollection(session.collectionId);
-        } catch (e) {
-            failed++;
-            console.warn(`[RecoveryAlert] Failed to cancel ${session.collectionId}:`, (e as Error).message);
-        }
-    }
-    return failed;
+export async function stopEveryRecoveryCollection(): Promise<number> {
+    const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
+    if (typeof res?.live === 'number') return res.live;
+    throw new Error('The node did not say how many recovery sessions are still live');
 }
 
 /**

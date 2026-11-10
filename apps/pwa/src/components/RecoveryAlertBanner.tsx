@@ -118,7 +118,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
 
         setStopping(true);
         try {
-            const left = await stopEveryRecoveryCollection(sessions);
+            const left = await stopEveryRecoveryCollection();
             if (left === 0) {
                 setSessions([]);
                 setLiveCount(0);

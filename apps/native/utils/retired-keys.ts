@@ -9,12 +9,14 @@
  *   - `bp_legacy_post_conv_cleaned_v1`: the old one-off "listing-keyed chats cleaned" flag (audit C8), the same.
  *   - `beanpool_pending_claim`: a claim code a build of 23 Oct 2026 (#2412) kept at rest for an account made elsewhere
  *     (audit C12). That detour is gone: the claim makes the account (app/claim-community.tsx). A wipe deletes it too.
+ *   - `beanpool_light_palette`: the retired Classic / Earth / Slate choice (audit C11; lane 910 removed its reader and the
+ *     sweep that deleted it, #3026).
  * The other half of CUT3 is the secure store's kept break-glass code (utils/break-glass.ts sweepKeptBreakGlassCode, audit
  * C13), which needs the community and the key to name it.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const RETIRED_KEYS = ['bp_trust_sync_v3', 'bp_legacy_post_conv_cleaned_v1', 'beanpool_pending_claim'] as const;
+export const RETIRED_KEYS = ['bp_trust_sync_v3', 'bp_legacy_post_conv_cleaned_v1', 'beanpool_pending_claim', 'beanpool_light_palette'] as const;
 
 /** Delete every retired key (RETIRED_KEYS). Never throws. */
 export async function forgetRetiredKeys(): Promise<void> {

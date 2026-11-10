@@ -99,7 +99,7 @@ vi.mock('../community-switch', () => ({ onCommunitySwitched: () => () => {}, com
 /** What the gate puts up: this app below the floor (the default), or the community's server too old (`nodeTooOld`). */
 const gateShows = vi.hoisted(() => ({ block: { version: '1.3.0' } as { version: string; nodeTooOld?: true } }));
 vi.mock('../force-update', () => ({
-    createForceUpdateGate: ({ show }: { show: (b: { version: string; nodeTooOld?: true }) => void }) => ({ start: async () => { show(gateShows.block); }, appStateChanged: async () => {}, communitySwitched: async () => {}, refused: () => {} }),
+    createForceUpdateGate: ({ show }: { show: (b: { version: string; nodeTooOld?: true }) => void }) => ({ start: async () => { show(gateShows.block); }, appStateChanged: async () => {}, communitySwitched: async () => {}, refused: () => {}, serverTooOld: () => {}, serverCurrent: () => {} }),
     checkCommunityForUpdate: async () => null,
     appVersionHeaderValue: () => '1.2.70',
     onAppRefused: () => () => {},

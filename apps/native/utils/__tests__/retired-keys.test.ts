@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe('CUT3: the retired keys go at start', () => {
     it('names exactly the keys the cutover retires on this build', () => {
-        expect([...RETIRED_KEYS]).toEqual(['bp_trust_sync_v3', 'bp_legacy_post_conv_cleaned_v1', 'beanpool_pending_claim']);
+        expect([...RETIRED_KEYS]).toEqual(['bp_trust_sync_v3', 'bp_legacy_post_conv_cleaned_v1', 'beanpool_pending_claim', 'beanpool_light_palette']);
     });
 
     it('deletes each one, and leaves every other key as it was', async () => {
@@ -53,7 +53,7 @@ describe('CUT3: the retired keys go at start', () => {
         expect(src).toMatch(/Conversion code, log row CUT3, remove in the first phone build after Play Console shows no device below 1\.4\.0 for 30\s+\* days/);
         const breakGlass = fs.readFileSync(path.join(root, 'utils/break-glass.ts'), 'utf8');
         expect(breakGlass).toMatch(/Conversion code, log row CUT3/);
-        for (const file of ['utils/db.ts', 'utils/onboarding-state.ts', 'app/_layout.tsx']) {
+        for (const file of ['utils/db.ts', 'utils/onboarding-state.ts', 'app/_layout.tsx', 'app/ThemeContext.tsx']) {
             const text = fs.readFileSync(path.join(root, file), 'utf8');
             for (const k of RETIRED_KEYS) expect(text, `${file} ${k}`).not.toContain(`'${k}'`);
         }

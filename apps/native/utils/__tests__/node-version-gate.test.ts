@@ -202,6 +202,52 @@ describe('a community whose server is 1.2.37: one card, and no other request', (
     });
 });
 
+describe('the card goes up as soon as any request hears the server too old, and comes down once it is updated', () => {
+    it('serverTooOld puts the server card up at once, mid-use; serverCurrent takes only that card down', async () => {
+        let release: (d: ForceUpdateDecision) => void = () => {};
+        const shown: Array<UpdateBlockShown | null> = [];
+        const gate = createForceUpdateGate({
+            now: () => 0,
+            check: () => new Promise<ForceUpdateDecision>((resolve) => { release = resolve; }),
+            show: (b) => shown.push(b),
+        });
+        // The cold start's question is slow (past the decide window, say): the request's own first read heard it first.
+        const started = gate.start('active');
+        gate.serverTooOld('1.2.37');
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
+        // The slow question answers late: asked before, so it says nothing now.
+        release({ kind: 'clear' });
+        await started;
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
+        // The operator updated it: the card comes down.
+        gate.serverCurrent();
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }, null]);
+        // serverCurrent never takes down this app's own block (its floor still holds).
+        gate.refused('1.5.0');
+        gate.serverCurrent();
+        expect(shown[shown.length - 1]).toEqual({ version: '1.5.0' });
+    });
+
+    it('every health answer the phone reads tells the block, once per change', async () => {
+        const { onNodeVersionHeard } = await import('../node-version-gate');
+        let told = 0;
+        const stop = onNodeVersionHeard(() => { told++; });
+        try {
+            noteHealthAnswer(HOME, { version: '1.2.37' });
+            noteHealthAnswer(`${HOME}/api/community/health`, { version: '1.2.37' });
+            expect(told).toBe(1);
+            noteHealthAnswer(HOME, { version: '1.4.0' });
+            expect(told).toBe(2);
+            // Not a health answer: nothing changes, nobody is told.
+            noteHealthAnswer(HOME, '<html>');
+            expect(told).toBe(2);
+            expect(tooOldVersionOf(HOME)).toBeNull();
+        } finally {
+            stop();
+        }
+    });
+});
+
 describe('a 426 app_too_old from the community is the full-screen Update required', () => {
     it('the wrapper hears it from the phone\'s own community, names the node\'s minimum, and hands the answer back as it was', async () => {
         noteHealthAnswer(HOME, { version: '1.5.0' });

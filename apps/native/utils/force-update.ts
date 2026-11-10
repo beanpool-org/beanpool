@@ -148,6 +148,14 @@ export interface ForceUpdateGate {
      * its older answer can't take the block straight down; the next safe moment asks again as usual.
      */
     refused(version: string): void;
+    /**
+     * The community's server was heard below MIN_NODE_VERSION (utils/node-version-gate.ts, by any request's first read of
+     * its health): the server's card goes up at once, since the phone sends that community nothing else, so nothing the
+     * member started can finish. A check already on its way is dropped.
+     */
+    serverTooOld(version: string): void;
+    /** The community's server was heard new enough again (its operator updated it): the server's card, if up, comes down. */
+    serverCurrent(): void;
 }
 
 /**
@@ -333,6 +341,17 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
             if (!v) return;
             asks++;
             show({ version: v });
+        },
+        serverTooOld(version) {
+            const v = normaliseVersion(version);
+            if (!v) return;
+            asks++;
+            show({ version: v, nodeTooOld: true });
+        },
+        serverCurrent() {
+            if (!blocked?.nodeTooOld) return;
+            asks++;
+            show(null);
         },
     };
 }

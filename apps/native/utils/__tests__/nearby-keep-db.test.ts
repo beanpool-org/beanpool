@@ -55,7 +55,7 @@ const BYRON = { lat: -28.6, lng: 153.6 };
 
 function listing(id: string, lat: number, lng: number, extra: Record<string, unknown> = {}) {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', credits: 5, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', price_c: 500, priceType: 'fixed',
         authorPublicKey: ANN, authorCallsign: 'Ann', createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
         active: true, status: 'active', audienceScope: 'public', lat, lng, ...extra,
     };
@@ -69,7 +69,7 @@ beforeEach(async () => {
 
 describe('the keep rule reads its ties by index', () => {
     it('the deal and conversation tests of every held listing search an index on post_id, never scan the table', async () => {
-        const tx = sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 5, 'completed')`);
+        const tx = sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 500, 'completed')`);
         const conv = sql.prepare(`INSERT INTO conversations (id, type, post_id, created_by) VALUES (?, 'dm', ?, ?)`);
         for (let i = 0; i < 300; i++) {
             tx.run(`tx-${i}`, `old-${i}`, ME, ANN);

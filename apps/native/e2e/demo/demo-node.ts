@@ -134,7 +134,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('../../../server/src/auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('../../../server/src/gateway-rate-limit.js');
     const { setMemberPhoto } = await import('../../../../packages/beanpool-engine/dist/index.js');
-    const { AVATAR_PRESETS, sealDmLine, newDmMessageId } = await import('@beanpool/core');
+    const { AVATAR_PRESETS, sealDmLine, newDmMessageId, beans } = await import('@beanpool/core');
 
     await initTls();
     se.initStateEngine();
@@ -163,19 +163,20 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng)
                     VALUES (?, ?, 'active', ?, ?, ?, ?, ?)`)
             .run(pk, callsign, ago(joinedDaysAgo), owner, `INV-${callsign.toUpperCase().replace(/[^A-Z]/g, '')}${pk.slice(0, 4)}`, at(area).lat, at(area).lng);
-        // Granted credit (members.earned_credit) is a credit-limit input: it moves no Beans, it lets a first trade through.
-        db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, pk);
+        // Granted credit (members.earned_credit_c) is a credit-limit input: it moves no Beans, it lets a first trade through.
+        // riverbend.json writes it in whole Beans; the node keeps whole hundredths (core beans()).
+        db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(beans(granted), pk);
         setMemberPhoto(db, pk, `bundled://${avatar}`);
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
     };
     const first = R.people.find((p) => p.genesis);
     if (!first) throw new Error('riverbend.json names no first member (genesis)');
     keys[first.key] = memberKey(first.key);
     se.seedGenesisMember(keys[first.key].publicKey, first.callsign);
-    db.prepare('UPDATE members SET joined_at = ?, area_lat = ?, area_lng = ?, earned_credit = ? WHERE public_key = ?')
-        .run(ago(first.joinedDaysAgo), at(first.area).lat, at(first.area).lng, first.grantedCredit, keys[first.key].publicKey);
+    db.prepare('UPDATE members SET joined_at = ?, area_lat = ?, area_lng = ?, earned_credit_c = ? WHERE public_key = ?')
+        .run(ago(first.joinedDaysAgo), at(first.area).lat, at(first.area).lng, beans(first.grantedCredit), keys[first.key].publicKey);
     setMemberPhoto(db, keys[first.key].publicKey, `bundled://${first.avatar}`);
-    db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(keys[first.key].publicKey);
+    db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(keys[first.key].publicKey);
     const owner = keys[first.key].publicKey;
     world.members[first.key] = owner;
 
@@ -217,14 +218,15 @@ async function main(): Promise<void> {
     // A first Offer before a Need (the node's rule), for the two who only ask: finished long ago, so never on the board.
     for (const o of R.pastOffers) {
         const where = at(R.people.find((p) => p.key === o.author)!.area);
-        const post = se.createPost('offer', o.category, o.title, o.description, o.credits, 'fixed', pk(o.author), where.lat, where.lng, [photoDataUrl(o.photo)], false, undefined, false, {} as any);
+        // riverbend.json prices in whole Beans; the node takes whole hundredths (core beans()).
+        const post = se.createPost('offer', o.category, o.title, o.description, beans(o.credits), 'fixed', pk(o.author), where.lat, where.lng, [photoDataUrl(o.photo)], false, undefined, false, {} as any);
         if (!post) throw new Error(`the node would not list ${o.id}`);
         const when = ago(o.daysAgo);
         db.prepare("UPDATE posts SET status = 'completed', active = 0, created_at = ?, updated_at = ?, completed_at = ? WHERE id = ?").run(when, when, when, post.id);
     }
     const listOne = (l: Listing) => {
         const where = at(l.at);
-        const post = se.createPost(l.type, l.category, l.title, l.description, l.credits, l.priceType, pk(l.author), where.lat, where.lng,
+        const post = se.createPost(l.type, l.category, l.title, l.description, beans(l.credits), l.priceType, pk(l.author), where.lat, where.lng,
             [photoDataUrl(l.photo)], l.repeatable === true, undefined, false,
             l.lendable ? ({ lendable: true, lendMaxDays: l.lendMaxDays, lendTerms: l.lendTerms, replacementValue: l.replacementValue } as any) : ({} as any));
         if (!post) throw new Error(`the node would not list ${l.id}`);

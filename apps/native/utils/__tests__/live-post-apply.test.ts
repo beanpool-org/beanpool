@@ -59,7 +59,7 @@ const ANN = 'a'.repeat(64);
 
 function offer(extra: Record<string, unknown> = {}) {
     return {
-        id: 'post-1', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', credits: 5,
+        id: 'post-1', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', price_c: 500,
         priceType: 'fixed', authorPublicKey: ANN, authorCallsign: 'Ann',
         createdAt: '2026-09-24T01:00:00.000Z', updatedAt: '2026-09-24T01:00:00.000Z',
         active: true, status: 'active', audienceScope: 'public', lat: -28.5, lng: 153.4,
@@ -175,14 +175,14 @@ describe('applyLivePostChange: written locally, no request to the node, cursor u
 
     it.each(['requested', 'pending'])('a listing I have a %s deal on is left to the catch-up sync', async (status) => {
         await applyDelta({ posts: [offer()] });
-        sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES ('tx1', 'post-1', ?, ?, 5, ?)`).run(ME, ANN, status);
+        sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES ('tx1', 'post-1', ?, ?, 500, ?)`).run(ME, ANN, status);
         expect(await applyLivePostChange(upsert(offer({ title: 'edited', updatedAt: '2026-09-24T02:00:00.000Z' })), ctx)).toBe(false);
         expect(await applyLivePostChange(removal(), ctx)).toBe(false);
         expect(row()).toMatchObject({ title: 'Spare lemons', status: 'active' });
     });
 
     it('a finished deal does not tie me to the listing', async () => {
-        sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES ('tx1', 'post-1', ?, ?, 5, 'completed')`).run(ME, ANN);
+        sql.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES ('tx1', 'post-1', ?, ?, 500, 'completed')`).run(ME, ANN);
         expect(await applyLivePostChange(upsert(offer(), true), ctx)).toBe(true);
     });
 
@@ -277,7 +277,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
     /** A group listing as `getPosts` sends it to a member of the group (packages/beanpool-engine/src/posts.ts `rowToPost`). */
     function groupOffer(extra: Record<string, unknown> = {}) {
         return offer({
-            id: 'post-g', category: 'tools', title: 'Box trailer for the working bee', credits: 20, priceType: 'daily',
+            id: 'post-g', category: 'tools', title: 'Box trailer for the working bee', price_c: 2000, priceType: 'daily',
             repeatable: true, lendable: true, cashAlsoNeeded: true, status: 'pending', acceptedBy: BOB, acceptedByCallsign: 'Bob',
             acceptedAt: '2026-09-24T01:30:00.000Z', pendingTransactionId: 'tx-9', originNode: 'test.beanpool.org',
             photos: ['/api/marketplace/posts/post-g/photos/0?v=0'], reach: 'local',
@@ -288,7 +288,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
     /** The whole cached row for `groupOffer()`: every column of the phone's posts table. */
     const GROUP_ROW = {
         id: 'post-g', type: 'offer', category: 'tools', title: 'Box trailer for the working bee', description: 'A bag',
-        credits: 20, author_pubkey: ANN, created_at: '2026-09-24T01:00:00.000Z', updated_at: '2026-09-24T01:00:00.000Z',
+        price_c: 2000, author_pubkey: ANN, created_at: '2026-09-24T01:00:00.000Z', updated_at: '2026-09-24T01:00:00.000Z',
         active: 1, status: 'pending', price_type: 'daily', repeatable: 1, lendable: 1, cash_also_needed: 1,
         accepted_by: BOB, accepted_by_callsign: 'Bob', accepted_at: '2026-09-24T01:30:00.000Z',
         pending_transaction_id: 'tx-9', completed_at: null, lat: -28.5, lng: 153.4, origin_node: 'test.beanpool.org',
@@ -422,7 +422,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         const member = (groupId: string, pubkey: string, status: string) =>
             sql.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'member', ?)`).run(groupId, pubkey, status);
         const groupEvent = offer({
-            id: 'event-g', type: 'event', category: 'community', title: 'Working bee', credits: 0,
+            id: 'event-g', type: 'event', category: 'community', title: 'Working bee', price_c: 0,
             eventStartAt: '2099-10-04T09:00:00.000Z', eventEndAt: '2099-10-04T12:00:00.000Z', eventPlaceName: 'The shed',
             audienceScope: 'group', targetGroupId: 'g1',
         });

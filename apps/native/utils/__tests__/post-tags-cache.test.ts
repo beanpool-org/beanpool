@@ -83,7 +83,7 @@ const DAY2 = '2026-10-02T01:00:00.000Z';
 
 function listing(id: string, extra: Record<string, unknown> = {}) {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', credits: 5, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', price_c: 500, priceType: 'fixed',
         authorPublicKey: ANN, authorCallsign: 'Ann', createdAt: DAY1, updatedAt: DAY1, active: true, status: 'active',
         audienceScope: 'public', photos: [],
         ...extra,
@@ -212,11 +212,11 @@ describe('a copy from before the column', () => {
 });
 
 describe("the phone's own writes", () => {
-    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, price_type: 'fixed', repeatable: false, photos: null };
+    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, price_type: 'fixed', repeatable: false, photos: null };
 
     it('a create keeps what the member chose', async () => {
         fetchMock.mockImplementation(async () => answer({ success: true, post: { id: 'new-1' } }));
-        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1, tags: [LEMON] });
+        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1, tags: [LEMON] });
         expect(stored('new-1')).toBe(LEMON);
     });
 
@@ -258,7 +258,7 @@ describe("the phone's own writes", () => {
 // it, down the same ways in, with the same cursor reset and the same rule on an edit.
 describe('the tags a member typed', () => {
     const free = (id: string) => (sql.prepare('SELECT free_tags FROM posts WHERE id = ?').get(id) as { free_tags: string } | undefined)?.free_tags;
-    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, price_type: 'fixed', repeatable: false, photos: null };
+    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, price_type: 'fixed', repeatable: false, photos: null };
     const event = { type: 'event', freeTags: ['live music'], eventStartAt: '2026-11-01T01:00:00.000Z' };
 
     it('the sync stores the list as the node does, and every read hands it back', async () => {
@@ -332,10 +332,10 @@ describe('the tags a member typed', () => {
             if (init?.body) bodies.push(JSON.parse(init.body));
             return answer({ success: true, post: { id: 'new' } });
         });
-        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1, freeTags: ['2nd hand'] });
+        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1, freeTags: ['2nd hand'] });
         expect(free('new-1')).toBe('["2nd hand"]');
         expect(bodies.find((b) => b.id === 'new-1')?.freeTags).toEqual(['2nd hand']);
-        await createPost({ id: 'new-2', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1 });
+        await createPost({ id: 'new-2', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1 });
         expect(free('new-2')).toBe('');
         expect(bodies.find((b) => b.id === 'new-2')).not.toHaveProperty('freeTags');
     });

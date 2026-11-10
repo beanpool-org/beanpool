@@ -35,9 +35,8 @@ export interface AmountOptions {
 }
 
 /**
- * For a door whose own guard decides the decimals (isWholeCents, the node's cents rule) or that takes any (hours, a
- * price): the parser reads the number and leaves the decimals to the door, as parseFloat did, so "1.234" still gets
- * the door's own "to the cent" sentence. What could be a thousand is refused all the same.
+ * For a door that takes any decimals (hours, a count): the parser reads the number and leaves the decimals to the door,
+ * as parseFloat did. What could be a thousand is refused all the same. A money door reads parseHundredths (two decimals).
  */
 export const ANY_DECIMALS: Readonly<AmountOptions> = Object.freeze({ maxDecimals: Infinity });
 

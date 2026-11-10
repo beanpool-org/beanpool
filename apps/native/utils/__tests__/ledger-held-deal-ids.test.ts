@@ -64,10 +64,10 @@ import { applyDelta, getDb, getTransactions } from '../db';
 /** A deal as the node sends it in a sync (MarketplaceTransaction), this member the buyer unless said otherwise. */
 const deal = (id: string, postId: string, side: { buyer?: string; seller?: string } = {}) => ({
     id, postId, postTitle: `Title of ${id}`, buyerPublicKey: side.buyer ?? ME, sellerPublicKey: side.seller ?? ANA,
-    credits: 30, status: 'pending', createdAt: '2026-10-16T09:00:00.000Z', completedAt: null,
+    amount_c: 3000, status: 'pending', createdAt: '2026-10-16T09:00:00.000Z', completedAt: null,
 });
 const ledgerRow = (id: string, from: string, to: string) => {
-    sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, 30, 0, ?, ?)')
+    sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, 3000, 0, ?, ?)')
         .run(id, from, to, 'Escrow hold', '2026-10-16T10:00:00.000Z');
 };
 

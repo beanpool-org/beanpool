@@ -37,7 +37,7 @@ import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
-import { formatHundredths, isHundredths } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 import { standingJsonOf, standingOfRow } from './standing-row';
@@ -1334,7 +1334,8 @@ function formatSystemMessage(
         try { meta = JSON.parse(metadataStr); } catch {}
     }
     // The node's escrow lines carry the figure as whole hundredths (TypedMessagePayload amount_c); anything else, no figure.
-    const amount = isHundredths(meta?.amount_c) && meta.amount_c > 0 ? formatHundredths(meta.amount_c) : '';
+    // Plain ASCII ("49.25"): this English is matched by utils/chat-line-words.ts, which writes the figure in the member's language.
+    const amount = isHundredths(meta?.amount_c) && meta.amount_c > 0 ? hundredthsAsDecimalText(meta.amount_c) : '';
     const beansStr = amount ? `${amount} Beans` : 'Beans';
 
     if (systemType === 'ESCROW_FUNDED') {
@@ -1749,7 +1750,7 @@ export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBala
         if (!res.ok) return null;
         const balData = await res.json();
         const database = await getDb();
-        const commons = await database.getFirstAsync<any>('SELECT balance_c FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
+        const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
         const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
 
         let changed = false;
@@ -1828,7 +1829,7 @@ export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBala
 export async function getBalance(pubkey: string) {
     const database = await getDb();
     const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
-    const commons = await database.getFirstAsync<any>('SELECT balance_c FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
+    const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
 
     // Store enriched data from server response
     let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };

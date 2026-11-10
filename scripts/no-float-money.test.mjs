@@ -123,6 +123,19 @@ export const PHONE_ALLOWED = new Map([
         "`FAIL ${f.file}:${f.line}  ${f.theme}  ${f.ratio.toFixed(2)}:1 (needs ${f.min})${f.when.length ? `  while ${f.when.join(' and ')}` : ''}`,",
     ]],
     ['apps/native/services/ws-client.ts', ['console.log(`[WS Sync] Scheduling reconnect in ${(delay / 1000).toFixed(1)}s`);']],
+    // The tools' price-guide figure, not a listing price: core's ToolOfferDraft/ToolPriceHint/StarterOpening `credits` is the
+    // guide's whole Beans (pricing_guide_items.price_beans stays whole Beans, #3033), carried into the composer as the
+    // typed text its price box holds, which new-listing.tsx's postFormPrice_c reads through core parseHundredths.
+    ['apps/native/tools/doors.ts', [
+        "postCredits: type === 'offer' ? String(fee ? beans : (offer?.credits ?? 0)) : '',",
+        "'offer', { title: opening.title, description: opening.description, category: opening.category, credits: opening.credits ",
+        "if (opening.credits === null) draft.postCredits = '';",
+    ]],
+    ['apps/native/tools/list-sheet.tsx', ['const beans = Math.max(0, Math.min(MAX_BEANS, Math.floor(Number(draft.credits) || 0)));']],
+    ['apps/native/tools/things/thing.tsx', [
+        `: hint.priceType === 'daily' ? t("Your community's price guide says about {beans} Beans a day for something like this. F`,
+        `: hint.priceType === 'weekly' ? t("Your community's price guide says about {beans} Beans a week for something like this.`,
+    ]],
 ]);
 
 /** Every .ts/.tsx file under `dir` (relative to ROOT), its tests aside. */

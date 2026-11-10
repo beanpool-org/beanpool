@@ -84,7 +84,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => 
 
 import { getDatabaseFilenameForNode, legacyDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY, resetCommunityCachesRenamedForTests } from '../cache-file-migration';
-import { closeDB, getDb } from '../db';
+import { closeDB, COPY_SCHEMA, getDb } from '../db';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -113,12 +113,14 @@ const file = (name: string) => path.join(h.dir, name);
 /**
  * A community copy as an old build left it on the phone: `rows` in a table the app never touches, in WAL mode, the
  * last of them only in the log (the app was stopped before SQLite folded it into the file). Written in a scratch
- * directory while still open, and copied from there as it stood, as a stopped app leaves it.
+ * directory while still open, and copied from there as it stood, as a stopped app leaves it. At this build's schema
+ * number (COPY_SCHEMA), so what is tested here is the move alone: a copy below it is cleared and read again on open,
+ * its cursors forgotten (copy-schema-clear.test.ts).
  */
 function oldCopy(name: string, rows: string[]) {
     const scratch = fs.mkdtempSync(path.join(root, 'scratch-'));
     const db = new DatabaseSync(path.join(scratch, name));
-    db.exec('PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0; CREATE TABLE kept (v TEXT)');
+    db.exec(`PRAGMA user_version = ${COPY_SCHEMA}; PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0; CREATE TABLE kept (v TEXT)`);
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     for (const v of rows) db.prepare('INSERT INTO kept (v) VALUES (?)').run(v);
     for (const side of ['', '-wal']) {

@@ -13,7 +13,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { BeanPoolMerkleTree, LIVE_POST_TYPES, t, type LivePostChange } from '@beanpool/core';
+import { BeanPoolMerkleTree, LIVE_POST_TYPES, isHundredths, t, type LivePostChange } from '@beanpool/core';
 import { applyDelta, communityCachesRenamed, copyForRead, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
@@ -1167,11 +1167,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 });
                 if (balanceRes.ok) {
                     const balData = await balanceRes.json();
-                    delta.accounts.push({
-                        public_key: pubKey,
-                        balance: balData.balance || 0,
-                        last_demurrage_epoch: balData.last_demurrage_epoch || 0
-                    });
+                    // The node's balance is whole hundredths of a Bean (`balance_c`); an answer without one keeps the copy's
+                    // last figure rather than writing a guessed 0 over it.
+                    if (isHundredths(balData?.balance_c)) {
+                        delta.accounts.push({
+                            public_key: pubKey,
+                            balance_c: balData.balance_c,
+                            last_demurrage_epoch: balData.last_demurrage_epoch || 0
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Balance fetch failed:', e);

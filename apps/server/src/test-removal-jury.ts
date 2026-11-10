@@ -40,7 +40,9 @@
  *     didn't serve, never why, in draw order and each entry alike; and the two together still check out.
  *  7. The line: 99 in the pool is decided by everyone, 100 by a jury; Everyone set is everyone at 150.
  *  8. Votes off: a pause opens no vote and draws nobody.
- *  9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept.
+ *  9. A juror can be stood aside on a roll. (The rebuild that gave a node from before decision_electors' jury statuses
+ *     at boot, its rows kept, went in the 1.4.0 cutover: 1.2.36 has the table in this shape, and the gate opens nothing
+ *     older.)
  * 10. J2c, branch juries (DESIGN-removal-jury-j2-calls-fable.md call 4): under Automatic at 150 an owner's branch pause
  *     (removal by vote S5) of three draws one jury of 12 for the root's key, from the day's pool without the accounts its
  *     card names (the listed and the established left off); the root's inviter, the subtree's other accounts (an admin, an
@@ -665,38 +667,11 @@ async function main() {
         `a pause with votes off opens no vote and draws nobody (${row(yanVote).effect})`);
     setSwitchOverride('decisions', true);
 
-    // ── 9. A node from before: its roll's CHECK is rebuilt at boot ──────────────────────────────────────────────────
-    console.log("\n9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept");
-    const { initSchema } = await import('./db/db.js');
-    const tableSql = () => (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'decision_electors'").get() as { sql: string }).sql;
-    const triggers = () => (db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'decision_electors' ORDER BY name").all() as Array<{ name: string }>).map(r => r.name);
-    const triggersBefore = triggers();
-    const kept = db.prepare("SELECT decision_id, member_pubkey FROM decision_electors WHERE status IN ('on', 'left') ORDER BY decision_id, member_pubkey").all();
-    db.exec(`
-        CREATE TABLE decision_electors_old (
-            decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
-            member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-            role_at_open  TEXT NOT NULL,
-            status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
-            created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            PRIMARY KEY (decision_id, member_pubkey)
-        );
-        INSERT INTO decision_electors_old SELECT decision_id, member_pubkey, role_at_open, status, created_at, updated_at
-            FROM decision_electors WHERE status IN ('on', 'left');
-        DROP TABLE decision_electors;
-        ALTER TABLE decision_electors_old RENAME TO decision_electors;
-    `);
-    assert(!tableSql().includes("'stood_aside'"), "the table is as a node from before has it: 'on' and 'left' only");
-    initSchema();
-    assert(tableSql().includes("'stood_aside'") && tableSql().includes("'silent'"), "after boot its CHECK takes 'stood_aside' and 'silent'");
-    assert(JSON.stringify(db.prepare("SELECT decision_id, member_pubkey FROM decision_electors ORDER BY decision_id, member_pubkey").all()) === JSON.stringify(kept),
-        `every row it held is kept (${kept.length})`);
-    assert(JSON.stringify(triggers()) === JSON.stringify(triggersBefore) && !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_decision_electors_member'").get(),
-        `its index and its triggers are back (${triggers().join(', ') || 'no triggers'})`);
+    // ── 9. A juror stood aside ──────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n9. A juror can be stood aside on a roll');
     // Wil's roll, which section 7 drew; with none, this fails here rather than throwing, so the sections after it still run.
     db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0]?.k ?? '');
-    assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'and a juror can be stood aside in it');
+    assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'a juror can be stood aside on the roll');
 
     // ── 10. Branch juries (J2c) ─────────────────────────────────────────────────────────────────────────────────────
     // DESIGN-removal-jury-j2-calls-fable.md call 4 (Marty, 4 Nov "All Fable's picks"): under a jury rule an owner's branch

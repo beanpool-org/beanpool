@@ -37,7 +37,7 @@ import {
 } from './state-engine.js';
 import { createDecision, castDecisionVote, tickDecisions, getDecision, tallyDecision } from './decisions-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db, initSchema, createCrowdfundProject, raiseCreatorOperatorSwitch } from './db/db.js';
+import { db, createCrowdfundProject, raiseCreatorOperatorSwitch } from './db/db.js';
 import { recordActivity } from './engine/members.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -619,31 +619,8 @@ async function main() {
     const crPropCancelled = db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(crProp.proposal.id) as any;
     assert(crPropCancelled.status === 'cancelled', 'Proposal cancelled when candidate not active operator');
 
-    // 2.7 (PR #838 B2) Deploy backfill: a member with no recorded activity is stamped with the migration's
-    // run time, so a long-standing lead is not instantly eligible for succession on the joined_at fallback.
-    const { publicKey: backfillEnt } = createTreasury('BackfillEnterprise', 'avatarBackfill', 0);
-    const backfillLead = makeIdentity('BackfillLead', 20);
-    const backfillKeeper = makeIdentity('BackfillKeeper', 20);
-    adminAssignTreasuryOperator(backfillEnt, backfillLead.pubKeyHex, 'admin');
-    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(backfillEnt, backfillLead.pubKeyHex);
-    adminAssignTreasuryOperator(backfillEnt, backfillKeeper.pubKeyHex, 'admin');
-    const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare("UPDATE members SET joined_at = ?, last_active_at = NULL WHERE public_key = ?").run(yearAgo, backfillLead.pubKeyHex);
-    db.prepare("DELETE FROM node_config WHERE key = 'migration_backfill_last_active_at_v1'").run();
-    const beforeBackfill = Date.now();
-    initSchema();
-    const backfilled = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillLead.pubKeyHex) as any;
-    assert(!!backfilled.last_active_at, 'B2: NULL last_active_at is backfilled by the migration');
-    assert(!!backfilled.last_active_at && new Date(backfilled.last_active_at).getTime() >= beforeBackfill - 1000,
-        'B2: backfill stamps the migration run time, not joined_at');
-    assert(getLeadInactivity(backfillEnt).isEligible === false, 'B2: long-standing lead is not eligible for succession right after deploy');
-    // Runs once: a later NULL (and a later boot) is left alone.
-    db.prepare("UPDATE members SET last_active_at = NULL WHERE public_key = ?").run(backfillKeeper.pubKeyHex);
-    initSchema();
-    assert((db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillKeeper.pubKeyHex) as any).last_active_at === null,
-        'B2: backfill does not run again on a later boot');
-    assert((db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillLead.pubKeyHex) as any).last_active_at === backfilled.last_active_at,
-        'B2: re-running initSchema leaves the backfilled value untouched');
+    // (2.7, the deploy's one-time stamp of last_active_at on members with none, audit A15, went in the 1.4.0 cutover: every
+    // kept node had run it, and the gate opens no database older than 1.2.36.)
 
     // =========================================================================
     // HTTP ROUTE LEVEL VERIFICATION

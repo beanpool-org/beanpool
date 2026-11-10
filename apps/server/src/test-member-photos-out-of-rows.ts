@@ -11,14 +11,12 @@
  *   1. The heap. N members with a photo each, given by the profile route's own writer (state-engine updateProfile), on a
  *      server held to a small heap: one full GET /api/members answers, with the heap's peak under a bound. On origin/main
  *      09c2588d the same request ended the process (measured: FATAL ERROR, heap out of memory).
- *   2. An upgraded node says what it said. A database from before the move, its photos inline, one member for every kind
- *      of value a live node's avatar_url holds, booted: each member's URL in the full list and in a delta (both apps'
- *      sync), in the community members list, the avatar route's answer (status, type, ETag, bytes) and the profile page's
- *      photo are what the old code made of the inline value (the rules kept below as the oracle; since SEC-PUB-02 a
- *      shipped picture's bare address answers 404, its lists carrying bundled://<name>); a reader with no member key is
- *      refused the list as before.
- *   3. A photo set, changed and removed by a member through POST /api/profile/update: each time the list's URL, the
- *      delta, the avatar route and the row's reference follow; nothing reads the photo to answer a list.
+ *   2. A photo set, changed and removed by a member through POST /api/profile/update, on a fresh node: each time the
+ *      list's URL, the delta, the avatar route and the row's reference follow; nothing reads the photo to answer a list.
+ *      A reader with no member key is refused the list.
+ *
+ * The section that booted a node from before the move, its photos inline, went with the move itself (audit A42, the 1.4.0
+ * cutover): the gate opens no database older than 1.2.36 (db/schema-gate.ts), and every kept node had finished the move.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-member-photos-out-of-rows.ts
  */
@@ -53,7 +51,6 @@ function jpeg(size: number, seed = 1): Buffer {
     return Buffer.concat([head, body, Buffer.from([0xff, 0xd9])]);
 }
 const dataUrl = (b: Buffer, mime = 'image/jpeg') => `data:${mime};base64,${b.toString('base64')}`;
-const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
 type Key = { pk: string; priv: string };
 function newKey(): Key {
@@ -79,24 +76,6 @@ async function seedPhotos(a: { n: number; reader: string }): Promise<void> {
     db.pragma('wal_checkpoint(TRUNCATE)');
 }
 
-/**
- * A database from before photos left the members rows: booted as a fresh one, then made into the old shape (the photo
- * inline in members.avatar_url; no reference, size or member_photos), with one member per kind of stored value.
- */
-async function seedLegacy(a: { reader: string; kinds: [string, string, string | null][] }): Promise<void> {
-    const se = await import('./state-engine.js');
-    const { db } = await import('./db/db.js');
-    se.initStateEngine();
-    db.exec(`DROP TRIGGER members_touch_updated_at; DROP TABLE member_photos;
-             ALTER TABLE members DROP COLUMN avatar_ref; ALTER TABLE members DROP COLUMN avatar_bytes;
-             ALTER TABLE members ADD COLUMN avatar_url TEXT;`);
-    const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status, avatar_url, profile_updated_at)
-                               VALUES (?, ?, ?, ?, 'active', ?, ?)`);
-    insert.run(a.reader, 'Reader', '2026-01-01T00:00:00.000Z', 'INV-READER', null, null);
-    a.kinds.forEach(([pk, , value], i) => insert.run(pk, `Kind${i}`, '2026-02-01T00:00:00.000Z', `INV-K${i}`, value, '2026-03-01T00:00:00.000Z'));
-    db.pragma('wal_checkpoint(TRUNCATE)');
-}
-
 /** The real server, on port 0, reporting its heap's peak (sampled every 5 ms) when asked on stdin. */
 async function serve(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
@@ -118,9 +97,9 @@ async function serve(): Promise<void> {
 }
 
 const role = process.argv[2];
-if (role === 'seed-photos' || role === 'seed-legacy' || role === 'serve') {
+if (role === 'seed-photos' || role === 'serve') {
     const args = role === 'serve' ? null : JSON.parse(process.argv[3]);
-    (role === 'seed-photos' ? seedPhotos(args) : role === 'seed-legacy' ? seedLegacy(args) : serve()).then(
+    (role === 'seed-photos' ? seedPhotos(args) : serve()).then(
         () => { if (role !== 'serve') process.exit(0); },
         (e) => { console.error(e); process.exit(1); },
     );
@@ -201,7 +180,7 @@ async function call(base: string, method: 'GET' | 'POST', route: string, key: Ke
     return { status: res.status, text: bytes.toString('utf8'), headers: res.headers, bytes };
 }
 
-// The old code's rules, kept here as the oracle: what origin/main 09c2588d made of a value stored in members.avatar_url.
+// The URL rule, kept here as the oracle: what origin/main 09c2588d made of a member's photo (section 2 holds today's to it).
 // Since the public-routes audit's SEC-PUB-02 every node keys faces: a URL is the oracle's with its key after it (`&k=`, made
 // from the server's own secret), so each is compared without the key, and a photo's URL must carry one.
 const KEY_RE = /&k=[A-Za-z0-9_-]{22}$/;
@@ -214,34 +193,6 @@ function oldUrl(pk: string, stored: string | null): string | null {
     const trimmed = stored.trim();
     if (trimmed.startsWith('bundled://')) return stored;
     return `/api/avatar/${pk}?size=thumb&v=${crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8)}`;
-}
-
-/** engine/avatar.ts AvatarService.getAvatar's answer (status, and for a 200 the bytes, type and ETag). */
-function oldAvatar(stored: string | null): { status: number; bytes?: Buffer; type?: string; etag?: string } {
-    if (!stored || !stored.trim()) return { status: 404 };
-    const raw = stored.trim();
-    if (raw.startsWith('bundled://')) {
-        // Where the route looks for a shipped picture, from the server's directory (apps/server): a build may have put it there.
-        const file = `avatar_${raw.slice('bundled://'.length).replace(/-/g, '_')}.jpg`;
-        const serverDir = path.dirname(path.dirname(HERE));
-        const found = [path.join(serverDir, 'public', 'avatars', file), path.join(serverDir, 'apps', 'server', 'public', 'avatars', file),
-            path.join(serverDir, 'apps', 'pwa', 'public', 'avatars', file)].find((f) => fs.existsSync(f));
-        if (!found) return { status: 404 };
-        const fileBytes = fs.readFileSync(found);
-        return { status: 200, bytes: fileBytes, type: 'image/jpeg', etag: `"${crypto.createHash('sha256').update(fileBytes).digest('hex').slice(0, 16)}"` };
-    }
-    let bytes: Buffer;
-    const m = raw.match(/^data:([^;,]+);base64,([\s\S]*)$/i);
-    if (m) {
-        const mime = m[1].toLowerCase().trim();
-        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'].includes(mime)) return { status: 400 };
-        bytes = Buffer.from(m[2], 'base64');
-    } else if (/^data:/i.test(raw)) return { status: 404 };
-    else bytes = Buffer.from(raw, 'base64');
-    const type = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? 'image/jpeg'
-        : bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? 'image/png' : null;
-    if (!type) return { status: 404 };
-    return { status: 200, bytes, type, etag: `"${crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"` };
 }
 
 async function main(): Promise<void> {
@@ -286,64 +237,17 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    // ── 2. An upgraded node says what it said ────────────────────────────────────────────────────────────────────────
-    console.log('\n— 2. a node from before the move, booted: every reader gets what the old code made of each inline value —');
-    const photoA = dataUrl(jpeg(9_000, 3));
-    const KINDS: [string, string | null][] = [
-        ['a JPEG as a data URL', photoA],
-        ['a photo with blanks around it', `\n ${dataUrl(jpeg(4_000, 5))}  `],
-        ['a PNG as a data URL', dataUrl(PNG_1PX, 'image/png')],
-        ['a legacy bare-base64 JPEG', jpeg(3_000, 7).toString('base64')],
-        ['a JPEG whose type says image/jpg', dataUrl(jpeg(2_000, 9), 'image/jpg')],
-        ['a hostile type (SVG)', `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64')}`],
-        ['a data URL that is not base64', 'data:image/svg+xml,%3Csvg%3E'],
-        ['bytes that are no image', `data:image/jpeg;base64,${Buffer.from('not a jpeg at all').toString('base64')}`],
-        ['a shipped picture', 'bundled://leaf'],
-        ['a link', 'https://example.org/me.jpg'],
-        ['this node\'s own avatar address', '/api/avatar/abc?size=thumb'],
-        ['blanks', '   '],
-        ['no avatar', null],
-    ];
-    const kinds = KINDS.map(([label, value]) => [newKey().pk, label, value] as [string, string, string | null]);
-    const legacyDir = path.join(root, 'legacy');
-    fs.mkdirSync(legacyDir, { recursive: true });
+    // ── 2. A member sets, changes and removes their photo ────────────────────────────────────────────────────────────
+    console.log('\n— 2. a photo set, changed and removed through POST /api/profile/update —');
+    const liveDir = path.join(root, 'live');
+    fs.mkdirSync(liveDir, { recursive: true });
     const member = newKey();
-    await runToEnd('seed-legacy', legacyDir, { reader: member.pk, kinds });
-    const server = await startServer(legacyDir, 256);
+    await runToEnd('seed-photos', liveDir, { n: 0, reader: member.pk });
+    const server = await startServer(liveDir, 256);
     try {
-        assert(/Members' photos are in member_photos now: 10 moved, 2 that were no photo left out/.test(server.output()),
-            `the boot moved the photos out of the rows (${(server.output().match(/Members' photos are in member_photos now:[^\n]*/) || ['nothing said'])[0]})`);
-        const full = JSON.parse((await call(server.base, 'GET', '/api/members', member)).text) as any[];
-        const delta = JSON.parse((await call(server.base, 'GET', '/api/members?updatedAfter=2026-02-15T00:00:00.000Z', member)).text) as any[];
-        const community = JSON.parse((await call(server.base, 'GET', '/api/community/members', member)).text) as any;
-        const communityList: any[] = Array.isArray(community) ? community : community?.members ?? [];
-        for (const [pk, label, value] of kinds) {
-            const want = oldUrl(pk, value);
-            const inFull = full.find((m) => m.publicKey === pk)?.avatarUrl;
-            const inDelta = delta.find((m) => m.publicKey === pk)?.avatarUrl;
-            const inCommunity = communityList.find((m) => m.publicKey === pk)?.avatarUrl;
-            assert(unkeyed(inFull) === want && unkeyed(inDelta) === want && unkeyed(inCommunity) === want && [inFull, inDelta, inCommunity].every(keyedIfAvatar),
-                `${label}: the full list, the delta and the community list give ${want === null ? 'no URL' : 'its URL'}, as before (${inFull}, ${inDelta}, ${inCommunity})`);
-            // Since SEC-PUB-02 the bare address answers 404 for a shipped picture, where the old route served the jpg: a 200 told
-            // anyone the key was a member's. No route hands that address out; the lists carry bundled://<name> (checked above),
-            // which each app draws from its own assets.
-            const shipped = typeof value === 'string' && value.trim().startsWith('bundled://');
-            const was = shipped ? { status: 404 } : oldAvatar(value);
-            // Asked as a member is handed it: the list's URL, with its key; with none, the bare address.
-            const got = await call(server.base, 'GET', typeof inFull === 'string' && inFull.startsWith('/api/avatar/') ? inFull : `/api/avatar/${pk}?size=thumb`, null);
-            const same = got.status === was.status && (was.status !== 200
-                || (got.bytes.equals(was.bytes!) && got.headers.get('content-type') === was.type && got.headers.get('etag') === was.etag));
-            assert(same, `${label}: the avatar route answers ${was.status}${was.status === 200 ? ' with the same bytes, type and ETag' : ''}, ${shipped ? 'at the bare address no list hands out' : 'as before'} (${got.status} ${got.headers.get('content-type') ?? ''})`);
-            if (oldUrl(pk, value) !== null) {
-                const profile = JSON.parse((await call(server.base, 'GET', `/api/profile/${pk}`, member)).text);
-                assert(profile?.avatar === value, `${label}: the profile page hands the photo out as it is stored, as before`);
-            }
-        }
         const stranger = await call(server.base, 'GET', '/api/members', null);
-        assert(stranger.status === 401 && !stranger.text.includes('avatar'), `an unsigned reader is refused the list, as before (${stranger.status})`);
+        assert(stranger.status === 401 && !stranger.text.includes('avatar'), `an unsigned reader is refused the list (${stranger.status})`);
 
-        // ── 3. A member sets, changes and removes their photo ────────────────────────────────────────────────────────
-        console.log('\n— 3. a photo set, changed and removed through POST /api/profile/update —');
         const listedUrl = async () => JSON.parse((await call(server.base, 'GET', '/api/members', member)).text).find((m: any) => m.publicKey === member.pk)?.avatarUrl ?? null;
         const deltaUrl = async (since: string) => JSON.parse((await call(server.base, 'GET', `/api/members?updatedAfter=${encodeURIComponent(since)}`, member)).text)
             .find((m: any) => m.publicKey === member.pk)?.avatarUrl;

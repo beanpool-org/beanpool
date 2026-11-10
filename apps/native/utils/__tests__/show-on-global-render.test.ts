@@ -343,7 +343,7 @@ describe('a copy of an Offer or a Need', () => {
     it.each([['light', lightColors], ['dark', darkColors]])('the card\'s line stays inside 320 dp at 1.3× text, %s', async (scheme, colors) => {
         theme.scheme = scheme;
         theme.colors = colors;
-        await draw(createElement(ListingCopyLine, { copy: { from: FROM, price: { beans: 20, per: 'fixed' } } }));
+        await draw(createElement(ListingCopyLine, { copy: { from: FROM, price: { price_c: 20, per: 'fixed' } } }));
         const line = byId('listing-copy-line')!;
         expect(line.textContent).toBe(LINE);
         const box = layOut(byId('floor')!, { width: WIDTH, height: 568 }, { fontScale: 1.3 }).box(line);

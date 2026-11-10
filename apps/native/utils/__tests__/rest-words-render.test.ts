@@ -295,7 +295,7 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
     it('the repayment card: what is left, and the way to pay', async () => {
         debt.repayment = { amount: 200, repaid: 50, left: 150, debtId: 'a'.repeat(32) };
         await renderIn('xx', createElement(RepaymentCard));
-        expect(host.textContent).toContain(repaymentBannerWords({ amount: 200, left: 150 }));
+        expect(host.textContent).toContain(repaymentBannerWords({ amount_c: 200, left_c: 150 }));
         expect(host.textContent).toMatch(/^\[/);
         expect(host.querySelector(`[data-hint="${xx('Pay Beans you hold to the Commons, or pay back a debt')}"]`)).not.toBeNull();
         expect(bypassing(host)).toEqual([]);
@@ -303,7 +303,7 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
 
     it("the sentences are names-debts.ts's, word for word in English, for every variant", () => {
         for (const n of [0.5, 1, 12, 12.5, 300]) expect(beansWords(n), String(n)).toBe(beans(n));
-        const r = { amount: 200, repaid: 0, left: 200, debtId: 'x' };
+        const r = { amount_c: 200, repaid_c: 0, left_c: 200, debtId: 'x' };
         expect(repaymentBannerWords(r)).toBe(REPAYMENT_COPY.banner(r));
         expect(linkLeftWords(300)).toBe(REPAYMENT_COPY.linkLeft(300));
         expect(String(REPAYMENT_LINES.payTitle)).toBe(REPAYMENT_COPY.payTitle);

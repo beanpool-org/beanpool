@@ -560,7 +560,7 @@ export default function PublicProfileScreen() {
         let sum = 0;
         for (const h of myVouching.history) {
             if (h.person?.memberPubkey === pubKeyStr && (h.for === 'profile' || h.outcome === 'vouched')) {
-                sum += Math.abs(h.amount);
+                sum += Math.abs(h.amount_c);
             }
         }
         return sum;

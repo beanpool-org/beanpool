@@ -26,7 +26,7 @@ const FIELDS = {
     standingId: '0b16212c-3742-4d58-a36d-788390a5b0bb',
     listingId: 'post-vehicle-storage',
     payee: 'b'.repeat(64),
-    beansPerPeriod: 50,
+    beansPerPeriod_c: 50,
     unit: 'month' as const,
     maxPeriods: 6,
     startsAt: '2026-11-09T08:00:00.000Z',

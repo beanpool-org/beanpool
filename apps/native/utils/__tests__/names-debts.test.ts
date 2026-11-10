@@ -55,8 +55,8 @@ function signedByMember(s: Sent): boolean {
 }
 
 const DEBT: NamesDebt = {
-    id: 'd'.repeat(32), entry_id: 'e1', amount: 300, reason: 'removed', removed_at: '2026-10-01T10:00:00.000Z', status: 'open',
-    repaying_pubkey: null, repaid: 120.5, settled_how: null, settled_by: null, settled_at: null, settle_ref: null, note: null,
+    id: 'd'.repeat(32), entry_id: 'e1', amount_c: 300, reason: 'removed', removed_at: '2026-10-01T10:00:00.000Z', status: 'open',
+    repaying_pubkey: null, repaid_c: 120.5, settled_how: null, settled_by: null, settled_at: null, settle_ref: null, note: null,
 };
 
 beforeEach(() => { sent = []; });
@@ -239,7 +239,7 @@ describe('words and checks', () => {
         expect(beans(179.5)).toBe('179.50 Beans');
         expect(beans(0.1 + 0.2)).toBe('0.30 Beans');
         expect(leftOf(DEBT)).toBe(179.5);
-        for (const s of [debtLine(DEBT, () => '@x'), DEBT_COPY.workOff('@b', 'Bea', DEBT), DEBT_COPY.forgive(DEBT), REPAYMENT_COPY.banner({ amount: 300, repaid: 120, left: 180 })]) {
+        for (const s of [debtLine(DEBT, () => '@x'), DEBT_COPY.workOff('@b', 'Bea', DEBT), DEBT_COPY.forgive(DEBT), REPAYMENT_COPY.banner({ amount_c: 300, repaid_c: 120, left_c: 180 })]) {
             expect(s).not.toContain('Ʀ');
             expect(s).toMatch(/Beans/);
         }
@@ -247,11 +247,11 @@ describe('words and checks', () => {
 
     it('an entry’s history: open with what is repaid and who works it off; settled; forgiven', () => {
         expect(debtLine({ ...DEBT, repaying_pubkey: 'p' }, () => '@bea')).toMatch(/^Removed on 1 Oct 2026 owing the Commons 300 Beans\. Open: 120\.50 Beans repaid, 179\.50 Beans left\. @bea is working it off\.$/);
-        expect(debtLine({ ...DEBT, repaid: 0, reason: 'account_deleted' }, () => '')).toMatch(/^Deleted their account on .* Open\.$/);
+        expect(debtLine({ ...DEBT, repaid_c: 0, reason: 'account_deleted' }, () => '')).toMatch(/^Deleted their account on .* Open\.$/);
         expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'pay_back', settled_by: 'a', settled_at: '2026-10-03T00:00:00Z' }, () => '@ada')).toMatch(/Settled on 3 Oct 2026: paid back, with a payment counted by @ada\.$/);
         expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'pay_back', settled_by: 'node', settled_at: '2026-10-03T00:00:00Z' }, () => '@node')).toMatch(/Settled on 3 Oct 2026: paid back\.$/);
         expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'work_off', settled_at: '2026-10-03T00:00:00Z' }, () => '@ada')).toMatch(/Settled on 3 Oct 2026: worked off\.$/);
-        expect(debtLine({ ...DEBT, repaid: 0, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z', note: 'hardship' }, () => '')).toMatch(/Forgiven by the community on 4 Oct 2026\. Note: hardship$/);
+        expect(debtLine({ ...DEBT, repaid_c: 0, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z', note: 'hardship' }, () => '')).toMatch(/Forgiven by the community on 4 Oct 2026\. Note: hardship$/);
         expect(debtLine({ ...DEBT, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z' }, () => ''))
             .toMatch(/Forgiven by the community on 4 Oct 2026: 120\.50 Beans had been repaid, and the 179\.50 Beans left was forgiven\.$/);
         const other = { ...DEBT, id: 'o', entry_id: 'e2' };
@@ -373,11 +373,11 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain('if (mine.debtId && !codeTyped.current) setCode((c) => (c.trim() ? c : mine.debtId!));');
         expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
         expect(read('components', 'RepaymentCard.tsx')).toContain("router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
-        expect(REPAYMENT_COPY.banner({ amount: 200, repaid: 0, left: 200, debtId: DEBT.id })).toContain('pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
+        expect(REPAYMENT_COPY.banner({ amount_c: 200, repaid_c: 0, left_c: 200, debtId: DEBT.id })).toContain('pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
         expect(REPAYMENT_COPY.payIntro).toContain('enter the pay-back code an admin gave you (working one off, yours is filled in)');
         expect(REPAYMENT_COPY.payConfirm(200, false, null, true)).toBe('Pay 200 Beans to the Commons? This won’t come off your debt: it has no pay-back code. To pay your debt, pay with '
             + 'your code (Pay the Commons fills it in), or ask an admin to count this payment toward it afterwards. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0. This can’t be undone.');
-        expect(REPAYMENT_COPY.paid(200, 'tx-9', false, { transactionId: 'tx-9', amount: 200 }, true)).toBe('Paid 200 Beans to the Commons. This did not come off your debt: it was paid '
+        expect(REPAYMENT_COPY.paid(200, 'tx-9', false, { transactionId: 'tx-9', amount_c: 200 }, true)).toBe('Paid 200 Beans to the Commons. This did not come off your debt: it was paid '
             + 'without your pay-back code. To have it count, ask an admin to count it toward your debt with this reference: tx-9. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0.');
         // With the code, or owing nothing, no such words.
         expect(REPAYMENT_COPY.payConfirm(200, true, null, false)).not.toContain('won’t come off');
@@ -392,8 +392,8 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(coversLeft(300, 300)).toBe(true);
         expect(coversLeft(150, 300)).toBe(false);
         expect(coversLeft(500, null)).toBe(false);
-        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left: 300, leftAfter: 150, settled: false })).toBe('Paid 150 Beans to the Commons. That came off your debt: 150 Beans left.');
-        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left: 150, leftAfter: 0, settled: true })).toBe('Paid 150 Beans to the Commons. Your debt is paid off and settled.');
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left_c: 300, leftAfter_c: 150, settled: false })).toBe('Paid 150 Beans to the Commons. That came off your debt: 150 Beans left.');
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left_c: 150, leftAfter_c: 0, settled: true })).toBe('Paid 150 Beans to the Commons. Your debt is paid off and settled.');
         // A node that doesn't say: nothing promised, the reference given.
         expect(REPAYMENT_COPY.paid(150, 'tx-1', true)).toBe('Paid 150 Beans to the Commons. Reference: tx-1');
         expect(REPAYMENT_COPY.payConfirm(300, true, 300)).toBe('Pay 300 Beans to the Commons for your debt? 300 Beans was what was left when the admin shared this. '
@@ -401,7 +401,7 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(REPAYMENT_COPY.payConfirm(150, true)).toBe('Pay 150 Beans to the Commons for your debt? It comes off your debt at once. If less is left now, '
             + 'your server refuses it and says how much, and nothing is paid. This can’t be undone.');
         expect(REPAYMENT_COPY.payConfirm(5, false)).toBe('Pay 5 Beans to the Commons? This can’t be undone.');
-        for (const words of [REPAYMENT_COPY.payIntro, REPAYMENT_COPY.payConfirm(150, true, 300), REPAYMENT_COPY.paid(150, 'tx-1', true, { leftAfter: 150 }), DEBT_COPY.shareCode(DEBT)]) {
+        for (const words of [REPAYMENT_COPY.payIntro, REPAYMENT_COPY.payConfirm(150, true, 300), REPAYMENT_COPY.paid(150, 'tx-1', true, { leftAfter_c: 150 }), DEBT_COPY.shareCode(DEBT)]) {
             expect(words).not.toMatch(/to an admin|one payment|doesn’t count/);
         }
         expect(REPAYMENT_COPY.payIntro).toContain('what you pay comes off the debt at once, and when nothing is left it is settled.');

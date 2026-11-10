@@ -6,7 +6,8 @@ import type { BeanPoolIdentity } from './identity';
 
 export interface AllocationHistoryLine {
     kind: string;
-    amount: number;
+    // Whole hundredths, as the node sends it (M1); the phone shows it in M2.
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;

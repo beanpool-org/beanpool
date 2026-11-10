@@ -75,7 +75,7 @@ export default function PayCommonsScreen() {
         DeviceEventEmitter.emit('transaction_completed');
         const forDebt = !!payment.body.debtId;
         // names-debts.ts REPAYMENT_COPY.paid, in the member's language (components/repayment-lines.ts).
-        setPaid({ words: paidWords(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
+        setPaid({ words: paidWords(r.value.amount_c, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
     });
 
     const pay = () => {

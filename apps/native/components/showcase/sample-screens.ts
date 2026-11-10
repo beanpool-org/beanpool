@@ -106,7 +106,9 @@ export const SAMPLE_MEMBER = SAMPLE_COMMUNITY.member;
  * (sample-community.ts sampleEnterpriseCards / Detail / Ledger: review of #2063, N5).
  */
 export function sampleEnterprises(): TreasurySummary[] {
-    return sampleEnterpriseCards();
+    // Core's sample is in whole hundredths (`balance_c`, `creditLine_c`, …), as the node now sends it; the phone's own types
+    // still name the old fields until M2 (atomic Beans, the phone) renames them and their reads. Compile-only until then.
+    return sampleEnterpriseCards() as unknown as TreasurySummary[];
 }
 
 /** One of them as the enterprise page reads it in preview: the project's for its id, else the Bakery's. */
@@ -116,7 +118,8 @@ export function sampleTreasuryDetail(pubkey?: string): any {
 
 /** Its Income & Spend as the enterprise page reads it in preview. */
 export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerResponse {
-    return coreSampleEnterpriseLedger(pubkey);
+    // As sampleEnterprises: core's `enterprise.balance_c` against the phone's old type, until M2.
+    return coreSampleEnterpriseLedger(pubkey) as unknown as EnterpriseLedgerResponse;
 }
 
 /**

@@ -1128,7 +1128,7 @@ export default function PostDetailModal() {
         setAccepting(true);
         try {
             const standing = await signStandingStart(standingFieldsFor({
-                listingId: post.id, payee, beansPerPeriod: Number(post.credits), unit: standingUnit, maxPeriods: choice.periods, startsAt: choice.startsAt,
+                listingId: post.id, payee, beansPerPeriod_c: Number(post.credits), unit: standingUnit, maxPeriods: choice.periods, startsAt: choice.startsAt,
             }));
             if (approveTxId) await approveMarketplaceRequest(approveTxId, identity.publicKey, standing);
             else await acceptMarketplacePost(post.id, identity.publicKey, undefined, standing);

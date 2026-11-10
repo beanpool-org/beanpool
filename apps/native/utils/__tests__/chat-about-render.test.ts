@@ -71,7 +71,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 
     it('shows the listing\'s own kind, title and price, and a tap opens the listing', () => {
         const opened: string[] = [];
-        const dom = draw(createElement(ChatAboutCard, { about, live: { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
+        const dom = draw(createElement(ChatAboutCard, { about, live: { ...EGGS, title: 'Fresh eggs, a dozen', price_c: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
         const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
         expect(card.textContent).toBe('OfferFresh eggs, a dozen8 Beans');
         // Named by what it shows (WCAG 2.5.3: no label of its own to differ from the visible words); the sentence is its hint.

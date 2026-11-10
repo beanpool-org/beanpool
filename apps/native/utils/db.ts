@@ -1685,7 +1685,12 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
 }
 
 /** The node's own balance read (GET /api/ledger/balance), as it answered: what a standing take-up's room is read from. */
-export type NodeBalanceRead = { balance?: number | null; floor?: number | null; usableFloor?: number | null; [field: string]: unknown };
+export type NodeBalanceRead = {
+    balance?: number | null; floor?: number | null; usableFloor?: number | null;
+    // The node sends whole hundredths under these names (M1); the phone reads them in M2.
+    balance_c?: number | null; floor_c?: number | null; usableFloor_c?: number | null;
+    [field: string]: unknown;
+};
 
 /**
  * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
@@ -2530,7 +2535,7 @@ export async function lookupAboutListing(postId: string): Promise<AboutPostLike 
         if (!Array.isArray(data)) return undefined;
         const post = data.find((p: any) => p && p.id === postId);
         if (!post) return null;
-        return { id: post.id, type: post.type, title: post.title, credits: post.credits, priceType: post.priceType ?? post.price_type, status: post.status };
+        return { id: post.id, type: post.type, title: post.title, price_c: post.price_c, priceType: post.priceType ?? post.price_type, status: post.status };
     } catch {
         return undefined;
     }

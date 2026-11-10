@@ -25,9 +25,9 @@ export const REPAYMENT_LINES = {
 };
 
 /** REPAYMENT_COPY.banner: what is left, and why incoming Beans go to the Commons. */
-export function repaymentBannerWords(r: Pick<Repayment, 'left' | 'amount'>): string {
+export function repaymentBannerWords(r: Pick<Repayment, 'left_c' | 'amount_c'>): string {
     return t('You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once. Then you keep what you receive, as everyone does.',
-        { left: beansWords(r.left), amount: beansWords(r.amount) });
+        { left: beansWords(r.left_c), amount: beansWords(r.amount_c) });
 }
 
 /** REPAYMENT_COPY.linkLeft. */
@@ -57,7 +57,7 @@ export function paidWords(amount: number, ref: string, forDebt: boolean, answer:
             : t('Paid {amount} to the Commons.', values);
     }
     if (answer.settled) return t('Paid {amount} to the Commons. Your debt is paid off and settled.', values);
-    if (typeof answer.leftAfter === 'number') return t('Paid {amount} to the Commons. That came off your debt: {left} left.', { ...values, left: beansWords(answer.leftAfter) });
+    if (typeof answer.leftAfter_c === 'number') return t('Paid {amount} to the Commons. That came off your debt: {left} left.', { ...values, left: beansWords(answer.leftAfter_c) });
     return t('Paid {amount} to the Commons. Reference: {ref}', values);
 }
 

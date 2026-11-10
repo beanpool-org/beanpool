@@ -10,10 +10,10 @@ const entries = [
 const BODY: HealthExceptionsBody = {
     settings: { debtLinePct: 50, quietDays: 60 },
     exceptions: [
-        { memberPubkey: 'k1', entryId: 'e1', balance: -120, floor: 200, reasons: ['past_debt_line', 'quiet_in_debit'] },
-        { memberPubkey: 'k2', entryId: 'e2', balance: -20, floor: 200, reasons: ['quiet_in_debit'] },
+        { memberPubkey: 'k1', entryId: 'e1', balance_c: -120, floor_c: 200, reasons: ['past_debt_line', 'quiet_in_debit'] },
+        { memberPubkey: 'k2', entryId: 'e2', balance_c: -20, floor_c: 200, reasons: ['quiet_in_debit'] },
     ],
-    departed: [{ id: 'd1', entryId: 'e1', amount: 80, reason: 'removed', removedAt: '2026-10-01T00:00:00Z', repaid: 30, repaying: true }],
+    departed: [{ id: 'd1', entryId: 'e1', amount_c: 80, reason: 'removed', removedAt: '2026-10-01T00:00:00Z', repaid_c: 30, repaying: true }],
 };
 
 describe('community health on the phone', () => {
@@ -222,7 +222,7 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
 });
 
 describe('a reason this phone has no words for (the node still has S1\'s step-back reason, which no app can cause)', () => {
-    const ROW = { memberPubkey: 'k', entryId: 'e1', balance: -800, floor: 200, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
+    const ROW = { memberPubkey: 'k', entryId: 'e1', balance_c: -800, floor_c: 200, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
     const SETTINGS = { debtLinePct: 50, quietDays: 60 };
 
     it('shows the balance and the floor alone, never "in debit with no sale", which would be untrue', () => {

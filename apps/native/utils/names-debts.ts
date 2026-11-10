@@ -73,7 +73,9 @@ export function fetchMyRepayment(node: string, identity: BeanPoolIdentity): Prom
 /** The member confirmed paying `amount`, for debt `debtId` if given: one id for every send of this payment. */
 export function confirmCommonsPayment(amount: number, debtId?: string): ConfirmedPayment<CommonsPayment> {
     const code = debtId?.trim().toLowerCase();
-    return confirmPayment<CommonsPayment>({ amount, ...(code ? { debtId: code } : {}) });
+    // Still the old body, `amount` in Beans, which a node on whole hundredths refuses (400 amount_c_required) until M2
+    // (atomic Beans, the phone) sends `amount_c`. Renamed here without that, a typed 5 would pay 5 hundredths: compile-only.
+    return confirmPayment<CommonsPayment>({ amount, ...(code ? { debtId: code } : {}) } as unknown as CommonsPayment);
 }
 
 /**

@@ -558,7 +558,7 @@ export default function NamesListScreen() {
                 await createDecision({
                     authorPubkey: identity.publicKey, touches: 'pool', effect: 'forgive_debt', subject: debt.id,
                     title: `Forgive a debt of ${beans(leftOf(debt))}`,
-                    description: `A member who left owed the Commons ${beans(debt.amount)}${debt.repaid > 0 ? `, and ${beans(debt.repaid)} of it was repaid` : ''}. `
+                    description: `A member who left owed the Commons ${beans(debt.amount_c)}${debt.repaid_c > 0 ? `, and ${beans(debt.repaid_c)} of it was repaid` : ''}. `
                         + 'Forgiving it moves no Beans: the Commons took the debt when they left. The record stays, marked forgiven.',
                 });
                 setNotice(t('The Decision is open: the community votes on forgiving the debt.'));

@@ -187,7 +187,7 @@ const LEDGER = {
 };
 const decision = (over: Partial<ScopedDecisionCard> = {}): ScopedDecisionCard => ({
     id: 'd1', authorPubkey: KOFI, title: 'Pay Mia for the oven door', description: 'She fixed the hinge last week.',
-    effect: 'pay_out', subject: MIA, params: { amount: 12.5 }, status: 'open',
+    effect: 'pay_out', subject: MIA, params: { amount_c: 12.5 }, status: 'open',
     opensAt: iso(now - 3600_000), closesAt: iso(now + 4 * DAY),
     tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 }, myVote: null, canVote: true, ...over,
 });

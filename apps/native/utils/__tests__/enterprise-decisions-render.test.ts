@@ -76,7 +76,7 @@ const KEEPERS = [
 function card(over: Partial<ScopedDecisionCard> = {}): ScopedDecisionCard {
     return {
         id: 'd1', authorPubkey: ANN, title: 'Pay Bob for the oven', description: 'Bob fixed the oven door last week.',
-        effect: 'pay_out', subject: BOB, params: { amount: 40 }, status: 'open',
+        effect: 'pay_out', subject: BOB, params: { amount_c: 40 }, status: 'open',
         opensAt: new Date(Date.now() - 3600_000).toISOString(), closesAt: new Date(Date.now() + 6 * 86400_000).toISOString(),
         tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 }, myVote: null, ...over,
     };

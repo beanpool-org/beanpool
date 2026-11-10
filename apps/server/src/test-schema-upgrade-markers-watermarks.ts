@@ -289,7 +289,15 @@ runSchemaSuite('the tables, columns and markers added since, and the watermarks'
             `both tables have both triggers, the rebuilt one too (${[...triggersOn(after, 'invite_codes'), ...triggersOn(after, 'deferred_wage_claims')].join(', ')})`);
         const stamp = (t: string, key: string, v: string) => (after.prepare(`SELECT updated_at AS u FROM ${t} WHERE ${key} = ?`).get(v) as any)?.u as string | null;
         const invited = stamp('invite_codes', 'code', 'OLD-CODE');
-        assert(!!invited && !!stamp('deferred_wage_claims', 'id', 'w1'), `each row held is stamped once (${invited})`);
+        assert(!!invited, `each row held is stamped once (${invited})`);
+        // The old wage claim held its figure in Beans (amount REAL): money is whole hundredths now and an upgrade drops old
+        // money rather than convert it (db/hundredths-step.ts), so the claim is gone, not carried. A claim written into the
+        // rebuilt table (with no stamp of its own) is stamped by its trigger, so the rebuilt table's triggers are proven still.
+        const heldClaims = (after.prepare(`SELECT COUNT(*) AS n FROM deferred_wage_claims`).get() as { n: number }).n;
+        assert(heldClaims === 0 && !columns(after, 'deferred_wage_claims').includes('amount') && columns(after, 'deferred_wage_claims').includes('amount_c'),
+            `the old wage claim (in Beans) is dropped, not converted, and the table holds amount_c (${heldClaims} rows)`);
+        after.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, amount_c, updated_at) VALUES ('w2', 'e', 'k', 200, NULL)`).run();
+        assert(!!stamp('deferred_wage_claims', 'id', 'w2'), 'a wage claim inserted into the rebuilt table with no stamp is stamped');
         after.prepare(`UPDATE invite_codes SET updated_at = '2025-01-02T00:00:00.000Z' WHERE code = 'OLD-CODE'`).run();
         after.prepare(`UPDATE invite_codes SET used_by = 'y' WHERE code = 'OLD-CODE'`).run();
         after.prepare(`INSERT INTO invite_codes (code, created_by, updated_at) VALUES ('NEW-CODE', 'x', NULL)`).run();

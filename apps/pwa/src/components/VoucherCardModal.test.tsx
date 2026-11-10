@@ -7,6 +7,7 @@ import * as api from '../lib/api';
 vi.mock('../lib/api', () => ({
     getVoucherCard: vi.fn(),
     setVoucherBudget: vi.fn(),
+    stopVoucher: vi.fn(),
 }));
 
 const SAMPLE_CARD: api.VoucherCardData = {
@@ -86,6 +87,35 @@ describe('VoucherCardModal (slice V3, §5, §10)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(api.getVoucherCard).mockResolvedValue(SAMPLE_CARD);
+    });
+
+    it('Stop vouching shows only where the node says this viewer may stop it (canStop; an admin\'s budget is an owner\'s, I5), asks first, then stops', async () => {
+        vi.mocked(api.getVoucherCard).mockResolvedValue({ ...SAMPLE_CARD, source: 'role', canStop: true });
+        vi.mocked(api.stopVoucher).mockResolvedValue({ ...SAMPLE_CARD, source: 'role', stoppedAt: '2026-11-10T00:00:00Z', stopReason: 'stopped', left: 0, held: 0, level: 0 });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const onUpdated = vi.fn();
+        render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} onUpdated={onUpdated} />);
+        const stop = await screen.findByTestId('voucher-stop');
+        expect(stop).toHaveTextContent('Stop vouching');
+        expect(stop.className).toMatch(/min-h-\[44px\]/);
+        fireEvent.click(stop);
+        expect(api.stopVoucher).not.toHaveBeenCalled();
+        fireEvent.click(stop);
+        await waitFor(() => expect(api.stopVoucher).toHaveBeenCalledWith(SAMPLE_CARD.memberPubkey));
+        expect(confirmSpy.mock.calls[0][0]).toContain('Stop @jane from vouching?');
+        await waitFor(() => expect(screen.queryByTestId('voucher-stop')).toBeNull());
+        expect(onUpdated).toHaveBeenCalled();
+        confirmSpy.mockRestore();
+    });
+
+    it('no Stop vouching where the node says this viewer may not (an owner\'s budget; an admin\'s to a committee admin) or says nothing', async () => {
+        for (const canStop of [false, undefined]) {
+            vi.mocked(api.getVoucherCard).mockResolvedValue({ ...SAMPLE_CARD, canStop });
+            const { unmount } = render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
+            await waitFor(() => expect(screen.getByText('Set budget to')).toBeInTheDocument());
+            expect(screen.queryByTestId('voucher-stop')).toBeNull();
+            unmount();
+        }
     });
 
     it('renders tabs with role=tablist and min-h-[44px], and close button >= 44x44', async () => {

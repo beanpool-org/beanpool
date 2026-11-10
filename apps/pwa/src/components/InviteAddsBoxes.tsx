@@ -20,9 +20,38 @@ import { t, INVITE_ADDS_WORDS, PEEK_WORDS } from '@beanpool/core';
 import { usePhoneBrowser } from '../lib/global-entry';
 import { openAppDoors } from '../lib/peek';
 
-type Row = 'names' | 'voucher';
+type Row = 'names' | 'voucher' | 'list';
 
 const LINK = 'inline-flex min-h-[44px] max-w-full items-center justify-center rounded-xl px-4 py-2 text-center text-[14px] font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
+
+/** The sentence that says where it is done, and (on a phone's browser) the links into the app; on the page once, under what was last tapped. */
+function DoneInAppNote({ asked, noteId, doors }: { asked: boolean; noteId: string; doors: ReturnType<typeof openAppDoors> }) {
+    return (
+        <div aria-live="polite">
+            {asked && (
+                <>
+                    <p id={noteId} className="m-0 mt-2 break-words rounded-xl bg-bp-chip-info-tint px-3 py-2 text-[13px] leading-relaxed text-bp-chip-info-ink" data-testid="invite-adds-note">
+                        {t(INVITE_ADDS_WORDS.doneInApp)}
+                    </p>
+                    {/* The links sit on the page's own ground, not on the note's tint, as the peek page has them (the blue ink is for it). */}
+                    {doors && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <a href={doors.app} data-testid="invite-adds-open-app" className={`${LINK} bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover`}>
+                                {t(PEEK_WORDS.openInApp)}
+                            </a>
+                            {/* An Android intent falls back to the store by itself; an iPhone's app link has no fallback. */}
+                            {!doors.app.startsWith('intent:') && (
+                                <a href={doors.store} rel="noopener noreferrer" data-testid="invite-adds-get-app" className={`${LINK} border border-bp-ink-info text-bp-ink-info`}>
+                                    {t(PEEK_WORDS.getApp)}
+                                </a>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
 
 function SwitchedOffRow({ row, testId, label, asked, noteId, doors, onAsk }: {
     row: Row;
@@ -52,29 +81,7 @@ function SwitchedOffRow({ row, testId, label, asked, noteId, doors, onAsk }: {
                 />
                 <span className="min-w-0 break-words">{label}</span>
             </label>
-            <div aria-live="polite">
-                {asked && (
-                    <>
-                        <p id={noteId} className="m-0 mt-2 break-words rounded-xl bg-bp-chip-info-tint px-3 py-2 text-[13px] leading-relaxed text-bp-chip-info-ink" data-testid="invite-adds-note">
-                            {t(INVITE_ADDS_WORDS.doneInApp)}
-                        </p>
-                        {/* The links sit on the page's own ground, not on the note's tint, as the peek page has them (the blue ink is for it). */}
-                        {doors && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                                <a href={doors.app} data-testid="invite-adds-open-app" className={`${LINK} bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover`}>
-                                    {t(PEEK_WORDS.openInApp)}
-                                </a>
-                                {/* An Android intent falls back to the store by itself; an iPhone's app link has no fallback. */}
-                                {!doors.app.startsWith('intent:') && (
-                                    <a href={doors.store} rel="noopener noreferrer" data-testid="invite-adds-get-app" className={`${LINK} border border-bp-ink-info text-bp-ink-info`}>
-                                        {t(PEEK_WORDS.getApp)}
-                                    </a>
-                                )}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+            <DoneInAppNote asked={asked} noteId={noteId} doors={doors} />
         </div>
     );
 }
@@ -89,6 +96,19 @@ export function InviteAddsBoxes() {
             <div className="flex flex-col gap-2">
                 <SwitchedOffRow row="names" testId="invite-adds-names" label={t(INVITE_ADDS_WORDS.addToNames)} asked={asked === 'names'} noteId={noteId} doors={doors} onAsk={() => setAsked('names')} />
                 <SwitchedOffRow row="voucher" testId="invite-adds-voucher" label={t(INVITE_ADDS_WORDS.makeVoucher)} asked={asked === 'voucher'} noteId={noteId} doors={doors} onAsk={() => setAsked('voucher')} />
+            </div>
+            {/* The other way in (invites-vouching I4): the names list's own "Invite this person", which is the phone's. */}
+            <div data-testid="invite-adds-row-list">
+                <button
+                    type="button"
+                    onClick={() => setAsked('list')}
+                    aria-describedby={asked === 'list' ? noteId : undefined}
+                    className="mt-1 min-h-[44px] max-w-full cursor-pointer break-words border-0 bg-transparent px-1 py-2 text-left text-[14px] font-bold text-bp-ink-accent"
+                    data-testid="invite-from-names-list"
+                >
+                    {t('Invite someone from the names list ›')}
+                </button>
+                <DoneInAppNote asked={asked === 'list'} noteId={noteId} doors={doors} />
             </div>
         </div>
     );

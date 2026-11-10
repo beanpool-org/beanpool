@@ -215,7 +215,7 @@ describe('People → Invites: the Vouchers block, exactly as the node answers (�
             expect(b).not.toBeNull();
             const rows = Array.from(b!.querySelectorAll('[data-testid="voucher-row"]')).map((r) => r.textContent);
             expect(rows).toEqual([voucherRowText(BLOCK.vouchers[0]), voucherRowText(BLOCK.vouchers[1])]);
-            expect(rows).toEqual(['@Wren · 1500 of 1500 left · 0 vouched · 0 below zero ›', '@jane · 550 of 650 left · 4 vouched · 1 below zero ›']);
+            expect(rows).toEqual(['@Wren · 1500 left ›', '@jane · 550 left ›']);
             expect(b!.textContent).toContain('+ Make someone a voucher');
             // Above the invite form (§11: "at the TOP of that screen, above Invite someone").
             const heading = inviteHeading();

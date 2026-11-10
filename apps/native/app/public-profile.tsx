@@ -39,6 +39,7 @@ import { signedRequestWords } from '../components/signed-request-lines';
 import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InvitedByCard } from '../components/InvitedByCard';
+import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 
 
 
@@ -1417,6 +1418,17 @@ export default function PublicProfileScreen() {
                             {/* Invited by, and Brought in n people (I3): the server says who reads which (InvitedByCard). */}
                             {showsBeans && (
                                 <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                            )}
+
+                            {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only. */}
+                            {!isSelf && (
+                                <ProfileVoucherButton
+                                    button={trust.voucherButton}
+                                    memberPubkey={pubKeyStr ?? ''}
+                                    callsign={profile?.callsign || callsignStr || ''}
+                                    anchorUrl={anchorUrl ?? ''}
+                                    identity={identity}
+                                />
                             )}
 
                             {/* Vouch for @sam (V3 §9) */}

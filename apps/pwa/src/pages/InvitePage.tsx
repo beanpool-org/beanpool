@@ -16,6 +16,7 @@ import {
     buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, revokeInvite, getInviteTree, getMyVouching, getVouchersBlock,
     myNodeRoleOnce, request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
 } from '../lib/api';
+import type { WaitingVoucherRow } from '@beanpool/core';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
@@ -27,7 +28,7 @@ import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, type InviteRowSource } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -152,6 +153,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [vouchPreset, setVouchPreset] = useState<number | null>(null);
     const [vouchersData, setVouchersData] = useState<VoucherSummary[] | null>(null);
+    // Invites not used yet that promise a budget (the Vouchers block's Waiting to join): their names are on the phone.
+    const [waitingData, setWaitingData] = useState<WaitingVoucherRow[]>([]);
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
     const [showMakeVoucherNotice, setShowMakeVoucherNotice] = useState(false);
 
@@ -176,12 +179,15 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     const loadVouchersBlock = useCallback(async () => {
         if (isPreview) return;
         let data: VoucherSummary[] | null;
+        let waiting: WaitingVoucherRow[] = [];
         try {
-            data = (await getVouchersBlock())?.vouchers ?? null;
+            const block = await getVouchersBlock();
+            data = block?.vouchers ?? null;
+            waiting = block?.waiting ?? [];
         } catch {
             data = null;
         }
-        if (mounted.current) setVouchersData(data);
+        if (mounted.current) { setVouchersData(data); setWaitingData(waiting); }
     }, [isPreview]);
 
     useEffect(() => {
@@ -565,31 +571,46 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 {t('Vouchers')}
                             </h2>
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl overflow-hidden shadow-sm divide-y divide-nature-100 dark:divide-nature-800">
-                                {vouchersData.map((v) => (
-                                    <button
-                                        key={v.memberPubkey}
-                                        type="button"
-                                        onClick={() => setSelectedVoucherPubkey(v.memberPubkey)}
-                                        className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-start justify-between gap-2 border-0 bg-transparent cursor-pointer"
-                                        data-testid={`voucher-row-${v.callsign}`}
-                                    >
-                                        <div className="flex-1 min-w-0 text-sm font-semibold text-nature-900 dark:text-white break-words">
-                                            <span className="truncate max-w-[140px] inline-block align-bottom">{v.callsign}</span>
-                                            {' · '}
-                                            <span className="whitespace-normal">
-                                                {v.noLimit
-                                                    ? t(VOUCH_PRESET_WORDS.vouchersRowTextNoLimit, { vouched: v.peopleVouched, below: v.belowZero })
-                                                    : t('{left} of {total} left · {vouched} vouched · {below} below zero', {
-                                                        left: formatNumber(v.left),
-                                                        total: formatNumber(v.level),
-                                                        vouched: v.peopleVouched,
-                                                        below: v.belowZero,
-                                                    })}
-                                            </span>
-                                        </div>
-                                        <span className="text-nature-400 dark:text-nature-300 font-bold ml-2 self-start mt-0.5">›</span>
-                                    </button>
-                                ))}
+                                {(() => {
+                                    const { owners, others } = vouchersBlockSections(vouchersData);
+                                    const row = (v: VoucherSummary) => (
+                                        <button
+                                            key={v.memberPubkey}
+                                            type="button"
+                                            onClick={() => setSelectedVoucherPubkey(v.memberPubkey)}
+                                            className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-start justify-between gap-2 border-0 bg-transparent cursor-pointer"
+                                            data-testid={`voucher-row-${v.callsign}`}
+                                        >
+                                            <div className="flex-1 min-w-0 text-sm font-semibold text-nature-900 dark:text-white break-words">
+                                                {v.noLimit ? ownerRowWords(v.callsign, v.peopleVouched) : voucherRowWords(v.callsign, v.left)}
+                                            </div>
+                                        </button>
+                                    );
+                                    return (
+                                        <>
+                                            {owners.length > 0 && (
+                                                <div className="px-3.5 pt-3 pb-1 text-xs font-bold text-nature-600 dark:text-nature-300" data-testid="vouchers-owners-line">{ownersHeading()}</div>
+                                            )}
+                                            {owners.map(row)}
+                                            {others.map(row)}
+                                            {waitingData.length > 0 && (
+                                                <h3 className="m-0 px-3.5 pt-3 pb-1 text-xs font-bold text-nature-600 dark:text-nature-300" data-testid="vouchers-waiting-heading">{waitingHeading()}</h3>
+                                            )}
+                                            {waitingData.map((w) => (
+                                                <button
+                                                    key={w.entryId}
+                                                    type="button"
+                                                    onClick={() => setShowMakeVoucherNotice(true)}
+                                                    className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-start justify-between gap-2 border-0 bg-transparent cursor-pointer"
+                                                    data-testid="voucher-waiting-row"
+                                                >
+                                                    {/* The name is sealed in the names list, which only a phone can open. */}
+                                                    <div className="flex-1 min-w-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{waitingRowWords(w, null)}</div>
+                                                </button>
+                                            ))}
+                                        </>
+                                    );
+                                })()}
                                 <button
                                     type="button"
                                     onClick={() => setShowMakeVoucherNotice(true)}

@@ -45,7 +45,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
-import { grantMissingRoleBudgets, voucherBudgetSetting, vouchingOnDeparture } from './engine/vouchers.js';
+import { grantMissingRoleBudgets, voucherBudgetSetting, vouchingOnDeparture, profileVoucherButton, type ProfileVoucherButton } from './engine/vouchers.js';
 import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
@@ -2745,6 +2745,11 @@ export interface ViewerTrustProfile {
      * /api/invite/tree?root=), for an owner or admin of this node and for the member themself; absent for anyone else.
      */
     broughtIn?: number;
+    /**
+     * The button an owner or admin sees on someone else's profile, following that person's state (engine/vouchers.ts
+     * profileVoucherButton; invites-vouching I4): Add to the names list, Make a voucher, or Voucher · n left. Absent for anyone else.
+     */
+    voucherButton?: ProfileVoucherButton;
     /** The member's own "Show who invited me to other members" switch, to the member themself only. */
     inviterShown?: boolean;
     risk: TradeRiskAssessment;
@@ -2937,6 +2942,8 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // "Brought in n people ›": for an owner or admin of this node, and for the member on their own profile (I3).
     const isSelf = !!viewerPubkey && viewerPubkey === targetPubkey;
     const broughtIn = invitesOn && (isSelf || seesWhoInvitedWhom(viewerPubkey)) ? broughtInCount(targetPubkey) : undefined;
+    // The names-list / voucher button: for an owner or admin only, on another member's profile (I4).
+    const voucherButton = profileVoucherButton(viewerPubkey, targetPubkey) ?? undefined;
 
     const risk = assessTradeRisk({
         tier,
@@ -2966,6 +2973,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         vouchedInBy,
         risk,
         ...(broughtIn !== undefined ? { broughtIn } : {}),
+        ...(voucherButton ? { voucherButton } : {}),
         ...(isSelf ? { inviterShown: inviterShownOf(targetPubkey) } : {}),
         ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };

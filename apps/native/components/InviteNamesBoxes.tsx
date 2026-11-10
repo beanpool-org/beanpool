@@ -387,12 +387,18 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
                     </Text>
                 </View>
             ) : null}
+            {/* The names box above stays; this is the other way in (invites-vouching I4): the list's own "Invite this person". */}
+            <Pressable onPress={names.openList} accessibilityRole="button" style={styles.linkRow} testID="invite-from-names-list">
+                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>{t('Invite someone from the names list ›')}</Text>
+            </Pressable>
         </View>
     );
 }
 
 const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     block: { marginBottom: 16 },
+    linkRow: { minHeight: 48, justifyContent: 'center' },
+    linkText: { fontSize: 15, fontWeight: '700', color: colors.brand.primary },
     inner: { marginLeft: 36, marginBottom: 8 },
     boxRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingVertical: 6 },
     boxLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.heading },

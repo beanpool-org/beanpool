@@ -4,7 +4,7 @@
  * and 100-step stepper, raise or lower), Budget history, and See who they brought in.
  */
 import { useEffect, useState, useRef } from 'react';
-import { formatNumber, formatDate, t, tn, formatHistoryLine, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { formatNumber, formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { getVoucherCard, setVoucherBudget, type VoucherCardData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -169,18 +169,18 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                             <div className="space-y-4">
                                 {/* Budget stats */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-1.5 text-xs text-nature-700 dark:text-nature-300">
+                                    {/* The numbers first (invites-vouching I4): "Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0". */}
+                                    <div className="text-sm font-extrabold text-nature-950 dark:text-white break-words" data-testid="voucher-headline">{voucherCardHeadline(card)}</div>
                                     <div className="text-sm font-extrabold text-nature-950 dark:text-white pb-1 border-b border-nature-100 dark:border-nature-800">
                                         {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
                                         {card.noLimit
                                             ? t(VOUCH_PRESET_WORDS.noLimit)
                                             : t('{left} of {total} left', { left: formatNumber(card.left), total: formatNumber(card.level) })}
                                     </div>
-                                    <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(card.vouched), people: tn(card.peopleVouched, '{n} person', '{n} people') })}</div>
                                     {!card.noLimit && (
                                         <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
                                     )}
                                     <div>{t('Invites sent with a vouch: {count}', { count: card.invitesWithVouch })}</div>
-                                    <div>{t('{below} of {total} below zero · written off {off}', { below: card.belowZero, total: card.peopleVouched, off: formatNumber(card.writtenOff) })}</div>
                                     {card.trading && (
                                         <div>{t('Trading: {others} with others · {inside} inside only', { others: card.trading.withOthers, inside: card.trading.insideOnly })}</div>
                                     )}

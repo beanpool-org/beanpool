@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, tn, formatNumber, formatDate, VOUCHER_BUDGET_MAX, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { t, tn, formatNumber, formatDate, voucherCardHeadline, VOUCHER_BUDGET_MAX, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchVoucherCard, setVoucherBudget, stopNamesVoucher,
@@ -145,6 +145,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default,
             backgroundColor: colors.surface.card, gap: 8,
         },
+        headline: { fontSize: 15, lineHeight: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 8 },
         boxHeader: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5, color: colors.text.secondary, textTransform: 'uppercase', marginBottom: 2 },
         boxLine: { fontSize: 15, lineHeight: 22, color: colors.text.body },
 
@@ -277,15 +278,14 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
 
                 {/* Their budget card */}
                 <View style={styles.box} testID="voucher-budget-card">
+                    {/* The numbers first (invites-vouching I4): "Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0". */}
+                    <Text style={styles.headline} maxFontSizeMultiplier={1.3} testID="voucher-headline">{voucherCardHeadline(card)}</Text>
                     <Text style={styles.boxHeader}>{t('Their budget')}</Text>
                     {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
                     <Text style={styles.boxLine}>
                         {card.noLimit
                             ? t(VOUCH_PRESET_WORDS.noLimit)
                             : t('{left} of {budget} left', { left: formatNumber(card.left), budget: formatNumber(card.level) })}
-                    </Text>
-                    <Text style={styles.boxLine}>
-                        {tn(card.peopleVouched, 'Vouched {amount} to {n} person who joined', 'Vouched {amount} to {n} people who joined', { amount: formatNumber(card.vouched) })}
                     </Text>
                     {!card.noLimit && (
                         <Text style={styles.boxLine}>
@@ -294,13 +294,6 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     )}
                     <Text style={styles.boxLine}>
                         {tn(card.invitesWithVouch, 'Invites sent with a vouch: {n}', 'Invites sent with a vouch: {n}')}
-                    </Text>
-                    <Text style={styles.boxLine}>
-                        {t('{belowZero} of {total} below zero · written off {writtenOff}', {
-                            belowZero: card.belowZero,
-                            total: card.peopleVouched,
-                            writtenOff: formatNumber(card.writtenOff),
-                        })}
                     </Text>
                     <Text style={styles.boxLine}>
                         {t('Trading: {others} with others · {inside} inside only', {

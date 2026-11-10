@@ -432,7 +432,7 @@ export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfte
 /**
  * The members whose name starts with `prefix`, case forgiven by the one name rule (`foldName`, any alphabet), shortest
  * name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a project or a
- * treasury. Answered from idx_members_callsign_fold (the server's db.ts migrateCallsignFold; SQLite's `lower()` folds A–Z
+ * treasury. Answered from idx_members_callsign_fold (the server's schema.sql; SQLite's `lower()` folds A–Z
  * only, so the old index on it missed "Олег" for "ол"): a range of the index, the folded prefix and every name after it
  * that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range term
  * is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the `status` term

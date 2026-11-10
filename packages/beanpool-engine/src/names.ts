@@ -74,10 +74,12 @@ export function registerNameFunctions(db: Db): void {
 /**
  * `name_fold` on this connection, and its two TEMP triggers, which write `members.callsign_fold` on every INSERT and every
  * UPDATE OF callsign (an upsert and an INSERT OR REPLACE included) made through it. TEMP: they live in this connection's
- * temp schema (sqlite_temp_master), never in the file, so a handle without them writes members as it always did, and
- * the next boot's re-fold (the server's db.ts migrateCallsignFold) repairs the fold of whatever it wrote. The body names
- * `members` unqualified (SQLite allows no schema there); with no temp.members it is main's. Nothing to do
- * on a database without the column (one no server of this version has booted yet): the boot adds it, then calls this.
+ * temp schema (sqlite_temp_master), never in the file, so a handle without them (the sqlite3 shell, say) writes members
+ * without the fold, and nothing repairs it: the server writes members only through a connection that has them, and an
+ * older image is never started on a file a newer one has stamped (the server's db/schema-gate.ts; going back is the
+ * copy made before an update). The body names `members` unqualified (SQLite allows no schema there); with no
+ * temp.members it is main's. Nothing to do on a database without the column (a fresh install's, before schema.sql has
+ * run): the server's boot calls this again once it has (db.ts initSchema).
  */
 export function installNameFold(db: Db): void {
     registerNameFunctions(db);

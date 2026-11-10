@@ -32,13 +32,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
     can_operate INTEGER DEFAULT 0,
     -- On the credit committee (DESIGN-invites-and-names-list-fable.md §5.4; engine/vouchers.ts): an admin an owner put on it
-    -- makes and stops vouchers and sets their budgets, as every owner does. Cleared when they stop being an admin. Also
-    -- added by db.ts's ALTER before this file runs, for the touch trigger's list below.
+    -- makes and stops vouchers and sets their budgets, as every owner does. Cleared when they stop being an admin.
     credit_committee INTEGER DEFAULT 0,
-    -- #127: declared HERE as well as by the guarded ALTER in db.ts, because the ALTER now runs BEFORE
-    -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
-    -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
-    -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
+    -- #127: a column a schema step in db.ts adds to an older database is declared HERE too, because the steps run
+    -- BEFORE db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
+    -- this line is the only thing that creates the column. A step without a declaration here silently gives fresh
     -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
     -- MONEY IS WHOLE HUNDREDTHS OF A BEAN (@beanpool/core hundredths.ts; DESIGN-atomic-beans-fable.md): every money column
     -- is INTEGER and named *_c, so a REAL or a whole-Bean figure can never be mistaken for one.
@@ -174,9 +172,7 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     used_by TEXT REFERENCES members(public_key),
     used_at DATETIME,
     intended_for TEXT,
-    -- Protocol v1 Admin Genesis Invites. Declared here as well as in db.ts's ALTER because the
-    -- ALTER now runs BEFORE this file is exec'd: on a fresh database the table does not exist yet,
-    -- the ALTER fails into its empty catch, and this line is the only thing that creates the column.
+    -- Protocol v1 Admin Genesis Invites.
     genesis_type TEXT DEFAULT 'standard',
     -- Who issued an admin (seed) invite: the owner/admin's pubkey under a key session, 'owner:password' under the
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
@@ -353,33 +349,32 @@ CREATE TABLE IF NOT EXISTS posts (
     -- The shop it is in (section 29, shops; DESIGN-shops-and-tools-fable.md §9.1, slice S1): an Offer only, public, in its
     -- author's own shop, or an enterprise's in the enterprise's (engine/shops.ts assertShopForPost). NULL on every other row.
     -- Foreign keys are off on this database, and a standby may hold a listing a moment before the shop its copy names, so
-    -- every reader takes an id with no shop row as no shop. Added to an older database by db.ts, before this file runs.
+    -- every reader takes an id with no shop row as no shop.
     shop_id TEXT REFERENCES shops(id),
     -- When its author, or a keeper of the enterprise that posted it, featured it in its shop (DESIGN-shops-round3-enterprise-
     -- shopfront-fable.md §4; engine/shops.ts featureOffer): an Offer in a shop only, six at most of a shop's that can be on
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
-    -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
+    -- shop, or its shop closed, the stamp goes. NULL on every other row.
     featured_at TEXT,
     -- A pin (scratch/fable-design/DESIGN-pinning-fable.md §2; engine/pins.ts, @beanpool/core pinLive): when it ends, and when it
     -- was made. Both NULL on every row nobody pinned; a pin ends by the clock on every read, and the hourly hygiene clears
     -- the stamps (state-engine.ts runMarketplaceHygiene). A row that leaves the board loses them in the same statement
-    -- (posts_pin_ends_off_board, below). Three at most, a week at most. Added to an older database by db.ts.
+    -- (posts_pin_ends_off_board, below). Three at most, a week at most.
     pinned_until TEXT,
     pinned_at TEXT,
     -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
-    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
-    -- an older database by db.ts.
+    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row.
     created_via TEXT,
     -- Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5; @beanpool/core tags/post-tags.ts): ids
     -- such as food.fruit.lemon, space-separated, at most 5 in 200 characters, each one the library knows when a member
     -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
-    -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
+    -- column (beanpool-engine posts.ts tagCondition). '' on every row without.
     tags TEXT NOT NULL DEFAULT '',
     -- The tags its author typed (DESIGN-tags-free-entry-fable.md §2; @beanpool/core tags/free-tags.ts): a JSON list of them
     -- in their stored form, at most 5 in 200 characters, each held to the rule (engine/post-fields.ts), never mixed with
     -- `tags`. Their words are in search_keywords; the Market's `free=` is a json_each on this column (beanpool-engine posts.ts
     -- freeTagCondition). '' on every row without. No trigger, index or default here calls a connection function, so an
-    -- older image boots on this file. Added to an older database by db.ts.
+    -- older image boots on this file.
     free_tags TEXT NOT NULL DEFAULT '',
     -- A member's copy of an in-person event, an Offer or a Need from their own community (DESIGN-list-on-global-fable.md §3,
     -- slices G2′ and G1′), on a node that keeps the directory: `shown_from_host` is set on every copy and on nothing else. It
@@ -387,7 +382,7 @@ CREATE TABLE IF NOT EXISTS posts (
     -- community's host is never kept). `shown_from_post_id` is the home listing's id there, or NULL. `shown_price` is an Offer's
     -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `price_c` stays 0, and
     -- nothing adds, compares or pays it. engine/event-copy.ts reads all three. No trigger, index or default here calls a
-    -- connection function, so an older image boots on this file. Added to an older database by db.ts.
+    -- connection function, so an older image boots on this file.
     shown_from_host TEXT,
     shown_from_post_id TEXT,
     shown_price TEXT,
@@ -701,8 +696,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_author_pubkey ON messages(author_pubkey)
 -- old id goes to the conversation such a line is in (engine/messaging.ts consolidatedConversationOf). Kept from
 -- messages.metadata by the three triggers below, on each server, and never copied: a standby keeps its own from the lines
 -- it imports, as posts_fts is kept from posts. An index, so an id nobody has is answered as fast as a real one: scanning
--- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review). db.ts fills it once
--- from the lines already there (migration_message_old_conversation_ids_v1).
+-- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review).
 CREATE TABLE IF NOT EXISTS message_old_conversation_ids (
     old_conversation_id TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -1039,8 +1033,8 @@ END;
 -- because it lives on the table rather than in any one code path. It also stops status-only writes (an
 -- RSVP, an escrow step) from churning the index for text that did not change.
 --
--- db.ts replaces the old unguarded trigger on boot and rebuilds posts_fts once; state-engine.ts's
--- backfillSearchKeywords re-creates this trigger and must keep the same WHEN (test-posts-fts-same-ms checks).
+-- state-engine.ts's backfillSearchKeywords re-creates this trigger and must keep the same WHEN (test-posts-fts-same-ms
+-- checks).
 CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts
 WHEN OLD.title IS NOT NEW.title
   OR OLD.description IS NOT NEW.description
@@ -1178,7 +1172,7 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     -- Whose account the fragment is of: the collection's owner, written with the release (engine/recovery-release.ts
     -- recordRelease) and copied to a standby with the row. The sessions (recovery_collections) stay each server's own, so
     -- on a server that took over this is the only thing naming the owner, and the owner's own account delete finds
-    -- their releases by it (state-engine.ts purgeMemberSelf). db.ts fills it at boot for a release whose session is here.
+    -- their releases by it (state-engine.ts purgeMemberSelf).
     owner_pubkey TEXT,
     UNIQUE(collection_id, share_id)
 );
@@ -1298,8 +1292,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts
 -- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
 -- knows what the old one had already seen and tells nobody about it again. `promise`, `accepting_knocks` and
 -- `closing_on` are the listing promise (mothership A2, engine/directory-promise.ts): the promise as JSON text, checked
--- to its five fields; whether a stranger can ask to join; the day the community says it closes. Added to an existing
--- table by db.ts.
+-- to its five fields; whether a stranger can ask to join; the day the community says it closes.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -1650,7 +1643,7 @@ END;
 -- Phase 2 delta backup — watermark triggers for the remaining mutable tables.
 --
 -- These tables gained their `updated_at` column via ALTER TABLE on already-live
--- DBs (see db.ts), where SQLite forbids a non-constant DEFAULT. So new rows on an
+-- DBs (a boot step before 1.2.36), where SQLite forbids a non-constant DEFAULT. So new rows on an
 -- existing node would be inserted with a NULL watermark and be invisible to the
 -- `WHERE updated_at > :since` delta filter. Each table therefore gets BOTH:
 --   * an AFTER INSERT trigger that stamps updated_at when it came in NULL, and
@@ -2720,14 +2713,13 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     role_at_open  TEXT NOT NULL,
     -- 'stood_aside' and 'silent': a removal jury's (role_at_open 'juror', engine/removal-jury.ts): passed over at the draw
-    -- or by the juror, and seated but no vote in 72 hours (slice J2). db.ts rebuilds a table from before for this CHECK.
+    -- or by the juror, and seated but no vote in 72 hours (slice J2).
     status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- A removal juror's seat (slice J2b, decisions-engine.ts settleOpenJuries): it dates from created_at, when the walk
     -- reached them. answered_at: when they answered Serve (NULL: not yet; a vote is an answer too, and Step aside is
-    -- 'stood_aside'). reminded_at: when the tick last reminded them, so a reminder goes once. Added by db.ts on a node
-    -- from before.
+    -- 'stood_aside'). reminded_at: when the tick last reminded them, so a reminder goes once.
     answered_at   DATETIME,
     reminded_at   DATETIME,
     PRIMARY KEY (decision_id, member_pubkey)
@@ -3190,7 +3182,7 @@ WHERE status = 'pending';
 -- `own`: per address of this community's; `unconfirmed`: per address a node with no configured names was reached at,
 -- which Settings offers the owner to confirm; `old_app`: signatures in the old format, bound to no community ("N
 -- members are on an old app", until the switch); `lost`: per lost name (another community holds it), the apps refused
--- there. Counts only: no key is stored. Rows older than 8 days are dropped. db.ts rebuilds a table from before `lost`.
+-- there. Counts only: no key is stored. Rows older than 8 days are dropped.
 CREATE TABLE IF NOT EXISTS signature_audiences (
     day      TEXT NOT NULL,
     kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app', 'lost')),
@@ -3210,7 +3202,7 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
     tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
     -- The document as JSON text, at most 128 KB as UTF-8, the most any tool may name (TOOL_STATE_CEILING_BYTES); each
-    -- tool's own bound is the engine's (toolStateMaxBytes). db.ts rebuilds a table made with the 64 KB CHECK of before.
+    -- tool's own bound is the engine's (toolStateMaxBytes).
     body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
     -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -3252,12 +3244,12 @@ CREATE TABLE IF NOT EXISTS shops (
     -- Its banner, its one photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4): only its reference here
     -- (@beanpool/core avatarRefOf: its version), which its URL is made from (shopPhotoUrlOf); the photo is in shop_photos,
     -- written with it by its one writer (engine/shops.ts setShopPhoto). NULL: none, and the apps draw a quiet block with its
-    -- category's emoji. Last, as db.ts adds it to an older database, before this file runs.
+    -- category's emoji. Last: an older database gained it by an ALTER.
     photo_ref     TEXT
 );
 -- An account's shop (shopOf), and an enterprise's newest one, whose banner its listings carry (engine posts.ts
 -- POST_ROW_SELECT, ORDER BY opened_at DESC): in this order, so that read is a search with no sort in every row of a list
--- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone; db.ts drops it).
+-- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone).
 CREATE INDEX IF NOT EXISTS idx_shops_owner_opened ON shops(owner_pubkey, opened_at);
 
 -- A shop's banner, exactly as it was set (a data URL, its metadata stripped, ≤ 2 MB of image bytes: @beanpool/core

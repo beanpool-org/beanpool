@@ -10,8 +10,7 @@ import { MembersModule } from './components/modules/MembersModule';
 /**
  * The owner console reads the node's members and posts a page at a time (capacity fix 3): POST /api/local/admin/data
  * with `lists: 'none'` is the summary and its counts, and /admin/data/members and /data/posts are the pages. The screens
- * count from the counts, list the pages read so far, and offer the next with Load more. A node from before the pages
- * sends the lists whole, and the console shows them as it always did.
+ * count from the counts, list the pages read so far, and offer the next with Load more.
  */
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) });
@@ -57,21 +56,20 @@ describe('the console reads the node a page at a time', () => {
         expect(data.membersTotal).toBe(3_500);
     });
 
-    it('a node from before the pages: its whole lists as they came, counts made from them, nothing more to load', async () => {
+    it('lists a summary happens to carry are not kept: the console always reads the pages, and counts only from the node\'s counts', async () => {
         const fetchMock = vi.fn().mockImplementation((url: string) => {
             const u = String(url);
-            if (u.endsWith('/api/local/admin/data')) {
-                return ok({ ...SUMMARY, counts: undefined, members: [member(0), member(1), { ...member(2), isTreasury: true, invitedBy: 'open:google' }], profiles: [], posts: [{ id: 'p1' }], memberStats: {} });
-            }
-            throw new Error(`an older node has no ${u}`);
+            if (u.endsWith('/api/local/admin/data/members')) return ok({ members: [member(5)], profiles: [], memberStats: {}, nextCursor: null, total: 1 });
+            if (u.endsWith('/api/local/admin/data/posts')) return ok({ posts: [{ id: 'p9' }], nextCursor: null });
+            if (u.endsWith('/api/local/admin/data')) return ok({ ...SUMMARY, members: [member(0), member(1)], posts: [{ id: 'p1' }] });
+            throw new Error(`unexpected ${u}`);
         });
         vi.stubGlobal('fetch', fetchMock);
-        const data = await fetchNodeData('https://old-node.example');
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(data.members).toHaveLength(3);
-        expect(data.counts).toMatchObject({ members: 3, treasuries: 1, doorMembers: 1 });
-        expect(data.membersNext).toBeNull();
-        expect(data.postsNext).toBeNull();
+        const data = await fetchNodeData('https://node.example');
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        expect(data.members?.map((m) => m.publicKey)).toEqual([key(5)]);
+        expect(data.posts).toEqual([{ id: 'p9' }]);
+        expect(data.counts?.members).toBe(3_500);
     });
 
     it('a walk of the pages holds each member once, even when a page is read twice', () => {

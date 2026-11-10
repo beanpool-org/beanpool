@@ -288,7 +288,7 @@ export interface NodeDataPayload {
     /** The Commons pot, whole hundredths of a Bean under its old name (server routes/admin.ts /admin/data getCommonsBalance). */
     commonsBalance?: number;
     enterprises?: unknown[];
-    /** What the screens count (the node's `counts`, or made from a whole list by a node from before the pages). */
+    /** What the screens count: the node's `counts`. */
     counts?: NodeDataCounts;
     /** The cursor of the next members page, or null when every member is held. */
     membersNext?: string | null;
@@ -1094,8 +1094,7 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
 /**
  * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
  * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
- * has 5 minutes, long on purpose: a node from before the pages sends every member (~4 MB on a big node), over what can
- * be a slow phone link.
+ * has 5 minutes, long on purpose: a big node's pages come over what can be a slow phone link.
  */
 export const NODE_DATA_ANSWER_MS = 30_000;
 export const NODE_DATA_ALL_MS = 5 * 60_000;
@@ -1197,37 +1196,13 @@ export function withPostsPage(data: NodeDataPayload, page: PostsPage): NodeDataP
     };
 }
 
-/** What a node from before the pages never sent: the counts, from its whole list. */
-export function countsFromMembers(members: MemberItem[] | undefined): NodeDataCounts | undefined {
-    if (!Array.isArray(members)) return undefined;
-    const platforms = { ios: 0, android: 0, web: 0, unknown: 0 };
-    for (const m of members) {
-        const p = String(m.platform || '').toLowerCase();
-        if (p === 'ios' || p === 'android') platforms[p]++;
-        else if (p === 'web' || p === 'pwa') platforms.web++;
-        else platforms.unknown++;
-    }
-    return {
-        members: members.length,
-        treasuries: members.filter((m) => m.isTreasury).length,
-        doorMembers: members.filter((m) => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:')).length,
-        owners: members.filter((m) => m.nodeRole === 'owner').length,
-        platforms,
-    };
-}
-
 /**
  * The node's data: its summary (`lists: 'none'`), with the first page of members and of posts, so every screen has the
- * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more. A node from before
- * the pages ignores `lists` and sends the lists whole: kept as they came, with counts made from them and nothing more to
- * load.
+ * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more.
  */
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const json = await postNodeRead(nodeUrl, '/api/local/admin/data', { lists: 'none' }, adminPassword, tfaToken);
     const data = normalizeNodeData(json);
-    if (Array.isArray(data.members) || !data.counts) {
-        return { ...data, counts: data.counts ?? countsFromMembers(data.members), membersNext: null, postsNext: null };
-    }
     const [members, posts] = await Promise.all([
         fetchMembersPage(nodeUrl, adminPassword, tfaToken),
         fetchPostsPage(nodeUrl, adminPassword, tfaToken),

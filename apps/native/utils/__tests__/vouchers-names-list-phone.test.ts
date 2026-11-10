@@ -89,6 +89,7 @@ const NODE_CARD: VoucherCardData = {
     held: 100,
     heldInvites: 1,
     vouched: 350,
+    vouchedLast30Days: 100,
     peopleVouched: 4,
     level: 650,
     belowZero: 1,
@@ -234,16 +235,19 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
         await renderCard({ initialCard: NODE_CARD });
         const text = container.textContent ?? '';
         expect(text).toContain('550 of 650 left');
-        expect(text).toContain('Vouched 350 to 4 people who joined');
+        // The numbers first (invites-vouching I4): the headline is the card's first line, before the budget.
+        expect(text).toContain('Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0');
+        expect(container.querySelector('[data-testid="voucher-budget-card"]')?.firstElementChild?.getAttribute('data-testid')).toBe('voucher-headline');
+        expect(text).not.toContain('people who joined');
         expect(text).toContain('Held 100 on 1 invite not used yet');
         expect(text).toContain('Invites sent with a vouch: 5');
-        expect(text).toContain('1 of 4 below zero · written off 0');
         expect(text).toContain('Trading: 2 with others · 1 inside only');
         expect(container.querySelector('[data-testid="set-budget-control"]')?.textContent).toContain('550 left · 100 held');
         expect(text).not.toMatch(/[A-HJ-NP-Za-km-z1-9]{20,}/);
         expect(text).not.toMatch(/balance/i);
         // Every figure on the card is one of the node's own numbers for this budget (or a level to pick), never a balance.
-        const own = new Set(['550', '650', '350', '4', '100', '1', '5', '0', '2', '50', '25', '500', '1000', '1500', '2000', '700']);
+        // ('30' is the headline's fixed window, "in the last 30 days": a length of time, not a figure from the node.)
+        const own = new Set(['550', '650', '350', '4', '100', '1', '5', '0', '2', '50', '25', '500', '1000', '1500', '2000', '700', '30']);
         const figures = Array.from(container.querySelectorAll('span')).flatMap((el) => (el.textContent ?? '').replace(/\d{1,2} (Nov|Oct)/g, '').match(/\d[\d,]*/g) ?? []);
         expect(figures.filter((f) => !own.has(f))).toEqual([]);
     });
@@ -386,8 +390,10 @@ describe('the rules the screens call', () => {
     });
 
     it('the Vouchers block row, from the node’s numbers (§11)', () => {
-        expect(voucherRowText(NODE_CARD)).toBe('@jane · 550 of 650 left · 4 vouched · 1 below zero ›');
-        expect(voucherRowText({ ...NODE_CARD, left: 1450, level: 1500, peopleVouched: 0, belowZero: 0 })).toBe('@jane · 1450 of 1500 left · 0 vouched · 0 below zero ›');
+        // Rows say only what matters (I4): who and what is left; an owner's says who and how many they vouched, no budget words.
+        expect(voucherRowText(NODE_CARD)).toBe('@jane · 550 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 1450 })).toBe('@jane · 1,450 left ›');
+        expect(voucherRowText({ ...NODE_CARD, noLimit: true })).toBe('@jane · 4 vouched ›');
     });
 });
 

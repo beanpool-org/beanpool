@@ -553,8 +553,15 @@ function assertNoInviteOut(actor: string, entryId: string, replace: boolean): vo
         const maker = out[0].createdBy;
         const callsign = getMember(db, maker)?.callsign ?? '';
         const daysLeft = daysLeftOf(out[0].createdAt);
-        throw new NamesListError(409, 'invite_out', tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first to make a new one.', { callsign, days: daysLeft }),
-            { madeBy: maker, madeByCallsign: callsign, daysLeft });
+        // Said to the viewer: its maker and any owner can revoke it, so they are told to; anyone else is told whom to ask
+        // (invites-vouching I4: "Ask @maker or an owner to revoke it first"), never to revoke what they can't.
+        const mayRevoke = actor === maker || isNodeOwner(actor);
+        const words = mayRevoke
+            ? tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first to make a new one.', { callsign, days: daysLeft })
+            : callsign
+                ? tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Ask @{callsign} or an owner to revoke it first.', { callsign, days: daysLeft })
+                : tr('An invite for this person is out already, with {days} days left. Ask an owner to revoke it first.', { days: daysLeft });
+        throw new NamesListError(409, 'invite_out', words, { madeBy: maker, madeByCallsign: callsign, daysLeft });
     }
     if (out.some((o) => o.createdBy !== actor) && !isNodeOwner(actor)) {
         throw new NamesListError(403, 'not_yours', word('Only the admin who made that invite, or an owner, can replace it.'));

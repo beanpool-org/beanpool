@@ -78,8 +78,9 @@ export { ErrorBoundary };
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
+/** `confirmFor`: the one-step add-and-confirm from a member's profile (invites-vouching I4): the entry is added, then this member is confirmed against it. */
 /** `workOff`: the pick confirms the member to work this open debt off (POST /api/names/debts/:id/work-off). */
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry; workOff?: NamesDebt } | { kind: 'check'; picked: Picked }
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string; confirmFor?: { publicKey: string; callsign: string } } | { kind: 'pick'; entry: OpenedEntry; workOff?: NamesDebt } | { kind: 'check'; picked: Picked }
     // Settling an entry's open debt with the payment the member made for it (#1597): its reference, typed or pasted.
     | { kind: 'settle'; entry: OpenedEntry; debt: NamesDebt }
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
@@ -93,7 +94,7 @@ export default function NamesListScreen() {
     const { theme, colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create(namesListStyleSpec(colors)));
     const { identity } = useIdentity();
-    const params = useLocalSearchParams<{ community?: string }>();
+    const params = useLocalSearchParams<{ community?: string; act?: string; forMember?: string; forCallsign?: string }>();
     const communityName = typeof params.community === 'string' && params.community.trim() ? params.community.trim() : 'This community';
 
     const [anchor, setAnchor] = useState<string | null>(null);
@@ -346,6 +347,47 @@ export default function NamesListScreen() {
         setMode({ kind: 'edit', entry, addId: entry ? undefined : newEntryId() });
     };
 
+    // Arriving from a member's profile (invites-vouching I4, DESIGN §3 ask 2): `act=add` opens the one-step add-and-confirm form
+    // with the name prefilled with their callsign; `act=make` opens Make a voucher for their confirmed entry. Once, when the
+    // list is open: a phone that can't open it (no key yet) shows the list's own guidance, as always.
+    const arrived = useRef('');
+    useEffect(() => {
+        const member = typeof params.forMember === 'string' ? params.forMember : '';
+        // Once per arrival: the same screen opened again for another member (or another act) is a new arrival.
+        const arrival = `${params.act}:${member}`;
+        if (arrived.current === arrival || !opened || !list || loading) return;
+        if ((params.act !== 'add' && params.act !== 'make') || !/^[0-9a-f]{64}$/.test(member)) return;
+        arrived.current = arrival;
+        const forCallsign = typeof params.forCallsign === 'string' ? params.forCallsign : '';
+        // The profile's button can be a step behind (the node's state moved on: this phone just added them, or another admin did).
+        // A member already holding a live confirmation is never added a second time (the node refuses the second confirmation,
+        // 409 already_confirmed, and the entry sealed for it would stay behind), and a Make that cannot open says why.
+        const mine = entries.find((x) => x.confirmation?.memberPubkey === member);
+        if (params.act === 'add' && mine?.confirmation) {
+            const who = mine.confirmation.callsign || forCallsign;
+            setNotice(mine.text?.name ? t('@{member} is confirmed against {name}.', { member: who, name: mine.text.name })
+                : t('@{member} is confirmed against the entry.', { member: who }));
+            return;
+        }
+        if (params.act === 'add') {
+            setName(forCallsign);
+            setNote('');
+            setFormError(null);
+            setMode({ kind: 'edit', entry: null, addId: newEntryId(), confirmFor: { publicKey: member, callsign: forCallsign } });
+            return;
+        }
+        if (mine?.confirmation && canMakeVoucher(mine, isCommittee, identity?.publicKey)) {
+            setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
+            setMode({ kind: 'make_voucher', entry: mine, memberPubkey: member, callsign: voucherCallsignFor(mine, callsignOf) || forCallsign });
+        } else if (mine?.voucher) {
+            setNotice(t('@{member} is a voucher already.', { member: forCallsign || mine.confirmation?.callsign || '' }));
+        } else if (!isCommittee) {
+            setError(t('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'));
+        } else {
+            setNotice(t('@{member} isn’t confirmed on this list yet, so there is no voucher to make.', { member: forCallsign }));
+        }
+    }, [opened, list, loading, entries, isCommittee, identity?.publicKey, voucherBlock, callsignOf, params.act, params.forMember, params.forCallsign]);
+
     /** The matching-name warning (#1597): a name typed here that is on another entry with an open debt is said first. */
     const saveChecked = () => {
         if (mode.kind !== 'edit') return;
@@ -387,7 +429,23 @@ export default function NamesListScreen() {
                 }],
             },
         });
+        const confirmFor = mode.confirmFor;
         setMode({ kind: 'list' });
+        // The one-step add-and-confirm (I4): the entry is on the list; now confirm this member against it. A refusal leaves the
+        // entry added and says why, so nothing is half-done in silence.
+        if (confirmFor) await confirmNewEntry(sent.value.id, confirmFor, name);
+    };
+
+    const confirmNewEntry = async (entryId: string, who: { publicKey: string; callsign: string }, typedName: string) => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const done = await confirmMember(anchor, identity, who.publicKey, entryId);
+        if (done.ok) await afterConfirmation();
+        finish();
+        if (!done.ok) { setError(done.message); return; }
+        setNotice(done.value.status === 'awaiting_second'
+            ? t('@{member} is confirmed by you and waits for a second admin.', { member: who.callsign })
+            : t('@{member} is confirmed against {name}.', { member: who.callsign, name: typedName.trim() }));
     };
 
     const remove = (entry: OpenedEntry) => {
@@ -722,6 +780,7 @@ export default function NamesListScreen() {
                         <Text style={styles.warnText}>{say(COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting, entry.checkedHere))}</Text>
                     </View>
                 ) : null}
+                {mode.confirmFor ? <Text style={styles.hint} testID="names-add-confirm-hint">{t('Confirm only someone you know is them.')}</Text> : null}
                 <Text style={styles.label}>{t('NAME')}</Text>
                 <TextInput
                     style={styles.input} value={name} onChangeText={setName} placeholder={t('Their real name')}
@@ -737,7 +796,7 @@ export default function NamesListScreen() {
                 <Text style={styles.hint}>{t('A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.')}</Text>
                 {formError ? <View style={styles.error}><Text style={styles.errorText}>{say(formError)}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn(t('Save'), saveChecked, 'primary')}
+                    {mode.confirmFor ? btn(t('Add and confirm @{member}', { member: mode.confirmFor.callsign }), saveChecked, 'primary') : btn(t('Save'), saveChecked, 'primary')}
                     {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
                 {entry ? <View style={styles.buttonRow}>{btn(t('Delete this entry'), () => remove(entry), 'danger')}</View> : null}

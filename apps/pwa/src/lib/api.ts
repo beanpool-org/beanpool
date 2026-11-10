@@ -6,7 +6,7 @@
 import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -903,6 +903,8 @@ export interface VoucherSummary {
     level: number;
     belowZero: number;
     writtenOff: number;
+    /** What their vouches that landed in the last 30 days add up to, in hundredths: the card's headline (invites-vouching I4). */
+    vouchedLast30Days?: number;
     passedOn: { amount_c: number; people: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
@@ -928,6 +930,8 @@ export interface VoucherCardData extends VoucherSummary {
 
 export interface VouchersBlockData {
     vouchers: VoucherSummary[];
+    /** Invites not used yet that promise a voucher budget, by names-list entry id (the name is on the phone). */
+    waiting?: WaitingVoucherRow[];
     settings: {
         voucherBudget: number;
         memberGift: number;

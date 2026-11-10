@@ -4640,7 +4640,6 @@
   "below zero": "sotto zero",
   "made a voucher by @{name}": "nominato garante da @{name}",
   "{amount} Beans{raised} · {source}": "{amount} fagioli{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} su {total} sotto zero · cancellato {off}",
   "{left} left · {held} held": "{left} rimasti · {held} trattenuti",
   "{left} of {total} left": "restano {left} su {total}",
   "{name} · Voucher": "{name} · Garante",

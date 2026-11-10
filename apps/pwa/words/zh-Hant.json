@@ -4463,7 +4463,6 @@
   "below zero": "餘額為負",
   "made a voucher by @{name}": "由 @{name} 設為擔保人",
   "{amount} Beans{raised} · {source}": "{amount} 豆子{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "總計 {total} 中有 {below} 為負 · 已沖銷 {off}",
   "{left} left · {held} held": "剩餘 {left} · 暫扣 {held}",
   "{left} of {total} left": "剩餘 {left} / 總計 {total}",
   "{name} · Voucher": "{name} · 擔保人",

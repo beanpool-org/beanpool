@@ -50,6 +50,7 @@ import {
 } from './names-list-trust.js';
 import type { HealthExceptionsBody, HealthLogLine } from './names-list-health.js';
 import { namesInviteBody, type BoundInvite, type NamesInviteBody } from './names-list-invite.js';
+import type { WaitingVoucherRow } from './vouchers-block.js';
 
 // ── What a device supplies ───────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,8 @@ export interface VoucherSummaryRow {
     level: number;
     belowZero: number;
     writtenOff: number;
+    /** What their vouches that landed in the last 30 days add up to: the card's headline (invites-vouching I4). */
+    vouchedLast30Days?: number;
     /** Room rooted at this voucher that moved on past the people they vouched for (§5 tracking (a)): how much, held by how
      *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf). */
     passedOn: { amount: number; people: number; belowZero: number };
@@ -235,7 +238,7 @@ export interface VoucherCardData extends VoucherSummaryRow {
 }
 
 /** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */
-export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; settings: VoucherSettings }
+export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; settings: VoucherSettings }
 
 // ── The pin, sealed at rest ──────────────────────────────────────────────────────────────────
 

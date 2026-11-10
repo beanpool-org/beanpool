@@ -131,8 +131,6 @@ export const VOUCH_PRESET_WORDS = {
     decreaseBudget: word('Decrease budget'),
     increaseBudget: word('Increase budget'),
     voucherCardSections: word('Voucher card sections'),
-    vouchersRowText: word('{left} of {total} left · {vouched} vouched · {below} below zero'),
-    vouchersRowTextNoLimit: word('No limit · {vouched} vouched · {below} below zero'),
     hasNotVouchedAnyone: word('Has not vouched for anyone yet.'),
     noBudgetHistoryYet: word('No budget history yet.'),
     raiseConfirmQuestion: word('You vouched {prior} for @{name} before. Raise it to {newTotal}?'),

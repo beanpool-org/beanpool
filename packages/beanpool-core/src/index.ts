@@ -57,6 +57,7 @@ export * from './invite-and-share.js';
 export * from './invite-share-text.js';
 // What each invite a member made says (who it is for, what it carries, days left), read the same in both apps' Pending, and the 30-day life.
 export * from './invite-rows.js';
+export * from './vouchers-block.js';
 // What a pasted invite says (its code, the community it is for), read the same in both apps' invite step.
 export * from './invite-text.js';
 export * from './event-copy.js';

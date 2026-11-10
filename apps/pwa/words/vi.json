@@ -4463,7 +4463,6 @@
   "below zero": "dưới 0",
   "made a voucher by @{name}": "được chỉ định làm người bảo lãnh bởi @{name}",
   "{amount} Beans{raised} · {source}": "{amount} đậu{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} trên {total} dưới 0 · đã xóa nợ {off}",
   "{left} left · {held} held": "còn {left} · đang giữ {held}",
   "{left} of {total} left": "còn {left} trên {total}",
   "{name} · Voucher": "{name} · Người bảo lãnh",

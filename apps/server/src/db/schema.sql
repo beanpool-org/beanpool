@@ -129,8 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(boar
 -- the board leaves off for a paused or finished enterprise or a paused account (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same
 -- expression, so the planner takes this index), and the standing of the authors whose standing ever moved, by key (the
 -- set's ETag), each from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k
--- posts (2026-10-10). A node from before 'disabled' was in it has the older one replaced at boot (db.ts
--- replaceOffBoardShapes).
+-- posts (2026-10-10).
 CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
     WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed', 'disabled')));
 CREATE INDEX IF NOT EXISTS idx_members_standing_by_key ON members(public_key, board_standing_changed_at)
@@ -1603,7 +1602,7 @@ END;
 -- S1), whichever writer does it. Nothing else a status says (suspended, pruned, funded…) changes what the board shows.
 -- The WHEN guard skips a write that sets the column itself: a standby taking its main server's. Holiday isn't on this
 -- row: setHolidayMode stamps it. Both columns are in members_touch_updated_at's list, so updated_at moves in the same
--- statement. A node from before 'disabled' was in it has the older one replaced at boot (db.ts replaceOffBoardShapes).
+-- statement.
 CREATE TRIGGER IF NOT EXISTS members_touch_board_standing
 AFTER UPDATE OF paused, status ON members
 FOR EACH ROW
@@ -3235,8 +3234,7 @@ CREATE TABLE IF NOT EXISTS shops (
     -- members, so it follows every rename.
     name          TEXT CHECK (name IS NULL OR length(CAST(name AS BLOB)) BETWEEN 1 AND 180),
     -- One of the Market's categories (@beanpool/core SHOP_CATEGORIES, checked by engine/shops.ts), or NULL: the list its
-    -- listings pick from. The shape only here, so a category added later needs no rebuild. A node from before kept a kind
-    -- here (the column was `kind`): db.ts moveShopKindsToCategories renames it and moves each row to its category.
+    -- listings pick from. The shape only here, so a category added later needs no rebuild.
     category      TEXT CHECK (category IS NULL OR (length(category) BETWEEN 1 AND 24 AND category NOT GLOB '*[^a-z-]*')),
     -- What it is, and "how I deal", each ≤ 300 characters in its owner's words. NULL: none. An enterprise's blurb reads as
     -- its purpose until a keeper writes one.

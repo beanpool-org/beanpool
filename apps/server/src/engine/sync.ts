@@ -1524,7 +1524,7 @@ function writeMemberStanding(
 /**
  * The members columns a copy never writes as they come: the avatar's reference and size, made here from its photo; and
  * `avatar_url`, which the copy carries the photo in but which, here, is only the old inline column of a standby whose boot
- * has not finished moving photos out of the rows (db.ts moveMemberPhotosOutOfRows). Written there, it would be moved
+ * had not finished moving photos out of the rows (a file the 1.4.0 gate refuses). Written there, it would be moved
  * over the photo importMemberPhoto just wrote (or back after a removal) by the next boot.
  */
 const MEMBER_PHOTO_COLUMNS: ReadonlySet<string> = new Set(['avatar_ref', 'avatar_bytes', 'avatar_url']);
@@ -1919,7 +1919,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
 
             // This table's own columns, which alone a member's `standing` may name; never the key or the stamp, written apart,
             // nor the avatar's reference and size, which go with the photo (importMemberPhoto), nor callsign_fold, which this
-            // server's own triggers make from the name it writes (db.ts migrateCallsignFold), whatever a main server sends.
+            // server's own triggers make from the name it writes (the engine's installNameFold), whatever a main server sends.
             const memberColumns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[])
                 .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at' && c !== 'callsign_fold' && !MEMBER_PHOTO_COLUMNS.has(c)));
             const standingStatements = new Map<string, Database.Statement>();
@@ -1979,7 +1979,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         // main server is the only writer of a standby's copy, so its mark is the row's. The touch trigger
                         // restamps a change of the mark, so the main server's stamp is put back (updated_at fires nothing).
                         const visitor = importedVisitor(rm);
-                        // Likewise the board standing a node fills once as it gains the column (db.ts backfillBoardStanding),
+                        // Likewise the board standing a node filled once as it gained the column (before 1.4.0's gate),
                         // which stamps no row: this copy filled its own, and a whole copy brings the main server's. Setting it
                         // fires no trigger.
                         const standing = boardStandingChangedAt(rm);

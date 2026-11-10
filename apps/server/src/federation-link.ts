@@ -176,8 +176,8 @@ export function ensureFederationLink(
  * A treasury this code made as the link for this peer that no link names, or null. Found only by the marker
  * ensureFederationLink writes when it makes the treasury (federation_link_treasuries), matched on the peer id exactly:
  * a member can make an enterprise named "<peer> Link" with no photo, and two peers can share a callsign, so a name, a
- * callsign or a missing photo proves nothing. Nothing else writes the marker (db.ts markLinkTreasuries copies it from the
- * link rows ensureFederationLink made). The oldest when there is more than one.
+ * callsign or a missing photo proves nothing. Nothing else writes the marker (ensureFederationLink writes it with the
+ * link row it makes). The oldest when there is more than one.
  */
 function findLinkTreasury(peerId: string): string | null {
     const row = db.prepare(`SELECT t.treasury_pubkey FROM federation_link_treasuries t

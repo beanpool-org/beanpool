@@ -4144,7 +4144,7 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
     if (amount > earnedRoom + knownRoom) {
         // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
         if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
-            throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount, earnedRoom }));
+            throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount: formatHundredths(amount, 'en'), earnedRoom: formatHundredths(earnedRoom, 'en') }));
         }
         throw new Error(tr('Pledge amount ({amount}) exceeds what you can pledge ({room} available: {earnedRoom} earned credit, {knownRoom} from your known floor)',
             { amount, room: earnedRoom + knownRoom, earnedRoom, knownRoom }));
@@ -4162,7 +4162,7 @@ function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
         // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
-        throw new KeeperChangeRefused(othersRefusal ?? tr('Your own balance ({balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor ({floor} beans); pay down first or pledge less.', { balance, floor }));
+        throw new KeeperChangeRefused(othersRefusal ?? tr('Your own balance ({balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor ({floor} beans); pay down first or pledge less.', { balance: formatHundredths(balance, 'en'), floor: formatHundredths(floor, 'en') }));
     }
 }
 
@@ -4528,7 +4528,7 @@ export function releaseEnterpriseBacking(
         // earned pledges + known pledges as the floor counts them, whichever is bigger); refused, the transaction writes nothing.
         const newAllowance = engine.enterpriseAllowance(db, enterprisePubkey).allowance;
         if (newAllowance < deficit) {
-            throw new Error(tr('Cannot release backing: enterprise is in deficit ({deficit} beans) and remaining allowance ({allowance} beans) would not cover it', { deficit, allowance: newAllowance }));
+            throw new Error(tr('Cannot release backing: enterprise is in deficit ({deficit} beans) and remaining allowance ({allowance} beans) would not cover it', { deficit: formatHundredths(deficit, 'en'), allowance: formatHundredths(newAllowance, 'en') }));
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -5326,8 +5326,8 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
         const gap = ((deficit - othersCover));
         const dr = deficit;
         const oc = othersCover;
-        const inDebt = tr('This enterprise is {debt} beans in debt and your pledge is part of what covers it.', { debt: dr });
-        const whenFree = tr('You can step down once the debt is down to {covered} beans, or once the other keepers pledge {gap} beans more.', { covered: oc, gap });
+        const inDebt = tr('This enterprise is {debt} beans in debt and your pledge is part of what covers it.', { debt: formatHundredths(dr, 'en') });
+        const whenFree = tr('You can step down once the debt is down to {covered} beans, or once the other keepers pledge {gap} beans more.', { covered: formatHundredths(oc, 'en'), gap: formatHundredths(gap, 'en') });
         throw new Error(`${inDebt} ${whenFree}`);
     }
 
@@ -6145,7 +6145,7 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
                         WHERE id = ? AND status = 'open' AND repaid_c >= amount_c`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
-        console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
+        console.error(`[NamesDebts] Failed to sweep ${formatHundredths(amount, 'en')} Beans of a repayment:`, err);
         return 0;
     }
     const over = amount - own;
@@ -9950,7 +9950,7 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
 
     const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
     if (acc && acc.balance_c !== 0) {
-        throw new Error(tr('Cannot delete enterprise account with non-zero balance ({balance} Beans). Sweep or refund funds first.', { balance: acc.balance_c }));
+        throw new Error(tr('Cannot delete enterprise account with non-zero balance ({balance} Beans). Sweep or refund funds first.', { balance: formatHundredths(acc.balance_c, 'en') }));
     }
     const acct = ledger.getAccount(projectId);
     if (acct && acct.balance_c !== 0) {

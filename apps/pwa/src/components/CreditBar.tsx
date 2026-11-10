@@ -14,7 +14,7 @@
  */
 
 import { Fragment } from 'react';
-import { formatNumber, splitBold, t, tn } from '@beanpool/core';
+import { formatHundredths, formatNumber, splitBold, t, tn } from '@beanpool/core';
 
 const RED = '#bb4b32';
 const WARM_BG = '#e9a23e';
@@ -58,7 +58,10 @@ function toPct(v: number, floor: number): number {
     return Math.max(3, Math.min(98, pct));
 }
 
-const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? formatNumber(n) : formatNumber(n, 1)}`;
+/** A balance in words, from whole hundredths: "+49.25", "−9.82", "+500" (core formatHundredths, a sign always). */
+const fmt = (c: number) => `${c >= 0 ? '+' : ''}${formatHundredths(c)}`;
+/** A ladder figure in Beans (the gauge's own geometry) back to words, as every figure is written. */
+const beansText = (beans: number) => formatHundredths(Math.round(beans * 100));
 
 /** A translated sentence with **bold** parts, each drawn in the caption's warm ink. */
 function Bold({ text }: { text: string }) {
@@ -89,23 +92,29 @@ export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: numb
     return { usableAt, offersForFull, rungs };
 }
 
+/** Every money prop is whole hundredths of a Bean (the node's `*_c` fields); the gauge draws in Beans. */
 interface Props {
-    balance: number;
-    floor: number;                 // earned credit LIMIT (deepest the floor could ever reach)
-    usableFloor?: number;          // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
-    knownGrant?: number;           // the known floor's part of the limit: one live offer unlocks all of it
+    balance_c: number;
+    floor_c: number;               // earned credit LIMIT (deepest the floor could ever reach)
+    usableFloor_c?: number;        // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    knownGrant_c?: number;         // the known floor's part of the limit: one live offer unlocks all of it
     liveOffers?: number;           // v3: current live-offer count (for the ladder caption)
     feeFreeMax?: number;
     className?: string;
 }
 
-export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGrant = 0, feeFreeMax = 200, className = '' }: Props) {
+export function CreditBar({ balance_c, floor_c, usableFloor_c, liveOffers = 0, knownGrant_c = 0, feeFreeMax = 200, className = '' }: Props) {
+    // The gauge's geometry (zones, rungs, percentages) is drawn in Beans; every figure it writes is the hundredths' own.
+    const balance = balance_c / 100;
+    const floor = floor_c / 100;
+    const usableFloor = usableFloor_c === undefined ? undefined : usableFloor_c / 100;
+    const knownGrant = knownGrant_c / 100;
     const pct = toPct(balance, floor);
     const overFeeFree = balance > feeFreeMax;
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
     const rate = marginalRate(balance);
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : '#16211b';
-    const tagLabel = overFeeFree ? t('{amount} B · ≈{rate}%/mo', { amount: fmt(balance), rate: formatNumber(rate) }) : t('{amount} B', { amount: fmt(balance) });
+    const tagLabel = overFeeFree ? t('{amount} B · ≈{rate}%/mo', { amount: fmt(balance_c), rate: formatNumber(rate) }) : t('{amount} B', { amount: fmt(balance_c) });
 
     // Offer ladder — the negative side mirrors the fee ladder above zero. `usableFloor` is the depth
     // your live Offers currently unlock; anything deeper (usableFloor → floor) is LOCKED until you
@@ -149,7 +158,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
             aria-valuenow={valuenow}
             aria-valuemin={valuemin}
             aria-valuemax={valuemax}
-            aria-valuetext={t('{amount} Beans', { amount: fmt(balance) })}
+            aria-valuetext={t('{amount} Beans', { amount: fmt(balance_c) })}
             className={`select-none ${className}`}
             style={{ paddingTop: 28, position: 'relative' }}
         >
@@ -252,11 +261,11 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
                     <span aria-hidden="true">🎣</span>
                     {uFloor < 0 ? (
                         <span>
-                            <Bold text={tn(liveOffers, '**{n} offer** unlocks\u00A0−{limit}', '**{n} offers** unlock\u00A0−{limit}', { limit: Math.abs(uFloor) })} />
-                            {nextUnlock ? <> · <Bold text={tn(nextOffers, '**{n} offer**\u00A0→\u00A0−{limit}', '**{n} offers**\u00A0→\u00A0−{limit}', { limit: nextUnlock })} /></> : ''}
+                            <Bold text={tn(liveOffers, '**{n} offer** unlocks\u00A0−{limit}', '**{n} offers** unlock\u00A0−{limit}', { limit: beansText(Math.abs(uFloor)) })} />
+                            {nextUnlock ? <> · <Bold text={tn(nextOffers, '**{n} offer**\u00A0→\u00A0−{limit}', '**{n} offers**\u00A0→\u00A0−{limit}', { limit: beansText(nextUnlock) })} /></> : ''}
                         </span>
                     ) : (
-                        <span><Bold text={tn(offersForFull, '**Post an Offer** to open your credit line — **{n}** offer unlocks your\u00A0full\u00A0−{limit}.', '**Post an Offer** to open your credit line — **{n}** offers unlock your\u00A0full\u00A0−{limit}.', { limit: Math.abs(floor) })} /></span>
+                        <span><Bold text={tn(offersForFull, '**Post an Offer** to open your credit line — **{n}** offer unlocks your\u00A0full\u00A0−{limit}.', '**Post an Offer** to open your credit line — **{n}** offers unlock your\u00A0full\u00A0−{limit}.', { limit: formatHundredths(Math.abs(floor_c)) })} /></span>
                     )}
                 </div>
             )}
@@ -277,7 +286,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
             {/* Lane 3 — anchors (space-between, can't collide) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
                 <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{formatNumber(floor)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{formatHundredths(floor_c)}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('your limit')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>

@@ -14,7 +14,7 @@
  * says which deal it acts on; colours are the shared library's roles (light and dark come with them).
  */
 
-import { dealMoves, dealStateWords, dealStep, t, tn } from '@beanpool/core';
+import { dealMoves, dealStateWords, dealStep, t, tn, formatHundredths } from '@beanpool/core';
 import type { MarketplaceTransaction } from '../lib/api';
 
 interface Props {
@@ -42,8 +42,8 @@ const buttonBase = {
 /** A card's second line: the amount and where it stands, as the phone writes it ("5 Beans · held in trust"). */
 function metaWords(tx: MarketplaceTransaction, me: string, peerName: string | null, showsBeans: boolean): string {
     // A request holds nothing yet: never "held in trust", whatever Beans it names.
-    if (tx.status !== 'requested' && showsBeans && tx.credits > 0) {
-        const amount = tn(tx.credits, '{n} Beans', '{n} Beans');
+    if (tx.status !== 'requested' && showsBeans && tx.amount_c > 0) {
+        const amount = tn(tx.amount_c / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(tx.amount_c) });
         return tx.status === 'completed' ? t('{amount} · completed', { amount }) : t('{amount} · held in trust', { amount });
     }
     // Nothing to count: whose step it is, in core's words for a deal.

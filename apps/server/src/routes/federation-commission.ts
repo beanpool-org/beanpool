@@ -301,8 +301,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             ctx.status = statusFor(outcome.status);
             ctx.body = {
                 ...outcome,
-                amount: funding.amount_c,
-                fee: funding.fee_c,
+                amount_c: funding.amount_c,
+                fee_c: funding.fee_c,
                 drawnFromCommons: funding.drawnFromCommons,
                 commissionedBy: link.name,
                 peer: connector.callsign ?? connector.address,

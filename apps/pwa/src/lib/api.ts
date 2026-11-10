@@ -867,7 +867,7 @@ export interface MyVouching {
     presets: number[];
     vouchMax: number;
     budgetMax: number;
-    vouchedBy: { memberPubkey: string; callsign: string; amount: number; at: string }[];
+    vouchedBy: { memberPubkey: string; callsign: string; amount_c: number; at: string }[];
 }
 
 export interface VoucherHistoryLine {
@@ -903,7 +903,7 @@ export interface VoucherSummary {
     level: number;
     belowZero: number;
     writtenOff: number;
-    passedOn: { amount: number; people: number };
+    passedOn: { amount_c: number; people: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
 }
@@ -1585,8 +1585,9 @@ export async function getBalance(publicKey: string): Promise<BalanceInfo> {
     return request('GET', `/api/ledger/balance/${encodeURIComponent(publicKey)}`);
 }
 
-export async function sendTransfer(from: string, to: string, amount: number, memo: string): Promise<{ success: boolean; transaction: Transaction }> {
-    return request('POST', '/api/ledger/transfer', { from, to, amount, memo });
+/** A send of `amount_c` whole hundredths of a Bean (the node refuses anything else, and the old `amount`, with 400). */
+export async function sendTransfer(from: string, to: string, amount_c: number, memo: string): Promise<{ success: boolean; transaction: Transaction }> {
+    return request('POST', '/api/ledger/transfer', { from, to, amount_c, memo });
 }
 
 export async function getTransactions(publicKey?: string, limit = 50): Promise<Transaction[]> {
@@ -1815,7 +1816,8 @@ export async function createMarketplacePost(post: {
     category: string;
     title: string;
     description: string;
-    amount_c: number;
+    /** The price, whole hundredths of a Bean (0: free). */
+    price_c: number;
     priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorPublicKey: string;
     lat?: number;
@@ -2181,9 +2183,10 @@ export interface CommissionCapacity {
     /** `ceiling − energyBalance`, floored at 0. Fee included, so it is what an amount must fit inside. */
     allowance: number;
     /** How much of the allowance is credit already earned rather than fresh discretion. */
+    /** Every figure here is whole hundredths of a Bean (federation-commission.ts CommissionCapacity). */
     redeemable: number;
     treasuryBalance: number;
-    commonsBalance_c: number;
+    commonsBalance: number;
 }
 
 /**
@@ -2204,7 +2207,7 @@ export async function getCommissionCapacity(): Promise<{ links: CommissionCapaci
  * in flight and recovery will finish it — `request` surfaces the body either way, so the caller reads
  * `status` rather than assuming success.
  */
-export async function commissionListing(postId: string, amount?: number): Promise<{
+export async function commissionListing(postId: string, amount_c?: number): Promise<{
     status: 'settled' | 'pending' | 'refused' | 'reversed';
     amount_c: number;
     fee_c: number;
@@ -2213,7 +2216,7 @@ export async function commissionListing(postId: string, amount?: number): Promis
     peer: string;
     listing: string;
 }> {
-    return request('POST', '/api/federation/commission', amount === undefined ? { postId } : { postId, amount });
+    return request('POST', '/api/federation/commission', amount_c === undefined ? { postId } : { postId, amount_c });
 }
 
 export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
@@ -2636,13 +2639,13 @@ function assertHttpsPeerUrl(url: string): void {
 }
 
 export async function sendRemoteTransfer(
-    baseUrl: string, from: string, to: string, amount: number, memo: string
+    baseUrl: string, from: string, to: string, amount_c: number, memo: string
 ): Promise<{ success: boolean; transaction: Transaction }> {
     assertHttpsPeerUrl(baseUrl);
     const res = await fetch(`${baseUrl}/api/ledger/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, amount, memo }),
+        body: JSON.stringify({ from, to, amount_c, memo }),
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Transfer failed' }));
@@ -2686,7 +2689,8 @@ export interface CommunityProject {
     fundedAt?: string;
 }
 
-export async function getCommonsBalance(): Promise<{ balance: number }> {
+/** The Commons pot, whole hundredths of a Bean. */
+export async function getCommonsBalance(): Promise<{ balance_c: number }> {
     return request('GET', '/api/commons/balance');
 }
 
@@ -3116,8 +3120,8 @@ export async function getEnterpriseLedger(treasury: string, opts?: { since?: str
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
 }
 
-export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+export async function treasuryPledge(treasury: string, amount_c: number, memo?: string): Promise<{ success: boolean; txId: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount_c, memo });
 }
 
 export async function createEnterprise(data: {
@@ -3142,10 +3146,10 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
 // (lib/photo-resize.ts), checked by the node as a member's own listing's are.
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**
@@ -3190,16 +3194,16 @@ export async function treasuryReject(treasury: string, transactionId: string): P
 export async function treasuryComplete(treasury: string, transactionId: string, hours?: number): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
 }
-export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
+export async function treasurySweep(treasury: string, amount_c: number): Promise<{ success: boolean; swept_c: number; balance_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount_c });
 }
-export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+export async function treasuryPledgeBacking(treasury: string, amount_c: number): Promise<{ success: boolean; pledge: any; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount_c });
 }
-export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+export async function treasuryRelease(treasury: string, amount_c?: number): Promise<{ success: boolean; releasedAmount_c: number; remainingPledge_c: number; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, amount_c === undefined ? {} : { amount_c });
 }
-export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null }> {
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number | null }> {
     return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
 }
 
@@ -3272,8 +3276,8 @@ export interface SuccessionProposalItem {
     hasVoted?: boolean;
 }
 
-export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
-    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking_c: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking_c });
 }
 
 export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending'): Promise<{ success: boolean; requests: KeeperRequestItem[] }> {
@@ -3319,7 +3323,7 @@ export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDe
 
 /** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
 export async function proposeEnterpriseDecision(treasury: string, body: {
-    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount_c: number; memo?: string };
 }): Promise<{ success: boolean }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
 }

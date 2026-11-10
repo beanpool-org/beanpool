@@ -11,7 +11,7 @@
  * Its sentences are in the member's language: the card's as word() keys (KNOWN_FROZEN, put through t() where the Ledger
  * shows them), the two lines below through t() and tn() here. In English they read exactly as before.
  */
-import { formatNumber, t, tn, word } from '@beanpool/core';
+import { formatHundredths, isHundredths, t, tn, word } from '@beanpool/core';
 
 export interface CreditLineState {
     activated?: boolean;
@@ -43,12 +43,15 @@ export const KNOWN_FROZEN = Object.freeze({
 export const KNOWN_FROZEN_BODY = KNOWN_FROZEN.body;
 export const KNOWN_FROZEN_PART = KNOWN_FROZEN.part;
 
-/** On the frozen card, for a member in debit: how far below zero they are and how they come back up. Null at zero or above. */
-export function frozenDebitLine(balance: number | undefined): string | null {
-    if (typeof balance !== 'number' || !(balance < 0)) return null;
-    const owed = Math.ceil(-balance * 10) / 10;
-    return tn(owed,
+/**
+ * On the frozen card, for a member in debit: how far below zero they are, exactly (whole hundredths, `balance_c`), and how
+ * they come back up. Null at zero or above, and for anything that isn't whole hundredths.
+ */
+export function frozenDebitLine(balance_c: number | undefined): string | null {
+    if (!isHundredths(balance_c) || !(balance_c < 0)) return null;
+    const owed = -balance_c;
+    return tn(owed / 100,
         'You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.',
         'You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.',
-        { n: Number.isInteger(owed) ? formatNumber(owed) : formatNumber(owed, 1) });
+        { n: formatHundredths(owed) });
 }

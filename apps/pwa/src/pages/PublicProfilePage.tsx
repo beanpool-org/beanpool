@@ -10,7 +10,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, VOUCH_PRESET_WORDS, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, VOUCH_PRESET_WORDS, type QuizResult, formatHundredths } from '@beanpool/core';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
@@ -255,7 +255,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         let sum = 0;
         for (const h of myVouching.history) {
             if (h.person?.memberPubkey === pubkey && (h.for === 'profile' || h.outcome === 'vouched')) {
-                sum += Math.abs(h.amount);
+                sum += Math.abs(h.amount_c);
             }
         }
         return sum;
@@ -757,12 +757,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member')}</h4>
-                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</p>
+                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn((balanceInfo.earnedCredit_c || 0) / 100, '{n} trust points', '{n} trust points', { n: formatHundredths(balanceInfo.earnedCredit_c || 0) })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="text-right">
-                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance, 1)}</span>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance_c >= 0 ? '+' : ''}{formatHundredths(balanceInfo.balance_c)}</span>
                                 <p className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">{t('Beans')}</p>
                             </div>
                             <svg className="w-5 h-5 text-nature-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1043,8 +1043,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     {!beansMarked && (
                                                                         <div className="flex items-center gap-1" data-testid="profile-listing-price">
                                                                             {/* Priced at 0 it reads Free, with no Beans mark: core listing-price.ts, as on every card. */}
-                                                                            {freePriceWords(p.credits, p.type) ? <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{freePriceWords(p.credits, p.type)}</span> : <>
-                                                                            <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
+                                                                            {freePriceWords(p.price_c, p.type) ? <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{freePriceWords(p.price_c, p.type)}</span> : <>
+                                                                            <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{typeof p.price_c === 'number' ? formatHundredths(p.price_c) : '?'}</span>
                                                                             <span className="text-[10px]">🫘</span>
                                                                             </>}
                                                                         </div>

@@ -11,7 +11,7 @@
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekGroupNote, pollWeekNotice } from '@beanpool/core';
-import { POST_TYPE_LINES, upperCase } from '@beanpool/core';
+import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -1322,7 +1322,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 : await createMarketplacePost({
                     type: 'event',
                     category: 'community',
-                    credits: 0,
+                    price_c: 0,
                     priceType: 'fixed',
                     authorPublicKey: identity?.publicKey || '',
                     repeatable: false,
@@ -1387,7 +1387,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     category: 'community',
                     title: newPostTitle.trim(),
                     description: newPostDescription.trim(),
-                    credits: 0,
+                    price_c: 0,
                     priceType: 'fixed',
                     authorPublicKey: identity?.publicKey || '',
                     repeatable: false,
@@ -1420,8 +1420,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         // Validate all fields
         const errors = new Set<string>();
         if (!newPostTitle.trim()) errors.add('title');
-        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, any decimals, as before.
-        const priceRead = parseAmount(newPostCredits, undefined, ANY_DECIMALS);
+        // The price in the language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250; a third
+        // decimal is refused rather than rounded.
+        const priceRead = parseHundredths(newPostCredits);
         const priceValue = priceRead.ok ? priceRead.value : NaN;
         if (!priceMarked && (newPostCredits.trim() === '' || isNaN(priceValue) || priceValue < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
@@ -1460,7 +1461,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 category: newPostCategory,
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                credits: priceMarked ? 0 : priceValue || 0,
+                price_c: priceMarked ? 0 : priceValue || 0,
                 priceType: priceMarked ? 'fixed' : newPostPriceType,
                 authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
@@ -3449,14 +3450,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         >
                             {(() => {
                                 // The price as the post sends it (handleCreatePost): what could be a thousand says so here.
-                                const read = parseAmount(newPostCredits, undefined, ANY_DECIMALS);
+                                const read = parseHundredths(newPostCredits);
                                 if (!read.ok && isAmbiguousAmount(read.refusal)) return `${amountRefusalWords(read.refusal)} `;
                                 const parsed = read.ok ? read.value : NaN;
                                 if (!isNaN(parsed) && parsed > 0) {
-                                    const net = Math.round(parsed * 0.985 * 100) / 100;
+                                    // The fee as the node takes it: core feeOf, whole hundredths, truncated once.
+                                    const net = parsed - feeOf(parsed);
                                     return newPostType === 'offer'
-                                        ? t('1.5% fee: You will receive {amount} B.', { amount: formatNumber(net, 2) })
-                                        : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatNumber(net, 2) });
+                                        ? t('1.5% fee: You will receive {amount} B.', { amount: formatHundredths(net) })
+                                        : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatHundredths(net) });
                                 }
                                 return t('1.5% transaction fee funds community projects & solvency.');
                             })()}{' '}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">{t('Learn more ⓘ')}</span>

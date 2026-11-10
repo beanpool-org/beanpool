@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { formatNumber, t, tn, word } from '@beanpool/core';
+import { formatNumber, t, tn, word, formatHundredths } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 /**
@@ -35,6 +35,7 @@ function exampleWorking(): string {
 interface Props {
     isOpen: boolean;
     onClose: () => void;
+    /** The Commons pot, whole hundredths of a Bean. */
     commonsBalance?: number;
 }
 
@@ -126,7 +127,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                     textAlign: 'center',
                                 }}>
                                     <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Current Commons Balance')}</div>
-                                    <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 4 }}>{formatNumber(commonsBalance, 2)} 🫘</div>
+                                    <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 4 }}>{formatHundredths(commonsBalance)} 🫘</div>
                                 </div>
                             )}
 

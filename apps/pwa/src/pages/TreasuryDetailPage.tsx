@@ -27,7 +27,7 @@ import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
-    deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
@@ -329,8 +329,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         try {
             setSubmittingJoinRequest(true);
             setActionFeedback(null);
-            await requestToJoinEnterprise(pubkey, Number(joinBackingPledge));
-            const amount = formatNumber(joinBackingPledge);
+            await requestToJoinEnterprise(pubkey, joinBackingPledge);
+            const amount = formatHundredths(joinBackingPledge);
             setActionFeedback({
                 at: 'join',
                 type: 'success',
@@ -356,7 +356,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setRequestProcessingId(requestId);
             setActionFeedback(null);
             const res = await approveKeeperRequest(pubkey, requestId);
-            const amount = formatNumber(res.backing ?? 0);
+            const amount = formatHundredths(res.backing ?? 0);
             setActionFeedback({
                 type: 'success',
                 message: res.applied === false
@@ -531,9 +531,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handlePledge = async (e: React.FormEvent) => {
         e.preventDefault();
         if (pledging) return;
-        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5; "1.000", which could be a thousand, is refused
-        // in words that say so. The cents guard below decides the decimals, as before.
-        const read = parseAmount(pledgeAmount, undefined, ANY_DECIMALS);
+        // The language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250; "1.000", which could be a
+        // thousand, and a third decimal are refused in words that say so.
+        const read = parseHundredths(pledgeAmount);
         if (!read.ok && isAmbiguousAmount(read.refusal)) {
             setActionFeedback({ at: 'pledge', type: 'error', message: amountRefusalWords(read.refusal) });
             return;
@@ -543,18 +543,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback({ at: 'pledge', type: 'error', message: t('Please enter a positive amount of Beans to pledge.') });
             return;
         }
-        // To the cent, as the node takes it (core isWholeCents).
-        if (!isWholeCents(amt)) {
-            setActionFeedback({ at: 'pledge', type: 'error', message: t('The amount is a number of Beans above 0, to the cent.') });
-            return;
-        }
         try {
             setPledging(true);
             setActionFeedback(null);
             await treasuryPledge(pubkey, amt, pledgeMemo.trim() || undefined);
             setPledgeAmount('');
             setPledgeMemo('');
-            const amount = formatNumber(amt);
+            const amount = formatHundredths(amt);
             setActionFeedback({
                 at: 'pledge',
                 type: 'success',
@@ -820,7 +815,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             const res = await finaliseWindUp(pubkey);
             setConfirmingFinaliseWindUp(false);
-            const amount = formatNumber(res.sweptAmount ?? 0);
+            const amount = formatHundredths(res.sweptAmount ?? 0);
             setActionFeedback({
                 type: 'success',
                 message: project
@@ -854,20 +849,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleSweep = async (e: React.FormEvent) => {
         e.preventDefault();
-        // The language's decimal mark (core parseAmount), as the pledge reads it; the node's cents rule decides the decimals.
-        const read = parseAmount(sweepAmount, undefined, ANY_DECIMALS);
+        // To whole hundredths in the language's decimal mark (core parseHundredths), as the pledge reads it.
+        const read = parseHundredths(sweepAmount);
         if (!read.ok && isAmbiguousAmount(read.refusal)) {
             setActionFeedback({ type: 'error', message: amountRefusalWords(read.refusal) });
             return;
         }
         const amt = read.ok ? read.value : NaN;
-        const bal = detail?.balance ?? 0;
+        const bal = detail?.balance_c ?? 0;
         if (isNaN(amt) || amt <= 0) {
             setActionFeedback({ type: 'error', message: t('Please enter a positive amount of Beans to sweep.') });
             return;
         }
         if (amt > bal) {
-            setActionFeedback({ type: 'error', message: t('Cannot sweep more than current surplus ({amount} 🫘).', { amount: formatNumber(bal) }) });
+            setActionFeedback({ type: 'error', message: t('Cannot sweep more than current surplus ({amount} 🫘).', { amount: formatHundredths(bal) }) });
             return;
         }
 
@@ -876,7 +871,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await treasurySweep(pubkey, amt);
             setSweepAmount('');
-            setActionFeedback({ type: 'success', message: t('Successfully swept {amount} 🫘 to the shared Commons pool.', { amount: formatNumber(amt) }) });
+            setActionFeedback({ type: 'success', message: t('Successfully swept {amount} 🫘 to the shared Commons pool.', { amount: formatHundredths(amt) }) });
             await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to sweep surplus to the Commons.') });
@@ -934,7 +929,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             }
             finalHours = parsed;
         } else {
-            const amount = credits != null ? formatNumber(credits) : '';
+            const amount = credits != null ? formatHundredths(credits) : '';
             const confirmed = window.confirm(postTitle
                 ? t('Release payment of {amount} 🫘 for "{title}"? This action cannot be reversed.', { amount, title: postTitle })
                 : t('Release payment of {amount} 🫘 for "deal"? This action cannot be reversed.', { amount }));
@@ -974,8 +969,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleCreatePost = async (e: React.FormEvent) => {
         e.preventDefault();
-        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, any decimals, as before.
-        const creditsRead = parseAmount(postCredits, undefined, ANY_DECIMALS);
+        // The price in the language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250.
+        const creditsRead = parseHundredths(postCredits);
         const creditsNum = creditsRead.ok ? creditsRead.value : NaN;
         if (!postTitle.trim()) {
             setPostError(t('Title is required'));
@@ -1001,7 +996,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 await treasuryPostOffer(pubkey, {
                     title: postTitle.trim(),
                     category: postCategory,
-                    credits: creditsNum,
+                    price_c: creditsNum,
                     priceType: postPriceType,
                     description: postDescription.trim() || undefined,
                     repeatable: postRepeatable,
@@ -1013,7 +1008,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 await treasuryPostNeed(pubkey, {
                     title: postTitle.trim(),
                     category: postCategory,
-                    credits: creditsNum,
+                    price_c: creditsNum,
                     priceType: postPriceType,
                     description: postDescription.trim() || undefined,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
@@ -1055,7 +1050,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         }
     };
 
-    const balance = detail?.balance ?? 0;
+    const balance = detail?.balance_c ?? 0;
     const name = detail?.name || t('Community Enterprise');
 
     const mayBlock = !isEffectivePreview && viewerIsMember && !isKeeperOfThis;
@@ -1102,7 +1097,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
     const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
-    const heldCredit = Math.abs(detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0);
+    const heldCredit = Math.abs(detail?.pausedFloorSnapshot_c ?? detail?.usableFloor_c ?? detail?.floor_c ?? detail?.creditLine_c ?? 0);
     const pauseExpiresAt = detail?.pauseExpiresAt || (detail?.pausedAt ? new Date(new Date(detail.pausedAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString() : null);
     const pauseDateFormatted = formatPauseDate(pauseExpiresAt);
 
@@ -1121,7 +1116,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             : tn(windUpDaysLeft, 'Winding up ({n} day left · started by a keeper)', 'Winding up ({n} days left · started by a keeper)');
     const keeperCount = detail?.keepers?.length || 1;
 
-    const availableToBack = detail?.availableToBack ?? 0;
+    const availableToBack = detail?.availableToBack_c ?? 0; // whole hundredths
     const isLeadOrSoleKeeperOrAdmin = !!detail?.isLeadOrSoleKeeperOrAdmin;
     const keeperRequests: KeeperRequestItem[] = detail?.keeperRequests || [];
     const myPendingRequest: KeeperRequestItem | null = detail?.myPendingRequest || null;
@@ -1311,7 +1306,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 {req.callsign || `${req.memberPubkey.slice(0, 8)}…`}
                                                             </div>
                                                             <div className="text-[11px] text-nature-500 dark:text-nature-400">
-                                                                <Sentence text={t('Backing pledge: {amount}')} parts={{ amount: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatNumber(req.pledgedBacking)} 🫘</span> }} />
+                                                                <Sentence text={t('Backing pledge: {amount}')} parts={{ amount: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatHundredths(req.pledgedBacking_c)} 🫘</span> }} />
                                                             </div>
                                                             {applicantBackingText(req.canBackPledge) && (
                                                                 <div className={req.canBackPledge === false
@@ -1533,7 +1528,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     {b.post_title}
                                                                 </div>
                                                                 <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm shrink-0">
-                                                                    {formatNumber(b.credits)} 🫘
+                                                                    {formatHundredths(b.amount_c)} 🫘
                                                                 </span>
                                                             </div>
                                                             <div className="text-xs text-nature-500 dark:text-nature-400">
@@ -1546,7 +1541,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     onClick={() => handleApproveBid(b.id)}
                                                                     className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                                 >
-                                                                    {actionState?.id === b.id && actionState?.type === 'approve' ? t('Approving…') : t('Approve Bid ({amount} 🫘)', { amount: formatNumber(b.credits) })}
+                                                                    {actionState?.id === b.id && actionState?.type === 'approve' ? t('Approving…') : t('Approve Bid ({amount} 🫘)', { amount: formatHundredths(b.amount_c) })}
                                                                 </button>
                                                                 <button
                                                                     type="button"
@@ -1584,7 +1579,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     {d.post_title}
                                                                 </div>
                                                                 <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm shrink-0">
-                                                                    {t('{amount} 🫘 held in trust', { amount: formatNumber(d.credits) })}
+                                                                    {t('{amount} 🫘 held in trust', { amount: formatHundredths(d.amount_c) })}
                                                                 </span>
                                                             </div>
                                                             <div className="text-xs text-nature-500 dark:text-nature-400">
@@ -1607,10 +1602,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     <button
                                                                         type="button"
                                                                         disabled={actionState?.id === d.id}
-                                                                        onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
+                                                                        onClick={() => handleCompleteDeal(d.id, d.post_title, d.amount_c, d.price_type, d.hours)}
                                                                         className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                                     >
-                                                                        {actionState?.id === d.id && actionState?.type === 'complete' ? t('Releasing…') : t('Release Payment ({amount} 🫘)', { amount: formatNumber(d.credits) })}
+                                                                        {actionState?.id === d.id && actionState?.type === 'complete' ? t('Releasing…') : t('Release Payment ({amount} 🫘)', { amount: formatHundredths(d.amount_c) })}
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -1717,8 +1712,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
                                                                         <span aria-hidden="true">⚠️ </span>
                                                                         {project
-                                                                            ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatNumber(balance) })
-                                                                            : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatNumber(balance) })}
+                                                                            ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatHundredths(balance) })
+                                                                            : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatHundredths(balance) })}
                                                                     </p>
                                                                 )}
                                                                 <div className="flex gap-2 pt-1">
@@ -1873,7 +1868,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
                                 {!isEffectivePreview && isKeeperOfThis && (
                                     <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
-                                        earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
+                                        earnedSurplus={typeof detail?.earnedSurplus_c === 'number' ? detail.earnedSurplus_c : null} lifecycle={detail?.lifecycle} />
                                 )}
 
                                 {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
@@ -2201,9 +2196,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <ShopfrontKeepers keepers={shopfrontKeepers} project={project} onOpen={!isEffectivePreview && onOpenProfile ? onOpenProfile : undefined} />
 
                                 {/* Funding Progress (for Bounded Enterprises with a goal) */}
-                                {detail.goalAmount != null && detail.goalAmount > 0 && (() => {
-                                    const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
-                                    const goal = detail.goalAmount;
+                                {detail.goalAmount_c != null && detail.goalAmount_c > 0 && (() => {
+                                    const current = detail.currentAmount_c != null ? detail.currentAmount_c : Math.max(0, balance);
+                                    const goal = detail.goalAmount_c;
                                     const progress = Math.min(100, (current / goal) * 100);
                                     const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                                     const daysRemaining = getDaysRemaining(detail.deadlineAt);
@@ -2224,8 +2219,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         <Sentence
                                                             text={t('{amount} 🫘 {raised}')}
                                                             parts={{
-                                                                amount: formatNumber(current),
-                                                                raised: <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{t('raised of {goal} 🫘 goal', { goal: formatNumber(goal) })}</span>,
+                                                                amount: formatHundredths(current),
+                                                                raised: <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{t('raised of {goal} 🫘 goal', { goal: formatHundredths(goal) })}</span>,
                                                             }}
                                                         />
                                                     </div>
@@ -2383,7 +2378,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         text={project
                                                             ? t('You asked to join this project with {amount} of backing standing. Waiting for the leader.')
                                                             : t('You asked to join this enterprise with {amount} of backing standing. Waiting for the lead keeper.')}
-                                                        parts={{ amount: <strong className="font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(myPendingRequest.pledgedBacking)} 🫘</strong> }}
+                                                        parts={{ amount: <strong className="font-bold text-emerald-700 dark:text-emerald-300">{formatHundredths(myPendingRequest.pledgedBacking_c)} 🫘</strong> }}
                                                     />
                                                 )}
                                             </p>
@@ -2406,8 +2401,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <div className="space-y-2">
                                                     <label htmlFor="join-backing-input" className="block text-xs font-bold text-nature-800 dark:text-nature-200">
                                                         {project
-                                                            ? t('Back this project with your standing: 0 … {n}', { n: availableToBack })
-                                                            : t('Back this enterprise with your standing: 0 … {n}', { n: availableToBack })}
+                                                            ? t('Back this project with your standing: 0 … {n}', { n: formatHundredths(availableToBack) })
+                                                            : t('Back this enterprise with your standing: 0 … {n}', { n: formatHundredths(availableToBack) })}
                                                     </label>
                                                     <div className="flex items-center gap-3">
                                                         <input
@@ -2427,8 +2422,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         <input
                                                             type="range"
                                                             aria-label={project
-                                                                ? t('Back this project with your standing: 0 to {n}', { n: availableToBack })
-                                                                : t('Back this enterprise with your standing: 0 to {n}', { n: availableToBack })}
+                                                                ? t('Back this project with your standing: 0 to {n}', { n: formatHundredths(availableToBack) })
+                                                                : t('Back this enterprise with your standing: 0 to {n}', { n: formatHundredths(availableToBack) })}
                                                             min={0}
                                                             max={availableToBack}
                                                             step={1}
@@ -2438,7 +2433,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             className="flex-1 accent-emerald-600 disabled:opacity-40"
                                                         />
                                                         <span className="text-xs font-extrabold text-nature-700 dark:text-nature-300 w-16 text-right">
-                                                            {formatNumber(joinBackingPledge)} 🫘
+                                                            {formatHundredths(joinBackingPledge)} 🫘
                                                         </span>
                                                     </div>
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400">
@@ -2464,14 +2459,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                                 {/* The money in one line, and today's figures, the keepers' backing and its ledger behind "Money and backing" (round 3
                                     §0 row 9): public to every member as the Commons design says. Open from the start in a preview, which shows everything. */}
-                                <ShopfrontMoney line={moneyLine(balance, Number(detail.creditLine ?? 0))} initiallyOpen={isEffectivePreview}>
+                                <ShopfrontMoney line={moneyLine(balance, Number(detail.creditLine_c ?? 0))} initiallyOpen={isEffectivePreview}>
                                     {/* Balance Card */}
                                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
                                             {project ? t('Project Balance') : t('Enterprise Balance')}
                                         </div>
                                         <div className={`text-4xl font-black mt-2 ${balance < 0 ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                            {formatNumber(balance)} 🫘
+                                            {formatHundredths(balance)} 🫘
                                         </div>
 
                                         {balance < 0 && (
@@ -2481,8 +2476,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed"
                                             >
                                                 {project
-                                                    ? t('⚠️ In Deficit: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: formatNumber(balance) })
-                                                    : t('⚠️ In Deficit: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: formatNumber(balance) })}
+                                                    ? t('⚠️ In Deficit: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: formatHundredths(balance) })
+                                                    : t('⚠️ In Deficit: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: formatHundredths(balance) })}
                                             </div>
                                         )}
 
@@ -2494,7 +2489,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     {t('Credit Line')}
                                                 </div>
                                                 <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                                    {formatNumber(detail.creditLine ?? 0)} 🫘
+                                                    {formatHundredths(detail.creditLine_c ?? 0)} 🫘
                                                 </div>
                                             </div>
                                             <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
@@ -2510,7 +2505,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     {t('Earned Surplus')}
                                                 </div>
                                                 <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                                    {formatNumber(detail.earnedSurplus ?? 0)} 🫘
+                                                    {formatNumber(detail.earnedSurplus_c ?? 0)} 🫘
                                                 </div>
                                             </div>
                                             <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
@@ -2518,7 +2513,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     {t('Capital Ceiling')}
                                                 </div>
                                                 <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
-                                                    {detail.workingCapitalCeiling != null ? `${formatNumber(detail.workingCapitalCeiling)} 🫘` : t('Uncapped')}
+                                                    {detail.workingCapitalCeiling_c != null ? `${formatNumber(detail.workingCapitalCeiling_c)} 🫘` : t('Uncapped')}
                                                 </div>
                                             </div>
                                         </div>
@@ -2681,10 +2676,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                         {entry.counterpartyName || t('Member')}
                                                                     </td>
                                                                     <td className={`${entry.direction === 'income' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap`}>
-                                                                        {entry.direction === 'income' ? `+${formatNumber(entry.amount, 2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
+                                                                        {entry.direction === 'income' ? `+${formatHundredths(entry.amount_c)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                                     </td>
                                                                     <td className={`${entry.direction === 'spend' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap`}>
-                                                                        {entry.direction === 'spend' ? `-${formatNumber(entry.amount, 2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
+                                                                        {entry.direction === 'spend' ? `−${formatHundredths(entry.amount_c)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                                     </td>
                                                                     <td className="order-4 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
                                                                         <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-300">{t('bal', undefined, 'running balance, short')} </span>{formatNumber(entry.runningBalance, 2)} 🫘
@@ -2707,7 +2702,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
                                 {!isEffectivePreview && !canManage && (
                                     <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
-                                        earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
+                                        earnedSurplus={typeof detail?.earnedSurplus_c === 'number' ? detail.earnedSurplus_c : null} lifecycle={detail?.lifecycle} />
                                 )}
 
                                 {/* Recent Activity Flow */}

@@ -17,7 +17,7 @@
 //    phone's "No" to a Settings sign-in), or a key a stored row names as someone who acts (an invite code's maker, a
 //    node role's holder), must already be in that spelling: a row under another spelling acts for nobody.
 
-import { isSyntheticAccount } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount } from '@beanpool/core';
 import { isMemberKeySpelling } from '@beanpool/engine';
 import { db } from '../db/db.js';
 
@@ -123,7 +123,7 @@ export function reportMisspeltMemberKeys(log: (line: string) => void = line => c
     for (const m of found) {
         const shown = m.publicKey.length > 16 ? `${m.publicKey.slice(0, 16)}…` : m.publicKey;
         log(`   - "${m.callsign}" (key ${JSON.stringify(shown)}, ${m.isVisitor ? 'visitor' : 'member'}, ${m.status ?? 'active'}, `
-            + `${m.balance_c} Beans${m.nodeRole ? `, holds the ${m.nodeRole} role` : ''})`
+            + `${formatHundredths(m.balance_c, 'en')} Beans${m.nodeRole ? `, holds the ${m.nodeRole} role` : ''})`
             + (m.sameKeyAs ? ` is the same key as "${m.sameKeyAs}", spelt another way.` : '.'));
     }
     log('   What to do: remove each one in Settings → People → Remove (a closed account keeps its row and its history; '

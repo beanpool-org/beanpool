@@ -73,21 +73,22 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
     const tier = TIER_LEVELS[Math.max(0, Math.min(TIER_LEVELS.length - 1, c.level - 1))];
     return {
         member: c.member,
+        // The sample's figures are written in Beans; the balance answer carries whole hundredths, as a node's does.
         balance: {
-            balance: c.balance,
-            floor: c.floor,
-            usableFloor: c.floor,
+            balance_c: c.balance * 100,
+            floor_c: c.floor * 100,
+            usableFloor_c: c.floor * 100,
             liveOffers: c.liveOffers,
             activated: true,
             frozen: false,
-            knownGrant: 0,
+            knownGrant_c: 0,
             tier: { name: tier.name, emoji: tier.emoji },
-            tierCredit: c.trust,
-            earnedCredit: c.trust,
-            qualifiedValue: c.valueTraded,
+            tierCredit_c: c.trust * 100,
+            earnedCredit_c: c.trust * 100,
+            qualifiedValue: c.valueTraded * 100,
             avgRating: c.rating,
             reviewCount: c.reviews,
-            commonsBalance: c.pool,
+            commonsBalance_c: c.pool * 100,
             callsign: c.member,
             trustStats: { tradeCount: c.transactions.filter(x => x.kind === 'trade' || x.kind === 'deal').length, uniquePartners: c.partners, ageDays: 0 },
         },
@@ -99,7 +100,7 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
                 : x.amount < 0
                 ? t('to {who} · {when}', { who: x.who, when: ago(x.daysAgo) })
                 : t('from {who} · {when}', { who: x.who, when: ago(x.daysAgo) }),
-            amount: Math.abs(x.amount),
+            amount: Math.abs(x.amount) * 100,
         })),
     };
 }
@@ -300,7 +301,7 @@ export function sampleDeals(now: number = Date.now()): SampleDealsResult {
             authorPublicKey: me,
             authorCallsign: S.member,
             acceptedBy: undefined,
-            credits: d.amount,
+            price_c: d.amount * 100,
             photos: [],
             createdAt: at(d.daysAgo),
             category: 'services',
@@ -317,7 +318,7 @@ export function sampleDeals(now: number = Date.now()): SampleDealsResult {
             authorPublicKey: SAMPLE_NEIGHBOUR,
             authorCallsign: d.who,
             acceptedBy: me,
-            credits: d.amount,
+            price_c: d.amount * 100,
             photos: [],
             createdAt: at(d.daysAgo),
             category: 'services',
@@ -337,7 +338,7 @@ export function sampleDeals(now: number = Date.now()): SampleDealsResult {
             buyerCallsign: bought ? S.member : d.who,
             sellerPublicKey: bought ? SAMPLE_NEIGHBOUR : me,
             sellerCallsign: bought ? d.who : S.member,
-            credits: d.amount,
+            amount_c: d.amount * 100,
             createdAt: at(d.daysAgo),
             ratedByBuyer: false,
             ratedBySeller: false,

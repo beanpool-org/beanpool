@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isHundredths, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, formatHundredths, isHundredths, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -3389,7 +3389,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
 
         const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
         if (acc && acc.balance_c !== 0) {
-            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance_c} Beans). Sweep or refund funds first.`);
+            throw new Error(`Cannot delete enterprise account with non-zero balance (${formatHundredths(acc.balance_c, 'en')} Beans). Sweep or refund funds first.`);
         }
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.

@@ -210,7 +210,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
         setError(null);
         try {
             await proposeEnterpriseDecision(treasuryKey, effect === 'pay_out' && amount && 'amount' in amount
-                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount: amount.amount } }
+                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount_c: amount.amount } }
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e) {

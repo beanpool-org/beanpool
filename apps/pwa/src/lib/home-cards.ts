@@ -18,7 +18,7 @@
  */
 
 import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
-import { copyFromLine, eventCopyOf, freePriceWords } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
@@ -152,7 +152,7 @@ export interface HomeFind {
 }
 
 export interface HomeMarketItem {
-    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
@@ -162,7 +162,7 @@ export interface HomeMarketItem {
  * One row of "Asked near you" (apps/server routes/home-answer.ts NeedItem): a neighbour's open Need, with the Market card's own
  * fields for the row. `credits` only where Beans are on; `priceType` only when the post has one.
  */
-export interface HomeNeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+export interface HomeNeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem {
@@ -187,7 +187,8 @@ export interface DealItem {
 }
 
 export interface EnterpriseLine {
-    amount: number;
+    /** Whole hundredths of a Bean: + in, − out. */
+    amount_c: number;
     at: string;
     kind: 'member' | 'deal' | 'commons' | 'other';
     who: string | null;
@@ -213,8 +214,9 @@ export interface GroupLastLine {
 
 export interface MonthFigures {
     trades: number;
-    in: number;
-    out: number;
+    /** Whole hundredths of a Bean. */
+    in_c: number;
+    out_c: number;
     more?: boolean;
 }
 
@@ -239,7 +241,7 @@ export interface HomeCards {
         others: number;
         lifecycle?: 'ongoing' | 'bounded';
         keepers?: number;
-        balance?: number;
+        balance_c?: number;
         month?: MonthFigures;
         latest?: EnterpriseLine | null;
     };
@@ -260,7 +262,7 @@ export interface HomeCards {
     groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }[] };
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month?: MonthFigures & { fees: number; more: boolean } };
+    beans?: { balance_c: number; room_c: number; tier: string; activated: boolean; frozen: boolean; month?: MonthFigures & { fees_c: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
     community?: {
@@ -479,9 +481,9 @@ export function askedUnit(priceType: string | null | undefined): string {
  * long ago it was asked. A Need that asks nothing says Free, with no unit; a node that sent no figure, or one without Beans, says
  * no price. Never a price the node did not send. `priceWords`: the page's own wording of an amount of Beans.
  */
-export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, beansOn: boolean, priceWords: (credits: number) => string): string {
-    const price = beansOn && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (freePriceWords(p.credits, 'need') ?? [priceWords(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' '))
+export function askedFacts(p: Pick<HomeNeedItem, 'price_c' | 'priceType' | 'createdAt'>, beansOn: boolean, priceWords: (price_c: number) => string): string {
+    const price = beansOn && typeof p.price_c === 'number' && Number.isSafeInteger(p.price_c)
+        ? (freePriceWords(p.price_c, 'need') ?? [priceWords(p.price_c), askedUnit(p.priceType)].filter(Boolean).join(' '))
         : null;
     return [price, formatRelativeTime(p.createdAt)].filter(Boolean).join(' · ');
 }
@@ -621,30 +623,24 @@ export function closesIn(closesAt: string, now: number): string {
 }
 
 /**
- * A balance's figure: thousands grouped in English as toLocaleString('en') always grouped them, cents and all ("1,234.5",
- * "-0.5"); every other language's digits alone, with its decimal separator (core formatCount and formatNumber).
+ * A figure from whole hundredths, as every figure is written (core formatHundredths): "1,234.50", "−0.50", "12" in English;
+ * every other language's digits alone, with its decimal separator.
  */
-export function beansFigure(n: number): string {
-    const abs = Math.abs(n);
-    const sign = n < 0 ? '−' : '';
-    if (Number.isInteger(n)) return `${sign}${formatCount(abs)}`;
-    const whole = Math.trunc(abs);
-    // formatNumber writes the whole part as it writes `whole` alone: what follows it is the separator and the cents.
-    const cents = formatNumber(abs).slice(formatNumber(whole).length);
-    return `${sign}${formatCount(whole)}${cents}`;
+export function beansFigure(c: number): string {
+    return formatHundredths(c);
 }
 
-/** "12 Beans", "1 Bean", "12.5 Beans", "1,234.5 Beans": the member's balance in words. */
-export const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: beansFigure(n) });
+/** "12 Beans", "1 Bean", "12.50 Beans", "1,234.50 Beans": the member's balance in words, from whole hundredths. */
+export const beansAmount = (c: number) => tn(c / 100, '{n} Bean', '{n} Beans', { n: beansFigure(c) });
 
 /** "12 Beans · room to spend 200 · Resident"; a new member's "0 Beans · nothing to repay". Their own balance only (§3.1). */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { line: string; note: string | null } {
-    const n = Math.round(b.balance * 100) / 100;
+    const n = b.balance_c;
     if (!b.activated && n === 0) {
         return { line: t('0 Beans · nothing to repay'), note: t('Your credit opens with a first trade.') };
     }
     const amount = beansAmount(n);
-    const line = b.frozen ? t('{amount} · spending paused', { amount }) : t('{amount} · room to spend {room}', { amount, room: count(Math.round(b.room)) });
+    const line = b.frozen ? t('{amount} · spending paused', { amount }) : t('{amount} · room to spend {room}', { amount, room: formatHundredths(b.room_c) });
     return { line, note: b.tier ? tierWords(b.tier) : null };
 }
 
@@ -842,50 +838,51 @@ export function dealStatusLine(d: DealItem): string {
 export function monthSummaryLine(m: MonthFigures): string {
     const trades = tn(m.trades, '{n} trade', '{n} trades');
     if (m.more) {
-        return t('This month (partial): {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
+        return t('This month (partial): {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in_c), out: beansFigure(m.out_c) });
     }
-    return t('This month: {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
+    return t('This month: {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in_c), out: beansFigure(m.out_c) });
 }
 
 /** An enterprise's latest line: "Latest: +12 Beans from Ana · 2h ago" */
 export function enterpriseLatestLine(l: EnterpriseLine): string {
-    const sign = l.amount >= 0 ? '+' : '−';
-    const amount = `${sign}${beansFigure(Math.abs(l.amount))}`;
+    const sign = l.amount_c >= 0 ? '+' : '−';
+    const amount = `${sign}${beansFigure(Math.abs(l.amount_c))}`;
+    const n = Math.abs(l.amount_c) / 100;
     const when = l.at ? formatRelativeTime(l.at) : '';
-    const isOut = l.amount < 0;
+    const isOut = l.amount_c < 0;
     if (l.kind === 'member' && l.who) {
         if (isOut) {
             return when
-                ? tn(l.amount, 'Latest: {amount} Bean to {who} · {when}', 'Latest: {amount} Beans to {who} · {when}', { amount, who: l.who, when })
-                : tn(l.amount, 'Latest: {amount} Bean to {who}', 'Latest: {amount} Beans to {who}', { amount, who: l.who });
+                ? tn(n, 'Latest: {amount} Bean to {who} · {when}', 'Latest: {amount} Beans to {who} · {when}', { amount, who: l.who, when })
+                : tn(n, 'Latest: {amount} Bean to {who}', 'Latest: {amount} Beans to {who}', { amount, who: l.who });
         }
         return when
-            ? tn(l.amount, 'Latest: {amount} Bean from {who} · {when}', 'Latest: {amount} Beans from {who} · {when}', { amount, who: l.who, when })
-            : tn(l.amount, 'Latest: {amount} Bean from {who}', 'Latest: {amount} Beans from {who}', { amount, who: l.who });
+            ? tn(n, 'Latest: {amount} Bean from {who} · {when}', 'Latest: {amount} Beans from {who} · {when}', { amount, who: l.who, when })
+            : tn(n, 'Latest: {amount} Bean from {who}', 'Latest: {amount} Beans from {who}', { amount, who: l.who });
     }
     if (l.kind === 'deal') {
         if (isOut) {
             return when
-                ? tn(l.amount, 'Latest: {amount} Bean held in trust · {when}', 'Latest: {amount} Beans held in trust · {when}', { amount, when })
-                : tn(l.amount, 'Latest: {amount} Bean held in trust', 'Latest: {amount} Beans held in trust', { amount });
+                ? tn(n, 'Latest: {amount} Bean held in trust · {when}', 'Latest: {amount} Beans held in trust · {when}', { amount, when })
+                : tn(n, 'Latest: {amount} Bean held in trust', 'Latest: {amount} Beans held in trust', { amount });
         }
         return when
-            ? tn(l.amount, 'Latest: {amount} Bean released from trust · {when}', 'Latest: {amount} Beans released from trust · {when}', { amount, when })
-            : tn(l.amount, 'Latest: {amount} Bean released from trust', 'Latest: {amount} Beans released from trust', { amount });
+            ? tn(n, 'Latest: {amount} Bean released from trust · {when}', 'Latest: {amount} Beans released from trust · {when}', { amount, when })
+            : tn(n, 'Latest: {amount} Bean released from trust', 'Latest: {amount} Beans released from trust', { amount });
     }
     if (l.kind === 'commons') {
         if (isOut) {
             return when
-                ? tn(l.amount, 'Latest: {amount} Bean to Commons · {when}', 'Latest: {amount} Beans to Commons · {when}', { amount, when })
-                : tn(l.amount, 'Latest: {amount} Bean to Commons', 'Latest: {amount} Beans to Commons', { amount });
+                ? tn(n, 'Latest: {amount} Bean to Commons · {when}', 'Latest: {amount} Beans to Commons · {when}', { amount, when })
+                : tn(n, 'Latest: {amount} Bean to Commons', 'Latest: {amount} Beans to Commons', { amount });
         }
         return when
-            ? tn(l.amount, 'Latest: {amount} Bean from Commons · {when}', 'Latest: {amount} Beans from Commons · {when}', { amount, when })
-            : tn(l.amount, 'Latest: {amount} Bean from Commons', 'Latest: {amount} Beans from Commons', { amount });
+            ? tn(n, 'Latest: {amount} Bean from Commons · {when}', 'Latest: {amount} Beans from Commons · {when}', { amount, when })
+            : tn(n, 'Latest: {amount} Bean from Commons', 'Latest: {amount} Beans from Commons', { amount });
     }
     return when
-        ? tn(l.amount, 'Latest: {amount} Bean · {when}', 'Latest: {amount} Beans · {when}', { amount, when })
-        : tn(l.amount, 'Latest: {amount} Bean', 'Latest: {amount} Beans', { amount });
+        ? tn(n, 'Latest: {amount} Bean · {when}', 'Latest: {amount} Beans · {when}', { amount, when })
+        : tn(n, 'Latest: {amount} Bean', 'Latest: {amount} Beans', { amount });
 }
 
 /** A group's last line: "Ana, 2h ago: Who has a ladder?" */

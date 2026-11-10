@@ -27,7 +27,7 @@ import {
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
-import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout } from '@beanpool/core';
+import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -2376,7 +2376,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             showsBeans={beansOn}
                             busy={actionLoading}
                             onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
-                            onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
+                            onRelease={tx => handleReleaseCredits(tx.id, tx.amount_c)}
                             onCancel={tx => handleCancelCredits(tx.id)}
                             onReview={tx => onNavigate?.('marketplace-review', tx.id)}
                         />
@@ -2419,7 +2419,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             }}>
                                 <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
                                     <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                        {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
+                                        {tn(pendingTx.amount_c / 100, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans', { n: formatHundredths(pendingTx.amount_c) })}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                         {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
@@ -2428,7 +2428,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 {isBuyer ? (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
                                         <button
-                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.amount_c)}
                                             disabled={actionLoading}
                                             style={{
                                                 background: 'var(--bp-commit-fill)',

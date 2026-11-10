@@ -33,7 +33,7 @@
 
 import crypto from 'node:crypto';
 import { db, idNamesMoney } from './db/db.js';
-import { feeOf, isHundredths } from '@beanpool/core';
+import { feeOf, formatHundredths, isHundredths } from '@beanpool/core';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import {
     transfer, registerVisitor, getMember, moveToCommons, payFromCommons,
@@ -1256,7 +1256,7 @@ export async function recoverSettlements(
             : `A local seller is owed and we cannot pay within our own credit limit`;
         console.warn(
             `[Federation] ⚠️  Settlement ${row.key} has been unresolved since ${row.updatedAt} `
-            + `(${row.amount_c} beans, peer ${row.peerId.slice(-8)}). ${whatIsStuck}. `
+            + `(${formatHundredths(row.amount_c, 'en')} beans, peer ${row.peerId.slice(-8)}). ${whatIsStuck}. `
             + `An operator needs to reconcile this with the other community — it will not clear by retrying.`,
         );
     }

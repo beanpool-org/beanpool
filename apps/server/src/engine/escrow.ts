@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, halves, loanDays, shareOf, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, formatHundredths, halves, loanDays, shareOf, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -561,7 +561,7 @@ function assertHoldFunded(cb: EscrowCallbacks, p: HoldParties, amount: number, o
         // but cannot become wages.
         if (amount > earnedSurplus) {
             if (opts.claim) recordDeferredWageClaim(p.payer, p.payee, amount, opts.claim.postId, opts.claim.transactionId);
-            const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay keeper wages (${amount} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
+            const msg = `${name} has insufficient earned surplus (${formatHundredths(earnedSurplus, 'en')} Beans) to pay keeper wages (${formatHundredths(amount, 'en')} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
             const err: any = new Error(msg);
             err.status = 403;
             err.statusCode = 403;

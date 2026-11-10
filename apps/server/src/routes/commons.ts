@@ -42,7 +42,7 @@ import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-erro
 import { requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
-import { isPastDeadline, word } from '@beanpool/core';
+import { isHundredths, isPastDeadline, word } from '@beanpool/core';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -50,7 +50,7 @@ export function createCommonsRoutes(deps: RouteDeps): Router {
 // ===================== COMMUNITY COMMONS =====================
 
 router.get('/api/commons/balance', async (ctx) => {
-    ctx.body = { balance: getCommonsBalance() };
+    ctx.body = { balance_c: getCommonsBalance() };
 });
 
 // Paying back a debt (community modes slice 5, design §4.2 (a)): a member sends Beans they hold to the Commons; an admin
@@ -458,7 +458,8 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
 });
 
 router.post('/api/crowdfund/projects', async (ctx) => {
-    const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
+    // The goal is whole hundredths, `goalAmount_c` (money-body.ts): an app from before them sends `goalAmount` in Beans, refused.
+    const { id, creatorPubkey, title, description, photos, goalAmount_c: goalAmount, deadlineAt } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
@@ -476,7 +477,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     }
     if (!title || !goalAmount) {
         ctx.status = 400;
-        ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
+        ctx.body = { error: 'creatorPubkey, title, and goalAmount_c are required' };
         return;
     }
 
@@ -523,7 +524,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     if (respondIfMuted(ctx, actor)) return;
-    if (!isAcceptableGoal(Number(goalAmount))) {
+    if (!isHundredths(goalAmount) || !isAcceptableGoal(goalAmount)) {
         ctx.status = 400;
         ctx.body = { error: GOAL_AMOUNT_ERROR };
         return;
@@ -535,7 +536,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     try {
-        createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
+        createCrowdfundProject(projectId, actor, title, description || '', photos || [], goalAmount, deadline.deadline);
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
@@ -549,7 +550,8 @@ router.post('/api/crowdfund/projects', async (ctx) => {
 });
 
 router.post('/api/crowdfund/projects/update', async (ctx) => {
-    const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
+    // The goal is whole hundredths, `goalAmount_c` (money-body.ts): an app from before them sends `goalAmount` in Beans, refused.
+    const { id, creatorPubkey, title, description, photos, goalAmount_c: goalAmount, deadlineAt } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
@@ -558,7 +560,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     }
     if (!id || !title || !goalAmount) {
         ctx.status = 400;
-        ctx.body = { error: 'id, creatorPubkey, title, and goalAmount are required' };
+        ctx.body = { error: 'id, creatorPubkey, title, and goalAmount_c are required' };
         return;
     }
 
@@ -597,7 +599,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     try {
         // Its end date before the change: moved in the week after it, while its pledges are held, the backers are told.
         const endDateBefore = projectEndDate(id);
-        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadline?.deadline);
+        updateCrowdfundProject(id, actor, title, description || '', photos || [], goalAmount, deadline?.deadline);
         noticeProjectEndDateMoved(id, endDateBefore, actor);
         const project = getCrowdfundProject(id);
         deps.broadcast?.({ type: 'project_updated', project });

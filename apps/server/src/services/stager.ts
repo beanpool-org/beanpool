@@ -50,7 +50,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import type { PhotoReference } from '../engine/sync.js';
-import { isHundredths } from '@beanpool/core';
+import { formatHundredths, isHundredths } from '@beanpool/core';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 /** The staging directory, inside the data directory; the swap at boot knows it by this name too (db/swap-at-boot.ts). */
@@ -694,8 +694,10 @@ async function stagerChild(): Promise<void> {
                 throw refused('[Sync] Conservation violation: a whole copy that carries no ledger; rejecting it', 'conservation');
             }
             if (!a.seed && Math.abs(stagedTotal - liveTotal) > LEDGER_CONSERVATION_TOLERANCE) {
-                throw refused(`[Sync] Conservation violation: the copy's ledger totals ${stagedTotal.toFixed(4)} and this standby's ${liveTotal.toFixed(4)}, `
-                    + `a shift of ${(stagedTotal - liveTotal).toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating copy`, 'conservation');
+                // The sums are whole hundredths (accounts.balance_c): shown as Beans by core's formatter, never the raw
+                // hundredths (982 Beans read "98200.0000" here before).
+                throw refused(`[Sync] Conservation violation: the copy's ledger totals ${formatHundredths(stagedTotal, 'en')} Beans and this standby's ${formatHundredths(liveTotal, 'en')} Beans, `
+                    + `a shift of ${formatHundredths(stagedTotal - liveTotal, 'en')} Beans (it must not move); rejecting value-creating copy`, 'conservation');
             }
 
             // 4. What this standby keeps of its own. Every table is classified, and every node_config key.

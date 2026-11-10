@@ -1,7 +1,7 @@
 /**
  * Lists show a listing photo's small copy (shortest side 320 px, cap 640 px, ~6-18 KB; Marty, 1 Nov).
  *
- * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb2` (and legacy `size=thumb`)
+ * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb2`
  * with a sharp copy of the photo, kept in the image store beside it (storage/photo-thumbnails.ts), behind exactly the gates
  * the photo has.
  *
@@ -12,8 +12,8 @@
  *  1. Made at upload: a listing with a real JPEG, WebP, PNG and a PNG with transparency (src/__fixtures__/photos). Each
  *     photo's small copy is in the store beside it, shortest side 320 px (cap 640 px, never enlarged), the same format,
  *     the PNG's transparency kept, each ~6-18 KB; served at the URL the listing read hands out with `&size=thumb2`, the
- *     same type and the same cache header as the photo, the photo itself unchanged at its own URL. Legacy `&size=thumb`
- *     still answers with the small copy too.
+ *     same type and the same cache header as the photo, the photo itself unchanged at its own URL. The `&size=thumb` of
+ *     phones before 1 Nov is not read any more (cutover N2, audit E14): it gets the photo itself, as its own URL does.
  *     Two hostile shapes the node's photo check accepts (review opus-1742 #1): a ~130 KB PNG of 16,777,216×1 px (16-bit
  *     RGBA), which a decoder would need over a gigabyte for, and the same with its image data stopping early (its chunks
  *     whole), which can never give a copy. No small copy, the photo itself served, the process alive with its peak
@@ -22,14 +22,14 @@
  *     which is then in the store, and the next request is served from the store (its bytes, marked, come back). On a
  *     bucket, a page of them asked at once waits on one resize at a time, not on each other's bucket requests (review
  *     opus-1742 #4): six, every request to the bucket slowed to 200 ms, are all answered within 1.5 s.
- *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb` serves the photo itself. A photo served
+ *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb2` serves the photo itself. A photo served
  *     in place of its small copy is cached for 5 minutes, not the year the photo's own URL is (review opus-1742 #5): a
  *     copy that can't be had now (a bucket hiccup) would otherwise leave the 800 px bytes under the list's URL for good.
  *  4. The gates: for each case the photo route refuses or allows (no key, a wrong key, a listing taken off, one hidden by
  *     reports, its rows gone), the small copy gets the same status and the same cache header, for every reader.
  *  5. Nothing in state.db: no row, column or byte of a small copy in the database file.
  *  0. A host where sharp won't load (review opus-1742 #2; the `nosharp` run, a disk store, sharp made to throw on import):
- *     the node boots, a listing with a photo is posted, its `size=thumb` is the photo itself, and the failure is logged
+ *     the node boots, a listing with a photo is posted, its `size=thumb2` is the photo itself, and the failure is logged
  *     once.
  *  6. The orphan sweep keeps a small copy while its photo is named and removes one whose photo no row names; replacing a
  *     listing's photos removes the old photos' small copies with them. On a bucket, removing a small copy is off the event
@@ -251,10 +251,12 @@ async function main(): Promise<void> {
         assert(small.type === full.type && small.type === f.mime && small.cache === full.cache,
             `${f.name}: the same type and cache header as the photo (${small.type} "${small.cache}" vs ${full.type} "${full.cache}")`);
         const legacy = await get(oldThumbOf(shelfUrls[i]), carol);
-        assert(legacy.status === 200 && !!kept && legacy.bytes.equals(kept),
-            `${f.name}: legacy &size=thumb still answers with the small copy (${legacy.status} ${legacy.bytes.length} B)`);
-        assert(legacy.type === small.type && legacy.cache === small.cache,
-            `${f.name}: legacy &size=thumb has the same type and cache header`);
+        // A photo already no bigger than a small copy (the 300 px PNG) is its own small copy, so only the others can differ.
+        const copyDiffers = !!kept && !kept.equals(full.bytes);
+        assert(legacy.status === 200 && legacy.bytes.equals(full.bytes) && (!copyDiffers || !legacy.bytes.equals(kept!)),
+            `${f.name}: the old &size=thumb is not read: it gets the photo itself${copyDiffers ? ', not the small copy' : ''} (${legacy.status} ${legacy.bytes.length} B)`);
+        assert(legacy.type === full.type && legacy.cache === full.cache,
+            `${f.name}: …with the photo's own type and cache header (${legacy.type} "${legacy.cache}")`);
         sizes.push(`${f.name} ${full.bytes.length} → ${small.bytes.length} B`);
     }
     {
@@ -404,7 +406,7 @@ async function main(): Promise<void> {
             .run(dataUrl('image/png', bytes), inline);
         const [url] = await urlsOf(inline);
         const r = await get(thumbOf(url), carol);
-        assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png', `size=thumb serves the photo from the row as it is (${r.status} ${r.bytes.length} B)`);
+        assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png', `size=thumb2 serves the photo from the row as it is (${r.status} ${r.bytes.length} B)`);
         const own = await get(url, carol);
         assert(!!own.cache?.endsWith(', max-age=31536000, immutable') && r.cache === own.cache.replace('max-age=31536000, immutable', 'max-age=300'),
             `…cached 5 minutes, the photo's own URL a year (${r.cache} vs ${own.cache})`);
@@ -488,7 +490,8 @@ async function main(): Promise<void> {
         assert(!(await headObject(store, oldThumb)), 'and sweeps the old-key (-t) file even while a row names its photo');
         assert(!(await headObject(store, stray)), 'and removes an aged one whose photo no row names');
 
-        // Delete paths: removing a photo removes both current (-s) and legacy (-t) small copies.
+        // Delete paths: removing a photo removes its small copy (-s). A -t copy from before the 320 px update (1 Nov) is
+        // no longer looked for there (cutover N2, audit E14): no row names it, so the sweep reclaims it, as above.
         const delBasket = make('Thumb delete cleanup', [dataUrl('image/jpeg', jpg)]);
         await settled();
         const delKey = rowOf(delBasket, 0).storage_key!;
@@ -502,7 +505,10 @@ async function main(): Promise<void> {
         await settled();
         assert(!(await headObject(store, delKey)), 'the photo object is removed');
         assert(!(await headObject(store, delNewThumb)), "the photo's small copy is removed");
-        assert(!(await headObject(store, delOldThumb)), "the photo's legacy -t small copy is also removed");
+        assert(!!(await headObject(store, delOldThumb)), 'the delete leaves an old -t copy alone');
+        await age(delOldThumb);
+        await sweepOrphanedImageObjects({ db, dataDir, store });
+        assert(!(await headObject(store, delOldThumb)), '…and the sweep reclaims it');
 
         const before = thumbKeyOf(rowOf(live, 0).storage_key!);
         const png = fixture('listing-400.png');

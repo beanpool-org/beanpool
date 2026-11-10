@@ -10,7 +10,7 @@
  *      - Single-use 60s handshake token minting
  *   2. Handshake Token Exchange:
  *      - Token exchange for browser session (2h idle / 12h hard limit)
- *      - Deep-link exchange on GET /settings?token=... with session cookie and redirect
+ *      - GET /settings?token=... (phones before 1.2.57) signs nobody in and leaves the token unspent
  *   3. Token Replay Protection:
  *      - Replaying an already-exchanged handshake token fails with 401 { replay: true }
  *   4. Token Expiry:
@@ -598,8 +598,10 @@ async function main() {
         setBreakGlassMode(false);
         assert(isBreakGlassMode() === false, 'breakGlassMode toggled back off');
 
-        // ── 11. Deep-link GET /settings?token=... Flow ──
-        console.log('Testing deep-link GET /settings?token=... flow...');
+        // ── 11. GET /settings?token=... signs nobody in (cutover N2, audit E4) ──
+        // That query form was the Manage button of phones before 1.2.57. The phone hands over in the fragment
+        // (#handoff=…), which the manager redeems with POST /api/local/admin/auth/exchange.
+        console.log('Testing that GET /settings?token=... signs nobody in...');
 
         const chalDl = createAdminChallenge();
         const solveDl = verifyAndSolveChallenge({
@@ -612,10 +614,16 @@ async function main() {
 
         // GET /settings?token=<token> with manual redirect handling
         const dlRes = await fetch(`${base}/settings?token=${dlToken}`, { redirect: 'manual' });
-        assert(dlRes.status === 302, 'GET /settings?token=... returns 302 redirect');
-        const dlCookie = dlRes.headers.get('set-cookie');
-        assert(Boolean(dlCookie && dlCookie.includes('admin_session=')), 'Redirect sets admin_session cookie');
-        assert(dlRes.headers.get('location') === '/settings', 'Redirects to /settings');
+        const dlCookie = dlRes.headers.get('set-cookie') ?? '';
+        assert(dlRes.status !== 302 && !dlRes.headers.get('location'), `GET /settings?token=... is no sign-in: no redirect (got ${dlRes.status})`);
+        assert(!dlCookie.includes('admin_session='), 'GET /settings?token=... sets no admin_session cookie');
+        // The token was never read, so it is still unspent: the one way in redeems it.
+        const dlExchange = await fetch(`${base}/api/local/admin/auth/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: dlToken }),
+        });
+        assert(dlExchange.status === 200, `the same token still redeems once by POST /api/local/admin/auth/exchange (got ${dlExchange.status})`);
 
         // ── 12. With 2FA on, a key sign-in asks for no code (decision D2, 2026-10-03) ──
         // The node's code is the password's second factor; the phone's unlock is the key's. A backup code is not spent.
@@ -846,12 +854,15 @@ async function main() {
         const graceOwnCodeCheck = await verifyBreakGlassCode(routineBody.breakGlassCode, graceKeys.pub);
         assert(typeof routineBody.breakGlassCode === 'string' && graceOwnCodeCheck === null, "verifyBreakGlassCode refuses Grace's own code once she is no longer an owner");
 
-        // 12.10 Settings failed token exchange returns accessible HTML (Comment 13)
-        const failTokenRes = await fetch(`${base}/settings?token=invalid_handshake_token`);
-        assert(failTokenRes.status === 400, 'Failed token exchange on /settings returns 400');
+        // 12.10 /settings has no token exchange of its own any more (cutover N2, audit E4), so a bad token in its query is
+        // no failed sign-in either: the page answers as it does with no token at all.
+        const failTokenRes = await fetch(`${base}/settings?token=invalid_handshake_token`, { redirect: 'manual' });
+        const plainSettingsRes = await fetch(`${base}/settings`, { redirect: 'manual' });
         const failTokenHtml = await failTokenRes.text();
-        assert(failTokenHtml.includes('Sign-In Failed'), 'Failed token exchange serves accessible error HTML');
-        assert(failTokenHtml.includes('name="viewport"'), 'Error HTML contains viewport meta tag');
+        await plainSettingsRes.text();
+        assert(failTokenRes.status === plainSettingsRes.status,
+            `/settings?token=<bad> answers as /settings does (${failTokenRes.status} vs ${plainSettingsRes.status})`);
+        assert(!failTokenHtml.includes('Sign-In Failed'), '/settings?token=<bad> serves no sign-in error page');
 
         // 12.11 Settings break-glass screen is accessible (Comment 14)
         setBreakGlassMode(true);

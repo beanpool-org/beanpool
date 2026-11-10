@@ -200,10 +200,11 @@ import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
-import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
+import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
-import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { APP_VERSION_HEADER, noteAppVersion, parseAppVersionHeader } from './app-version-counts.js';
+import { floorLetsThrough, floorRefusing } from './app-store-versions.js';
 import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
@@ -1676,6 +1677,25 @@ export async function startHttpsServer(port: number): Promise<number> {
         // A peek ticket's read of the post it opens (peekReadAllowed) is let through by the ticket, as a public read is.
         const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path)
             && !peekReadAllowed(ctx as unknown as { method: string; path: string; query: Record<string, unknown> });
+        // The phone floor (cutover 1.4.0, design §1): an app whose X-BeanPool-App names a version below its platform's
+        // floor, once that floor's update block applies (app-store-versions.ts floorRefusing: never before its store has
+        // the build), is refused every write and gated read, 426 app_too_old with the floor. An app from 1.4.0 on puts up
+        // its full-screen "Update required" at once on that answer (apps/native utils/node-request-signing.ts); an older
+        // one doesn't read it, so what it tries fails until its next safe moment, a start or a return after 5 minutes
+        // away, puts the screen up (utils/force-update.ts). The screen's ways out are let through (floorLetsThrough: the
+        // push token's DELETE and a leave statement), so a phone that leaves stops getting alerts. Public reads still
+        // answer, /api/community/health among them. Only the phone app sends the header: the web app (this server's own
+        // copy), the manager and scripts never do.
+        if ((isMutatingApi || isGatedRead) && !floorLetsThrough(ctx.method, ctx.path)) {
+            const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
+            const floor = app ? floorRefusing(app.platform, app.version) : null;
+            if (floor) {
+                ctx.status = 426;
+                ctx.set('Cache-Control', 'no-store');
+                ctx.body = { error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE, minAppVersion: floor };
+                return;
+            }
+        }
         if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
@@ -1911,8 +1931,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     app.use(copyOnlyFromOtherSites);
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
-    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything. An app below
-    // the community's floor keeps working with the server; only the app itself stops, at a safe moment.
+    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything here. An
+    // app below the community's floor was refused before this, once the floor's block applies (requireSignature), on
+    // everything but its ways out (floorLetsThrough), which are counted as any answered request is.
     app.use(async (ctx, next) => {
         const actor = ctx.state.actor as string | undefined;
         if (actor) noteAppVersion(actor, ctx.get(APP_VERSION_HEADER), k => isNodeMember(k) || isLiveVisitor(k));

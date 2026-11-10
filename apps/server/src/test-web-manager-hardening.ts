@@ -12,8 +12,8 @@
  *  1b. The node, not the browser, ends a session: the cookie has no Max-Age, so at 12 h, 2 h idle (15 min for the phone
  *      hand-off) the node answers `sessionExpired` with the reason. A request with nothing (no cookie, no password)
  *      is answered at once, `sessionExpired`, and not counted by the admin tarpit.
- *   2. L3: the key sign-in's exchange answers the session in the cookie only (HttpOnly, SameSite=Strict), and so
- *      does /settings?token=.
+ *   2. L3: the key sign-in's exchange answers the session in the cookie only (HttpOnly, SameSite=Strict); the query
+ *      form /settings?token= of phones before 1.2.57 is gone and sets no cookie at all (cutover N2, audit E4).
  *   3. L4: a CSRF token counts only for the session it was issued to: a moderator's on an owner's cookie, another
  *      password session's, or one issued to a password caller, is refused; a session's tokens go with it.
  *   4. L5: /ws/logs takes a ticket only; the admin password in its query string (`?auth=`) is refused, 2FA off too.
@@ -294,11 +294,13 @@ async function main(): Promise<void> {
         const idleAnswer = await later(2 * 3_600_000 + 1_000, idlePw.sessionId);
         assert(idleAnswer.status === 401 && idleAnswer.body?.sessionExpired === true && /2h idle/.test(idleAnswer.body?.error ?? ''),
             `a password session unused for 2 h: 401, sessionExpired, "2h idle" (${show(idleAnswer)})`);
-        const handoff = await call('GET', `/settings?token=${mintHandshakeToken(owner.pub, 'owner').handshakeToken}`);
+        // The phone's hand-off (/settings#handoff=…), as the manager redeems it.
+        const handOver = () => call('POST', '/api/local/admin/auth/exchange', { body: { token: mintHandshakeToken(owner.pub, 'owner').handshakeToken } });
+        const handoff = await handOver();
         const handoffIdle = await later(16 * 60_000, handoff.sessionId);
-        assert(handoff.status === 302 && handoffIdle.status === 401 && handoffIdle.body?.sessionExpired === true && /15 min idle/.test(handoffIdle.body?.error ?? ''),
+        assert(handoff.status === 200 && handoffIdle.status === 401 && handoffIdle.body?.sessionExpired === true && /15 min idle/.test(handoffIdle.body?.error ?? ''),
             `the phone hand-off's cookie session still idles out at 15 min, and says so (${show(handoffIdle)})`);
-        const handoff2 = await call('GET', `/settings?token=${mintHandshakeToken(owner.pub, 'owner').handshakeToken}`);
+        const handoff2 = await handOver();
         const handoffUsed = await later(14 * 60_000, handoff2.sessionId);
         assert(handoffUsed.status === 200, `used within 15 min, it is still signed in (${handoffUsed.status})`);
 
@@ -330,8 +332,8 @@ async function main(): Promise<void> {
         assert(k.body?.sessionId === undefined && !!k.sessionId && !k.text.includes(k.sessionId),
             `and its body never holds the session's id (${k.text.slice(0, 160)})`);
         const deep = await call('GET', `/settings?token=${mintHandshakeToken(owner.pub, 'owner').handshakeToken}`);
-        assert(deep.status === 302 && !!deep.sessionId && /;\s*samesite=strict/i.test(deep.cookie) && /;\s*httponly/i.test(deep.cookie),
-            `/settings?token= sets the same strict cookie (${deep.status} ${deep.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
+        assert(deep.status !== 302 && !deep.sessionId && !deep.cookie,
+            `/settings?token= (phones before 1.2.57) sets no cookie at all: it signs nobody in (${deep.status} ${deep.cookie || 'no cookie'})`);
 
         // ── 3. L4: a CSRF token is bound to its session ───────────────────────────────────────────
         console.log('\n── 3. a CSRF token counts for its own session only ──');
@@ -421,9 +423,10 @@ async function main(): Promise<void> {
                 `GET ${p}: script-src is ${scriptSrc.join(' ')}: no inline, no eval, no unpkg.com`);
             assert(r.headers.get('referrer-policy') === 'strict-origin-when-cross-origin', `GET ${p}: Referrer-Policy kept (${r.headers.get('referrer-policy')})`);
         }
+        // A token in the query is no sign-in link any more (cutover N2, audit E4): the page is Settings, as without it.
         const failedLink = await call('GET', '/settings?token=deadbeef');
-        assert(failedLink.status === 400 && failedLink.headers.get('content-security-policy') === APP_DOCUMENT_CSP && !/<script/i.test(failedLink.text),
-            `a sign-in link that fails gets a page with no script, under the strict policy (${failedLink.status})`);
+        assert(failedLink.status === 200 && failedLink.text.includes('the manager') && failedLink.headers.get('content-security-policy') === APP_DOCUMENT_CSP && !failedLink.cookie,
+            `/settings?token=<bad> is the manager under the strict policy, and sets no cookie (${failedLink.status})`);
         // The old page with inline handlers is gone (design case 18, D9): nothing at /settings-legacy runs any script.
         const legacy = await call('GET', '/settings-legacy');
         assert(legacy.status === 404 && !/<script/i.test(legacy.text),

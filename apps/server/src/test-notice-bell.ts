@@ -182,7 +182,11 @@ async function main() {
         assert(heard.length === 1 && Object.keys(heard[0]).sort().join(',') === 'id,kind,type', 'and nothing else: no words, no chat, no sender');
         const annHeard = annSock.events.filter(e => e.type === 'push_notice');
         assert(annHeard.length === 1 && annHeard[0].id === rowsOf(ann)[0]?.id, "another member's socket hears only their own notice");
-        // An app from before the bell takes any event it doesn't know for a doorbell (an old phone: a full sync each).
+        // An app from before the bell takes any event it doesn't know for a doorbell (an old phone: a full sync each). The
+        // opt-in is the protocol, kept through the cutover (N2, audit E9; #3047's deciding review). A live socket first, so
+        // its silence below is the opt-in's doing.
+        assert(webOld.ws.readyState === WebSocket.OPEN && webOld.events.some(e => e.type === 'state_snapshot'),
+            'the socket that sent no bell=1 is open and heard its state snapshot');
         assert(!webOld.events.some(e => e.type === 'push_notice'), "the same member's socket from an app before the bell (no bell=1) hears nothing of it");
 
         // ── 3. The list ────────────────────────────────────────────────────────────────────────────────────

@@ -9,8 +9,9 @@
  *      expiry, single use, wrong key, non-admin refused, role revoked between request and use,
  *      role CHANGED between request and use (session takes the live role), demoted mid-session,
  *      no actor from the body, and the node's own TOTP still applies on top.
- *   4. The hand-off's session locks after 15 minutes idle (PHONE_HANDOFF_IDLE_TTL_MS), through the exchange and an
- *      older app's GET /settings?token=; a session made any other way keeps the 2-hour idle limit.
+ *   4. The hand-off's session locks after 15 minutes idle (PHONE_HANDOFF_IDLE_TTL_MS), through the exchange; the query
+ *      form GET /settings?token= of phones before 1.2.57 signs nobody in (cutover N2, audit E4); a session made any other
+ *      way keeps the 2-hour idle limit.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -342,14 +343,17 @@ async function main() {
         const after = await sessionInfo(ex.sessionId!);
         assert(after.authenticated === false, 'and the node no longer accepts the cookie');
 
-        // An older app's GET /settings?token=… is the same hand-off.
+        // The query form GET /settings?token=… of phones before 1.2.57 is gone (cutover N2, audit E4): it signs nobody in,
+        // and the token it carried is still unspent, so the hand-off that exists redeems it with the same 15 minutes.
         const legacyLink = await requestLink(admin);
         const legacy = await fetch(`${BASE}/settings?token=${legacyLink.body.handshakeToken}`, { redirect: 'manual' });
         const legacyId = (legacy.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
-        assert(legacy.status === 302 && !!legacyId, `GET /settings?token= signs in (got ${legacy.status})`);
+        assert(legacy.status !== 302 && !legacyId, `GET /settings?token= signs nobody in (got ${legacy.status}, cookie ${legacyId ? 'set' : 'none'})`);
+        const afterQuery = await exchange(legacyLink.body.handshakeToken);
+        assert(afterQuery.status === 200 && !!afterQuery.sessionId, `the token is unspent: the exchange still redeems it (got ${afterQuery.status})`);
         const tl = Date.now();
-        assert(validateAdminSession(legacyId!, tl + 14 * MIN).valid === true, 'GET /settings?token=: still signed in at 14 minutes');
-        assert(validateAdminSession(legacyId!, tl + 14 * MIN + 16 * MIN).valid === false, 'GET /settings?token=: signed out after 16 minutes unused');
+        assert(validateAdminSession(afterQuery.sessionId!, tl + 14 * MIN).valid === true, 'that hand-off: still signed in at 14 minutes');
+        assert(validateAdminSession(afterQuery.sessionId!, tl + 14 * MIN + 16 * MIN).valid === false, 'that hand-off: signed out after 16 minutes unused');
 
         // Any other sign-in (the desktop "Sign in with your phone" pairing redeems with no option) keeps 2 hours.
         const direct = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken);
@@ -368,11 +372,12 @@ async function main() {
         assert(replaced.status === 200 && !!replacedId && replacedId !== held1.sessionId && validateAdminSession(replacedId!).valid === true,
             `a second hand-off from the same browser signs in (got ${replaced.status})`);
         assert(validateAdminSession(held1.sessionId!).valid === false, '/exchange: the session the browser held is ended');
+        // A token in the query from that browser is not a hand-off: no new session, and the one it holds is not ended.
         const legacy2 = await fetch(`${BASE}/settings?token=${(await requestLink(admin)).body.handshakeToken}`,
             { redirect: 'manual', headers: { Cookie: `admin_session=${replacedId}` } });
         const legacy2Id = (legacy2.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
-        assert(legacy2.status === 302 && !!legacy2Id && validateAdminSession(legacy2Id!).valid === true, `GET /settings?token= from that browser signs in (got ${legacy2.status})`);
-        assert(validateAdminSession(replacedId!).valid === false, 'GET /settings?token=: the session the browser held is ended');
+        assert(legacy2.status !== 302 && !legacy2Id, `GET /settings?token= from that browser signs nobody in (got ${legacy2.status})`);
+        assert(validateAdminSession(replacedId!).valid === true, 'GET /settings?token=: the session the browser held is untouched');
     }
 
     // ── 5. Owner-only changes from the phone need a recent unlock (decision D2's step-up, 2026-10-03) ──

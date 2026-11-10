@@ -271,7 +271,9 @@ async function main(): Promise<void> {
             const after = await snapS();
             const r6 = await standby.send('record');
             const st6 = await standby.send('staging');
-            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '') && served >= 2
+            // The shift is the 7 Beans planted, in Beans (core's formatter), never raw hundredths with four decimals ("700.0000").
+            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '')
+                && /a shift of −7 Beans/.test(p6.error ?? '') && !/\d\.\d{4}\b/.test(p6.error ?? '') && served >= 2
                 && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0 && after.ledgerSum === before.ledgerSum && !st6.staging,
                 `the routine whole copy, all ${served} pages of it built, is refused at the closing check against S's live ledger; S's ledger as it was, the plant included (${JSON.stringify({ pull: p6, why: r6.lastWhy })}; total ${after.ledgerSum}; before: one payload refused by the import's own guard)`);
             // The next pull's copy can make its staging before S has seen the refused one's stager exit (CI runs 36794955035

@@ -110,23 +110,6 @@ export function thumbnailKeyOf(photoKey: string | null | undefined): string | nu
     return m ? `${m[1]}-s.${m[2]}` : null;
 }
 
-/** Legacy small copy key (`-t`), used before the 320 px update (Marty, 1 Nov). */
-export function legacyThumbnailKeyOf(photoKey: string | null | undefined): string | null {
-    if (typeof photoKey !== 'string') return null;
-    const m = PHOTO_KEY.exec(photoKey);
-    return m ? `${m[1]}-t.${m[2]}` : null;
-}
-
-/** All small copy keys for a photo key (current `-s` and legacy `-t`), for delete paths. */
-export function allThumbnailKeysOf(photoKey: string | null | undefined): string[] {
-    const cur = thumbnailKeyOf(photoKey);
-    const leg = legacyThumbnailKeyOf(photoKey);
-    const out: string[] = [];
-    if (cur) out.push(cur);
-    if (leg) out.push(leg);
-    return out;
-}
-
 function mimeOfKey(key: string): string {
     return MIME_OF_EXT[key.slice(key.lastIndexOf('.') + 1)] ?? 'application/octet-stream';
 }
@@ -301,16 +284,17 @@ const removing = new Set<Promise<unknown>>();
 /**
  * Remove the small copy of the photo whose object is `photoKey`, with its photo (image-columns.ts deleteStoredObjects).
  * Off the event loop: on a bucket the store's own delete blocks for a HEAD and a DELETE, and a listing's delete held the
- * loop half as long again for them (review opus-1742 #3). Removes both current (`-s`) and legacy (`-t`) small copies.
+ * loop half as long again for them (review opus-1742 #3). Only today's copy (`-s`): a `-t` copy from before the 320 px
+ * update (1 Nov) is one no row names, which the storage-health sweep reclaims (cutover N2, audit E14).
  * Never throws and is never waited on; one it fails to remove is an orphan the storage-health sweep collects.
  */
 export function removeThumbnailOf(store: ImageStore, photoKey: string): void {
-    for (const thumbKey of allThumbnailKeysOf(photoKey)) {
-        const done: Promise<unknown> = deleteObjectUnless(store, thumbKey, () => false)
-            .catch(e => console.warn(`[ImageStore] Could not delete ${thumbKey}:`, e))
-            .finally(() => removing.delete(done));
-        removing.add(done);
-    }
+    const thumbKey = thumbnailKeyOf(photoKey);
+    if (!thumbKey) return;
+    const done: Promise<unknown> = deleteObjectUnless(store, thumbKey, () => false)
+        .catch(e => console.warn(`[ImageStore] Could not delete ${thumbKey}:`, e))
+        .finally(() => removing.delete(done));
+    removing.add(done);
 }
 
 /** For the suites: resolves once every small copy queued so far is made and kept, and every one being removed is gone. */

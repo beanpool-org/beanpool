@@ -590,7 +590,13 @@ export interface InviteCode {
     usedBy: string | null;
     usedAt: string | null;
     intendedFor?: string;
-    vouchAmount?: number;
+    vouchAmount?: number | null;
+    /** What the node tells the maker of an invite (GET /api/invite/mine): the names-list entry it is bound to, the budget it promises, when it lapses. */
+    namesEntryId?: string | null;
+    voucherLevel?: number | null;
+    expiresAt?: string | null;
+    forKnock?: boolean;
+    usedByCallsign?: string | null;
 }
 
 export async function generateInvite(
@@ -2298,11 +2304,6 @@ export async function signStandingStart(fields: StandingAuthorisationFields): Pr
 /** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
 export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
-}
-
-/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
-export async function holdBackStandingDeal(standingId: string): Promise<{ success: boolean }> {
-    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function requestMarketplacePost(

@@ -128,17 +128,18 @@ describe('People → Invites goes through the helpers (source check)', () => {
 
     it('every way to make or share an invite is drawn only where the node makes them', () => {
         branchesFound();
-        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', 'shareInvite(inv.code)']) {
+        // The QR and Share live in two components now (components/InviteRows.tsx): the made card, and the Pending list that opens an invite.
+        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<InviteMadeCard', '<PendingInvites', 'onPress={() => shareInvite(code)}']) {
             expect(count(entry)).toBe(1);
             expect(makes).toContain(entry);
             expect(noInvites).not.toContain(entry);
         }
-        // Twice: the preview's marker label and the live button's; both inside the generator, neither in the others.
-        expect(count('📤 Share Invite')).toBe(2);
-        expect(makes.split('📤 Share Invite').length - 1).toBe(2);
+        // Three times: the made card's marker label and live button, and the live button on an opened Pending invite; all inside the generator, none in the others.
+        expect(count('📤 Share Invite')).toBe(3);
+        expect(makes.split('📤 Share Invite').length - 1).toBe(3);
         expect(noInvites).not.toContain('📤 Share Invite');
         // In the preview each live action is the marker's other arm: the real generate and shares sit only where it is off.
-        for (const live of ['onPress={handleGenerate}', 'onPress={() => shareInvite(newCode)}', 'onPress={() => shareInvite(inv.code)}']) {
+        for (const live of ['onPress={handleGenerate}', 'onPress={() => shareInvite(newCode)}', 'onPress={() => shareInvite(code)}']) {
             const before = makes.slice(0, makes.indexOf(live));
             expect(before.length).toBeGreaterThan(0);
             // The nearest invitesPreview before it opens its arm: `{!invitesPreview && (`, or `{invitesPreview ? (` with it after the `) : (`.
@@ -363,7 +364,7 @@ describe('People → Invites where only admins invite (source check)', () => {
     it('a member who may not invite gets the plain words and no way to make an invite', () => {
         found();
         expect(adminsOnly).toContain('adminsOnlyText(takesKnocks)');
-        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', '📤 Share Invite', 'shareInvite(']) {
+        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<InviteMadeCard', '<PendingInvites', '📤 Share Invite', 'shareInvite(']) {
             expect(adminsOnly).not.toContain(entry);
             expect(makes).toContain(entry);
         }

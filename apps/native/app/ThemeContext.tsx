@@ -31,8 +31,6 @@ export interface ThemeContextType {
 }
 
 const PATTERN_KEY = 'beanpool_background_pattern';
-/** Where the retired Classic / Earth / Slate choice was kept. Removed on start; there is one light set now. */
-const RETIRED_LIGHT_PALETTE_KEY = 'beanpool_light_palette';
 
 /** The flat colour the doodle tiles are drawn on — sampled from the art itself. */
 const PATTERN_GROUND = { light: '#f1f1e4', dark: '#141a1a' } as const;
@@ -58,7 +56,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             .catch(() => { /* keep 'light' */ })
             // On a failed read too: nothing waits for ever on this.
             .finally(() => setThemeLoading(false));
-        AsyncStorage.removeItem(RETIRED_LIGHT_PALETTE_KEY).catch(() => { /* nothing reads it */ });
         AsyncStorage.getItem(PATTERN_KEY)
             .then((pref) => { if (pref === 'plain') setPatternEnabledState(false); })
             .catch(() => { /* keep the pattern on */ });

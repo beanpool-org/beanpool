@@ -439,47 +439,47 @@ for (const theme of ['light', 'dark'] as const) {
             expect(net.calls).not.toContain('db.treasuryReject');
         });
 
-        // Standing deals S2 (DESIGN-standing-deals-fable §2.2): a period running by itself is released by the node at its end, so
-        // its payer sees the standing panel (Hold back, Stop), never the plain Release the node would refuse (409).
+        // Standing deals (DESIGN-standing-deals-upfront-fable §3): each period is paid at its start and nothing is held, so the
+        // payer sees the standing panel (Stop, Message), never a Release, Cancel or Hold back. Month 1 (9 Oct – 9 Nov) paid.
         const standing = (over: Record<string, unknown> = {}) => deal({
-            id: 'tx-s', credits: 50, standingId: 'sd-1', periodNo: 1, standingPhase: 'held', standingBeans: 50, standingUnit: 'month',
-            standingMaxPeriods: null, standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-11-09T08:00:00.000Z',
+            id: 'tx-s', credits: 50, status: 'completed', standingId: 'sd-1', periodNo: 1, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month',
+            standingMaxPeriods: null, standingNextDueAt: '2026-11-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z',
             standingShortSince: null, standingStopped: false, ...over,
         });
         const storage = { title: 'Vehicle Storage', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 50, price_type: 'monthly' };
-        it('one who took up a monthly Offer, running by itself: its panel with Hold back and Stop, never Release; Hold back reaches the node', async () => {
+        it('one who took up a monthly Offer, running: its panel with Stop and Message, never Release, Cancel or Hold back', async () => {
             node.mine = [standing()];
             await open(listing(storage));
             const panel = host.querySelector('[data-testid="standing-panel-tx-s"]') as HTMLElement;
-            expect(panel?.textContent).toContain("This month's 50 Beans are held · they go to Damo 9 Dec");
-            expect(buttons()).toEqual(expect.arrayContaining(['Hold back this month', 'Stop…', 'Message Damo']));
+            expect(panel?.textContent).toContain('the next 50 go on 9 Nov');
+            expect(buttons()).toEqual(expect.arrayContaining(['Stop…', 'Message Damo']));
+            expect(buttons()).not.toContain('Hold back this month');
             expect(host.textContent).not.toContain('✅ Release Credits');
             expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
-            await press(panel, 'Hold back this month');
-            expect(net.calls).toContain('db.holdBackStandingDeal');
         });
-        it("the same payer short of the next month: the banner with the week's end, Stop, and no held panel", async () => {
-            node.mine = [standing({ status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' })];
+        // Month 2 (9 Nov – 9 Dec, 30 days) unpaid: its grace is 15 days, to 24 Nov (the same day in every time zone at 08:00 UTC).
+        const SHORT = { status: 'completed', standingPhase: 'short', standingShortSince: '2026-11-09T08:00:00.000Z', standingNextDueAt: '2026-11-09T09:00:00.000Z' };
+        it("the same payer short of the month now due: the banner with the grace's end, Stop now, and no Release", async () => {
+            node.mine = [standing(SHORT)];
             await open(listing(storage));
-            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
-            expect(buttons()).not.toContain('Hold back this month');
+            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends");
+            expect(buttons()).toContain('Stop now');
             expect(host.textContent).not.toContain('✅ Release Credits');
         });
 
         // Round 2 of #3000 (deciding review on e07a97d3).
-        const SHORT = { status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' };
         const repeatable = { ...storage, repeatable: 1, status: 'active', accepted_by: null };
         it('finding 5: the payer short on a repeatable monthly Offer (still on the board): the banner, and no Accept under it', async () => {
             node.mine = [standing(SHORT)];
             await open(listing(repeatable));
-            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
+            expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends");
             expect(buttons()).not.toContain('🤝 Accept Offer');
             expect(host.querySelector('[data-testid="post-take-up-area"]')).toBeNull();
         });
         it('finding 3: its payee, opened at the short row from Your deals: the panel and Stop now, never "That deal is done."', async () => {
             node.mine = [standing({ ...SHORT, buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
             await open(listing({ ...repeatable, author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-s' });
-            expect(host.querySelector('[data-testid="standing-panel-tx-s"]')?.textContent).toContain("Next month isn't covered yet · we'll keep trying until 16 Dec");
+            expect(host.querySelector('[data-testid="standing-panel-tx-s"]')?.textContent).toContain("This month isn't paid yet · we'll keep trying until 24 Nov");
             expect(buttons()).toContain('Stop now');
             expect(host.textContent).not.toContain('That deal is done.');
         });
@@ -498,7 +498,7 @@ for (const theme of ['light', 'dark'] as const) {
             };
             await press(host, '🤝 Accept Offer');
             expect(host.querySelector('[data-testid="standing-take-up"]')).toBeNull();
-            expect(host.textContent).not.toContain('Agree and hold 0 Beans');
+            expect(host.textContent).not.toContain('Agree and pay 0 Beans');
             expect(host.textContent).toContain('Accept this Offer?');
             await typeInto(host.querySelector('input[aria-label="Trust commitment in hours"]') as HTMLInputElement, '2');
             await press(host, 'Confirm');

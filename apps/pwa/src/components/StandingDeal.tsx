@@ -77,7 +77,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
                 </div>
             </fieldset>
             <div className="text-xs text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-3 rounded-lg border border-nature-100 dark:border-nature-800 flex flex-col gap-2">
-                <p data-testid="standing-held-now" className="font-bold">{l.heldNow}</p>
+                <p data-testid="standing-held-now" className="font-bold">{l.paidNow}</p>
                 <p>{l.howItRuns}</p>
                 <p>{l.shortAhead}</p>
             </div>
@@ -95,18 +95,18 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
 
 /**
  * One standing deal still running, for one of its sides (`actingAs`: the member, or the enterprise they keep): since when and
- * for how much, where it is now (the payer's short-funds banner names the end of the week of grace), and Hold back, Stop and
- * Message where core says so. Stop asks first (§1.3). A period held back is also a plain held deal, whose Release and Cancel
- * hold the page draws as for any deal.
+ * for how much, where it is now (the payer's short-funds banner names the day the grace ends), and Stop and Message where
+ * core says so. Stop asks first, in core's words for this side and phase. Nothing of a standing deal is held, so it has no
+ * Release, Cancel or Hold back (DESIGN-standing-deals-upfront-fable §3).
  */
-export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessage, messageLabel }: {
+export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLabel }: {
     tx: StandingDealRow; actingAs: string; busy: boolean;
-    onStop: () => void; onHoldBack: () => void; onMessage?: () => void; messageLabel?: string;
+    onStop: () => void; onMessage?: () => void; messageLabel?: string;
 }) {
     const p = standingPanel(tx, actingAs, day);
     if (!p) return null;
     const ask = () => {
-        const c = standingStopConfirm(p.unit, p.phase);
+        const c = standingStopConfirm(tx, actingAs, day);
         const question = [c.title, c.body].join('\n\n');
         if (window.confirm(question)) onStop();
     };
@@ -122,9 +122,8 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onHoldBack, onMessag
             </p>
             {p.lastLine && <p className="text-xs text-nature-600 dark:text-nature-400 break-words">{p.lastLine}</p>}
             {p.periodOf && <p className="text-xs font-semibold text-nature-600 dark:text-nature-400">{p.periodOf}</p>}
-            {(p.holdBack || p.stop || onMessage) && (
+            {(p.stop || onMessage) && (
                 <div className="flex flex-wrap gap-2 mt-1">
-                    {p.holdBack && <button type="button" data-testid="standing-hold-back" className={QUIET} disabled={busy} onClick={onHoldBack}>{p.holdBackLabel}</button>}
                     {p.stop && <button type="button" data-testid="standing-stop" className={QUIET} disabled={busy} onClick={ask}>{p.stopLabel}</button>}
                     {onMessage && messageLabel && <button type="button" className={QUIET} disabled={busy} onClick={onMessage}>{messageLabel}</button>}
                 </div>

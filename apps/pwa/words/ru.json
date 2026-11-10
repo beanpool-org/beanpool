@@ -2803,7 +2803,6 @@
   "Who can see this?": "Кто может это видеть?",
   "Who hosts it": "Кто хостит узел",
   "Who invited whom. The tree shows how your community grows.": "Кто кого пригласил. Древо показывает, как растёт сообщество.",
-  "Who is this invite for? (For your records)": "Для кого это приглашение? (Для вашей записи)",
   "Who should be able to join?": "Кто может присоединиться?",
   "Who should lead?": "Кто должен руководить?",
   "Who you work well with": "С кем вам легко работать",
@@ -5058,5 +5057,7 @@
   "Your name here": "Ваше имя здесь",
   "your browser": "ваш браузер",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Сервер сообщества {community} старше этого приложения и пока не может найти ваш аккаунт по входу. Попросите администрацию сообщества {community} обновить его или используйте свои 12 слов.",
-  "✓ We'll tell you here when {name} answers.": "✓ Мы сообщим вам здесь, когда {name} ответит."
+  "✓ We'll tell you here when {name} answers.": "✓ Мы сообщим вам здесь, когда {name} ответит.",
+  "Make another invite": "Создать ещё одно приглашение",
+  "A note for you, kept on your community's server": "Заметка для вас, хранится на сервере вашего сообщества"
 }

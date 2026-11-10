@@ -1353,9 +1353,7 @@
   "Share this community's link": "이 커뮤니티 링크 공유하기",
   "📤 Share the link": "📤 링크 공유하기",
   "📤 Invite Someone": "📤 초대하기",
-  "Who is this invite for? (For your records)": "누구에게 보낼 초대장인가요? (내 메모용)",
   "Generating...": "생성 중...",
-  "Share this cryptographic code": "이 암호화 코드를 공유하세요",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ 대기 중 ({n})"
   },
@@ -6840,5 +6838,7 @@
   "Nothing new.": "새로운 소식이 없어요.",
   "Older notices are gone after 7 days.": "오래된 알림은 7일 뒤에 사라져요.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · 한도 없음 · {vouched} 보증됨 · {belowZero} 0 아래 ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "한도 없음 · {vouched} 보증됨 · {belowZero} 0 아래 · {writtenOff} 대손 처리됨 · {passedOn} 전달됨"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "한도 없음 · {vouched} 보증됨 · {belowZero} 0 아래 · {writtenOff} 대손 처리됨 · {passedOn} 전달됨",
+  "Make another invite": "다른 초대 만들기",
+  "A note for you, kept on your community's server": "나를 위한 메모, 커뮤니티 서버에 보관됩니다"
 }

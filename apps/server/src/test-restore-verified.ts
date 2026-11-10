@@ -17,8 +17,9 @@
  *     passes against a live database that has no schema (ownPoint), which the plain check refuses over triggers.
  *     Through the route on a fresh server: the empty, dummy and members(x INT) files sealed by a pinned key → 400 "is not a
  *     BeanPool database", nothing changed; a real backup then restores 200. (Before: 200 for all three.)
- *     Review of #2050 B1: a database made from v1.2.18's schema.sql (__fixtures__, no node_roles table) with one member passes
- *     the core-table check. (Before: "is not a BeanPool database (no node_roles table)".)
+ *     conversion-s0: a database made from v1.2.18's schema.sql (__fixtures__, no node_roles table) is refused, 400 "is not a
+ *     BeanPool database (no node_roles table)", the file untouched, by the check and through the route: nothing at boot makes
+ *     its owner any more. (Before, #3026 at 12813f01: it passed, and the node booted on it with no owner.)
  *  5. H2 note, the shell's roll-back (rollBackTo, as `beanpool restore-point roll-back` runs it) onto a live members(x INT)
  *     database: it rolls back, and the owner is back. (Before: refused, "made by a newer version of BeanPool".)
  *  6. M1, boot: .restore-tmp, .restore-candidate, the upload, the opened file and a phone's file past its window are
@@ -26,12 +27,14 @@
  *  7. Review of #2050 B2, the restart window: once an owner's phone has finished a restore and the database is closed, a
  *     key session's restore and roll-back (their auth reads node_roles) and a password session's restore are each 409 in
  *     words. (Before: the key sessions' were a bare 500, which made check 3 red about one run in two.)
- *  8. Review of #2050 N1, the backups the live nodes made: a database from v1.2.15 … v1.2.18's schema.sql (the same bytes;
- *     no node_roles, the recovery_requests_touch_updated_at trigger keeper recovery removed) passes the check with that
- *     trigger dropped; one with a trigger on a table this version no longer has passes with it dropped. Through
- *     `beanpool restore --unlocked` on a stopped node it restores (exit 0), the trigger is not in the file, a point is kept,
- *     and the node then boots on it with its founder as owner. A trigger this version does not know on members, under a
- *     new name or under the old trigger's name, is refused and nothing changes. (Before: every one refused.)
+ *  8. Review of #2050 N1, the backups the live nodes made. A node that ran v1.2.15 … v1.2.18 and was then updated holds
+ *     that release's schema.sql (the same bytes) with node_roles added (its founder the owner) and still the
+ *     recovery_requests_touch_updated_at trigger keeper recovery removed: its database passes the check with that trigger
+ *     dropped; one with a trigger on a table this version no longer has passes with it dropped. Through `beanpool restore
+ *     --unlocked` on a stopped node it restores (exit 0), the trigger is not in the file, a point is kept, and the node then
+ *     boots on it with its founder still the owner. A trigger this version does not know on members, under a new name or
+ *     under the old trigger's name, is refused and nothing changes. (Before: every one refused.) conversion-s0: a backup
+ *     made by v1.2.18 itself (no node_roles) is refused by `beanpool restore` in words, exit 1, nothing changed, no point.
  *  9. Review of #2050 N2 + N3: the 500s of a snapshot, an integrity check and a backup download, and a restore's 200
  *     whose image store did not go back, say what happened in words; the raw error, path and all, is in the log only.
  *
@@ -374,7 +377,7 @@ async function child(): Promise<void> {
     if (scenario === 'h2') {
         // Files sealed by a pinned key whose state.db is no community's: refused in words, nothing changed.
         const rows: Record<string, unknown> = {};
-        for (const k of ['EMPTY', 'DUMMY', 'WRONG']) {
+        for (const k of ['EMPTY', 'DUMMY', 'WRONG', 'OLD']) {
             const before = await dirState(dataDir);
             const r = await restoreBy(file(process.env[`TEST_${k}`]!));
             const after = await dirState(dataDir);
@@ -560,10 +563,16 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
+    // What a node of those releases holds once it was updated (`extra` for oldReleaseDb): node_roles as this version's
+    // schema.sql makes it, its founder the owner. No boot removes the old trigger, so it is still there.
+    const nodeRolesDdl = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'db', 'schema.sql'), 'utf8')
+        .match(/CREATE TABLE IF NOT EXISTS node_roles \([\s\S]*?\n\);/)?.[0];
+    assert(!!nodeRolesDdl, 'setup: node_roles as schema.sql makes it');
+    const UPDATED = [nodeRolesDdl ?? '', `INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES ('${'f0'.repeat(32)}', 'owner', 'genesis')`];
     const env = {
         TEST_CODE: recovery.code, TEST_OWNER: owner, TEST_OWNER_SEED: ownerSeedHex, TEST_ONE: one, TEST_TWO: two,
         TEST_EMPTY: await sealBare('empty.bpsealed', emptyDb), TEST_DUMMY: await sealBare('dummy.bpsealed', dummyDb),
-        TEST_WRONG: await sealBare('wrong.bpsealed', wrongDb),
+        TEST_WRONG: await sealBare('wrong.bpsealed', wrongDb), TEST_OLD: await sealBare('old.bpsealed', oldReleaseDb()),
     };
 
     try {
@@ -636,7 +645,9 @@ async function main(): Promise<void> {
                 const dir = fs.mkdtempSync(path.join(work, 'cand-'));
                 const cand = path.join(dir, 'state.db');
                 fs.copyFileSync(f, cand);
-                try { return { ok: true, ...checkRestoreDatabase(cand, live, opts) }; } catch (e: any) { return { ok: false, status: e?.httpStatus, error: String(e?.message) }; }
+                const bytes = sha(fs.readFileSync(cand));
+                const untouched = () => sha(fs.readFileSync(cand)) === bytes;
+                try { return { ok: true, ...checkRestoreDatabase(cand, live, opts), untouched: untouched() }; } catch (e: any) { return { ok: false, status: e?.httpStatus, error: String(e?.message), untouched: untouched() }; }
             };
             const words = (why: string) => `This backup's state.db is not a BeanPool database (${why}). Nothing was changed.`;
             const viewDb = made('view.db', ['CREATE TABLE m (public_key TEXT, callsign TEXT)', 'CREATE VIEW members AS SELECT * FROM m']);
@@ -652,10 +663,10 @@ async function main(): Promise<void> {
             }
             const real = check(realCopy);
             assert(real.ok === true, `4. a real backup's database passes (${JSON.stringify(real)})`);
-            // B1: node_roles came with 2026-09-14's schema; the boot makes it and seeds the owner when it is missing.
+            // conversion-s0: node_roles came with 2026-09-14's schema, and nothing at boot makes an owner from older data.
             const old = check(oldReleaseDb());
-            assert(old.ok === true || !/is not a BeanPool database/.test((old as any).error ?? ''),
-                `4. a database from v1.2.18's schema.sql with one member (no node_roles) passes the core-table check (${JSON.stringify(old).slice(0, 200)})`);
+            assert(!old.ok && (old as any).status === 400 && (old as any).error === words('no node_roles table') && old.untouched === true,
+                `4. a database from v1.2.18's schema.sql (no node_roles): refused 400 in words, the file untouched (${JSON.stringify(old).slice(0, 200)})`);
             // A point this server took, against a live database with no schema: its triggers are its own.
             const brokenLive = new Database(wrongDb, { readonly: true });
             const plain = check(realCopy, brokenLive);
@@ -666,7 +677,8 @@ async function main(): Promise<void> {
             assert(own.ok === true, `4. as this server's own point it passes (${JSON.stringify(own)})`);
 
             const r = runChild('h2', newDir(), env);
-            for (const [k, why] of [['EMPTY', 'no members table'], ['DUMMY', 'no members table'], ['WRONG', 'its members table has no public_key column']] as const) {
+            for (const [k, why] of [['EMPTY', 'no members table'], ['DUMMY', 'no members table'], ['WRONG', 'its members table has no public_key column'],
+                ['OLD', 'no node_roles table']] as const) {
                 const row = r.rows?.[k];
                 assert(row?.answer?.status === 400 && row?.answer?.error === 'Restore failed: ' + words(why),
                     `4. the ${k.toLowerCase()} file through the route: 400 in words (${JSON.stringify(row?.answer)})`);
@@ -713,7 +725,7 @@ async function main(): Promise<void> {
         }
 
         // ── 8. N1: the backups the live nodes made ──
-        console.log('\n── 8. N1: a backup from v1.2.15 … v1.2.18 restores; a trigger this version does not know is still refused ──');
+        console.log('\n── 8. N1: a backup of a node updated from v1.2.15 … v1.2.18 restores; a trigger this version does not know, and a backup with no node_roles, are refused ──');
         {
             const RETIRED = 'recovery_requests_touch_updated_at';
             const triggersIn = (f: string): string[] => {
@@ -741,12 +753,12 @@ async function main(): Promise<void> {
             };
             const stoppedNode = () => { const d = newDir(); runChild('stopped', d, env); return d; };
 
-            const oldDb = oldReleaseDb();
-            assert(triggersIn(oldDb).includes(RETIRED), `8. setup: the old release's database carries ${RETIRED}`);
+            const oldDb = oldReleaseDb(UPDATED);
+            assert(triggersIn(oldDb).includes(RETIRED), `8. setup: the updated node's database carries ${RETIRED}`);
             const a = direct(oldDb);
             assert(a.ok === true && !(a as any).left.includes(RETIRED),
                 `8. it passes the check, with ${RETIRED} dropped from the file (${JSON.stringify(a).slice(0, 300)})`);
-            const gone = direct(oldReleaseDb(['CREATE TABLE old_thing (x INT, at TEXT)',
+            const gone = direct(oldReleaseDb([...UPDATED, 'CREATE TABLE old_thing (x INT, at TEXT)',
                 `CREATE TRIGGER old_thing_touch AFTER UPDATE ON old_thing BEGIN UPDATE old_thing SET at = 'now' WHERE rowid = NEW.rowid; END`]));
             assert(gone.ok === true && !(gone as any).left.includes('old_thing_touch'),
                 `8. a trigger on a table this version does not have passes, dropped from the file (${JSON.stringify(gone).slice(0, 300)})`);
@@ -761,14 +773,24 @@ async function main(): Promise<void> {
                 `8. …${RETIRED} is not in the restored file, a restore point was kept, nothing left over (${JSON.stringify(after.points)} ${JSON.stringify(after.leftovers)})`);
             const booted = runChild('booted', dir, env);
             assert(JSON.stringify(booted.owners) === '["OldFounder"]' && booted.callsigns?.includes('OldMember') && !booted.triggers?.includes(RETIRED),
-                `8. …and the node boots on it, its founder the owner (owners ${JSON.stringify(booted.owners)}, ${booted.triggers?.length} triggers)`);
+                `8. …and the node boots on it, its founder still the owner (owners ${JSON.stringify(booted.owners)}, ${booted.triggers?.length} triggers)`);
+
+            // conversion-s0: a backup made by v1.2.18 itself has no node_roles, and nothing at boot would make its owner.
+            const bare = stoppedNode();
+            const bareBefore = JSON.stringify(await dirState(bare));
+            const refused = shell(bare, ['restore', '--unlocked', tarOf(oldReleaseDb())], 'UNLOCKED\n');
+            const bareAfter = await dirState(bare);
+            assert(refused.code === 1
+                && refused.out.includes("Nothing was restored: This backup's state.db is not a BeanPool database (no node_roles table). Nothing was changed.")
+                && JSON.stringify(bareAfter) === bareBefore && bareAfter.points.length === 0 && bareAfter.leftovers.length === 0,
+                `8. beanpool restore --unlocked of a v1.2.18 backup (no node_roles): refused in words, exit 1, nothing changed, no restore point (exit ${refused.code}: ${refused.out.trim().slice(-220)})`);
 
             for (const [label, extra, named] of [
                 ['a new trigger on members', ['CREATE TRIGGER members_bonus AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END'], 'members_bonus'],
                 [`a trigger on members named ${RETIRED}`, [`DROP TRIGGER ${RETIRED}`,
                     `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END`], RETIRED],
             ] as const) {
-                const crafted = oldReleaseDb([...extra]);
+                const crafted = oldReleaseDb([...UPDATED, ...extra]);
                 const d = direct(crafted);
                 assert(!d.ok && (d as any).status === 400 && String((d as any).error).includes(`trigger "${named}"`), `8. ${label}: the check refuses it (${String((d as any).error).slice(0, 160)})`);
                 const node = stoppedNode();

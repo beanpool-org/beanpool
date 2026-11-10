@@ -410,7 +410,7 @@ export const TABLES: Record<string, TableEntry> = {
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
     // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
     // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
-    standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since held_back_reason stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
+    standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
@@ -756,7 +756,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
     openJoinSalt: {
         kind: 'per-server',
-        reason: "the door's key as an older version kept it: written only by the rollback command (services/open-join-key.ts --write-key-row) for an older image to read; this version moves it to data/open-join.key at boot, and no copy carries it",
+        reason: "the door's key as an older version kept it: this version moves it to data/open-join.key at boot (services/open-join-key.ts), writes it never, and no copy carries it",
     },
     migration_mark_visitors_v1: {
         kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)",

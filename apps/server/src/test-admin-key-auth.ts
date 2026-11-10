@@ -42,7 +42,7 @@
 import { scryptSync, randomBytes } from 'node:crypto';
 import Koa from 'koa';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { db, seedNodeRolesFromGenesis } from './db/db.js';
+import { db } from './db/db.js';
 import {
     initStateEngine,
     seedGenesisMember,

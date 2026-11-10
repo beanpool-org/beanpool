@@ -160,6 +160,18 @@ async function child(): Promise<void> {
             await flushTakeoverChecks();
             return { code: made.code };
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -632,7 +644,8 @@ async function main(): Promise<void> {
 
         // ── 7. The take-over ──
         console.log('\n— 7. the standby takes over with the recovery code —');
-        const standbyOwner: Record<string, string> = await standby.send('owner-session'); // step 7c, as above
+        await standby.send('standby-owner', { owner: gwen.pk });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk }); // step 7c, as above
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const fetchesS0 = await standby.send('fetches'); // what it refused while it copied, before it restarts itself

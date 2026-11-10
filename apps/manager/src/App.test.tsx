@@ -83,13 +83,11 @@ describe('App Component', () => {
             }
         });
 
-        it("the retired copilot's stored settings are removed, and its saved tab opens the Overview instead of nothing", async () => {
-            localStorage.setItem('bp_fleet_ai_config', JSON.stringify({ provider: 'openrouter', apiKey: 'sk-or-v1-stale' }));
+        it("a saved tab that no longer exists (the retired copilot's) opens the Overview instead of nothing", async () => {
             localStorage.setItem('bp_fleet_active_tab', 'ai');
             await act(async () => {
                 render(<App isFleetMode={true} />);
             });
-            expect(localStorage.getItem('bp_fleet_ai_config')).toBeNull();
             expect(localStorage.getItem('bp_fleet_active_tab')).toBe('overview');
         });
 
@@ -538,7 +536,7 @@ describe('App Component', () => {
             expect(screen.getByTestId('totp-setup-gate')).toBeInTheDocument();
         });
 
-        it('what an older build stored (the password, its 2FA session, a profile password) is removed on load and never sent', async () => {
+        it('what an older build stored in a fleet profile (a password, a replication token) is removed on load and never sent', async () => {
             sessionStorage.clear();
             localStorage.clear();
             localStorage.setItem('bp_fleet_profiles', JSON.stringify([{
@@ -548,9 +546,6 @@ describe('App Component', () => {
                 adminPassword: 'stale-password-from-storage',
                 replicationToken: 'stale-replication-token',
             }]));
-            sessionStorage.setItem('bp-admin-token', 'old-build-password');
-            sessionStorage.setItem('bp-2fa-session', 'old-2fa-session');
-            sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa-session');
 
             let lastAdminHeaders: Record<string, string> = {};
             stubPasswordSession((url, opts) => {
@@ -568,7 +563,7 @@ describe('App Component', () => {
                 render(<App isFleetMode={false} />);
             });
 
-            for (const secret of ['stale-password-from-storage', 'stale-replication-token', 'old-build-password', 'old-2fa-session']) {
+            for (const secret of ['stale-password-from-storage', 'stale-replication-token']) {
                 expect(storedText()).not.toContain(secret);
             }
 

@@ -1421,9 +1421,7 @@
   "Share this community's link": "Shiriki kiungo cha jumuiya hii",
   "📤 Share the link": "📤 Shiriki kiungo",
   "📤 Invite Someone": "📤 Mwalike Mtu",
-  "Who is this invite for? (For your records)": "Mwaliko huu ni wa nani? (Kwa kumbukumbu zako)",
   "Generating...": "Inatengeneza...",
-  "Share this cryptographic code": "Shiriki msimbo huu wa kikriptografia",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ INASUBIRI ({n})",
     "other": "⏳ ZINASUBIRI ({n})"
@@ -7104,5 +7102,7 @@
   "Nothing new.": "Hakuna jipya.",
   "Older notices are gone after 7 days.": "Arifa za zamani hupotea baada ya siku 7.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Hakuna kikomo · {vouched} wamedhaminiwa · {belowZero} chini ya sifuri ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Hakuna kikomo · {vouched} wamedhaminiwa · {belowZero} chini ya sifuri · imefutwa {writtenOff} · imepitishwa {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Hakuna kikomo · {vouched} wamedhaminiwa · {belowZero} chini ya sifuri · imefutwa {writtenOff} · imepitishwa {passedOn}",
+  "Make another invite": "Tengeneza mwaliko mwingine",
+  "A note for you, kept on your community's server": "Dokezo kwa ajili yako, linalohifadhiwa kwenye seva ya jumuiya yako"
 }

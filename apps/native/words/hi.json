@@ -1423,9 +1423,7 @@
   "Share this community's link": "इस समुदाय का लिंक साझा करें",
   "📤 Share the link": "📤 लिंक साझा करें",
   "📤 Invite Someone": "📤 किसी को आमंत्रित करें",
-  "Who is this invite for? (For your records)": "यह आमंत्रण किसके लिए है? (आपके रिकॉर्ड के लिए)",
   "Generating...": "बनाया जा रहा है...",
-  "Share this cryptographic code": "यह क्रिप्टोग्राफ़िक कोड साझा करें",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ लंबित ({n})",
     "other": "⏳ लंबित ({n})"
@@ -7104,5 +7102,7 @@
   "Nothing new.": "कुछ नया नहीं।",
   "Older notices are gone after 7 days.": "पुरानी सूचनाएं 7 दिन बाद हट जाती हैं।",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · कोई सीमा नहीं · {vouched} गारंटीकृत · {belowZero} शून्य से नीचे ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "कोई सीमा नहीं · {vouched} गारंटीकृत · {belowZero} शून्य से नीचे · {writtenOff} बट्टे खाते डाला गया · {passedOn} आगे दिया गया"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "कोई सीमा नहीं · {vouched} गारंटीकृत · {belowZero} शून्य से नीचे · {writtenOff} बट्टे खाते डाला गया · {passedOn} आगे दिया गया",
+  "Make another invite": "एक और आमंत्रण बनाएँ",
+  "A note for you, kept on your community's server": "आपके लिए एक नोट, आपके समुदाय के सर्वर पर रखा गया"
 }

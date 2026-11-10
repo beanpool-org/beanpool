@@ -8347,14 +8347,9 @@ export async function signStandingStart(fields: StandingAuthorisationFields): Pr
     return signStandingStatement(anchorUrl, fields, identity.privateKey);
 }
 
-/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+/** Stop a standing deal (either side): after the period already paid, or at once while it is short (in the grace). */
 export async function stopStandingDeal(standingId: string) {
     return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
-}
-
-/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
-export async function holdBackStandingDeal(standingId: string) {
-    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
 }
 
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {

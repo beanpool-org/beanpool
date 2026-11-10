@@ -604,10 +604,11 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketpla
 CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_transactions_standing_period
     ON marketplace_transactions(standing_id, period_no) WHERE standing_id IS NOT NULL;
 
--- 5b. Standing deals (DESIGN-standing-deals-fable.md §2.1; Marty's decisions, 9 Nov 2026): a listing priced per week or per
--- month, taken up, pays one period at a time. One period's Beans are held at a time, each period an ordinary deal row
--- (marketplace_transactions.standing_id); this row is the arrangement and the payer's signed authorisation that bounds every
--- hold the node makes for it (auth_*: the text, its signature, its signer). engine/standing-deals.ts runs it.
+-- 5b. Standing deals (DESIGN-standing-deals-upfront-fable.md and its amendment; Marty's decisions, 10 Nov 2026): a listing
+-- priced per week or per month, taken up, pays each period at its start, nothing held in trust, each period one finished
+-- deal row (marketplace_transactions.standing_id) and one ledger row; this row is the arrangement and the payer's signed
+-- authorisation that bounds every payment the node makes for it (auth_*: the text, its signature, its signer).
+-- engine/standing-deals.ts runs it.
 CREATE TABLE IF NOT EXISTS standing_deals (
     id TEXT PRIMARY KEY,
     post_id TEXT NOT NULL REFERENCES posts(id),
@@ -619,17 +620,20 @@ CREATE TABLE IF NOT EXISTS standing_deals (
     starts_at TEXT NOT NULL,
     -- NULL: until one of them stops it.
     max_periods INTEGER,
-    phase TEXT NOT NULL CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended')),
+    -- paid: every period due so far is paid; short: the period now due is unpaid while its grace runs (half the period);
+    -- ended: nothing more is paid (@beanpool/core StandingPhase).
+    phase TEXT NOT NULL CHECK (phase IN ('paid', 'short', 'ended')),
+    -- How many periods are paid; current_tx_id is the latest one's row.
     periods_done INTEGER NOT NULL DEFAULT 0,
     current_tx_id TEXT REFERENCES marketplace_transactions(id),
+    -- Paid: the next period's start. Short: the next try (hourly, never after the grace ends).
     next_due_at TEXT NOT NULL,
+    -- Short: when the unpaid period was due (its start).
     short_since TEXT,
-    -- payer | node_held | listing_hidden | cant_run (@beanpool/core StandingHeldBackReason), while phase is held_back.
-    held_back_reason TEXT,
     stopped_by TEXT,
     stopped_at TEXT,
     ended_at TEXT,
-    -- stopped | count_reached | short | cancelled | listing_gone | account_closed | node_held | cant_run
+    -- stopped | count_reached | short | listing_gone | account_closed | server_away | cant_run (@beanpool/core StandingEndReason)
     ended_reason TEXT,
     auth_signer TEXT NOT NULL,
     auth_signature TEXT NOT NULL,
@@ -1794,7 +1798,7 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- getAdminPubkey() mechanism with explicit role assignments.
 --
 -- role CHECK IN ('owner', 'admin').
--- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
+-- granted_by holds the granting owner's public key (or 'claim:<id>' for a claimed owner, 'genesis' for a seeded one).
 CREATE TABLE IF NOT EXISTS node_roles (
     member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
     role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),

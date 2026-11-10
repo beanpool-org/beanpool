@@ -2915,7 +2915,6 @@
   "Who can see this?": "من يمكنه رؤية هذا؟",
   "Who hosts it": "من يستضيفه",
   "Who invited whom. The tree shows how your community grows.": "من دعا من. توضح الشجرة كيف ينمو مجتمعك.",
-  "Who is this invite for? (For your records)": "لمن هذه الدعوة؟ (لسجلاتك الخاصة)",
   "Who should be able to join?": "من يجب أن يتمكن من الانضمام؟",
   "Who should lead?": "من يجب أن يقود؟",
   "Who you work well with": "من تعمل معه بشكل جيد",
@@ -5420,5 +5419,7 @@
   "Your name here": "اسمك هنا",
   "your browser": "متصفحك",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "خادم {community} أقدم من هذا التطبيق ولا يستطيع العثور على حسابك من تسجيل الدخول بعد. اطلب من مشرف {community} التحديث، أو استخدم كلماتك الـ 12.",
-  "✓ We'll tell you here when {name} answers.": "✓ سنخبرك هنا عندما يرد {name}."
+  "✓ We'll tell you here when {name} answers.": "✓ سنخبرك هنا عندما يرد {name}.",
+  "Make another invite": "إنشاء دعوة أخرى",
+  "A note for you, kept on your community's server": "ملاحظة لك، محفوظة على خادم مجتمعك"
 }

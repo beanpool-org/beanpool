@@ -89,7 +89,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); });
 
 describe('finding 1: a free weekly or monthly listing is taken up as the one-off deal of 0 Beans it was', () => {
-    it('a free monthly Offer: Accept opens the one-off box, never "Agree and hold 0 Beans", and the accept carries no standing deal', async () => {
+    it('a free monthly Offer: Accept opens the one-off box, never "Agree and pay 0 Beans", and the accept carries no standing deal', async () => {
         stubNode([{ ...storage, credits: 0 }]);
         const accept = vi.spyOn(api, 'acceptMarketplacePost').mockResolvedValue({ transaction: tx({ credits: 0 }) } as any);
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-storage" onPostOpened={() => {}} transactions={[]} onRefreshTransactions={vi.fn()} />);
@@ -98,7 +98,7 @@ describe('finding 1: a free weekly or monthly listing is taken up as the one-off
         fireEvent.click(screen.getByText('🤝 Accept Offer'));
         await screen.findByText('Accept this Offer?');
         expect(screen.queryByTestId('standing-take-up')).toBeNull();
-        expect(screen.queryByText('Agree and hold 0 Beans')).toBeNull();
+        expect(screen.queryByText('Agree and pay 0 Beans')).toBeNull();
         fireEvent.change(screen.getByRole('textbox'), { target: { value: '2' } });
         fireEvent.click(screen.getByText('Confirm'));
         await waitFor(() => expect(accept).toHaveBeenCalledWith('offer-storage', ME, 2));
@@ -112,7 +112,7 @@ describe('finding 1: a free weekly or monthly listing is taken up as the one-off
         await settle();
         fireEvent.click(screen.getByText('🤝 Accept Offer'));
         expect(await screen.findByTestId('standing-take-up')).toBeTruthy();
-        expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and hold 50 Beans');
+        expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and pay 50 Beans');
     });
 
     it("a free weekly Need: its author approves a helper's request at once, as a one-off deal, with no take-up to sign", async () => {
@@ -132,17 +132,17 @@ describe('finding 1: a free weekly or monthly listing is taken up as the one-off
 describe('finding 3: a short standing deal opened from Your deals or Home is never "done"', () => {
     const SHORT = {
         id: 'tx-short', status: 'completed', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, sellerCallsign: 'Mia',
-        standingId: 'sd-1', periodNo: 2, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
-        standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-12-09T08:00:00.000Z',
+        standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
+        standingNextDueAt: '2026-11-09T09:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z',
         standingStopped: false,
     };
-    it('its payee (the Offer\'s author) reads the panel, "isn\'t covered yet" and Stop now, with no "That deal is done." above it', async () => {
+    it('its payee (the Offer\'s author) reads the panel, "isn\'t paid yet" and Stop now, with no "That deal is done." above it', async () => {
         stubNode([{ ...storage, authorPublicKey: ME, authorCallsign: 'Mia' }]);
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-storage" openTxId="tx-short" onPostOpened={() => {}}
             transactions={[tx(SHORT)]} onRefreshTransactions={vi.fn()} />);
         await screen.findByRole('heading', { name: /Vehicle Storage/ });
         await settle();
-        expect(screen.getByTestId('standing-panel-tx-short').textContent).toContain("Next month isn't covered yet · we'll keep trying until 16 Dec");
+        expect(screen.getByTestId('standing-panel-tx-short').textContent).toContain("This month isn't paid yet · we'll keep trying until 24 Nov");
         expect(screen.getByTestId('standing-stop').textContent).toBe('Stop now');
         expect(screen.queryByTestId('pinned-deal-over')).toBeNull();
         expect(screen.queryByText('That deal is done.')).toBeNull();

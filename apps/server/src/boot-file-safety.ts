@@ -63,7 +63,7 @@ export const SECRET_FILES = [
     'local-config.json.bak',
     'tls/ca-key.pem',
     'tls/server-key.pem',
-    'tls/le-key.pem',
+    'tls/le-key.pem', // the fleet's Let's Encrypt key from before tls/acme/: nothing reads it now, but fleet disks still hold it
     'tls/acme-account.json',
     'alerts.json',
 ];

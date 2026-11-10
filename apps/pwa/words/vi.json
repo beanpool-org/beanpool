@@ -2635,7 +2635,6 @@
   "Who can see this?": "Ai có thể thấy thông tin này?",
   "Who hosts it": "Ai lưu trữ máy chủ",
   "Who invited whom. The tree shows how your community grows.": "Ai đã mời ai. Cây hiển thị cách cộng đồng của bạn lớn lên.",
-  "Who is this invite for? (For your records)": "Lời mời này dành cho ai? (Để bạn tiện theo dõi)",
   "Who should be able to join?": "Ai có thể tham gia?",
   "Who should lead?": "Ai nên dẫn dắt?",
   "Who you work well with": "Người bạn hợp tác ăn ý",
@@ -4530,5 +4529,7 @@
   "Your name here": "Tên của bạn ở đây",
   "your browser": "trình duyệt của bạn",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Máy chủ của {community} cũ hơn ứng dụng này và chưa thể tìm tài khoản của bạn từ đăng nhập. Hãy nhờ quản trị viên của {community} cập nhật, hoặc dùng 12 từ của bạn.",
-  "✓ We'll tell you here when {name} answers.": "✓ Chúng tôi sẽ báo cho bạn tại đây khi {name} trả lời."
+  "✓ We'll tell you here when {name} answers.": "✓ Chúng tôi sẽ báo cho bạn tại đây khi {name} trả lời.",
+  "Make another invite": "Tạo lời mời khác",
+  "A note for you, kept on your community's server": "Ghi chú cho bạn, được lưu trên máy chủ của cộng đồng bạn"
 }

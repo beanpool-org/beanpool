@@ -71,7 +71,7 @@
  */
 import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
-    readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe,
+    readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord,
 } from '@beanpool/core';
@@ -579,6 +579,11 @@ function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, d
     }
 }
 
+/** A date as the Home answer's English lines write it: day and month, UTC ("24 Dec"). */
+const homeDay = (iso: string): string => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+/** The longest a standing deal's live line may be: its listing's title is cut first (clip), so the answer stays small. */
+const LINE_CHARS = 200;
+
 function chats(c: Ctx): ReturnType<typeof listYourChats> {
     return c.chats ??= listYourChats(c.me!);
 }
@@ -588,13 +593,13 @@ const muted = (mute: { mutedUntil: string | null; always?: boolean } | null | un
 
 /**
  * The signer's open marketplace trades (requested or in progress), newest first: the deals card's and the needs line's. A
- * standing deal between its periods is one too (DESIGN-standing-deals-fable §2.2): short of the next period's Beans, its
- * current row is the period last settled, so the read by status never finds it, and its payer must still be told.
+ * standing deal still running is one too (DESIGN-standing-deals-upfront-fable §3): every period is paid at its start, so its
+ * current row is the period last paid (`completed`) and the read by status never finds it, paid or short.
  */
 function openDeals(me: string) {
     const raw = [...getMarketplaceTransactions(me, { status: 'requested' }, 200), ...getMarketplaceTransactions(me, { status: 'pending' }, 200)];
     const between = db.prepare(`SELECT current_tx_id AS id FROM standing_deals WHERE (payer_pubkey = ? OR payee_pubkey = ?)
-                                AND phase IN ('short', 'due') AND current_tx_id IS NOT NULL LIMIT 200`).all(me, me) as { id: string }[];
+                                AND phase IN ('paid', 'short') AND current_tx_id IS NOT NULL LIMIT 200`).all(me, me) as { id: string }[];
     for (const { id } of between) {
         const tx = getMarketplaceTransaction(id);
         if (tx && tx.status !== 'pending' && tx.status !== 'requested') raw.push(tx);
@@ -664,9 +669,10 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
         }
     }
 
-    // H0b: the signer's own trades, where escrow is on.
+    // H0b: the signer's own trades, where escrow is on. A short standing deal has its own live line, below, not this one.
     if (c.switches.escrow) {
-        const deals = dealsNeedingMe(openDeals(me), me, c.now);
+        const open = openDeals(me);
+        const deals = dealsNeedingMe(open, me, c.now).filter(t => !(t.standingId && t.standingPhase));
         if (deals.length) {
             const [first] = deals;
             items.push({
@@ -677,6 +683,14 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                     : `${deals.length} deals waiting for you`,
                 target: deals.length === 1 && first.postId ? { to: 'deal', postId: first.postId, txId: first.id } : { to: 'my-deals' },
             });
+        }
+        // One live line per short standing deal, per side (DESIGN-standing-deals-upfront-amend-fable §2), written from the row
+        // on every answer, so its "N days overdue" moves with the clock and nothing is kept; it leaves the moment the period
+        // is paid or the deal ends, and no ✕ or Clear all touches it. The payer's is their step (amber, counted); the
+        // payee's is listed, calm. Its target is the deal, which the apps' own builders dedupe against by txId.
+        for (const line of standingNeedsLines(open, me, c.now, homeDay)) {
+            if (!line.txId || !line.postId) continue;
+            items.push({ kind: 'deal', count: 1, accent: line.accent, label: clip(line.label, LINE_CHARS), target: { to: 'deal', postId: line.postId, txId: line.txId } });
         }
     }
 

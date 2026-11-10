@@ -76,7 +76,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
-import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
+import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, type KeySession } from './lib/key-session';
 import { FreshProofRequiredError } from './lib/fresh-proof';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
@@ -176,10 +176,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         } catch {}
         return isFleetMode ? 'overview' : 'home';
     });
-    // The fleet copilot is gone (#1865): what it kept in this browser, an OpenRouter key among it, goes with it.
-    useEffect(() => {
-        try { localStorage.removeItem('bp_fleet_ai_config'); } catch {}
-    }, []);
     const [navSubTab, setNavSubTab] = useState<string | undefined>(undefined);
 
     /**
@@ -193,8 +189,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      * a code is confirmed; the node refuses everything else with 403 `totp_setup_required`. Never set for a key session.
      */
     const [totpGate, setTotpGate] = useState<boolean>(false);
-    // What older builds stored on this origin (the password, its 2FA session) goes on the first load of this one.
-    useEffect(() => { forgetStoredAdminSecrets(); }, []);
 
     /**
      * Signed in with a member key via the app's one-time link (lib/key-session.ts) rather than the
@@ -358,13 +352,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     const handleLogout = () => {
         if (keySession || passwordSession) void endKeySession(keySessionCsrf);
-        forgetStoredAdminSecrets();
         dropSession();
     };
 
     /** After "Sign out everywhere" (Owners & admins): the node already ended this session and cleared its cookie. */
     const handleSignedOutEverywhere = () => {
-        forgetStoredAdminSecrets();
         dropSession();
         setKeySessionNotice('You are signed out everywhere. Sign in again to carry on.');
     };
@@ -1374,7 +1366,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         onClick={() => {
                             const { csrfToken } = otherSession;
                             setOtherSession(null);
-                            forgetStoredAdminSecrets();
                             void endKeySession(csrfToken).then(() => setKeySessionNotice('Signed out. Tap Manage again in the BeanPool app.'));
                         }}
                     >

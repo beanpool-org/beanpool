@@ -2690,7 +2690,6 @@
   "Who can see this?": "இதை யார் பார்க்கலாம்?",
   "Who hosts it": "இதை யார் ஹோஸ்ட் செய்கிறார்கள்",
   "Who invited whom. The tree shows how your community grows.": "யார் யாரை அழைத்தார்கள். சமூகம் எவ்வாறு வளர்கிறது என்பதை மரம் காட்டுகிறது.",
-  "Who is this invite for? (For your records)": "இந்த அழைப்பு யாருக்கானது? (உங்கள் குறிப்புக்காக)",
   "Who should be able to join?": "யார் இணைய முடியும்?",
   "Who should lead?": "யார் தலைமை ஏற்க வேண்டும்?",
   "Who you work well with": "யாருடன் நீங்கள் சிறப்பாகப் பணியாற்றுகிறீர்கள்",
@@ -4706,5 +4705,7 @@
   "Your name here": "உங்கள் பெயர் இங்கே",
   "your browser": "உங்கள் உலாவி",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} இன் சேவையகம் இந்தச் செயலியை விடப் பழையது; உள்நுழைவிலிருந்து உங்கள் கணக்கை இன்னும் அதனால் கண்டறிய முடியாது. புதுப்பிக்க அதன் நிர்வாகியிடம் கேளுங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்.",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} பதிலளிக்கும்போது இங்கே உங்களுக்குத் தெரிவிப்போம்."
+  "✓ We'll tell you here when {name} answers.": "✓ {name} பதிலளிக்கும்போது இங்கே உங்களுக்குத் தெரிவிப்போம்.",
+  "Make another invite": "மற்றொரு அழைப்பை உருவாக்கு",
+  "A note for you, kept on your community's server": "உங்களுக்கான குறிப்பு, உங்கள் சமூகத்தின் சேவையகத்தில் வைக்கப்படும்"
 }

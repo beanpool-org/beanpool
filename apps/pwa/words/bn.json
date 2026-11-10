@@ -2691,7 +2691,6 @@
   "Who can see this?": "কে এটি দেখতে পাবে?",
   "Who hosts it": "কে এটি হোস্ট করে",
   "Who invited whom. The tree shows how your community grows.": "কে কাকে আমন্ত্রণ জানিয়েছে। গাছটি দেখায় আপনার সম্প্রদায় কীভাবে বাড়ে।",
-  "Who is this invite for? (For your records)": "এই আমন্ত্রণটি কার জন্য? (আপনার হিসাবের জন্য)",
   "Who should be able to join?": "কারা যোগ দিতে সক্ষম হওয়া উচিত?",
   "Who should lead?": "কার নেতৃত্ব দেওয়া উচিত?",
   "Who you work well with": "যাদের সাথে আপনি ভালো কাজ করেন",
@@ -4716,5 +4715,7 @@
   "Your name here": "এখানে আপনার নাম",
   "your browser": "আপনার ব্রাউজার",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}-এর সার্ভার এই অ্যাপের চেয়ে পুরোনো এবং এখনও সাইন-ইন থেকে আপনার অ্যাকাউন্ট খুঁজে পায় না। এর অ্যাডমিনকে আপডেট করতে বলুন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} উত্তর দিলে আমরা আপনাকে এখানে জানাব।"
+  "✓ We'll tell you here when {name} answers.": "✓ {name} উত্তর দিলে আমরা আপনাকে এখানে জানাব।",
+  "Make another invite": "আরেকটি আমন্ত্রণ তৈরি করুন",
+  "A note for you, kept on your community's server": "আপনার জন্য একটি নোট, আপনার কমিউনিটির সার্ভারে রাখা হয়"
 }

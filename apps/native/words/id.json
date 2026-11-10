@@ -1354,9 +1354,7 @@
   "Share this community's link": "Bagikan tautan komunitas ini",
   "📤 Share the link": "📤 Bagikan tautan",
   "📤 Invite Someone": "📤 Undang Seseorang",
-  "Who is this invite for? (For your records)": "Undangan ini untuk siapa? (Untuk catatanmu)",
   "Generating...": "Membuat...",
-  "Share this cryptographic code": "Bagikan kode kriptografis ini",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "other": "⏳ MENUNGGU ({n})"
   },
@@ -6840,5 +6838,7 @@
   "Nothing new.": "Tidak ada yang baru.",
   "Older notices are gone after 7 days.": "Pemberitahuan lama hilang setelah 7 hari.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Tanpa batas · {vouched} dijamin · {belowZero} di bawah nol ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Tanpa batas · {vouched} dijamin · {belowZero} di bawah nol · {writtenOff} dihapusbukukan · {passedOn} diteruskan"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Tanpa batas · {vouched} dijamin · {belowZero} di bawah nol · {writtenOff} dihapusbukukan · {passedOn} diteruskan",
+  "Make another invite": "Buat undangan lain",
+  "A note for you, kept on your community's server": "Catatan untuk Anda, disimpan di server komunitas Anda"
 }

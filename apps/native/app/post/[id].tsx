@@ -15,7 +15,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, holdBackStandingDeal,
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal,
 } from '../../utils/db';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
@@ -1094,9 +1094,8 @@ export default function PostDetailModal() {
     }, me, operatedTreasuries);
     const toAnswer = requests.filter(r => !requestMoves(r)?.withdraw);
     const afterDealStep = () => { DeviceEventEmitter.emit('sync_data_updated'); };
-    // While a standing deal runs by itself its period is no deal to release (the node releases it at the period's end): its
-    // panel shows instead of the held one. One held back is a plain held deal again, and shows both.
-    const standingRunning = deals.standing.some(m => m.tx.standingPhase !== 'held_back');
+    // A standing deal running on it shows its panel: nothing of it is held, so it is never a deal to release.
+    const standingRunning = deals.standing.length > 0;
     const standingStep = async (step: () => Promise<unknown>) => {
         setAccepting(true);
         try {
@@ -1687,14 +1686,13 @@ export default function PostDetailModal() {
                     </Text>
                 )}
 
-                {/* A standing deal running on it, one panel for each the reader stands on (§2.2): Hold back, Stop and Message. */}
+                {/* A standing deal running on it, one panel for each the reader stands on (design §3): Stop and Message. */}
                 {deals.standing.map(m => {
                     const other = m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerPublicKey : m.tx.buyerPublicKey;
                     const otherName = (m.tx.buyerPublicKey === m.actingAs ? m.tx.sellerCallsign : m.tx.buyerCallsign) || t('Peer');
                     return (
                         <StandingPanel key={m.tx.id} tx={m.tx as any} actingAs={m.actingAs} busy={accepting}
                             onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
-                            onHoldBack={() => standingStep(() => holdBackStandingDeal(m.tx.standingId!))}
                             onMessage={m.asKeeper ? undefined : () => messageRow(other)}
                             messageLabel={t('Message {name}', { name: otherName })} />
                     );

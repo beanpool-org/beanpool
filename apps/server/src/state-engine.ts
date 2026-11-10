@@ -93,7 +93,7 @@ import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledge
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
-    holdBackStandingDeal as holdBackStandingDealEngine, extendStandingDeal as extendStandingDealEngine, type StandingStart, type StandingHooks,
+    extendStandingDeal as extendStandingDealEngine, hasShortStandingDeal, payShortStandingDealsOf, type StandingStart, type StandingHooks,
 } from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -300,6 +300,7 @@ import {
     type Member,
     type DirectoryRow,
     type InviteCode,
+    type MyInvite,
     type MemberProfile,
     type InviteCheckResult,
     type InviteTreeNode,
@@ -1186,8 +1187,9 @@ function armMainServerTimers(): void {
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
-        // Standing deals (engine/standing-deals.ts): each period's Beans to the payee at its end and the next period held,
-        // short payers tried again, and warned ahead. Main server only, like the rest; Beans off moves nothing.
+        // Standing deals (engine/standing-deals.ts): each period paid to the payee at its start, short ones tried again and
+        // ended when their grace is over, the grace's pushes on their cadence, payers warned ahead. Main server only, like
+        // the rest; Beans off moves nothing.
         try { runStandingDeals(); } catch (e) { console.warn('[Standing] Standing deals tick failed:', e); }
     }), 60 * 1000);
 }
@@ -1200,6 +1202,37 @@ export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => 
     const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
     // `wrap`: a suite's way to watch or fail the node's own primitives (a crash in the middle of a step).
     return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
+}
+
+/**
+ * A suite's way to watch or fail the hook's primitives too, as runStandingDeals' `wrap` does the tick's, and to pin its clock
+ * as runStandingDeals' `now` does (a suite runs periods that start in the future).
+ */
+let standingHookWrap: ((hooks: StandingHooks) => StandingHooks) | null = null;
+let standingHookNow: (() => number) | null = null;
+export function setStandingHookForTests(wrap: ((hooks: StandingHooks) => StandingHooks) | null, now: (() => number) | null = null): void {
+    standingHookWrap = wrap;
+    standingHookNow = now;
+}
+
+/**
+ * Beans reached `to` and the move that brought them has committed (transfer() and payFromCommons(), the two doors every
+ * credit to a member goes through): each of their short standing deals is paid at once, the whole period, oldest due first
+ * (DESIGN-standing-deals-upfront-amend-fable §3). Run when the batch of after-commit work now running is over, so each
+ * payment is its own transaction, one after another and never nested in another's commit; a payee paid there who is short
+ * on a standing deal of their own is tried in the same way, and every payment moves one deal out of short, so a chain ends.
+ * Main server only (payShortStandingDealsOf); a cheap read first, so a credit to anyone not short costs one indexed lookup.
+ */
+function payShortStandingDealsAfterCredit(to: string): void {
+    if (isSyntheticAccount(to) || to === 'genesis' || to === 'COMMONS_POOL' || !hasShortStandingDeal(to)) return;
+    whenPostCommitBatchOver(() => {
+        try {
+            const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+            payShortStandingDealsOf(standingHookWrap ? standingHookWrap(hooks) : hooks, to, standingHookNow ? standingHookNow() : Date.now());
+        } catch (e) {
+            console.warn('[Standing] Paying short standing deals after a credit failed:', e);
+        }
+    });
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
@@ -1473,9 +1506,6 @@ export function runMarketplaceHygiene(): void {
         WHERE t.status='pending'
           AND t.created_at < datetime('now', ?)
           AND (t.last_reminded_at IS NULL OR t.last_reminded_at < datetime('now', ?))
-          -- A standing deal's period running by itself is released by the node at its end (engine/standing-deals.ts):
-          -- nobody is asked to release it. One held back is a plain held deal again, and is nudged like any.
-          AND NOT EXISTS (SELECT 1 FROM standing_deals sd WHERE sd.id = t.standing_id AND sd.current_tx_id = t.id AND sd.phase = 'held')
     `).all(`-${ESCROW_NUDGE_DAYS} days`, `-${ESCROW_NUDGE_DAYS} days`) as any[];
     for (const row of lingering) {
         // A loan (a lendable Offer, S3) is asked about the thing, not the Beans: the borrower is the one who says it's back.
@@ -2254,8 +2284,33 @@ export function checkInvite(codeOrTicket: string): ServerInviteCheckResult {
     return result;
 }
 
-export function getInvitesByMember(pubkey: string): InviteCode[] {
-    return getInvitesByMemberEngine(db, pubkey);
+/** An invite as its maker reads it: the engine's row, and two things only this node can add. */
+export interface MyInviteRead extends MyInvite {
+    /** Made when this member said yes to someone's request to join: its note (`intendedFor`) is then the applicant's key, not a name. */
+    forKnock: boolean;
+    /** The callsign of whoever joined with it, once used. */
+    usedByCallsign: string | null;
+}
+
+/** A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker). */
+export function getInvitesByMember(pubkey: string): MyInviteRead[] {
+    const rows = getInvitesByMemberEngine(db, pubkey);
+    if (rows.length === 0) return [];
+    const knocked = new Set((db.prepare('SELECT invite_code FROM join_requests WHERE decided_by = ? AND invite_code IS NOT NULL').all(pubkey) as { invite_code: string }[])
+        .map((r) => r.invite_code));
+    const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    const joiners = new Map<string, string | null>();
+    return rows.map((r) => {
+        if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
+        // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
+        // columns: while the row lived, redeemInvite admitted only the applicant's key to this code, so a used one has its
+        // note (the applicant's key) equal to the key that used it. A re-key moves used_by and not the note, so a note that
+        // is a key spelling counts too (a maker typing a whole key as a note is the one false positive). A plain invite's note
+        // is the maker's own words.
+        const forKnock = knocked.has(r.code)
+            || (!!r.usedBy && (r.intendedFor === r.usedBy || (r.intendedFor != null && isMemberKeySpelling(r.intendedFor))));
+        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+    });
 }
 
 export function getInviteTree(rootPubkey?: string): InviteTreeNode[] {
@@ -3189,6 +3244,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // What this payment brought them, net of the fee: the hardship shield is read against it.
             sweepRepayment(to, txn.amount - (txn.taxFee || 0));
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     const fromMember = getMember(from);
@@ -3613,6 +3669,7 @@ export function payFromCommons(
         } else {
             sweepRepayment(to, txn.amount);
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     return txn;
@@ -6961,16 +7018,11 @@ export function cancelPostTransaction(transactionId: string, cancellerPublicKey:
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
 }
 
-// A standing deal's Stop, Hold back and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
-// holds, so each refuses on a standby first, as every step of a trade does.
+// A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's payments,
+// so each refuses on a standby first, as every step of a trade does.
 export function stopStandingDeal(id: string, actor: string): Record<string, unknown> {
     assertLedgerWritable();
     return stopStandingDealEngine(getEscrowCb(), id, actor);
-}
-
-export function holdBackStandingDeal(id: string, actor: string): Record<string, unknown> {
-    assertLedgerWritable();
-    return holdBackStandingDealEngine(getEscrowCb(), id, actor);
 }
 
 export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {
@@ -8714,18 +8766,6 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
 }
 
 /**
- * Admin: promote a member to (or demote from) the Elder tier. Pulls the SAME lever as a genesis
- * "Elder invite" — it sets the member's pre-seeded earned_credit, which lowers their credit floor
- * into the Elder band; tier follows from floor as usual (one source of truth, no separate role).
- * Grants Elder borrowing/gifting standing, but NOT password-admin powers (prune, delete,
- * announcements), which stay behind the admin password.
- *
- * Balance-safe: earned_credit is a borrowing *limit*, not a ledger balance. This makes no
- * transaction and mints/moves no beans — the member keeps their exact balance (positive
- * OR negative) and the double-entry books stay balanced. Granting only widens their credit
- * limit; revoking (back to 0) narrows it, leaving any balance untouched. Idempotent.
- */
-/**
  * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
  * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
  * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
@@ -8739,11 +8779,6 @@ export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
-}
-
-// Back-compat wrapper: Elder is simply the top tier badge.
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
-    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
 }
 
 /**
@@ -9661,8 +9696,6 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
             'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
-
-export function migrateAdminConversations() {} // Deprecated, state is clean now.
 
 // ===================== ACTIVITY =====================
 

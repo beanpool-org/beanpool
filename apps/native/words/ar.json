@@ -1693,9 +1693,7 @@
   "Share this community's link": "مشاركة رابط هذا المجتمع",
   "📤 Share the link": "📤 مشاركة الرابط",
   "📤 Invite Someone": "📤 دعوة شخص ما",
-  "Who is this invite for? (For your records)": "لمن هذه الدعوة؟ (لسجلاتك الخاصة)",
   "Generating...": "جارٍ الإنشاء...",
-  "Share this cryptographic code": "مشاركة هذا الرمز المشفر",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "zero": "⏳ قيد الانتظار ({n})",
     "one": "⏳ دعوة معلقة واحدة",
@@ -8140,5 +8138,7 @@
   "Nothing new.": "لا جديد.",
   "Older notices are gone after 7 days.": "تختفي الإشعارات الأقدم بعد 7 أيام.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · بلا حد · تمت تزكية {vouched} · {belowZero} تحت الصفر ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "بلا حد · تمت تزكية {vouched} · {belowZero} تحت الصفر · تم شطب {writtenOff} · تم تمرير {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "بلا حد · تمت تزكية {vouched} · {belowZero} تحت الصفر · تم شطب {writtenOff} · تم تمرير {passedOn}",
+  "Make another invite": "إنشاء دعوة أخرى",
+  "A note for you, kept on your community's server": "ملاحظة لك، محفوظة على خادم مجتمعك"
 }

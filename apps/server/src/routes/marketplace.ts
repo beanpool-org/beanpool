@@ -16,9 +16,9 @@ import {
     closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
-    stopStandingDeal, holdBackStandingDeal, extendStandingDeal,
+    stopStandingDeal, extendStandingDeal,
 } from '../state-engine.js';
-import { STANDING_AUTH_CODE, STANDING_RUNS_ITSELF_CODE, type StandingStart } from '../engine/standing-deals.js';
+import { STANDING_AUTH_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -1512,7 +1512,7 @@ function standingFromBody(ctx: any, standing: any): StandingStart | undefined {
 }
 
 /** A standing deal's own refusals: their status and code with their words (engine/standing-deals.ts, engine/escrow.ts). */
-const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', STANDING_RUNS_ITSELF_CODE, 'standing_gone', 'standing_payer_only', 'standing_not_running']);
+const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only']);
 function respondStandingRefusal(ctx: any, err: any): boolean {
     if (!STANDING_CODES.has(err?.code)) return false;
     ctx.status = typeof err.status === 'number' ? err.status : 400;
@@ -1679,12 +1679,13 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ? rawCode
             : 400;
         ctx.status = statusCode;
-        ctx.body = { error: memberErrorText(e, word('Escrow release failed')), ...(e?.code === STANDING_RUNS_ITSELF_CODE ? { code: e.code } : {}) };
+        ctx.body = { error: memberErrorText(e, word('Escrow release failed')) };
     }
 });
 
-// A standing deal's Stop (either side), Hold back (the payer) and Extend (the payer, a new signed authorisation): signed
-// requests, the signer named by the middleware; a keeper acts for an enterprise side (engine/standing-deals.ts).
+// A standing deal's Stop (either side: after the period paid, or at once in the grace) and Extend (the payer, a new signed
+// authorisation): signed requests, the signer named by the middleware; a keeper acts for an enterprise side
+// (engine/standing-deals.ts).
 async function standingStep(ctx: any, step: (id: string, actor: string, body: any) => Record<string, unknown>): Promise<void> {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
@@ -1702,7 +1703,6 @@ async function standingStep(ctx: any, step: (id: string, actor: string, body: an
 }
 
 router.post('/api/marketplace/standing/:id/stop', (ctx) => standingStep(ctx, (id, actor) => stopStandingDeal(id, actor)));
-router.post('/api/marketplace/standing/:id/hold-back', (ctx) => standingStep(ctx, (id, actor) => holdBackStandingDeal(id, actor)));
 router.post('/api/marketplace/standing/:id/extend', (ctx) => standingStep(ctx, (id, actor, body) =>
     extendStandingDeal(id, actor, standingFromBody(ctx, body.standing ?? body) ?? { authorisation: { payload: '', signature: '' } })));
 

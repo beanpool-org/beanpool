@@ -181,8 +181,8 @@ accountable — and un-farmable.**
 
 ### Grants & seeding — unify into one granted-credit lane
 
-Finding (2026-07-02): admin/genesis grants currently write **`earned_credit`** (`adminSetElder`
-`state-engine.ts:5001`; genesis-invite redemption `:874`), i.e. they grant **credit/floor, not just a
+Finding (2026-07-02): admin/genesis grants currently write **`earned_credit`** (`adminSetTier`
+in `state-engine.ts`; genesis-invite redemption `:874`), i.e. they grant **credit/floor, not just a
 badge**. Genesis invites already tier the seed: `standard/trusted/ambassador/elder` → −80/−200/−600/−1400.
 
 - [ ] **Route ALL grants into `grantedCredit`, not `earnedCredit`.** Required for the Phase-4 guardrail —

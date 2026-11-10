@@ -1,16 +1,16 @@
 /**
- * Standing deals S2, the shared half both apps draw from (scratch/fable-design/DESIGN-standing-deals-fable.md §2.2, §6):
- * the signed authorisation the payer's app sends (signStandingAuthorisation: 0xFF ‖ the text, as every member statement is
- * signed, verified here with Node's own ed25519), the take-up screen's lines, and the panel each side sees per phase.
+ * Standing deals, the shared half both apps draw from (DESIGN-standing-deals-fable.md §6; DESIGN-standing-deals-upfront-fable.md
+ * §3): the signed authorisation the payer's app sends (signStandingAuthorisation: 0xFF ‖ the text, as every member statement
+ * is signed, verified here with Node's own ed25519), the take-up screen's lines, and the panel each side sees per phase.
  */
 import crypto from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-    STANDING_GRACE_MS,
     STANDING_PICK_DAYS,
     parseStandingAuthorisation,
     signStandingAuthorisation,
     standingFieldsFor,
+    standingGraceEndsAt,
     standingPanel,
     standingStartAt,
     standingStopConfirm,
@@ -97,101 +97,62 @@ describe('standingStartAt: Today, or 1 to 30 days ahead, never past the node\'s 
     });
 });
 
-describe('standingTakeUpLines: the take-up screen (§2.2)', () => {
-    it('a month from today: held now for the first month, its dates, the agree button', () => {
+describe('standingTakeUpLines: the take-up screen (design §3)', () => {
+    it('a month from today: paid now for the first month, its dates, the agree button', () => {
         const l = standingTakeUpLines({ unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 }, day);
         expect(l.title).toBe('Take this up?');
         expect(l.summary).toBe('Vehicle Storage · 50 Beans a month · from Rob');
-        expect(l.heldNow).toBe('50 Beans are held now for the first month (9 Nov – 9 Dec).');
+        expect(l.paidNow).toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
         expect(l.forPeriods).toBe('For 6 months');
-        expect(l.agree).toBe('Agree and hold 50 Beans');
-        expect(l.howItRuns).toContain('they go to Rob');
+        expect(l.agree).toBe('Agree and pay 50 Beans');
+        expect(l.howItRuns).toBe('You can stop it any time. A month already paid stays paid.');
+        expect(Object.values(l).join(' ')).not.toMatch(/held|hold/i);
     });
     it('a week, one period, starting later', () => {
         const l = standingTakeUpLines({ unit: 'week', beans: 12.5, title: 'Eggs', payeeName: 'Ann', startsAt: NOW + 2 * 86_400_000, periods: 1 }, day);
         expect(l.forPeriods).toBe('For 1 week');
         expect(l.startOn).toBe('On 11 Nov');
-        expect(l.heldNow).toBe('12.5 Beans are held now for the first week (11 Nov – 18 Nov).');
+        expect(l.paidNow).toBe('12.5 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.5 at the start of each week, until one of you stops it.');
         expect(l.shortAhead).toBe("If you're short when a week is due, you'll be told the day before.");
     });
 });
 
 const row = (o: Partial<StandingDealRow> = {}): StandingDealRow => ({
-    id: 'tx-3', postTitle: 'Vehicle Storage', status: 'pending',
+    id: 'tx-3', postTitle: 'Vehicle Storage', status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
     buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    standingId: 'sd-1', periodNo: 3, standingPhase: 'held', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 });
 
 describe('standingPanel: what each side sees, per phase', () => {
-    it('held, payer: when the Beans go, Hold back and Stop; the Home rule badges nobody', () => {
+    it('paid: the Home rule badges nobody; month 2 of 6', () => {
         const p = standingPanel(row(), PAYER, day, NOW)!;
         expect(p.title).toBe('🔁 Standing deal since 9 Oct · 50 Beans a month');
-        expect(p.status).toBe("This month's 50 Beans are held · they go to Rob 9 Dec");
-        expect(p.periodOf).toBe('Month 3 of 6');
-        expect([p.holdBack, p.stop, p.warning]).toEqual([true, true, false]);
-        expect(p.holdBackLabel).toBe('Hold back this month');
-        expect(p.stopLabel).toBe('Stop…');
+        expect(p.periodOf).toBe('Month 2 of 6');
         expect(dealStep(row(), PAYER, NOW).needsMe).toBe(false);
         expect(dealStep(row(), PAYEE, NOW).needsMe).toBe(false);
     });
-    it('held, payee: held for you, paid on the day; Stop, never Hold back', () => {
-        const p = standingPanel(row(), PAYEE, day, NOW)!;
-        expect(p.role).toBe('payee');
-        expect(p.status).toBe("Marty's standing deal · 50 Beans a month · this month held for you · paid 9 Dec");
-        expect([p.holdBack, p.stop]).toEqual([false, true]);
-    });
-    it('short, payer: the warning names the end of the week of grace; it needs the payer', () => {
-        const shortSince = '2026-12-09T08:00:00.000Z';
-        const r = row({ status: 'completed', standingPhase: 'short', standingShortSince: shortSince, standingNextDueAt: '2026-12-09T09:00:00.000Z' });
+    it('short: the grace is half the month that is due (month 3, 9 Dec – 9 Jan: 15½ days), from the day it was due', () => {
+        const r = row({ standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z', standingNextDueAt: '2026-12-09T09:00:00.000Z' });
         const p = standingPanel(r, PAYER, day, NOW)!;
-        expect(p.warning).toBe(true);
-        expect(p.graceEndsAt).toBe(new Date(Date.parse(shortSince) + STANDING_GRACE_MS).toISOString());
-        expect(p.status).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
-        expect([p.holdBack, p.stop]).toEqual([false, true]);
+        expect(p.graceEndsAt).toBe(standingGraceEndsAt('2026-10-09T08:00:00.000Z', 'month', 3));
+        expect(p.graceEndsAt).toBe('2026-12-24T20:00:00.000Z');
         expect(dealStep(r, PAYER, NOW).needsMe).toBe(true);
         expect(dealStep(r, PAYEE, NOW).needsMe).toBe(false);
     });
-    it('short, payee: we keep trying until the day; Stop now', () => {
-        const r = row({ status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' });
-        const p = standingPanel(r, PAYEE, day, NOW)!;
-        expect(p.status).toBe("Next month isn't covered yet · we'll keep trying until 16 Dec");
-        expect(p.stopLabel).toBe('Stop now');
-    });
-    it('held back: the schedule is paused, for both; no Hold back; it needs the payer only', () => {
-        const r = row({ standingPhase: 'held_back' });
-        for (const who of [PAYER, PAYEE]) {
-            const p = standingPanel(r, who, day, NOW)!;
-            expect(p.status).toBe('Held back · the schedule is paused');
-            expect(p.holdBack).toBe(false);
-        }
-        expect(dealStep(r, PAYER, NOW).needsMe).toBe(true);
-        expect(dealStep(r, PAYEE, NOW).needsMe).toBe(false);
-    });
-    it('stopped: no Stop again, and the last period says when it ends', () => {
-        const p = standingPanel(row({ standingStopped: true }), PAYEE, day, NOW)!;
-        expect(p.stop).toBe(false);
-        expect(p.lastLine).toBe('Vehicle Storage: the last month of this standing deal is under way. It ends on 9 Dec.');
-    });
-    it('the last of its count says so too; until stopped has no "of"', () => {
-        expect(standingPanel(row({ periodNo: 6 }), PAYER, day, NOW)!.lastLine).toContain('the last month');
+    it('the last of its count says so; until stopped has no "of"', () => {
+        expect(standingPanel(row({ periodNo: 6 }), PAYER, day, NOW)!.lastLine).toBe('Vehicle Storage: the last month of this standing deal is paid. It ends on 9 Dec.');
         expect(standingPanel(row({ standingMaxPeriods: null }), PAYER, day, NOW)!.periodOf).toBeNull();
     });
     it('weekly words', () => {
         const p = standingPanel(row({ standingUnit: 'week', standingMaxPeriods: null }), PAYER, day, NOW)!;
-        expect(p.status).toBe("This week's 50 Beans are held · they go to Rob 9 Dec");
-        expect(p.holdBackLabel).toBe('Hold back this week');
+        expect(p.status).toBe("This week's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec");
     });
     it('ended, a one-off deal, or a stranger: no panel', () => {
         expect(standingPanel(row({ standingPhase: 'ended' }), PAYER, day, NOW)).toBeNull();
         expect(standingPanel(row({ standingId: null, standingPhase: null }), PAYER, day, NOW)).toBeNull();
         expect(standingPanel(row(), 'c'.repeat(64), day, NOW)).toBeNull();
-    });
-    it('the Stop confirm', () => {
-        expect(standingStopConfirm('month')).toEqual({
-            title: 'Stop after this month?', body: 'The month under way is still paid. Nothing more is held after it.', yes: 'Stop it', no: 'Keep it',
-        });
     });
 });
 
@@ -227,27 +188,25 @@ describe('standingUnitForListing: only a PRICED weekly or monthly listing makes 
     });
 });
 
-describe('standingStopConfirm: a short deal stops NOW (non-blocking note)', () => {
-    it('short, or between its periods (due): nothing is held, so Stop ends it at once, and the question says so', () => {
-        for (const phase of ['short', 'due'] as const) {
-            for (const unit of ['month', 'week'] as const) {
-                expect(standingStopConfirm(unit, phase)).toEqual({
-                    title: 'Stop it now?', body: 'It ends now. Nothing is held for it, and nothing more will be.', yes: 'Stop it', no: 'Keep it',
-                });
-            }
+describe('standingStopConfirm: in the grace it ends NOW, for either side (amendment §1)', () => {
+    it('short: "Stop it now?", for the payer and the payee alike, by the week or the month', () => {
+        for (const unit of ['month', 'week'] as const) {
+            const r = row({ standingUnit: unit, standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' });
+            expect(standingStopConfirm(r, PAYER, day).title).toBe('Stop it now?');
+            expect(standingStopConfirm(r, PAYEE, day).title).toBe('Stop it now?');
         }
     });
-    it('held, or held back: the period under way is still paid, as before', () => {
-        expect(standingStopConfirm('month', 'held').title).toBe('Stop after this month?');
-        expect(standingStopConfirm('week', 'held_back').title).toBe('Stop after this week?');
+    it('paid: after the period already paid', () => {
+        expect(standingStopConfirm(row(), PAYER, day).title).toBe('Stop after this month?');
+        expect(standingStopConfirm(row({ standingUnit: 'week' }), PAYEE, day).title).toBe('Stop after this week?');
     });
 });
 
 describe("listingDealLines.finished: a standing deal still running is never 'done' (finding 3)", () => {
     const shortRow = { status: 'completed', standingId: 'sd-1', standingPhase: 'short' as const };
-    it("a short deal's row is the period last settled (completed), but the deal runs on: no line", () => {
+    it("a running deal's row is the period last paid (completed), but the deal runs on: no line", () => {
         expect(listingDealLines.finished(shortRow)).toBeNull();
-        expect(listingDealLines.finished({ ...shortRow, standingPhase: 'due' })).toBeNull();
+        expect(listingDealLines.finished({ ...shortRow, standingPhase: 'paid' })).toBeNull();
     });
     it('one that has ended, or an older period (no phase), is a finished deal like any other', () => {
         expect(listingDealLines.finished({ ...shortRow, standingPhase: 'ended' })).toBe('That deal is done.');

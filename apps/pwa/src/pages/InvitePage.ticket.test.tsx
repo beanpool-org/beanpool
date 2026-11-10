@@ -41,7 +41,7 @@ function ticketOf(code: string): { p: string; s: string } {
 
 async function generate(forWhom: string): Promise<string> {
     render(<InvitePage identity={IDENTITY} />);
-    fireEvent.change(screen.getByPlaceholderText('Who is this invite for? (For your records)'), { target: { value: forWhom } });
+    fireEvent.change(screen.getByPlaceholderText("A note for you, kept on your community's server"), { target: { value: forWhom } });
     fireEvent.click(screen.getByRole('button', { name: /Generate New Invite/ }));
     const shown = await waitFor(() => {
         const el = document.querySelector('p[title^="BP-"]');

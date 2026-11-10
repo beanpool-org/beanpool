@@ -1447,7 +1447,7 @@ async function main(): Promise<void> {
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
             'POST /api/marketplace/transactions/cancel', 'POST /api/marketplace/transactions/cancel-request',
             'POST /api/marketplace/transactions/complete', 'POST /api/marketplace/transactions/reject',
-            'POST /api/marketplace/standing/:id/stop', 'POST /api/marketplace/standing/:id/hold-back', 'POST /api/marketplace/standing/:id/extend',
+            'POST /api/marketplace/standing/:id/stop', 'POST /api/marketplace/standing/:id/extend',
             'POST /api/member/channels', 'POST /api/member/channels/:id', 'POST /api/member/channels/:id/delete',
             'POST /api/member/channels/:id/disconnect-oauth', 'POST /api/member/channels/:id/verify-oauth',
             'POST /api/member/pulse/channels/:id/dismiss-nudge', 'POST /api/member/pulse/items/:id/delete', 'POST /api/member/pulse/items/:id/mute',

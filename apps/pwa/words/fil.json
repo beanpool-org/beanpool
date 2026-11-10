@@ -2691,7 +2691,6 @@
   "Who can see this?": "Sino ang makakakita nito?",
   "Who hosts it": "Sino ang nagho-host nito",
   "Who invited whom. The tree shows how your community grows.": "Sino ang nag-imbita kanino. Ipinapakita ng puno kung paano lumalago ang iyong komunidad.",
-  "Who is this invite for? (For your records)": "Para kanino ang imbitasyong ito? (Para sa iyong tala)",
   "Who should be able to join?": "Sino ang dapat makasali?",
   "Who should lead?": "Sino ang dapat mamuno?",
   "Who you work well with": "Ang mga mahusay mong nakakatrabaho",
@@ -4706,5 +4705,7 @@
   "Your name here": "Ang iyong pangalan dito",
   "your browser": "iyong browser",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Mas luma ang server ng {community} kaysa sa app na ito at hindi pa nito mahahanap ang iyong account mula sa isang sign-in. Hilingin sa admin ng {community} na mag-update, o gamitin ang 12 salita mo.",
-  "✓ We'll tell you here when {name} answers.": "✓ Sasabihan ka namin dito kapag may sagot mula sa {name}."
+  "✓ We'll tell you here when {name} answers.": "✓ Sasabihan ka namin dito kapag may sagot mula sa {name}.",
+  "Make another invite": "Gumawa ng isa pang imbitasyon",
+  "A note for you, kept on your community's server": "Isang tala para sa iyo, nakatago sa server ng iyong komunidad"
 }

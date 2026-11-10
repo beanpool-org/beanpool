@@ -2635,7 +2635,6 @@
   "Who can see this?": "Siapa yang dapat melihat ini?",
   "Who hosts it": "Siapa yang meng-host",
   "Who invited whom. The tree shows how your community grows.": "Siapa mengundang siapa. Pohon ini menunjukkan pertumbuhan komunitas Anda.",
-  "Who is this invite for? (For your records)": "Undangan ini untuk siapa? (Untuk catatanmu)",
   "Who should be able to join?": "Siapa yang dapat bergabung?",
   "Who should lead?": "Siapa yang harus memimpin?",
   "Who you work well with": "Dengan siapa kamu cocok bekerja sama",
@@ -4530,5 +4529,7 @@
   "Your name here": "Namamu di sini",
   "your browser": "browser-mu",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Server {community} lebih lama daripada aplikasi ini dan belum bisa menemukan akunmu dari login. Minta admin {community} untuk memperbarui, atau pakai 12 katamu.",
-  "✓ We'll tell you here when {name} answers.": "✓ Kami akan memberitahumu di sini saat {name} menjawab."
+  "✓ We'll tell you here when {name} answers.": "✓ Kami akan memberitahumu di sini saat {name} menjawab.",
+  "Make another invite": "Buat undangan lain",
+  "A note for you, kept on your community's server": "Catatan untuk Anda, disimpan di server komunitas Anda"
 }

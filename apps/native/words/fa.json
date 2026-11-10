@@ -1422,9 +1422,7 @@
   "Share this community's link": "اشتراک‌گذاری پیوند این جامعه",
   "📤 Share the link": "📤 اشتراک‌گذاری پیوند",
   "📤 Invite Someone": "📤 دعوت یک نفر",
-  "Who is this invite for? (For your records)": "این دعوت برای چه کسی است؟ (برای یادداشت خودتان)",
   "Generating...": "در حال ایجاد...",
-  "Share this cryptographic code": "اشتراک‌گذاری این کد رمزنگاری‌شده",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ در انتظار ({n})",
     "other": "⏳ در انتظار ({n})"
@@ -7104,5 +7102,7 @@
   "Nothing new.": "چیز تازه‌ای نیست.",
   "Older notices are gone after 7 days.": "اعلان‌های قدیمی‌تر پس از 7 روز ناپدید می‌شوند.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · بدون سقف · {vouched} ضمانت‌شده · {belowZero} زیر صفر ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "بدون سقف · {vouched} ضمانت‌شده · {belowZero} زیر صفر · {writtenOff} بخشوده‌شده · {passedOn} منتقل‌شده"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "بدون سقف · {vouched} ضمانت‌شده · {belowZero} زیر صفر · {writtenOff} بخشوده‌شده · {passedOn} منتقل‌شده",
+  "Make another invite": "ساخت دعوت دیگر",
+  "A note for you, kept on your community's server": "یادداشتی برای شما، نگه‌داری‌شده روی سرور جامعهٔ شما"
 }

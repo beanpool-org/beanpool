@@ -111,6 +111,18 @@ async function child(): Promise<void> {
             await flushTakeoverChecks();
             return { code: made.code };
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -614,6 +626,7 @@ async function main(): Promise<void> {
         require_(caught7.ok === true && rowsDiff(m7, s7).length === 0 && m7.enterprise_pledges.some((p) => p.keeper === kip2.pk && p.released_at === null)
             && m7.treasury_operators.filter((o) => o.treasury_pubkey === probe.publicKey).length === 2,
             `S has caught up with M, where Kip is one of Probe Co's two keepers and holds a pledge (${caught7.ok ? caught7.mode : caught7.error}; differences ${first(rowsDiff(m7, s7))})`);
+        await standby.send('standby-owner', { owner: gwen.pk });
         const pledgeWrites: [string, Answer][] = [
             ['Kip releases 1 of his backing (the review\'s sequence)', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/release`, { as: kip2, body: { amount: 1 } })],
             ['by /pledge/release', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge/release`, { as: kip2, body: { amount: 1 } })],
@@ -623,7 +636,7 @@ async function main(): Promise<void> {
             ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount: 1 } })],
             ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount: 1 } })],
             ['Kip steps down, which releases his pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/keepers/step-down`, { as: kip2, body: {} })],
-            ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: await standby.send('owner-session') })],
+            ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: await standby.send('owner-session', { owner: gwen.pk }) })],
         ];
         const through = pledgeWrites.filter(([, a]) => !(a.status === 409 && a.body?.code === 'standby')).map(([w, a]) => `${w}: ${brief(a)}`);
         assert(through.length === 0, `on S every write of a pledge answers 409 standby (${through.length} did not: ${through.join(' | ') || 'none'})`);
@@ -768,7 +781,7 @@ async function main(): Promise<void> {
         await main.send('checkpoint');
         await main.kill('SIGKILL');
         // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
-        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         refused.push(...(await standby.send('fetches')).blocked);

@@ -321,12 +321,14 @@ async function main() {
         const hooks = { broadcast: se.broadcast, dispatchPushNotification: se.dispatchPushNotification };
         const KEPT_KINDS = new Set(['community.notice', 'community.invite-ask', 'account.removal-vote', 'account.reply-taken-down']);
         const keptOf = (id: Id) => attempt(() => db.prepare('SELECT id, seen_at FROM moderation_notices WHERE recipient = ? ORDER BY created_at, rowid').all(id.pk) as any[]) ?? [];
-        const clearsTogether = async (label: string, who: Id, way: 'acknowledge' | 'tap', send: () => unknown) => {
+        // `kinds`: the push kinds the sender's row may carry (a standing deal's go as trade.update, tab Market:
+        // DESIGN-standing-deals-upfront-amend-fable §2); every other sender's are the kept kinds.
+        const clearsTogether = async (label: string, who: Id, way: 'acknowledge' | 'tap', send: () => unknown, kinds: ReadonlySet<string> = KEPT_KINDS) => {
             const rowsBefore = new Set(rowsOf(who).map(r => r.id));
             const keptBefore = new Set(keptOf(who).map(k => k.id));
             const outcome = await attempt(send);
             await sleep(50);
-            const rows = rowsOf(who).filter(r => !rowsBefore.has(r.id) && KEPT_KINDS.has(r.kind));
+            const rows = rowsOf(who).filter(r => !rowsBefore.has(r.id) && kinds.has(r.kind));
             const kept = keptOf(who).filter(k => !keptBefore.has(k.id));
             const data = attempt(() => JSON.parse(rows[0]?.data ?? '{}')) ?? {};
             assert(rows.length === 1 && kept.length === 1 && data.noticeId === kept[0].id,
@@ -352,9 +354,9 @@ async function main() {
             await clearsTogether(`a standing deal (${way})`, bea, way, () => {
                 const data = { kind: 'standing_started', standing: `sd-${way}`, postId: `p-sd-${way}` };
                 const title = 'Your standing deal';
-                const body = 'Olive took up your standing deal. The first period is held in trust.';
+                const body = 'Olive took up your standing deal. The first period is paid.';
                 standing.tellStanding(hooks as any, [{ to: bea.pk, title, body, data, id: keepNotice(bea.pk, title, body, data) }]);
-            });
+            }, new Set(['trade.update']));
         }
         // Unfunded pledges, through the node's own return (state-engine.ts returnUnfundedProjectPledges, the minute tick's).
         se.payFromCommons(bea.pk, 50, 'Beans to pledge', { allowDeficit: true } as any);

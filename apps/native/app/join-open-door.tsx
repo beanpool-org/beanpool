@@ -778,7 +778,14 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                             {error && <Text style={[styles.error, { marginTop: 12 }]} accessibilityLiveRegion="polite">{error}</Text>}
                             {way === 'words' && doorWork.busy && <Text style={styles.helper} accessibilityLiveRegion="polite">{doorWork.busy}</Text>}
                             {way === 'words' && workWaiting && <DoorWorkProgress state={doorWork.state('words')} colors={colors} />}
-                            <Pressable style={styles.primary} onPress={way === 'words' ? handleWordsJoin : handleJoin} disabled={loading} accessibilityRole="button" accessibilityLabel={t('Join')}>
+                            <Pressable
+                                style={styles.primary}
+                                onPress={way === 'words' ? handleWordsJoin : handleJoin}
+                                disabled={loading}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Join')}
+                                accessibilityState={{ disabled: loading, busy: loading }}
+                            >
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{t('Join →')}</Text>}
                             </Pressable>
                             <Pressable style={styles.secondary} onPress={signInAgain} disabled={!ways.otherSignIn} accessibilityRole="button">

@@ -130,7 +130,7 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 
 import PeopleScreen from '../../app/(tabs)/people';
-import { t } from '@beanpool/core';
+import { inviteFolds, t } from '@beanpool/core';
 
 const NODE = 'https://node.example';
 const LOCAL = { beans: true, invites: true, showcase: false };
@@ -139,6 +139,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+    inviteFolds.clear();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -215,10 +216,17 @@ describe('People → Invites: Share sends the whole message as text, never a pic
         sentTheTextOnly('INV-TEST-0001');
     });
 
-    it('an invite in the pending list (Share on its row) sends its own message', async () => {
-        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([{ code: 'INV-ROW-0001', createdAt: '2026-11-01T00:00:00Z', intendedFor: 'Sam' }]));
+    it('an invite in the pending list (open the row, then Share) sends its own message', async () => {
+        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([{ code: 'INV-ROW-0001', createdAt: new Date().toISOString(), intendedFor: 'Sam' }]));
         await open();
-        await tap(t('Share'));
+        // Pending is folded until opened; the whole row opens the invite, and Share is on it.
+        for (const id of ['invites-pending-fold', 'invite-pending-row']) {
+            const el = host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+            expect(el, id).toBeTruthy();
+            await act(async () => { el!.click(); });
+            await settle();
+        }
+        await tap(t('📤 Share Invite'));
         sentTheTextOnly('INV-ROW-0001');
     });
 

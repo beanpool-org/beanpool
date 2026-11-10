@@ -1421,9 +1421,7 @@
   "Share this community's link": "Μοιραστείτε τον σύνδεσμο αυτής της κοινότητας",
   "📤 Share the link": "📤 Κοινοποίηση συνδέσμου",
   "📤 Invite Someone": "📤 Πρόσκληση ατόμου",
-  "Who is this invite for? (For your records)": "Για ποιον είναι αυτή η πρόσκληση; (Για το αρχείο σας)",
   "Generating...": "Δημιουργία...",
-  "Share this cryptographic code": "Μοιραστείτε αυτόν τον κρυπτογραφικό κωδικό",
   "⏳ PENDING ({n})|⏳ PENDING ({n})": {
     "one": "⏳ ΣΕ ΕΚΚΡΕΜΟΤΗΤΑ ({n})",
     "other": "⏳ ΣΕ ΕΚΚΡΕΜΟΤΗΤΑ ({n})"
@@ -7099,5 +7097,7 @@
   "Nothing new.": "Τίποτα νέο.",
   "Older notices are gone after 7 days.": "Οι παλαιότερες ειδοποιήσεις εξαφανίζονται μετά από 7 ημέρες.",
   "{name} · No limit · {vouched} vouched · {belowZero} below zero ›": "{name} · Χωρίς όριο · {vouched} με εγγύηση · {belowZero} κάτω από το μηδέν ›",
-  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Χωρίς όριο · {vouched} με εγγύηση · {belowZero} κάτω από το μηδέν · διαγράφηκαν {writtenOff} · μεταβιβάστηκαν {passedOn}"
+  "No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "Χωρίς όριο · {vouched} με εγγύηση · {belowZero} κάτω από το μηδέν · διαγράφηκαν {writtenOff} · μεταβιβάστηκαν {passedOn}",
+  "Make another invite": "Δημιουργία άλλης πρόσκλησης",
+  "A note for you, kept on your community's server": "Μια σημείωση για εσάς, αποθηκευμένη στον διακομιστή της κοινότητάς σας"
 }

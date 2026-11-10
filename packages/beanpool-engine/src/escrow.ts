@@ -30,21 +30,22 @@ export interface MarketplaceTransaction {
     postRepeatable?: boolean;
     postLendable?: boolean;
     /**
-     * A period of a standing deal (DESIGN-standing-deals-fable §2.3): which one and its number; on the standing deal's
-     * CURRENT period's row only, its phase, the Beans per period, its unit, how many periods (null: until stopped), its
-     * start, when the node next acts on it (this period's end, or its next try), since when it is short and whether either side has
-     * tapped Stop.
+     * A period of a standing deal (DESIGN-standing-deals-fable §2.3; DESIGN-standing-deals-upfront-fable §1): which one and
+     * its number, each a finished deal paid at its start; on the standing deal's CURRENT row only (the period last paid), its
+     * phase, the Beans per period, its unit, how many periods (null: until stopped), its start, when the node next acts on it
+     * (the next period's start, or its next try while short), since when the period now due is unpaid, and whether either
+     * side has tapped Stop.
      */
     standingId?: string;
     periodNo?: number;
-    standingPhase?: 'held' | 'due' | 'short' | 'held_back' | 'ended';
+    standingPhase?: 'paid' | 'short' | 'ended';
     standingBeans?: number;
     standingUnit?: 'week' | 'month';
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string;
     standingStopped?: boolean;
     standingStartsAt?: string;
-    /** Since when the next period couldn't be held (phase short): the week of grace ends 7 days after it. */
+    /** Since when the period now due is unpaid (phase short): its start; its grace ends half that period later (@beanpool/core standingGraceEndsAt). */
     standingShortSince?: string | null;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.

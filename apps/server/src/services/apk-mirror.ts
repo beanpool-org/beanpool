@@ -133,8 +133,13 @@ export async function startApkMirror(): Promise<void> {
     }
     const schedule = (ms: number) => {
         timer = setTimeout(async () => {
-            logOutcome(await refreshApk());
-            schedule(23 * 3600_000 + Math.random() * 2 * 3600_000);
+            try {
+                logOutcome(await refreshApk());
+            } catch (e) {
+                logger.warn('SYS', `[apk] APK mirror check failed: ${e instanceof Error ? e.message : String(e)}`);
+            } finally {
+                schedule(23 * 3600_000 + Math.random() * 2 * 3600_000);
+            }
         }, ms);
         timer.unref?.();
     };

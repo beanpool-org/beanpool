@@ -124,6 +124,18 @@ async function child(): Promise<void> {
             await flushTakeoverChecks();
             return { code: made.code };
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -648,7 +660,8 @@ async function main(): Promise<void> {
         console.log('\n— 4. the standby writes none of it itself —');
         const sv = `https://localhost:${await standby.send('serve')}`;
         // Step 7c: S's admin calls go under an owner's key session S makes, so each refusal below is S's, not a refused credential.
-        const sOwner: Record<string, string> = await standby.send('owner-session');
+        await standby.send('standby-owner', { owner: gwen.pk });
+        const sOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const onS = (who: Id | null, route: string, body: unknown = {}) => api(sv, 'POST', route, who ? { as: who, body } : { admin: sOwner, body });
         const routes: [string, Promise<Answer>][] = [
             ['an invite made', onS(gwen, '/api/invite/generate', { publicKey: gwen.pk })],
@@ -725,7 +738,7 @@ async function main(): Promise<void> {
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
-        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];

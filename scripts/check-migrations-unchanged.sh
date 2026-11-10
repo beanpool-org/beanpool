@@ -12,14 +12,13 @@
 #
 # WHAT IT DOES NOT COVER. The node's own schema steps are not files: they are the user_version and column-exists steps
 # inside apps/server/src/db/db.ts, which no file-level check can tell apart from the rest of that file.
-# apps/server/src/db/migrations/ holds one .sql file that no code applies; it is guarded anyway.
 #
 # With nothing to compare against it passes, on a line starting "⚪ SKIP:", which test-all.sh reports as skipped and not as
 # a pass (and a run with one records no green). CI fetches origin/main for this (ci.yml, "Fetch origin/main"), so on a pull
 # request or a train branch it really compares.
 
 cd "$(dirname "$0")/.." || exit 1
-DIRS=(apps/registrar/migrations apps/server/src/db/migrations)
+DIRS=(apps/registrar/migrations)
 
 if ! git rev-parse --verify -q origin/main >/dev/null; then
   echo "⚪ SKIP: no origin/main here, so no shipped migrations to compare against"

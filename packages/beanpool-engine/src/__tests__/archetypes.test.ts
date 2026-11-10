@@ -8,7 +8,7 @@ import {
     calculateSynergy,
     parseArchetype,
     type ArchetypeKey,
-} from '../archetypes.js';
+} from '@beanpool/core';
 
 describe('Archetype Engine', () => {
     it('defines all 9 community archetypes without raw numbers or clinical labels', () => {

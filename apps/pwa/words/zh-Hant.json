@@ -2635,7 +2635,6 @@
   "Who can see this?": "誰能看見？",
   "Who hosts it": "由誰主機託管",
   "Who invited whom. The tree shows how your community grows.": "展示誰邀請了誰。該樹狀圖呈現了社群的成長脈絡。",
-  "Who is this invite for? (For your records)": "這張邀請函要給誰？（供你個人記錄）",
   "Who should be able to join?": "誰可以加入？",
   "Who should lead?": "該由誰帶領？",
   "Who you work well with": "與你契合的搭檔",
@@ -4530,5 +4529,7 @@
   "Your name here": "在此輸入你的名稱",
   "your browser": "你的瀏覽器",
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} 的伺服器比這個 App 舊，目前還無法透過登入找到你的帳號。請讓它的管理員更新，或使用你的 12 個助記詞。",
-  "✓ We'll tell you here when {name} answers.": "✓ {name} 回覆時，我們會在這裡通知你。"
+  "✓ We'll tell you here when {name} answers.": "✓ {name} 回覆時，我們會在這裡通知你。",
+  "Make another invite": "再建立一個邀請",
+  "A note for you, kept on your community's server": "給你自己的備註，儲存在你所在社群的伺服器上"
 }

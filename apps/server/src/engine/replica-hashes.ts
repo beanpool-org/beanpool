@@ -157,13 +157,17 @@ export interface TableHashes {
  * read; the request itself is copied whole, and after a take-over from such a copy it simply shows no "After reading" line.
  */
 /**
- * 27: members gains inviter_shown (a member's "Show who invited me to other members", DESIGN-invites-vouching-review-
+ * 27: standing deals are paid at the start of each period (DESIGN-standing-deals-upfront-fable.md, slice U1): standing_deals
+ * loses held_back_reason and its phase CHECK becomes ('paid', 'short', 'ended'). Raised for the same reason as 21: a standby
+ * updated before its main server hashes `standing_deals` over one column fewer. REPLICA_FORMAT stays: each side's import
+ * writes only the columns its own table has; the rows communities hold are ended ones, which both CHECKs take.
+ * 28: members gains inviter_shown (a member's "Show who invited me to other members", DESIGN-invites-vouching-review-
  * fable.md slice I3). Raised for the same reason as 8: a standby updated before its main server hashes `members` over one
  * more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has (engine/sync.ts
  * writeMemberStanding); what an older importer drops is a member's switch, and after a take-over from such a copy their
  * inviter shows again until they switch it off again.
  */
-export const TABLE_HASHES_VERSION = 27;
+export const TABLE_HASHES_VERSION = 28;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

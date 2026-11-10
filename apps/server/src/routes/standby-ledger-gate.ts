@@ -25,9 +25,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     // out), and turning a request down; and an enterprise's, taken by a keeper.
     /^\/api\/marketplace\/posts\/(accept|request)\/?$/,
     /^\/api\/marketplace\/transactions\/(approve|reject|cancel-request|complete|cancel)\/?$/,
-    // A standing deal's Stop, Hold back and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the
-    // node's holds.
-    /^\/api\/marketplace\/standing\/[^/]+\/(stop|hold-back|extend)\/?$/,
+    // A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
+    // payments.
+    /^\/api\/marketplace\/standing\/[^/]+\/(stop|extend)\/?$/,
     /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject)\/?$/,
     // An enterprise's sweep to the Commons, a pledge to it (a crowdfund's moves Beans), and its wind-up's final sweep.
     /^\/api\/(treasury|enterprise)\/[^/]+\/(sweep|pledge|wind-up\/finalise)\/?$/,

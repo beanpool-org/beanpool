@@ -165,6 +165,25 @@ describe('Your deals: one card per standing deal', () => {
     });
 });
 
+describe('Your deals, My listings: a one-off listing a standing deal took is 🔁 STANDING, never Held in Trust (U2)', () => {
+    // The node keeps the listing off the board ('pending') while the standing deal runs; nothing is held in trust (design §1, §3).
+    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', authorPublicKey: PAYEE, credits: 50, createdAt: '2026-10-01T08:00:00.000Z', photos: [] } as any;
+    for (const standingPhase of ['paid', 'short'] as const) {
+        it(`a running standing deal (${standingPhase}) says 🔁 STANDING`, () => {
+            render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[taken]} initialTab="active"
+                transactions={[row({ id: 'tx-1', standingPhase })]} onNavigateToPost={vi.fn()} />);
+            const card = screen.getByTestId('deal-card-post-1');
+            expect(card.textContent).toContain('🔁 STANDING');
+            expect(card.textContent).not.toContain('Held in Trust');
+        });
+    }
+    it('a one-off deal held still says Held in Trust', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[taken]} initialTab="active"
+            transactions={[row({ id: 'tx-1', status: 'pending', standingId: undefined, standingPhase: undefined })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-card-post-1').textContent).toContain('🤝 Held in Trust');
+    });
+});
+
 describe('Your deals, History: an ended standing deal says how it ended; review once (U2)', () => {
     const STOPPED = { periodNo: 1, standingPhase: 'ended' as const, standingShortSince: '2026-11-09T08:00:00.000Z', standingEndedAt: '2026-11-12T08:00:00.000Z', standingEndedReason: 'stopped', standingStoppedBy: PAYEE, standingStopped: true };
     it('stopped in the grace by the payee: each side reads its line', () => {

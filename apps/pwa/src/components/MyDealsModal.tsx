@@ -187,6 +187,11 @@ export function MyDealsModal({
         }
         return map;
     }, [preview, effectiveTransactions, transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set((preview ? effectiveTransactions : transactions)
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [preview, effectiveTransactions, transactions]);
 
     const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
     const rawTxs = preview ? effectiveTransactions : transactions;
@@ -611,7 +616,8 @@ export function MyDealsModal({
                                 if (!preview) {
                                     const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
                                     const relatedTx = activeTxsByPostId.get(item.id)?.[0];
-                                    const isHeld = item.status === 'pending' || relatedTx?.status === 'pending';
+                                    const standingTaken = item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id);
+                                    const isHeld = !standingTaken && (item.status === 'pending' || relatedTx?.status === 'pending');
                                     const isActionRequired = relatedTx?.status === 'requested' && ((item.authorPublicKey ?? (item as any).author_pubkey) === currentPubkey);
 
                                     return (
@@ -683,7 +689,9 @@ export function MyDealsModal({
                                                         isActionRequired ? 'text-amber-800 dark:text-amber-400' : 'text-nature-500 dark:text-nature-400'
                                                     }`}>
                                                         {(() => {
-                                                            if (isHeld) {
+                                                            if (standingTaken) {
+                                                                return standingLines.chip();
+                                                            } else if (isHeld) {
                                                                 return t('🤝 Held in Trust');
                                                             } else if (relatedTx?.status === 'requested') {
                                                                 return isActionRequired ? t('⚠️ Action Required') : t('⏳ Awaiting Approval');

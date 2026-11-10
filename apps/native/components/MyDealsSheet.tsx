@@ -429,6 +429,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         }
         return map;
     }, [transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set(transactions
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [transactions]);
 
     // ── Data derivation ──
     const myPosts = posts.filter(p => {
@@ -631,7 +636,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         // Action Required is drawn bold.
         let actionRequired = false;
 
-        if (item.status === 'pending' || relatedTx?.status === 'pending') {
+        if (item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id)) {
+            displayStatusText = standingLines.chip();
+        } else if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = t('🤝 Held in Trust');
             highlightStyle = heldTone;
             if (isDark) statusInk = colors.feedback.success.fg;

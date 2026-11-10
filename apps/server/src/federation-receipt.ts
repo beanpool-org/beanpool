@@ -47,7 +47,7 @@ export interface SettlementReceipt {
     sellerPublicKey: string;
     postId: string | null;
     /** The agreed price — NEVER price plus fee. The fee never crosses the border (§2.1). */
-    amount: number;
+    amount_c: number;
     /** ISO timestamp of the commit on the buyer's node. */
     committedAt: string;
 }
@@ -74,7 +74,7 @@ export function receiptPayload(r: SettlementReceipt): string {
         r.buyerHomeNode ?? '',
         r.sellerPublicKey,
         r.postId ?? '',
-        canonicalAmount(r.amount),
+        canonicalAmount(r.amount_c),
         r.committedAt,
     ].join('\n');
 }
@@ -83,7 +83,7 @@ export function receiptPayload(r: SettlementReceipt): string {
 export async function signReceipt(r: SettlementReceipt, privateKey: any): Promise<string> {
     if (!privateKey?.sign) throw new Error('No node identity key available to sign a settlement receipt');
     // Whole hundredths only: a malformed receipt here means a caller bug, not a peer's input.
-    if (!r || !isHundredths(r.amount) || r.amount <= 0) {
+    if (!r || !isHundredths(r.amount_c) || r.amount_c <= 0) {
         throw new Error('Cannot sign a settlement receipt without an amount in whole hundredths');
     }
     if (!r.key || !r.issuerPeerId) {

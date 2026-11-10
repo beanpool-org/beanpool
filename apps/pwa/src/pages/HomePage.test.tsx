@@ -7,7 +7,10 @@ import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
+import type { HomeAnswer, HomeLayoutV2 } from '../lib/home-cards';
+
+/** A version-1 layout as an older web app's copy held it: core still reads it (translateV1), nothing here writes one. */
+type HomeLayout = { v: 1; order: string[]; hidden: string[]; dismissed: Record<string, string>; updatedAt: string | null };
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
@@ -45,7 +48,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
-import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
+import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
@@ -226,7 +229,7 @@ describe('one request, the cached answer first (§5)', () => {
         expect(screen.queryByTestId('home-card-market')).toBeNull();
     });
 
-    it('offline with no copy: a sentence and Try again, never a blank page; a node older than Home says that', async () => {
+    it('offline with no copy: a sentence and Try again, never a blank page; a 404 is the same failed line, no longer a node older than Home', async () => {
         vi.mocked(api.getHome).mockRejectedValueOnce(new TypeError('Failed to fetch'));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-failed')).toHaveTextContent("Couldn't reach your community");
@@ -238,7 +241,7 @@ describe('one request, the cached answer first (§5)', () => {
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_FAILED);
     });
 
     it('a failed read says why in the language of the moment: a live switch translates it, a node\'s own words stay its own (#1947 review N2)', async () => {
@@ -247,10 +250,10 @@ describe('one request, the cached answer first (§5)', () => {
         try {
             vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
             render(<Live />);
-            expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
+            expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_FAILED);
             await act(async () => { await chooseAndShowLanguage('ru'); });
-            expect(screen.getByTestId('home-failed')).toHaveTextContent((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE] as string);
-            expect((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE]).not.toBe(HOME_NOT_ON_NODE);
+            expect(screen.getByTestId('home-failed')).toHaveTextContent((ruWords as Record<string, unknown>)[HOME_FAILED] as string);
+            expect((ruWords as Record<string, unknown>)[HOME_FAILED]).not.toBe(HOME_FAILED);
             cleanup();
             // A refusal the node wrote is shown as it wrote it, in any language.
             vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Your account is paused.'), { status: 403 }));
@@ -2023,6 +2026,24 @@ describe('the card frame (F3)', () => {
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market']));
     });
 
+    it('a layout the node refuses (400): the account\'s list stands, nothing is sent again by itself, and Arrange says nothing of an update', async () => {
+        nodeV2(answer(), v2(['market', 'events', 'pulse']));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
+        fireEvent.click(screen.getByTestId('home-menu-remove'));
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
+        // The account's own list comes back: the card the node would not let go of is drawn again.
+        await waitFor(() => expect(cardIds()).toContain('pulse'));
+        openArrange();
+        expect(screen.queryByTestId('home-arrange-not-on-account')).toBeNull();
+        doneArrange();
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await pause(100);
+        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
+    });
+
     it('a card type this app does not know is kept byte for byte through every save, and never drawn or asked', async () => {
         const future = { id: 'fut1', type: 'future-card', settings: { a: [1, { b: 'é' }] } };
         nodeV2(answer(), v2(['market', 'events', 'pulse'], AT, [future]));
@@ -2034,56 +2055,6 @@ describe('the card frame (F3)', () => {
         await waitFor(() => expect(savedLayouts()).toHaveLength(1));
         expect(JSON.stringify(savedLayouts()[0].cards.find(c => c.id === 'fut1'))).toBe(JSON.stringify(future));
         for (const c of vi.mocked(api.getHome).mock.calls) expect(c[0]?.cards ?? []).not.toContain('fut1');
-    });
-
-    it('an empty version-1 list (a standby) draws the newcomer list; when the real list returns it stands and nothing is sent', async () => {
-        const node = nodeV2(answer(), null);
-        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer({ layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT } as never })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        expect(cardIds()).not.toContain('beans');
-        // The primary is back with the member's real list.
-        (node as unknown as { account: () => unknown }).account();
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['beans', 'market'], '2026-10-02T00:00:00.000Z') })));
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        expect(api.saveHomePreferences).not.toHaveBeenCalled();
-    });
-
-    it('a node from before the frame refuses the list: kept here, Arrange says so, sent again once per landing only', async () => {
-        const v1Answer = answer({ layout: { v: 1, order: ['market', 'events', 'pulse'], hidden: [], dismissed: {}, updatedAt: AT } as never });
-        vi.mocked(api.getHome).mockResolvedValue(fresh(v1Answer));
-        vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(cardIds()).not.toContain('pulse'));
-        openArrange();
-        expect(screen.getByTestId('home-arrange-not-on-account')).toBeInTheDocument();
-        doneArrange();
-        // More reads on this landing send nothing.
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        expect(cardIds()).not.toContain('pulse');
-        // The next landing sends it once more.
-        first.unmount();
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(2));
-        expect(cardIds()).not.toContain('pulse');
-    });
-
-    it('the standby tie: a version-1 copy dated like this browser\'s never wins, and nothing is sent', async () => {
-        const mine = v2(['beans', 'market']);
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: mine }), layout: mine as never, layoutUnsaved: false, savedAt: 1 });
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { v: 1, order: ['market', 'events'], hidden: [], dismissed: {}, updatedAt: AT } as never })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        expect(cardIds()).not.toContain('events');
-        expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
     it('a member here before the frame who never edited sees the fewer-cards line once', async () => {
@@ -2110,26 +2081,8 @@ describe('the card frame (F3)', () => {
     });
 });
 
-describe('an empty version-1 account list, no copy here: every edit stands once the first is saved (review of #1701, finding 1)', () => {
+describe('edits made one after another: every one stands once the first is saved (review of #1701, finding 1)', () => {
     const posts = (log: string[]) => log.filter(l => l === 'POST').length;
-
-    it('R1: Add Your Beans, then Remove Coming up: the second edit is sent and stays', async () => {
-        const node = nodeKeeping(answer(), EMPTY_V1);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        fireEvent.click(screen.getByTestId('home-add-open'));
-        fireEvent.click(screen.getByTestId('home-add-beans'));
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause();
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await pause(100);
-        expect(posts(node.log)).toBe(2);
-        expect(cardIds()).not.toContain('events');
-        expect(node.account().cards.map(c => c.id)).not.toContain('events');
-        expect(node.account().cards.map(c => c.id)).toContain('beans');
-    });
 
     it('R1b: Remove Coming up, then add a saved search: the search and its words stay', async () => {
         const node = nodeKeeping(answer(), EMPTY_V1);
@@ -2149,23 +2102,9 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
         expect((node.account().cards.find(c => c.type === 'search') as { settings?: unknown } | undefined)?.settings).toMatchObject({ q: 'eggs' });
     });
 
-    it('R1c: the fewer-cards line shows; Your Beans, The Pulse and Your groups added one after another all stay', async () => {
-        const node = nodeKeeping(answer({}, { groups: { items: [{ id: 'g1', name: 'Garden', unread: 1, muted: false }] } } as never), EMPTY_V1);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
-        for (const t of ['beans', 'pulse', 'groups']) {
-            fireEvent.click(screen.getByTestId('home-add-open'));
-            fireEvent.click(screen.getByTestId(`home-add-${t}`));
-            await pause(80);
-        }
-        for (const t of ['beans', 'pulse', 'groups']) expect(cardIds()).toContain(t);
-        expect(posts(node.log)).toBe(3);
-        expect(node.account().cards.map(c => c.type)).toEqual(expect.arrayContaining(['beans', 'pulse', 'groups']));
-    });
 });
 
-describe('a read that overtakes the first save\'s answer on an empty version-1 list: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
+describe('a read that overtakes a save\'s answer: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
     const ids = (l: unknown) => ((l as { cards?: Array<{ id: string }> } | null)?.cards ?? []).map(c => c.id);
     /**
      * nodeKeeping, but a save is applied at once and, with `hold`, answered only when the test calls answerSaves(): never on
@@ -2210,118 +2149,6 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await pause(20);
     };
 
-    it('X1: Add Your Beans, then Add The Pulse before the first save answers, and the second edit\'s read answers first: both stand, on the account too', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        // The node has the first save; its answer is still out. The second edit's read answers before it.
-        const before = reads(node.log);
-        add('pulse');
-        await readAnswered(node.log, before);
-        expect(node.log).not.toContain('answered');
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        // Now the first save answers, then the second edit's save that waited on it.
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        // The second edit is sent once, after the first save's answer (one save out at a time).
-        expect(posts(node.log)).toBe(2);
-        expect(node.log.indexOf('answered')).toBeLessThan(node.log.map(l => l.startsWith('POST ')).lastIndexOf(true));
-        expect(screen.getByTestId('home-live').textContent).toContain('The Pulse');
-    });
-
-    it('X1, the mark kept in this browser: closed before either answer, opened again, the account\'s list is this browser\'s own save, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true);
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        add('pulse');
-        // Closed at once: the second edit's read and the first save's answer reach no page.
-        first.unmount();
-        await pause(20);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        expect(node.log).not.toContain('answered');
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(posts(node.log)).toBe(2);
-    });
-
-    it('a standby\'s refusal keeps the mark, and the primary back with the member\'s real list still wins: nothing more is sent', async () => {
-        const real = v2(['market', 'events', 'pulse'], AT);
-        let primary = false;
-        let account: unknown = { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT };
-        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
-            if (!primary) throw Object.assign(new Error('A Home layout is …'), { status: 400 });
-            account = prefs['home.layout'];
-            return { success: true, 'home.layout': account } as never;
-        });
-        vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
-            const full = answer();
-            const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
-            return fresh({ ...full, layout: (primary ? real : account) as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
-        });
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await pause(80);
-        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await pause(80);
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        primary = true;
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await pause(100);
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'pulse']));
-        expect(cardIds()).not.toContain('beans');
-    });
-
-    for (const behind of [200, 5_000]) {
-        it(`S1: X1 with the node's clock ${behind} ms behind this browser's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
-            const node = nodeSlowSave(answer(), EMPTY_V1, true, behind);
-            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-            await screen.findByTestId('home-card-events');
-            add('beans');
-            await waitFor(() => expect(posts(node.log)).toBe(1));
-            await pause(20);
-            // The second edit's read carries the first save back with the node's date, not the one this browser sent.
-            const before = reads(node.log);
-            add('pulse');
-            await readAnswered(node.log, before);
-            expect(node.log).not.toContain('answered');
-            // The second save reaches the node at least 250 ms after its edit (a slower machine only makes it later): a node
-            // 200 ms behind takes its date as sent, one 5 s behind still holds it to its now.
-            await pause(250);
-            await node.answerSaves();
-            await waitFor(() => expect(posts(node.log)).toBe(2));
-            await node.answerSaves();
-            await pause(100);
-            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(posts(node.log)).toBe(2);
-            expect(screen.getByTestId('home-live').textContent).toContain('The Pulse');
-            await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-            await pause(300);
-            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            // The copy took the node's date from the save's answer: the read sends nothing more (review of #1715, note 1).
-            expect(posts(node.log)).toBe(2);
-        });
-    }
-
     it('S2: the member\'s own list, the node\'s clock 5 s behind this browser\'s: one Add is sent once, and the reads after it send nothing (review of #1715, note 1)', async () => {
         const node = nodeSlowSave(answer(), v2(['events', 'market', 'pulse'], AT), false, 5_000);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -2339,82 +2166,9 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         expect(ids(node.account())).toEqual(expect.arrayContaining(['events', 'market', 'pulse', 'beans']));
     });
 
-    it('S1, the mark kept in this browser: the node\'s clock 5 s behind, closed before either answer, opened again: the node\'s copy of the first save is still this browser\'s own, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true, 5_000);
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        add('pulse');
-        first.unmount();
-        await pause(20);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        expect(node.log).not.toContain('answered');
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(posts(node.log)).toBe(2);
-    });
-
-    it('W2b: another device\'s list lands just before the first save, which the node drops as older: that list stands, and the edit that waited is not sent (review of #1715, finding 2)', async () => {
-        const full = answer();
-        const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
-        let account: unknown = EMPTY_V1;
-        const log: string[] = [];
-        let answerFirst = () => {};
-        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
-            const l = prefs['home.layout'] as unknown;
-            log.push(`POST ${ids(l).join(',')}`);
-            if (log.filter(x => x.startsWith('POST ')).length === 1) {
-                // The first save is applied only as it answers, when the test says (never on a timer); another device's
-                // list, dated 5 ms after it, lands first.
-                await new Promise<void>(r => { answerFirst = r; });
-                const other = {
-                    v: 2, dismissed: {}, updatedAt: new Date(at(l) + 5).toISOString(),
-                    cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
-                };
-                if (at(other) >= at(account)) account = other;
-            }
-            if (at(l) >= at(account)) account = l;
-            log.push('answered');
-            return { success: true, 'home.layout': account } as never;
-        });
-        vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
-            log.push(params.cards ? 'GET cards=' : 'GET');
-            const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
-            return fresh({ ...full, layout: account as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
-        });
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(log)).toBe(1));
-        await pause(40);
-        // The second edit's read still sees the empty row: the first save is not applied yet.
-        const before = reads(log);
-        add('pulse');
-        await readAnswered(log, before);
-        expect(log).not.toContain('answered');
-        await act(async () => { answerFirst(); });
-        await waitFor(() => expect(log).toContain('answered'));
-        await pause(100);
-        expect(posts(log)).toBe(1);
-        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
-        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'search-k2x7']));
-        expect(cardIds()).not.toContain('pulse');
-        // Nothing more is sent at the next read either.
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await pause(300);
-        expect(posts(log)).toBe(1);
-        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
-    });
 });
 
-describe('what a never-edited member asks, and the old web app\'s empty copy (review of #1701, findings 6 and 4)', () => {
+describe('what a never-edited member asks (review of #1701, finding 6)', () => {
     it('R3: no row and no copy: the first read has no cards=, every read after it asks the newcomer\'s cards', async () => {
         const node = nodeKeeping(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -2435,21 +2189,6 @@ describe('what a never-edited member asks, and the old web app\'s empty copy (re
         expect(node.log).not.toContain('POST');
     });
 
-    it('R5: the old web app\'s Reset (an empty version-1 list on the account and in this browser\'s copy) is unknown: the newcomer\'s list, the fewer line, the newcomer\'s ask', async () => {
-        const empty = { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: empty as never }), layout: empty as never, layoutUnsaved: false, savedAt: 1 });
-        const node = nodeKeeping(answer(), empty);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        await pause();
-        expect(cardIds()).not.toContain('pulse');
-        expect(cardIds()).not.toContain('beans');
-        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
-        const asked = node.log.find(l => l.startsWith('GET'))!.slice(4).split(',');
-        expect(asked).not.toContain('pulse');
-        expect(asked).not.toContain('beans');
-        expect(node.log).not.toContain('POST');
-    });
 });
 
 // ── A chosen chat (DESIGN-home-chosen-chat-fable.md §2, slice C3): the same bodies as the phone's card ───────────────────

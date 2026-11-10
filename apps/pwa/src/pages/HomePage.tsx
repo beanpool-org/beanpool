@@ -64,10 +64,10 @@ import {
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews,
+    listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine,
+    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
@@ -146,15 +146,12 @@ const HOME_WORDS = {
     offline: word("Couldn't reach your community; showing what we had."),
     failed: word("Couldn't reach your community. Your other tabs still work."),
     signedOut: word('You signed out of this browser in another tab. Reload this page to carry on.'),
-    notOnNode: word("This community's server doesn't have Home yet. The Market and the other tabs work as before."),
     tipsDone: word('That was the last tip. Add a card brings them back.'),
 };
 export const HOME_OFFLINE = HOME_WORDS.offline;
 export const HOME_FAILED = HOME_WORDS.failed;
 /** The member signed out in another tab: this page shows and keeps nothing of theirs any more. */
 export const HOME_SIGNED_OUT = HOME_WORDS.signedOut;
-/** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
-export const HOME_NOT_ON_NODE = HOME_WORDS.notOnNode;
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 /** Said politely when Done on the last tip takes the Tips card away. */
 export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
@@ -165,7 +162,7 @@ export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
 const LIB_LINES = {
     skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
     typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
-    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
 } as const;
 /** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
 const findTownWords = (): AddressSearchWords => ({
@@ -183,11 +180,6 @@ const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok &&
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
 const fewerKey = (pk: string) => `beanpool_home_fewer_seen_${pk}`;
-/** A raw account layout's date (an empty version-1 one's too): the mark an edit made on the newcomer's list carries. */
-const rawDate = (raw: unknown): string => {
-    const at = raw && typeof raw === 'object' ? (raw as { updatedAt?: unknown }).updatedAt : undefined;
-    return typeof at === 'string' && at.length <= 40 ? at : '';
-};
 /** The Tips card's record (@beanpool/core home-tips.ts), per account in this browser, never on the account. */
 export const tipsKey = (pk: string) => `beanpool_home_tips_${pk}`;
 
@@ -1215,7 +1207,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
     // Which failure, not its words: the words are written at render, so a language switch translates them (#1947 review
     // N2). A refusal the node wrote (401/403) is kept as the node wrote it.
-    const [failure, setFailure] = useState<'notOnNode' | 'failed' | { message: string } | null>(null);
+    const [failure, setFailure] = useState<'failed' | { message: string } | null>(null);
     const [live, setLive] = useState('');
     // The interests the page holds after a tap (saved in the background); null: the answer's.
     const [interests, setInterests] = useState<string[] | null>(null);
@@ -1250,8 +1242,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
     // A chat card picked again takes a new id in the same place (home-layout changeCardSettings): its settings' close finds it by that.
     const settingsMovedTo = useRef<{ from: string; to: string } | null>(null);
-    // The node refused the version-2 layout (a node from before the frame): Arrange says the cards stay here (§2.3).
-    const [notOnAccount, setNotOnAccount] = useState(false);
     const [fewerOpen, setFewerOpen] = useState(false);
     const [point, setPoint] = useState<HomePoint | null>(() => marketPoint());
     const [pointProblem, setPointProblem] = useState<string | null>(null);
@@ -1449,15 +1439,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // This browser's own copy of the layout (the account's once read, or the member's edit); null while it has none.
     const layoutRef = useRef<HomeLayoutV2 | null>(null);
     const drawnRef = useRef<HomeLayoutV2 | null>(null);
-    // Set while this browser's copy is an edit made on the newcomer's list drawn for an unknown account list: that list's
-    // date (lib/home-layout.ts pickLayout). Such an edit is never sent by itself: a read decides (review of #1699, finding 2).
-    const overRef = useRef<string | undefined>(undefined);
-    // While marked: the edits this browser sent (each its date and its list's print). A version-2 answer that is one of them
-    // is this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave; review of #1701
-    // confirmation, finding 2; review of #1715, finding 1).
-    const overSentRef = useRef<MarkSent[]>([]);
-    // The node refused this browser's version-2 layout on this landing: it is sent again at the next landing, never in a loop.
-    const refusedLanding = useRef(false);
     // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
     const extraRead = useRef(false);
     // After an add: the new card, whose "…" takes focus once it is drawn; `read`: the add's read of Home has answered, so a
@@ -1527,17 +1508,15 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const keep = useCallback((a: HomeAnswer, l: HomeLayoutV2 | null, epoch: number) => {
         void writeCachedHome(cacheKey, {
             answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current,
-            ...(overRef.current !== undefined ? { localOnlyOver: overRef.current, localOnlySent: overSentRef.current } : {}), savedAt: Date.now(),
+            savedAt: Date.now(),
         }, epoch);
     }, [cacheKey]);
 
     const draw = (l: HomeLayoutV2 | null) => { drawnRef.current = l; setLayout(l); };
 
     /*
-     * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A 400 from a node
-     * whose Home answer is version 1 (or has none) is a node from before the card frame: the cards stay in this browser,
-     * Arrange says so, and they are sent again at the next landing, never in a loop (CARD-FRAME §2.3). Any other refusal:
-     * the account's copy stands and this one is never sent again by itself. A success clears both.
+     * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A refusal: the
+     * account's copy stands and this one is never sent again by itself. A success clears it.
      */
     const saveLayout = useCallback((next: HomeLayoutV2): Promise<void> => {
         // Signed out or cleared, here or in another tab: nothing more is sent as that account.
@@ -1545,7 +1524,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         if (!publicKey || epoch === null) return Promise.resolve();
         const seq = ++layoutSeq.current;
         savingLayout.current += 1;
-        if (overRef.current !== undefined) overSentRef.current = rememberMarkSent(overSentRef.current, next);
         return saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
@@ -1555,12 +1533,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // finding 2). Otherwise this answer marked it saved and it waited, unsent, for some later read.
                 const waiting = unsavedRef.current && layoutRef.current && layoutRef.current !== next ? layoutRef.current : null;
                 unsavedRef.current = false;
-                refusedLanding.current = false;
-                // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
-                // clearPhoneOnly; review of #1701, finding 1: the next edit was otherwise thrown away unsent).
-                overRef.current = undefined;
-                overSentRef.current = [];
-                setNotOnAccount(false);
                 // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
                 const kept = readLayout(r['home.layout']);
                 if (kept && (kept.updatedAt ?? '') > (next.updatedAt ?? '')) {
@@ -1585,14 +1557,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // Not a refusal (no connection, a timeout, too many): kept in this browser, sent again after the next read.
                 if (typeof code !== 'number' || code < 400 || code >= 500 || code === 408 || code === 429) return;
                 const answered = answerRef.current?.layout;
-                if (code === 400 && (!answered || layoutV1Of(answered))) {
-                    refusedLanding.current = true;
-                    setNotOnAccount(true);
-                    return;
-                }
                 unsavedRef.current = false;
-                overRef.current = undefined;
-                overSentRef.current = [];
                 const account = readLayout(answered);
                 layoutRef.current = account;
                 draw(account);
@@ -1633,7 +1598,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (read?.notModified && answerRef.current) {
                 recordHomeAnswer(answerRef.current, publicKey);
                 builtForRef.current = sent ?? builtFor(answerRef.current);
-                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0 && !refusedLanding.current) void saveLayout(layoutRef.current);
+                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0) void saveLayout(layoutRef.current);
                 // The account's interests are the ones in the copy drawn: a change made here that never reached them is
                 // sent again while they are unchanged since (lib/home-interests.ts).
                 const me = answerRef.current.me;
@@ -1651,36 +1616,14 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (!a || typeof a !== 'object' || !a.cards || typeof a.cards !== 'object' || Array.isArray(a.cards)) throw new Error('not a Home answer');
             recordHomeAnswer(a, publicKey);
             etagRef.current = read && !read.notModified ? read.etag : null;
-            // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date, with the standby tie
-            // and the empty version-1 "unknown" rule. A visitor keeps no layout.
+            // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date. A visitor keeps no layout.
             const account = readLayout(a.layout);
-            const v1 = layoutV1Of(a.layout);
             const local = layoutRef.current;
             const member = !!a.me && !a.welcome;
-            if (member && overRef.current !== undefined && ownMarkedSave(account, v1, overSentRef.current)) {
-                // This browser's own marked save, read back (the read overtook the save's answer): the account's list is
-                // known and is this browser's, so the mark goes and the dates decide (a newer edit made since wins).
-                overRef.current = undefined;
-                overSentRef.current = [];
-            }
-            const pick = member ? pickLayout(account, local, v1, overRef.current) : { layout: null, push: false };
-            if (member && account && !v1) {
-                // A version-2 answer: this node keeps the new shape, so nothing waits on it any more.
-                // After a refusal the landing's one extra read may already be spent: a standby's empty version-1 list is built without
-                // the starter set's cards that version 1 never had ("Asked near you"), and asking for them took it. The account's
-                // real list is a new list to read the cards of, so it gets its own one (cold-start N2).
-                if (refusedLanding.current) extraRead.current = false;
-                refusedLanding.current = false;
-                setNotOnAccount(false);
-                // The account's real list is back: it stands, and the edit made on the unknown one goes, unsent.
-                if (overRef.current !== undefined && !pick.push) { overRef.current = undefined; overSentRef.current = []; }
-            }
-            // The newcomer's list drawn for an unknown account list is not this browser's copy: nothing of it is sent.
-            const unknown = member && !local && !!v1?.empty;
+            const pick = member ? pickLayout(account, local) : { layout: null, push: false };
             unsavedRef.current = !!pick.layout && pick.layout === local && (pick.push || unsavedRef.current);
-            layoutRef.current = unknown ? null : pick.layout;
-            const fewerFrom = v1?.empty && !local ? null : account;
-            if (member && publicKey && fewerCardsNews(fewerFrom, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
+            layoutRef.current = pick.layout;
+            if (member && publicKey && fewerCardsNews(account, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
                 writeFlag(fewerKey(publicKey));
                 setFewerOpen(true);
             }
@@ -1699,9 +1642,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             setStatus('ready');
             setFailure(null);
             keep(a, layoutRef.current, epoch);
-            // This browser's list, newer than the account's (an edit made offline, or one whose save failed), is sent; one the
-            // node refused as a shape it doesn't know yet only at the next landing.
-            const saving = unsavedRef.current && layoutRef.current && !refusedLanding.current && savingLayout.current === 0
+            // This browser's list, newer than the account's (an edit made offline, or one whose save failed), is sent.
+            const saving = unsavedRef.current && layoutRef.current && savingLayout.current === 0
                 ? saveLayout(layoutRef.current) : null;
             // The list drawn asks for cards this answer wasn't built for (a first landing here, or another device's edit), or
             // has Home's point go otherwise (a saved search closer than the list it was read by): one more read for them,
@@ -1732,9 +1674,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 statusRef.current = 'failed';
                 setStatus('failed');
                 const code = (e as { status?: number } | null)?.status;
-                // 404: a server from before Home (lib/api.ts isRouteMissing).
                 const said = (e as Error | null)?.message;
-                setFailure(code === 404 ? 'notOnNode' : (code === 401 || code === 403) && said ? { message: said } : 'failed');
+                setFailure((code === 401 || code === 403) && said ? { message: said } : 'failed');
             }
         } finally {
             inFlight.current = false;
@@ -1763,9 +1704,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         etagRef.current = null;
         layoutRef.current = null;
         drawnRef.current = null;
-        overRef.current = undefined;
-        overSentRef.current = [];
-        refusedLanding.current = false;
         extraRead.current = false;
         builtForRef.current = null;
         setAnswer(null);
@@ -1796,12 +1734,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 builtForRef.current = cached.asked ?? null;
                 etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
-                overRef.current = cached.localOnlyOver;
-                overSentRef.current = cached.localOnlySent ?? [];
                 unsavedRef.current = cached.layoutUnsaved;
                 setAnswer(cached.answer);
                 const ans = cached.answer;
-                draw(ans.me && !ans.welcome ? pickLayout(readLayout(ans.layout), cached.layout, layoutV1Of(ans.layout), cached.localOnlyOver).layout : null);
+                draw(ans.me && !ans.welcome ? pickLayout(readLayout(ans.layout), cached.layout).layout : null);
             }
         }).finally(() => {
             if (!cancelled) void fetchHomeRef.current('landing');
@@ -1819,8 +1755,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         etagRef.current = null;
         layoutRef.current = null;
         drawnRef.current = null;
-        overRef.current = undefined;
-        overSentRef.current = [];
         builtForRef.current = null;
         unsavedRef.current = false;
         setAnswer(null);
@@ -1829,7 +1763,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setArranging(false);
         setPickerOpen(false);
         setSettingsFor(null);
-        setNotOnAccount(false);
         // Said in the same render as her Home goes, never a moment of "Loading" between.
         if (end === 'signed-out' && publicKey) {
             statusRef.current = 'signed-out';
@@ -2288,23 +2221,11 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const before = shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current });
         const next = make(before);
         if (!next) return false;
-        if (overRef.current === undefined && !layoutRef.current && layoutV1Of(answered.layout)?.empty) {
-            // Made while the account's list is unknown: this browser's only, until the account's real list answers.
-            overRef.current = rawDate(answered.layout);
-            overSentRef.current = [];
-        }
         unsavedRef.current = true;
         layoutRef.current = next;
         draw(next);
         keep(answered, next, epoch);
-        if (overRef.current !== undefined) {
-            // Never sent by itself, as the account's real list may be back (the primary after a standby): a read decides,
-            // and sends the edit only if it still stands (review of #1699 confirmation, finding 1).
-            void fetchHomeRef.current('layout').then(opts.afterRead);
-            return true;
-        }
-        // Refused on this landing as a shape the node doesn't know yet: kept here, sent at the next landing.
-        const saving = refusedLanding.current ? Promise.resolve() : saveLayout(next);
+        const saving = saveLayout(next);
         // An add, a card's settings, Reset, or a card the answer wasn't built for: read Home again once the save is
         // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
         const pins = askPins(answered);
@@ -2444,7 +2365,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     ) : status === 'failed' ? (
                         <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                             <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
-                                {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
+                                {failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
                             </p>
                             <button type="button" onClick={() => void fetchHome('retry')}
                                 className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
@@ -3467,9 +3388,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             {t('Done')}
                         </button>
                     </div>
-                )}
-                {inArrange && notOnAccount && (
-                    <p data-testid="home-arrange-not-on-account" className="m-0 mb-3 text-sm text-text-primary break-words">{t(LIB_LINES.notOnAccount)}</p>
                 )}
                 {/* The cards (D1): columns 320–576 px wide, packed shortest column first in the saved order (slice L1).
                     When packed: 4 px row tracks, 0 row gap, with cards positioned by gridColumn/gridRow and self-aligned.

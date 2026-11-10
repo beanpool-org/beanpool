@@ -85,19 +85,6 @@ export type NeedsTarget =
 /** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
 export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
-/**
- * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only
- * through lib/home-layout.ts `readLayout` (core's translateV1) and `layoutV1Of`; this app never writes one.
- */
-export interface HomeLayout {
-    v: 1;
-    order: HomeCardId[];
-    hidden: HomeCardId[];
-    dismissed: Partial<Record<HomeCardId, string>>;
-    /** The node stamps every saved layout; null only on a copy that was never saved. */
-    updatedAt: string | null;
-}
-
 export interface HomeProbation {
     onProbation: boolean;
     rules?: 'words' | 'ordinary';

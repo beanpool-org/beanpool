@@ -341,7 +341,7 @@ export interface HomeCards {
      */
     enterprise?: {
         id: string; name: string; requests: number; others: number; lifecycle: 'ongoing' | 'bounded'; keepers: number;
-        balance?: number; month?: MonthFigures; latest?: EnterpriseLine | null;
+        balance_c?: number; month?: MonthFigures; latest?: EnterpriseLine | null;
     };
     /** "Your shop and tools" (slice S4′): the reader's own shop, or none yet (the card still shows, with the tools). */
     shop?: { shop: ShopHomeCard | null };
@@ -361,7 +361,7 @@ export interface HomeCards {
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt: string | null }[] };
     /** `month`: the signer's own ledger this month; `more` when it held more lines than are read (MONTH_LINES). */
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month: MonthFigures & { fees: number; more: boolean } };
+    beans?: { balance_c: number; room: number; tier: string; activated: boolean; frozen: boolean; month: MonthFigures & { fees: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /**
      * The community's figures, totals public by rule: `listings` (the public board's live listings) to anyone answered;

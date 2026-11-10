@@ -201,7 +201,7 @@ export function listEnergyBalances(): Array<{
     peerId: string | null;
     address: string;
     callsign?: string;
-    balance: number;
+    balance_c: number;
     cap: number | null;
     extended: number;
     headroom: number | null;

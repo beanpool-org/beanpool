@@ -69,7 +69,7 @@ export interface MisspeltMemberKey {
     callsign: string;
     status: string | null;
     isVisitor: boolean;
-    balance: number;
+    balance_c: number;
     nodeRole: string | null;
     /** The callsign of the row under the same key in the one spelling, when there is one. */
     sameKeyAs: string | null;

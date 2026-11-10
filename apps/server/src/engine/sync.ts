@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
-import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
+import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, isHundredths, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { attachmentKey, getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -125,15 +125,18 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     (attachmentReferenceOf), and deleted with its tombstone. An importer before this one keeps none (it knows no such plain
  *     table), and its cursor is past every photo already sent: the re-seed brings them all. OLDEST_STANDBY_FORMAT stays: an
  *     older standby is no worse off than before, its photos unavailable after a take-over as they always were.
+ * 15. Money is whole hundredths (DESIGN-atomic-beans-fable.md): every money field `*_c`, an integer (balance_c, amount_c,
+ *     fee_c, price_c, commonsBalance_c, ...). An importer before this one reads none of them, so OLDEST_STANDBY_FORMAT is 15:
+ *     a copy or a delta is never sent to an older standby.
  */
-export const REPLICA_FORMAT = 14;
+export const REPLICA_FORMAT = 15;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
  * reference, 10 event times, 11 the let-in, 12 repeating events; raise it with any format whose older importer drops a
  * column.
  */
-export const OLDEST_STANDBY_FORMAT = 13;
+export const OLDEST_STANDBY_FORMAT = 15;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -314,7 +317,7 @@ export interface MainLedgerRecord extends LedgerSummary {
  */
 export function noteMainLedger(accounts: readonly SyncAccount[], generatedAt: string | null): void {
     const summary = summariseLedger(accounts.filter((a) => typeof a?.publicKey === 'string')
-        .map((a) => ({ publicKey: a.publicKey, balance: a.balance_c })));
+        .map((a) => ({ publicKey: a.publicKey, balance_c: a.balance_c })));
     const last = mainLedgerAtLastCopy();
     if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
         const record: MainLedgerRecord = { ...summary, generatedAt };
@@ -1329,24 +1332,21 @@ function instantOrNull(v: unknown): string | null {
 }
 
 const ENFORCE_LEDGER_AUTH = process.env.ENFORCE_LEDGER_AUTH === 'true';
-export const LEDGER_CONSERVATION_TOLERANCE = 0.5;
+/**
+ * How far a copy may move this standby's ledger total: not at all. Every balance is whole hundredths (@beanpool/core
+ * hundredths.ts) and SQLite sums INTEGER exactly, so a main server that conserves moves the total by exactly 0.
+ */
+export const LEDGER_CONSERVATION_TOLERANCE = 0;
 
 /**
- * The largest balance a copy may carry: 900,719,925,474.0991 Beans, Number.MAX_SAFE_INTEGER / 10,000. The ledger's
- * smallest unit is 0.0001 Bean (the engine rounds to it, round4), and past this a balance in those units is no longer a
- * safe integer, so it can't be held to the unit. No real ledger comes near it: every Bean an account holds is credit some
- * other account spent, and credit lines are a few thousand Beans (an earned one tops out below 1,920), so one account at
- * this bound takes some 470 million members each spending a full line into it. A copy carrying a balance beyond it, or one
- * that isn't a finite number (JSON's 1e400 parses to Infinity), is refused before anything is written.
- *
- * It also keeps the conservation guard's sum exact enough: SQLite's SUM compensates its rounding (Kahan-Babuska-Neumaier,
- * since 3.43; this build's better-sqlite3 carries 3.51), so over any copy the row cap lets in (250,000 accounts by default,
- * at most this much each) its error, beyond rounding the total itself, is under 1e-8 Beans. A running sum of doubles loses
- * up to half a step of the running total at each account instead (16 Beans near 2e17).
+ * The largest balance a copy may carry, in whole hundredths: 2^53 / 250,000, so the conservation guard's SUM over every
+ * account the row cap lets in (250,000 by default) stays a safe integer. No real ledger comes near it: every Bean an
+ * account holds is credit some other account spent, and credit lines are a few thousand Beans. A copy carrying a balance
+ * beyond it, or one that is not whole hundredths (a float, text, JSON's 1e400), is refused before anything is written.
  */
-const MAX_LEDGER_BALANCE = Number.MAX_SAFE_INTEGER / 10_000;
+const MAX_LEDGER_BALANCE = Math.floor(Number.MAX_SAFE_INTEGER / 250_000);
 
-/** What this server's ledger holds between all its accounts, as SQLite sums it (compensated, MAX_LEDGER_BALANCE). */
+/** What this server's ledger holds between all its accounts, whole hundredths, as SQLite sums INTEGER: exactly. */
 function ledgerTotal(): number {
     return (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
 }
@@ -1377,7 +1377,9 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
         const body = bodyOfSignedText(tx.authPayload);
         const signed = JSON.parse(body || '{}');
         if (String(signed.to) !== String(tx.to)) return false;
-        if (Number(signed.amount) !== Number(tx.amount)) return false;
+        // The integer the member signed, exactly (DESIGN-atomic-beans-fable.md §1): a body with `amount` (an older app's) has
+        // no amount_c and fails, as does a float or a numeric string.
+        if (!isHundredths(signed.amount_c) || signed.amount_c !== tx.amount_c) return false;
         // The note stored is the one signed, or none: a note the main server kept from someone who had blocked its sender
         // is stored blank (engine/withheld-notes.ts). Who signed it and the Beans it moved are checked above either way.
         // Both sides as stored: the main server keeps a note with each lone UTF-16 surrogate replaced by U+FFFD
@@ -1827,7 +1829,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     // A conservation violation, as the guard's refusals are, so the puller logs it at SECURITY, not as a pull to retry.
     for (const acc of Array.isArray(remote.accounts) ? remote.accounts : []) {
         const b = acc?.balance_c as unknown;
-        if (typeof b === 'number' && !(Math.abs(b) <= MAX_LEDGER_BALANCE)) {
+        // A number that is not whole hundredths (a float: a copy from before them) is refused here too, never rounded.
+        if (typeof b === 'number' && (!isHundredths(b) || !(Math.abs(b) <= MAX_LEDGER_BALANCE))) {
             throw new Error(`[Sync] Conservation violation: import payload account ${String(acc?.publicKey).slice(0, 16)} has a balance of ${b}, beyond what any ledger holds (|balance| ≤ ${MAX_LEDGER_BALANCE}); rejecting payload`);
         }
     }
@@ -2085,7 +2088,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.category,
                         rp.title,
                         rp.description,
-                        rp.credits,
+                        isHundredths(rp.price_c) && rp.price_c >= 0 ? rp.price_c : 0,
                         rp.authorPublicKey,
                         rp.createdAt,
                         rp.active ? 1 : 0,
@@ -2200,7 +2203,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.originNode || null,
                         rp.title,
                         rp.description,
-                        rp.credits,
+                        isHundredths(rp.price_c) && rp.price_c >= 0 ? rp.price_c : 0,
                         rp.active ? 1 : 0,
                         rp.status,
                         rp.repeatable ? 1 : 0,
@@ -2335,7 +2338,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // project's) goes. A comparison of stamps let this standby's own rows win: the members import made a zero
                 // row for each new member stamped with this clock, and every balance made before the first copy stayed 0.
                 const local = new Map((db.prepare('SELECT public_key, balance_c, last_updated_at, last_demurrage_epoch FROM accounts').all() as
-                    { public_key: string; balance: number | null; last_updated_at: string | null; last_demurrage_epoch: number | null }[])
+                    { public_key: string; balance_c: number | null; last_updated_at: string | null; last_demurrage_epoch: number | null }[])
                     .map((r) => [r.public_key, r]));
                 const named = new Set<string>();
                 const refusedBalances: string[] = [];
@@ -2368,7 +2371,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     accountChanges++;
                     // What the row holds now: an account the copy names twice is written twice, and its second entry is
                     // compared with its first.
-                    local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance_c, last_updated_at: stamp, last_demurrage_epoch: epoch });
+                    local.set(acc.publicKey, { public_key: acc.publicKey, balance_c: acc.balance_c, last_updated_at: stamp, last_demurrage_epoch: epoch });
                 }
                 if (refusedBalances.length > 0) {
                     console.warn(`[Sync] SECURITY: ${refusedBalances.length} account(s) in this copy carry a balance that is not a finite number; `
@@ -2401,20 +2404,20 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             }
 
             // The conservation guard: what this copy moved the ledger's total by, measured as the total after its writes
-            // against the total before them, both as SQLite sums the rows (exact enough, MAX_LEDGER_BALANCE). A running sum
+            // against the total before them, both as SQLite sums the rows (INTEGER: exact, MAX_LEDGER_BALANCE). A running sum
             // of each account's change, in the copy's order, lost a change smaller than half a step of the running total:
             // +1e20, 1000, then -1e20 measured 0, and the next copy, dropping the two, measured 0 too, which left 1000 Beans
             // here that the main server's ledger doesn't have. Every write this copy makes to the accounts is before this
             // point, a re-key's move included, whatever branch above it took.
             const totalAfter = ledgerTotal();
             if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed
-                && Math.abs(totalAfter - totalBefore) > LEDGER_CONSERVATION_TOLERANCE) {
+                && totalAfter - totalBefore !== LEDGER_CONSERVATION_TOLERANCE) {
                 // A copy may not move this standby's total by more than the tolerance, unless the puller took it as a seed
                 // (ImportOptions.seed), which it decides from this standby's own records and never from the ledger here: a
                 // count of accounts let one copy that named none bring the ledger back to "empty", and the next went
                 // unchecked. With every account the main server's, what it measures is the shift between the two ledgers,
                 // which is 0 whenever the main server conserves.
-                throw new Error(`[Sync] Conservation violation: import shifted total balance by ${(totalAfter - totalBefore).toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
+                throw new Error(`[Sync] Conservation violation: import shifted total balance by ${String(totalAfter - totalBefore)} hundredths (it must not move); rejecting value-creating payload`);
             }
 
             // The in-memory ledger follows these rows once they are committed, after every copy that lands, and only then.
@@ -2456,7 +2459,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         conflictsSkipped++;
                         continue;
                     }
-                    if (!tx.from || !tx.to || typeof tx.amount !== 'number' || !Number.isFinite(tx.amount) || tx.amount <= 0) {
+                    if (!tx.from || !tx.to || !isHundredths(tx.amount_c) || tx.amount_c <= 0) {
                         conflictsSkipped++;
                         continue;
                     }
@@ -2465,7 +2468,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         tx.from,
                         tx.to,
                         tx.amount,
-                        typeof tx.taxFee === 'number' && Number.isFinite(tx.taxFee) ? tx.taxFee : 0,
+                        isHundredths(tx.fee_c) && tx.fee_c >= 0 && tx.fee_c <= tx.amount_c ? tx.fee_c : 0,
                         tx.memo,
                         tx.timestamp,
                         tx.authSigner ?? null,
@@ -2508,7 +2511,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         mt.postId ?? mt.post_id ?? null,
                         mt.buyerPubkey ?? mt.buyerPublicKey ?? mt.buyer_pubkey ?? null,
                         mt.sellerPubkey ?? mt.sellerPublicKey ?? mt.seller_pubkey ?? null,
-                        mt.credits ?? 0,
+                        isHundredths(mt.amount_c) && mt.amount_c >= 0 ? mt.amount_c : 0,
                         mt.hours ?? null,
                         mt.status ?? 'pending',
                         createdAt,
@@ -2782,7 +2785,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 for (const st of remote.settlements) {
                     insertSettlement.run(
                         st.key, st.direction, st.peerId, st.buyerPubkey, st.buyerHomeNode ?? null,
-                        st.sellerPubkey ?? null, st.postId ?? null, st.amount, st.fee ?? 0,
+                        st.sellerPubkey ?? null, st.postId ?? null, st.amount_c, st.fee_c ?? 0,
                         st.reservedUntil ?? null, st.state, st.receipt ?? null, st.receiptPayload ?? null,
                         st.failureReason ?? null, st.createdAt, st.updatedAt,
                     );

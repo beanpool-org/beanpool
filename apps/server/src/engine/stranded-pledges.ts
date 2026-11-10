@@ -98,7 +98,7 @@ export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
         JOIN accounts a ON a.public_key = 'escrow_' || p.id
         WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance_c > ?
         ORDER BY p.id
-    `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance: number }[];
+    `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance_c: number }[];
     return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c)));
 }
 

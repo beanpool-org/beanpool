@@ -214,7 +214,7 @@ export function listBrokenBalances(limit = 50): { total: number; accounts: Broke
         SELECT a.public_key AS account, m.callsign AS callsign, a.balance_c AS balance_c, typeof(a.balance_c) AS t
         FROM accounts a LEFT JOIN members m ON m.public_key = a.public_key
         WHERE ${BROKEN_BALANCE_SQL.replace(/\bbalance\b/g, 'a.balance_c')}
-        ORDER BY a.public_key`).all() as { account: string; callsign: string | null; balance: unknown; t: string }[];
+        ORDER BY a.public_key`).all() as { account: string; callsign: string | null; balance_c: unknown; t: string }[];
     const accounts: BrokenBalance[] = rows.map((r) => ({
         account: r.account,
         callsign: r.callsign ?? (r.account === 'COMMONS_POOL' ? 'the Commons pot' : null),
@@ -332,7 +332,7 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
  * since this check existed), and then it can't say the ledger is the main server's.
  */
 export function ledgerAgainstLastCopy(): { match: boolean; here: LedgerSummary; lastCopy: MainLedgerRecord | null } {
-    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance_c FROM accounts').all() as { publicKey: string; balance: number }[]);
+    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance_c FROM accounts').all() as { publicKey: string; balance_c: number }[]);
     const lastCopy = mainLedgerAtLastCopy();
     return { match: !!lastCopy && lastCopy.digest === here.digest, here, lastCopy };
 }
@@ -358,7 +358,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     const commonsBalance = Math.round(COMMONS_BALANCE * 100) / 100;
     const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));
 
-    const accountRows = db.prepare("SELECT public_key, balance_c FROM accounts").all() as { public_key: string; balance: number }[];
+    const accountRows = db.prepare("SELECT public_key, balance_c FROM accounts").all() as { public_key: string; balance_c: number }[];
     const balanceMap = new Map(accountRows.map(r => [r.public_key, r.balance_c]));
 
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
@@ -401,7 +401,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
  */
 export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
     const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as { callsign: string } | undefined;
-    const account = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(publicKey) as { balance: number } | undefined;
+    const account = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(publicKey) as { balance_c: number } | undefined;
 
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
     balancesCsv += `commons,Community Pool,System,${Math.round(COMMONS_BALANCE * 100) / 100}\n`;

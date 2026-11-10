@@ -87,7 +87,7 @@ interface ProjectRow {
     deadline: string | null;
     enterprise: string;
     enterprise_status: string | null;
-    balance: number | null;
+    balance_c: number | null;
 }
 
 /** A project's rows as the return reads them: its end date as pledgeToProject reads it (its own row's, else its enterprise's). */

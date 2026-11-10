@@ -491,7 +491,7 @@ export function createPost(
     category: string,
     title: string,
     description: string,
-    credits: number,
+    price_c: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string,
     authorPublicKey: string,
     lat?: number,
@@ -702,7 +702,7 @@ export function createPost(
 
         // Enforce poll isolation defaults
         category = 'community';
-        credits = 0;
+        price_c = 0;
         priceType = 'fixed';
         repeatable = false;
         lat = undefined;
@@ -764,7 +764,7 @@ export function createPost(
         // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
         // carries event fields (§2.4).
         category = 'community';
-        credits = 0;
+        price_c = 0;
         priceType = 'fixed';
         repeatable = false;
         cashAlsoNeeded = false;
@@ -831,7 +831,7 @@ export function createPost(
             event_repeat, event_repeat_until, event_repeat_skips,
             lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
+            finalId, type, category, title, description, price_c, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
@@ -893,7 +893,7 @@ export function createPost(
     // Nor a member's copy: the feed names who posted, and a copy names nobody (engine/event-copy.ts).
     if (audienceScope === 'public' && !options?.shownCopy) {
         try {
-            recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
+            recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, price_c });
         } catch (e) {
             console.warn('[ActivityFeed] Could not record post_created:', e);
         }
@@ -1077,7 +1077,7 @@ export const PRICE_FROZEN_ERROR = word('This post has a deal in progress, so its
  * refused: an edit that sends the same price back (every edit form does) goes through. Before anything is written.
  */
 function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates: Partial<MarketplacePost>): void {
-    const creditsChange = updates.credits !== undefined && Number(updates.credits) !== Number(existingPost.credits);
+    const creditsChange = updates.price_c !== undefined && Number(updates.price_c) !== Number(existingPost.price_c);
     const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
     if (!creditsChange && !unitChange) return;
     // A standing deal's periods don't freeze it (DESIGN-standing-deals-fable §2.4): the standing deal keeps the price per
@@ -1299,7 +1299,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             }
         }
         // Enforce poll isolation during updates
-        delete updates.credits;
+        delete updates.price_c;
         delete updates.lat;
         delete updates.lng;
         delete updates.photos;
@@ -1326,7 +1326,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
     let hostOpenedChat = false;
     if (existingPost.type === 'event') {
-        delete updates.credits;
+        delete updates.price_c;
         delete updates.category;
         delete updates.priceType;
         delete updates.repeatable;
@@ -1516,7 +1516,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
     if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
     if (updates.category !== undefined) { fields.push('category = ?'); values.push(updates.category); }
-    if (updates.credits !== undefined) { fields.push('credits = ?'); values.push(updates.credits); }
+    if (updates.price_c !== undefined) { fields.push('price_c = ?'); values.push(updates.price_c); }
     if (updates.priceType !== undefined) { fields.push('price_type = ?'); values.push(updates.priceType); }
     if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push(updates.repeatable ? 1 : 0); }
     // The string "false" is truthy, so a stringified payload could never CLEAR the flag.
@@ -2361,7 +2361,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
             for (const tx of pending) {
                 const escrowAccount = `escrow_${tx.id}`;
                 // REFUND WHAT THE ESCROW HOLDS, NOT WHAT THE ROW CLAIMS. This loop used to refund
-                // `tx.credits` outright and ignore the result, so a trade row pointing at an escrow that
+                // `tx.amount_c` outright and ignore the result, so a trade row pointing at an escrow that
                 // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
                 // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
                 // ever recorded against it. A removal is a tidy-up; it must never create Beans.
@@ -2371,7 +2371,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                 // Beans stayed in an escrow of a cancelled deal, which nothing else can reach (sync check F1,
                 // 2026-10-02). Nobody can say what such a row owed, so its buyer gets everything the escrow holds. An
                 // escrow that isn't a number of Beans itself (NaN, NULL, below 0) gives back nothing.
-                const owed = isBeanAmount(tx.credits) ? tx.credits : null;
+                const owed = isBeanAmount(tx.amount_c) ? tx.amount_c : null;
                 const rawHeld = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : owed ?? 0;
                 const held = isBeanAmount(rawHeld) ? rawHeld : 0;
                 const refund = owed === null ? held : Math.min(owed, held);
@@ -2382,7 +2382,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                     if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
                 }
                 if (owed === null || refund < owed) {
-                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.credits)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.amount_c)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
                     hooks?.onRefundShortfall?.({
                         transactionId: tx.id,
                         postId,

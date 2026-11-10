@@ -162,7 +162,13 @@ export interface TableHashes {
  * updated before its main server hashes `standing_deals` over one column fewer. REPLICA_FORMAT stays: each side's import
  * writes only the columns its own table has; the rows communities hold are ended ones, which both CHECKs take.
  */
-export const TABLE_HASHES_VERSION = 27;
+/**
+ * 28: money is whole hundredths (DESIGN-atomic-beans-fable.md): every money column is INTEGER and named *_c (accounts.balance_c,
+ * transactions.amount_c and fee_c, posts.price_c, marketplace_transactions.amount_c, ...), and members loses
+ * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
+ * copy never crosses the change.
+ */
+export const TABLE_HASHES_VERSION = 28;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

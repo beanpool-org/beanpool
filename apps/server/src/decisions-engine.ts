@@ -693,7 +693,7 @@ export function isPauseVote(decision: Pick<Decision, 'effect' | 'authorPubkey' |
 export interface BranchEntry {
     pubkey: string;
     name: string;
-    balance?: number;
+    balance_c?: number;
     debt?: number;
     reply?: string;
     repliedAt?: string;
@@ -1246,9 +1246,9 @@ export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's de
  * removal by vote S3), so its voters can weigh it: their name, balance and any debt, and what the Commons holds, from the
  * ledger. The balance and the debt go to those voters and the member only (decisionForReader).
  */
-export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
+export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance_c: number } {
     const member = getMember(subjectPubkey);
-    const accRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
+    const accRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance_c: number } | undefined;
     const memberBalance = accRow !== undefined ? accRow.balance_c : (getBalance(subjectPubkey)?.balance_c ?? 0);
     return {
         memberName: member?.callsign || nameGiven || subjectPubkey.slice(0, 8),

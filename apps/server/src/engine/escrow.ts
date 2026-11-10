@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, halves, loanDays, shareOf, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -11,7 +11,7 @@ import { assertLocalSettlement, assertTradableHere } from '../federation-settlem
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
-import { isDealQuantity, DEAL_QUANTITY_ERROR } from './post-fields.js';
+import { isDealQuantity, DEAL_QUANTITY_ERROR, dealAmountFor, quantityHundredths } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
 import { checkStandingStart, firstPeriodOf, insertStandingDeal, type CheckedStandingStart, type StandingStart } from './standing-deals.js';
 import type { KeptNoticePushOptions } from './kept-notices.js';
@@ -446,7 +446,7 @@ export function requestPost(
     const keptHours = post.price_type !== 'fixed' || (lendable && hours != null) ? hours : undefined;
 
     const requester = getMember(db, requesterPublicKey);
-    const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
+    const finalCredits = post.price_type !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     assertDealAmount(finalCredits);
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
@@ -479,13 +479,13 @@ export function requestPost(
         buyerCallsign,
         sellerPublicKey,
         sellerCallsign,
-        credits: finalCredits,
+        amount_c: finalCredits,
         hours: keptHours,
         status: 'requested',
         createdAt: new Date().toISOString()
     };
 
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.amount_c, tx.hours ?? null, tx.createdAt);
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
@@ -691,7 +691,7 @@ export interface RequestDeal {
     post_id: string;
     buyer_pubkey: string;
     seller_pubkey: string;
-    credits: number;
+    amount_c: number;
 }
 
 /**
@@ -714,7 +714,7 @@ export function requestHoldChecks(
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
     if (post.hidden_by_reports_at) throw postHiddenNoNewDeal();
-    assertDealRowAmount(row.credits, 'requested');
+    assertDealRowAmount(row.amount_c, 'requested');
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
@@ -792,7 +792,7 @@ export function requestHoldChecks(
     }
     const parties: HoldParties = { payer: row.buyer_pubkey, payee: row.seller_pubkey, isEnterprisePayer, isPayeeKeeper };
 
-    assertHoldFunded(cb, parties, row.credits, {
+    assertHoldFunded(cb, parties, row.amount_c, {
         payerName: buyerMember?.callsign || 'This enterprise',
         insufficient: word('Buyer has insufficient balance to cover escrow'),
         claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
@@ -834,9 +834,9 @@ export function approvePostRequest(
     assertNoDealOnCopy(post.shown_from_host);
     if ((post.type === 'offer' ? row.seller_pubkey : row.buyer_pubkey) !== authorPublicKey) return null;
     const standing = opts?.standing
-        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.price_type, price: post.credits, payer: row.buyer_pubkey, payee: row.seller_pubkey, signer: opts.authSigner })
+        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.price_type, price: post.price_c, payer: row.buyer_pubkey, payee: row.seller_pubkey, signer: opts.authSigner })
         : null;
-    const deal: RequestDeal = standing ? { ...row, credits: standing.auth.beansPerPeriod } : row;
+    const deal: RequestDeal = standing ? { ...row, amount_c: standing.auth.beansPerPeriod_c } : row;
 
     const parties = requestHoldChecks(cb, deal, post, authorPublicKey, { authSigner: opts?.authSigner, standing: !!standing });
     if (!parties) return null;
@@ -857,7 +857,7 @@ export function approvePostRequest(
             txId: row.id,
             postId: post.id,
             parties,
-            amount: deal.credits,
+            amount: deal.amount_c,
             memo: `Escrow hold for approved deal ${row.post_id}`,
             // Only attribute authSigner when the debited account is the enterprise itself (Need listings).
             auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
@@ -873,7 +873,7 @@ export function approvePostRequest(
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
-            amount: deal.credits,
+            amount: deal.amount_c,
             postId: post.id,
             transactionId: row.id,
             actorPubkey: authorPublicKey,
@@ -1128,18 +1128,18 @@ export function acceptPost(
     // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per
     // period; the first period is paid now, and the period is the deal's quantity. Without `standing` the accept is today's.
     const standing = opts?.standing
-        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.priceType, price: post.credits, payer: buyerPublicKey, payee: post.authorPublicKey, signer: opts.authSigner })
+        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.priceType, price: post.price_c, payer: buyerPublicKey, payee: post.authorPublicKey, signer: opts.authSigner })
         : null;
 
     let keptHours: number | undefined;
     const parties = offerHoldChecks(cb, post, buyerPublicKey, () => {
-        if (standing) return standing.auth.beansPerPeriod;
+        if (standing) return standing.auth.beansPerPeriod_c;
         if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
         if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
             throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
         }
         keptHours = post.priceType !== 'fixed' ? hours : undefined;
-        return post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
+        return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     }, { authSigner: opts?.authSigner, standing: !!standing });
     const finalCredits = parties.amount;
     if (standing) {
@@ -1155,7 +1155,7 @@ export function acceptPost(
         buyerCallsign: parties.buyerCallsign || 'Anonymous',
         sellerPublicKey: post.authorPublicKey,
         sellerCallsign: post.authorCallsign,
-        credits: finalCredits,
+        amount_c: finalCredits,
         hours: keptHours,
         status: 'pending',
         createdAt: new Date().toISOString()
@@ -1246,14 +1246,14 @@ function startStanding(cb: EscrowCallbacks, v: CheckedStandingStart, d: {
  */
 export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
     completedAt: string;
-    credits: number;
+    amount_c: number;
     authSigner?: string;
     adjust?: () => number;
 }): { releaseResult: any; releaseCredits: number } {
     const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(opts.completedAt, row.id);
     if (updateRes.changes !== 1) throw new Error(word('Deal was already completed or cancelled'));
 
-    const releaseCredits = opts.adjust ? opts.adjust() : opts.credits;
+    const releaseCredits = opts.adjust ? opts.adjust() : opts.amount_c;
 
     // The 1.5% community fee is charged HERE — the seller receives (amount − fee), the fee goes to
     // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
@@ -1312,7 +1312,7 @@ export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released:
         recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
             postId: row.post_id,
             postTitle: post?.title,
-            credits: releaseCredits,
+            amount_c: releaseCredits,
         });
     } catch (e) {
         console.warn('[ActivityFeed] Could not record trade_completed:', e);
@@ -1434,25 +1434,25 @@ export function completePostTransaction(
     if (finalHours != null && !isDealQuantity(finalHours)) {
         throw new Error(DEAL_QUANTITY_ERROR.replace(/^The quantity/, 'The final quantity'));
     }
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
     const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
     // Each refusal below names the way out that works in the only states that reach it (#1445 re-review, measured):
     // a booked quantity outside 0.01–10000 is itself refused as a final quantity, and neither app can confirm a per-unit
     // deal with none, so only the cancel works there; a row whose credits were set near the largest number by hand can't
     // be completed or cancelled (its escrow holds what was really paid), and only a moderator's removal clears it.
-    let releaseCredits = row.credits;
+    let releaseCredits = row.amount_c;
     if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
         // The rate must be one the row really holds (#1445 review, BLOCKING 2): its booked quantity a real one (a row from
         // before POST_HOURS_MIN, or written by hand, may hold 5e-324, and then credits / hours had rounded to a whole
         // number of Beans, or to 0), the rate finite, and the rate times the booked quantity the credits again. Otherwise
         // nothing is paid at it: a wrong amount would move for good.
-        const rate = row.credits / bookedHours;
-        const roundTrips = Number.isFinite(rate) && Math.abs(rate * bookedHours - row.credits) <= 1e-9 * Math.max(1, row.credits);
-        if (!isDealQuantity(bookedHours) || !roundTrips) {
+        // Whole hundredths: what was held times the confirmed quantity over the booked one, truncated once (the buyer keeps
+        // a part below a hundredth). Both quantities counted in hundredths of a unit, so nothing here is a float.
+        if (!isDealQuantity(bookedHours)) {
             throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. `
                 + 'Cancel the deal, and the Beans held for it go back.');
         }
-        releaseCredits = rate * finalHours;
+        releaseCredits = shareOf(row.amount_c, quantityHundredths(finalHours), quantityHundredths(bookedHours));
     }
     // A row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits near the
     // largest number). Its escrow holds what was really paid, which can't cover what the row says, so a cancel is refused
@@ -1471,10 +1471,10 @@ export function completePostTransaction(
     cb.conservingTransaction(() => {
         released = releaseHeld(cb, row, post, {
             completedAt,
-            credits: releaseCredits,
+            amount_c: releaseCredits,
             authSigner: opts?.authSigner,
-            adjust: !(isHourly && releaseCredits !== row.credits) ? undefined : () => {
-                const diff = releaseCredits - row.credits;
+            adjust: !(isHourly && releaseCredits !== row.amount_c) ? undefined : () => {
+                const diff = releaseCredits - row.amount_c;
                 if (diff > 0) {
                     const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
                     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
@@ -1489,9 +1489,9 @@ export function completePostTransaction(
                         if (balance - diff < 0 || diff > earnedSurplus) {
                             // Extra hours cannot be funded from balance or earned surplus.
                             // Record deferred wage claim for the difference (diff), release the base hold
-                            // (row.credits) already secured in escrow to the keeper, and avoid stranding funds.
+                            // (row.amount_c) already secured in escrow to the keeper, and avoid stranding funds.
                             recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
-                            releaseCredits = row.credits;
+                            releaseCredits = row.amount_c;
                         } else {
                             db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
                                 .run(diff, row.buyer_pubkey);
@@ -1547,7 +1547,7 @@ export function cancelPostTransaction(
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
     assertNodeMember(cancellerPublicKey);
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -1557,7 +1557,7 @@ export function cancelPostTransaction(
         const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
         if (updateRes.changes === 0) throw new Error(word('Deal was already completed or cancelled'));
 
-        const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.credits, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
+        const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.amount_c, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
         if (!refundResult) throw new Error(word('Failed to refund escrow funds'));
 
         const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
@@ -1571,7 +1571,7 @@ export function cancelPostTransaction(
             );
             if (isPayeeKeeper) {
                 db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
-                    .run(row.credits, row.buyer_pubkey);
+                    .run(row.amount_c, row.buyer_pubkey);
             }
         }
 
@@ -1588,7 +1588,7 @@ export function cancelPostTransaction(
 
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
-            amount: row.credits,
+            amount: row.amount_c,
             postId: row.post_id,
             transactionId: row.id,
             actorPubkey: cancellerPublicKey,
@@ -1666,7 +1666,7 @@ export function resolveEscrowDispute(
     if (!row) {
         throw new Error('Transaction not found or not in pending escrow');
     }
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
 
     assertNotPartyToDispute(row, adminSigner.trim());
 
@@ -1685,18 +1685,13 @@ export function resolveEscrowDispute(
     let sellerShare = 0;
 
     if (action === 'release_to_seller') {
-        sellerShare = row.credits;
+        sellerShare = row.amount_c;
     } else if (action === 'refund_to_buyer') {
-        buyerShare = row.credits;
+        buyerShare = row.amount_c;
     } else if (action === 'split') {
-        // The seller's half is the EXACT remainder, not a second independent rounding. Rounding both to 2dp
-        // could make them sum to more than the escrow holds: at row.credits = 12.345 (an hourly deal is not
-        // a round number of cents) the old arithmetic gave 6.17 + 6.18 = 12.35, so a split paid out half a
-        // cent that nobody put in. Under the escrow floor that no longer mints beans — the second transfer
-        // is refused and the arbitration throws — which would be a working dispute turning into an error.
-        // So fix the arithmetic: round the buyer's half for legibility, and give the seller what is left.
-        buyerShare = Math.round((row.credits / 2) * 100) / 100;
-        sellerShare = row.credits - buyerShare;
+        // Whole hundredths (core halves): the buyer's half truncated, the seller's the rest, so the two always drain the
+        // escrow exactly: 1235 → 617 + 618, 1 → 0 + 1. Never a second rounding that could pay out what nobody put in.
+        [buyerShare, sellerShare] = halves(row.amount_c);
     }
 
     cb.conservingTransaction(() => {
@@ -1763,7 +1758,7 @@ export function resolveEscrowDispute(
                 );
                 if (isPayeeKeeper) {
                     db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
-                        .run(row.credits, row.buyer_pubkey);
+                        .run(row.amount_c, row.buyer_pubkey);
                 }
             }
 
@@ -1856,7 +1851,7 @@ export function resolveEscrowDispute(
             postTitle: post?.title,
             transactionId: row.id,
             resolution: action,
-            credits: row.credits,
+            amount_c: row.amount_c,
             counterpartyPubkey: row.seller_pubkey,
             counterpartyCallsign: sellerMember?.callsign || 'counterparty',
             role: 'buyer',
@@ -1868,7 +1863,7 @@ export function resolveEscrowDispute(
             postTitle: post?.title,
             transactionId: row.id,
             resolution: action,
-            credits: row.credits,
+            amount_c: row.amount_c,
             counterpartyPubkey: row.buyer_pubkey,
             counterpartyCallsign: buyerMember?.callsign || 'counterparty',
             role: 'seller',
@@ -1885,7 +1880,7 @@ export function resolveEscrowDispute(
             postId: row.post_id,
             transactionId: row.id,
             resolution: action,
-            amount: row.credits,
+            amount: row.amount_c,
             resolvedByName: resolverName,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,

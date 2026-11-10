@@ -636,7 +636,7 @@ export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebui
         const col = db.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as { nn: number } | undefined;
         if (!col || col.nn === 1) return 'already';
         const broken = db.prepare(`SELECT public_key, balance_c, typeof(balance_c) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
-            .all() as { public_key: string; balance: unknown; t: string }[];
+            .all() as { public_key: string; balance_c: unknown; t: string }[];
         if (broken.length > 0) {
             console.error('');
             console.error('╔════════════════════════════════════════════════════════════════════════╗');
@@ -2385,20 +2385,6 @@ export function initSchema() {
         }
     }
 
-    // Slice 4 Grandfather migration: existing enterprises keep their fixed line as legacy_credit_floor (min 200)
-    // until keepers' pledges exceed it. Gated behind node_config so it runs strictly once.
-    try {
-        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get();
-        if (!alreadyMigrated) {
-            db.prepare(`
-                UPDATE members
-                SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
-                WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
-            `).run();
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
-        }
-    } catch { }
-
     markExistingVisitors();
     backfillBoardStanding();
     fillPausedBoardStanding();
@@ -2585,7 +2571,7 @@ export function initSchema() {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
         }
     } catch (e) {
-        console.error('[DB] Failed to backfill earned_surplus_c:', e);
+        console.error('[DB] Failed to backfill earned_surplus:', e);
     }
 
     // Migration: Replace table-wide transaction_id UNIQUE on deferred_wage_claims with partial unique index
@@ -3441,7 +3427,7 @@ export function createCrowdfundProject(
     title: string,
     description: string,
     photos: string[],
-    goal_amount_c: number,
+    goal_amount: number,
     deadline_at: string | null
 ) {
     if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
@@ -3508,7 +3494,7 @@ export function updateCrowdfundProject(
     title: string,
     description: string,
     photos: string[],
-    goal_amount_c: number,
+    goal_amount: number,
     deadline_at?: string | null
 ) {
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
@@ -3653,7 +3639,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     const targetAccount = project.enterprise_pubkey || projectId;
     onSettleDemurrage?.([targetAccount, project.creator_pubkey, fromPubkey]);
 
-    const sender = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
+    const sender = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance_c: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
     if (sender.balance_c < amount) throw new Error("Insufficient balance for pledge");
 
@@ -3694,7 +3680,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 
             // Auto-Sweep Escrow to Enterprise Account (Slice 3: pledges land in enterprise account!)
-            const escrowBalanceRow = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowPubkey) as { balance: number };
+            const escrowBalanceRow = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowPubkey) as { balance_c: number };
             const escrowBalance = escrowBalanceRow ? escrowBalanceRow.balance_c : Math.max(0, updatedProject.current_amount_c);
 
             if (escrowBalance > 0) {
@@ -3749,7 +3735,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     }
 
     // Guard against non-zero account balance to maintain ledger conservation
-    const account = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    const account = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
     if (account && Math.abs(account.balance_c) > 0.0001) {
         throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance_c}). Drain or sweep funds first.`);
     }
@@ -3813,7 +3799,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
 
-        const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+        const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
         if (acc && Math.abs(acc.balance_c) > 1e-9) {
             throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance_c} Beans). Sweep or refund funds first.`);
         }

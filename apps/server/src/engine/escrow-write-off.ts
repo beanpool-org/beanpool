@@ -49,7 +49,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export interface StrandedEscrow {
     /** The account id, `escrow_<trade id>`. */
     escrowId: string;
-    balance: number;
+    balance_c: number;
     tradeId: string;
     /** The trade row, or null when the node has none (a legacy escrow can outlive its trade row). */
     trade: { status: string; credits: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
@@ -220,7 +220,7 @@ export function writeOffStrandedEscrow(
         return refuse(409, 'already_written_off', `The Commons already covered this escrow on ${prior.timestamp}`, { writtenOffAt: prior.timestamp });
     }
 
-    const row = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowId) as { balance: number } | undefined;
+    const row = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowId) as { balance_c: number } | undefined;
     if (!row) return refuse(404, 'not_found', 'No such escrow account on this node');
 
     const tradeId = tradeIdOf(escrowId);

@@ -521,7 +521,7 @@ async function stagerChild(): Promise<void> {
     let closing: Record<string, any> | null = null;
     let next = 0;
     const received: Counts = {};
-    const accounts: { publicKey: string; balance: number }[] = [];
+    const accounts: { publicKey: string; balance_c: number }[] = [];
     // The values this database's rules refused, as the copy named them, for the hash check (engine/replica-hashes.ts).
     const membersLeftOut = new Map<string, Record<string, unknown>>();
     const valuesLeftOutNames: string[] = [];

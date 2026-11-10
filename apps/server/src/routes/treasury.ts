@@ -38,7 +38,7 @@ import { enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { LISTING_COPY_CODE } from '../engine/escrow.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
-import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -55,8 +55,9 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isPastDeadline, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
+import { avatarUrlOf, isPastDeadline, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, optionalHundredthsOf, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
 import { answerPotPaused } from '../engine/audit.js';
@@ -78,9 +79,9 @@ export function pledgeDispatchKind(treasury: string, body: { type?: unknown; mem
  * alone: getKeeperRequests rows, which the lead keeper and admins read, carry canBackPledge instead (#1612 review), with
  * the pledge itself as keeperRequestForReader gives it.
  */
-function ownPendingRequest(treasury: string, actor: string): (KeeperJoinRequest & { availableToBack: number }) | null {
+function ownPendingRequest(treasury: string, actor: string): (KeeperJoinRequest & { availableToBack_c: number }) | null {
     const mine = getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor);
-    return mine ? { ...mine, availableToBack: getAvailableBacking(actor) } : null;
+    return mine ? { ...mine, availableToBack_c: getAvailableBacking(actor) } : null;
 }
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -205,7 +206,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
-            `SELECT public_key, callsign, avatar_ref, earned_credit_c, legacy_credit_floor, earned_surplus_c, working_capital_ceiling_c, purpose, goal_amount_c, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_ref, earned_credit_c, earned_surplus_c, working_capital_ceiling_c, purpose, goal_amount_c, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
             !(r.status === 'suspended' || r.status === 'disabled' || r.status === 'rejected')
             || adminSignIn
@@ -261,23 +262,22 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     avatar: avatarUrlOf(r.public_key, r.avatar_ref),
                     // The photo's URL, as `avatar` (#1478): both apps read `avatar` first and this only where it is empty.
                     avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
-                    balance: b.balance_c, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
-                    allowance: floorInfo.allowance,
-                    derivedAllowance: floorInfo.derivedAllowance,
-                    legacyFloor: floorInfo.legacyFloor,
+                    balance_c: b.balance_c, creditLine_c: b.earnedCredit_c, floor_c: b.floor_c, usableFloor_c: b.usableFloor_c,
+                    allowance_c: floorInfo.allowance,
+                    derivedAllowance_c: floorInfo.derivedAllowance,
                     liveOffers: b.liveOffers,
-                    earnedSurplus: r.earned_surplus_c ?? 0,
-                    workingCapitalCeiling: r.working_capital_ceiling_c ?? null,
+                    earnedSurplus_c: r.earned_surplus_c ?? 0,
+                    workingCapitalCeiling_c: r.working_capital_ceiling_c ?? null,
                     purpose: r.purpose ?? null,
-                    goalAmount: r.goal_amount_c != null ? Number(r.goal_amount_c) : null,
-                    currentAmount,
+                    goalAmount_c: r.goal_amount_c != null ? Number(r.goal_amount_c) : null,
+                    currentAmount_c: currentAmount,
                     deadlineAt: r.deadline_at ?? null,
                     lifecycle: r.lifecycle ?? 'ongoing',
                     status: r.status ?? 'active',
                     paused: !!r.paused,
                     pausedAt: r.paused_at ?? null,
                     pausedBy: r.paused_by ?? null,
-                    pausedFloorSnapshot: r.paused_floor_snapshot_c != null ? Number(r.paused_floor_snapshot_c) : null,
+                    pausedFloorSnapshot_c: r.paused_floor_snapshot_c != null ? Number(r.paused_floor_snapshot_c) : null,
                     pauseExpiresAt,
                     pauseDaysRemaining,
                     pauseExpiringSoon,
@@ -407,7 +407,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const flow = (db.prepare(
             'SELECT from_pubkey, to_pubkey, amount_c, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
         ).all(treasury, treasury) as any[]).map(f => ({
-            amount: f.amount,
+            amount_c: f.amount_c,
             memo: isOperator || (!!actor && (f.from_pubkey === actor || f.to_pubkey === actor)) ? f.memo : '',
             timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
@@ -463,19 +463,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             callsign: m.callsign,
             avatar: avatarUrlOf(treasury, m.avatar_ref),
             avatarUrl: m.avatar_url,
-            balance: b.balance_c, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
-            allowance: floorInfo.allowance,
-            derivedAllowance: floorInfo.derivedAllowance,
-            legacyFloor: floorInfo.legacyFloor,
+            balance_c: b.balance_c, creditLine_c: b.earnedCredit_c, floor_c: b.floor_c, usableFloor_c: b.usableFloor_c,
+            allowance_c: floorInfo.allowance,
+            derivedAllowance_c: floorInfo.derivedAllowance,
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
-            earnedSurplus: m.earned_surplus_c ?? 0,
-            workingCapitalCeiling: m.working_capital_ceiling_c ?? null,
+            earnedSurplus_c: m.earned_surplus_c ?? 0,
+            workingCapitalCeiling_c: m.working_capital_ceiling_c ?? null,
             purpose: m.purpose ?? null,
             // Its About, in its keepers' words, and when it started (round 3 §3: "since Sep 2026").
             about: m.bio ?? null,
             since: m.joined_at ?? null,
-            goalAmount: m.goal_amount_c != null ? Number(m.goal_amount_c) : null,
-            currentAmount,
+            goalAmount_c: m.goal_amount_c != null ? Number(m.goal_amount_c) : null,
+            currentAmount_c: currentAmount,
             deadlineAt: m.deadline_at ?? null,
             pledgesReturnedAt,
             lifecycle: m.lifecycle ?? 'ongoing',
@@ -483,7 +482,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             paused: !!m.paused,
             pausedAt: m.paused_at ?? null,
             pausedBy: m.paused_by ?? null,
-            pausedFloorSnapshot: m.paused_floor_snapshot_c != null ? Number(m.paused_floor_snapshot_c) : null,
+            pausedFloorSnapshot_c: m.paused_floor_snapshot_c != null ? Number(m.paused_floor_snapshot_c) : null,
             pauseExpiresAt,
             pauseDaysRemaining,
             pauseExpiringSoon,
@@ -510,7 +509,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // from this alone, never from the keepers list, which can't say who is an admin or whether a keeper ever left.
             // Never on one that has wound up: its projects row still reads ACTIVE, and no app offered a cancel there before.
             mayCancel: actor && m.lifecycle === 'bounded' && m.status !== 'completed' ? mayCancelProject(treasury, actor) : false,
-            availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
+            availableToBack_c: actor ? getAvailableBacking(actor, treasury) : null,
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending').map(r => keeperRequestForReader(r, backingReader))
                 : [],
@@ -575,13 +574,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (blockCrossNodeSettlement(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
-        const { amount, memo } = body;
-        const parsedAmount = Number(amount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-            ctx.status = 400;
-            ctx.body = { error: word('A positive amount is required') };
-            return;
-        }
+        const { memo } = body;
+        // Whole hundredths above 0 (money-body.ts).
+        const parsedAmount = requirePositiveHundredths(ctx, body);
+        if (parsedAmount === null) return;
         // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
         if (respondIfNoteTooLong(ctx, memo)) return;
         if (isNote(memo) && respondIfMuted(ctx, actor)) return;
@@ -622,7 +618,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (respondIfMuted(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
-        const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
+        const { name, title, avatar, photos, purpose, description, lifecycle, deadlineAt, lat, lng } = body;
+        // Money in the body is whole hundredths, `*_c` (money-body.ts): a goal or a ceiling of anything else is refused.
+        const goalIn = optionalHundredthsOf(body, 'goalAmount_c');
+        const ceilingIn = optionalHundredthsOf(body, 'workingCapitalCeiling_c');
+        if (!goalIn.ok || !ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        const goalAmount = goalIn.value;
+        const workingCapitalCeiling = ceilingIn.value;
         const enterpriseName = replaceLoneSurrogates(String(name || title || '').trim());
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
@@ -687,7 +689,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         const parsedDeadline = deadline.deadline;
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || parsedDeadline) ? 'bounded' : 'ongoing';
-        const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
+        const parsedGoal = goalAmount != null ? goalAmount : null;
         const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
         const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
         // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main). After the checks
@@ -701,7 +703,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 0, // Member-created enterprises must start with 0 credit line (Rule 1)
                 {
                     systemCreated: !photoUrl,
-                    workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,
+                    workingCapitalCeiling: workingCapitalCeiling != null ? workingCapitalCeiling : null,
                     purpose: enterprisePurpose,
                     lifecycle: parsedLifecycle,
                     goalAmount: parsedGoal,
@@ -737,7 +739,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 name: enterpriseName,
                 purpose: enterprisePurpose,
                 lifecycle: parsedLifecycle,
-                goalAmount: parsedGoal,
+                goalAmount_c: parsedGoal,
                 deadlineAt: parsedDeadline,
             };
         } catch (e: any) {
@@ -760,8 +762,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
+        const adminBody = (ctx as any).requestBody || {};
+        const { name, avatar, purpose } = adminBody;
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
+        const lineIn = optionalHundredthsOf(adminBody, 'creditLine_c');
+        const ceilingIn = optionalHundredthsOf(adminBody, 'workingCapitalCeiling_c');
+        if (!lineIn.ok || !ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above (#2082: own only).
         const avatarRefusal = routePhotoValueRefusal(String(avatar));
         if (avatarRefusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) }; return; }
@@ -771,9 +777,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 ...createTreasury(
                     String(name),
                     String(avatar),
-                    Number(creditLine) || 0,
+                    lineIn.value ?? 0,
                     {
-                        workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null,
+                        workingCapitalCeiling: ceilingIn.value ?? null,
                         purpose: purpose ? String(purpose) : undefined,
                     }
                 ),
@@ -788,16 +794,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        const { ceiling } = (ctx as any).requestBody || {};
-        const parsedCeiling = ceiling === null || ceiling === undefined || ceiling === '' ? null : Number(ceiling);
-        if (parsedCeiling !== null && (!Number.isFinite(parsedCeiling) || parsedCeiling < 0)) {
-            ctx.status = 400;
-            ctx.body = { error: 'Ceiling must be a non-negative finite number or null' };
-            return;
-        }
+        // Whole hundredths, 0 or more, or null for none (money-body.ts).
+        const ceilingIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'ceiling_c');
+        if (!ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        const parsedCeiling = ceilingIn.value ?? null;
         db.prepare('UPDATE members SET working_capital_ceiling_c = ? WHERE public_key = ?').run(parsedCeiling, treasury);
         sweepEnterpriseCeiling(treasury);
-        ctx.body = { success: true, workingCapitalCeiling: parsedCeiling };
+        ctx.body = { success: true, workingCapitalCeiling_c: parsedCeiling };
     });
 
     // Master switch per member: may they steward anything at all. Retained for the fleet manager,
@@ -1054,10 +1057,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
-        const amt = Number((ctx as any).requestBody?.amount);
-        if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
-        // To the cent, as a member's payment to the Commons is (LED-05).
-        if (!isWholeCents(amt)) { ctx.status = 400; ctx.body = { error: WHOLE_CENTS_ERROR }; return; }
+        // Whole hundredths above 0 (money-body.ts), as a member's payment to the Commons is (LED-05).
+        const amt = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+        if (amt === null) return;
         if (amt > getBalance(treasury).balance_c) { ctx.status = 400; ctx.body = { error: word('Cannot sweep more than the treasury holds') }; return; }
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
         // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
@@ -1096,7 +1098,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: word('That sweep could not be completed — check the treasury still holds that much.') };
             return;
         }
-        ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance_c };
+        ctx.body = { success: true, swept_c: amt, balance_c: getBalance(treasury).balance_c };
     });
 
     // ---- Enterprise Season / Lifecycle (docs/the-commons.md §2.2) -----------------------
@@ -1112,7 +1114,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 success: true,
                 paused: true,
                 pausedAt: res.pausedAt,
-                pausedFloorSnapshot: res.pausedFloorSnapshot,
+                pausedFloorSnapshot_c: res.pausedFloorSnapshot,
                 alreadyPaused: !!res.alreadyPaused,
             };
         } catch (e: any) {
@@ -1381,11 +1383,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const floorInfo = getEnterpriseFloor(treasury);
         ctx.body = {
             pledges: getEnterprisePledgesForReader(treasury, backingReaderOf(actor)),
-            floor: floorInfo.floor,
-            allowance: floorInfo.allowance,
-            derivedAllowance: floorInfo.derivedAllowance,
-            legacyFloor: floorInfo.legacyFloor,
-            availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
+            floor_c: floorInfo.floor,
+            allowance_c: floorInfo.allowance,
+            derivedAllowance_c: floorInfo.derivedAllowance,
+            availableToBack_c: actor ? getAvailableBacking(actor, treasury) : null,
         };
     };
     router.get('/api/treasury/:treasury/pledges', getPledgesHandler);
@@ -1396,24 +1397,19 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
-        const { amount } = (ctx as any).requestBody || {};
-        const parsedAmount = Number(amount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-            ctx.status = 400;
-            ctx.body = { error: 'amount must be a positive number' };
-            return;
-        }
+        // Whole hundredths above 0 (money-body.ts).
+        const parsedAmount = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+        if (parsedAmount === null) return;
         try {
             const pledge = pledgeEnterpriseBacking(treasury, actor, parsedAmount);
             const floorInfo = getEnterpriseFloor(treasury);
             ctx.body = {
                 success: true,
                 pledge,
-                floor: floorInfo.floor,
-                allowance: floorInfo.allowance,
-                derivedAllowance: floorInfo.derivedAllowance,
-                legacyFloor: floorInfo.legacyFloor,
-                availableToBack: getAvailableBacking(actor, treasury),
+                floor_c: floorInfo.floor,
+                allowance_c: floorInfo.allowance,
+                derivedAllowance_c: floorInfo.derivedAllowance,
+                availableToBack_c: getAvailableBacking(actor, treasury),
             };
         } catch (e: any) {
             ctx.status = 400;
@@ -1468,25 +1464,21 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const { amount } = (ctx as any).requestBody || {};
-        const parsedAmount = (amount !== undefined && amount !== null) ? Number(amount) : undefined;
-        if (parsedAmount !== undefined && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
-            ctx.status = 400;
-            ctx.body = { error: 'amount must be a positive number' };
-            return;
-        }
+        // Optional: whole hundredths above 0, or absent for all of it (money-body.ts).
+        const releaseIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'amount_c');
+        if (!releaseIn.ok || releaseIn.value === 0) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        const parsedAmount = releaseIn.value ?? undefined;
         try {
             const res = releaseEnterpriseBacking(treasury, actor, parsedAmount);
             const floorInfo = getEnterpriseFloor(treasury);
             ctx.body = {
                 success: true,
-                releasedAmount: res.releasedAmount,
-                remainingPledge: res.remainingPledge,
-                floor: floorInfo.floor,
-                allowance: floorInfo.allowance,
-                derivedAllowance: floorInfo.derivedAllowance,
-                legacyFloor: floorInfo.legacyFloor,
-                availableToBack: getAvailableBacking(actor, treasury),
+                releasedAmount_c: res.releasedAmount,
+                remainingPledge_c: res.remainingPledge,
+                floor_c: floorInfo.floor,
+                allowance_c: floorInfo.allowance,
+                derivedAllowance_c: floorInfo.derivedAllowance,
+                availableToBack_c: getAvailableBacking(actor, treasury),
             };
         } catch (e: any) {
             ctx.status = 400;
@@ -1520,8 +1512,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
-        const { pledgedBacking, amount, backing } = (ctx as any).requestBody || {};
-        const pledge = pledgedBacking ?? amount ?? backing ?? 0;
+        // The backing they offer: whole hundredths, 0 or more (money-body.ts); none is 0.
+        const pledgeIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'pledgedBacking_c');
+        if (!pledgeIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        const pledge = pledgeIn.value ?? 0;
         try {
             const req = requestToJoinEnterprise(treasury, actor, pledge);
             ctx.body = { success: true, request: req };

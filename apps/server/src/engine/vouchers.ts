@@ -618,7 +618,7 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
 
 /** The stored balance, never read through the ledger (memory boot-getbalance-before-exemptions): below zero now? */
 function belowZeroNow(pk: string): boolean {
-    return ((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance_c ?? 0) < 0;
+    return ((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0) < 0;
 }
 
 /**

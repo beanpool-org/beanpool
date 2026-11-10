@@ -124,7 +124,7 @@ export function countVouchReset(db: Database.Database): VouchResetCounts {
         const owing = db.prepare(`
             SELECT m.public_key AS pk, a.balance_c AS balance_c
               FROM members m JOIN accounts a ON a.public_key = m.public_key
-             WHERE ${vouchedSql} AND ${person} AND a.balance_c < 0`).all() as { pk: string; balance: number }[];
+             WHERE ${vouchedSql} AND ${person} AND a.balance_c < 0`).all() as { pk: string; balance_c: number }[];
         for (const o of owing) {
             // The engine's line, with no vouch term: what this member keeps after the reset.
             const { floor } = getMemberTrustProfile(db, o.pk);

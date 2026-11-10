@@ -104,7 +104,7 @@ export interface OffboardPreview {
         status: string;
         joinedAt: string;
     };
-    balance: number;
+    balance_c: number;
     commonsBalance: number;
     costToCommunity: number;
     projectedCommonsBalance: number;

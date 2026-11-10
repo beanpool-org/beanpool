@@ -24,14 +24,15 @@ import {
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
+    beans, isHundredths, shareOf,
 } from '@beanpool/core';
 
 // A refusal with values in it, in English, its sentence marked for the way out to find again in the member's language
 // (member-words.ts), as engine/posts.ts writes them.
 const { t: tr } = wordsFor('en');
 
-/** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
-export const POST_CREDITS_MAX = 1_000_000;
+/** The most one listing may ask, per unit, in whole hundredths: a million Beans, far above any real price. */
+export const POST_PRICE_MAX_C = beans(1_000_000);
 /** The most units (hours, days, …) one deal may be for. */
 export const POST_HOURS_MAX = 10_000;
 /**
@@ -50,7 +51,8 @@ export interface PostFieldsIn {
     title?: unknown;
     description?: unknown;
     category?: unknown;
-    credits?: unknown;
+    /** The price, whole hundredths of a Bean (the wire's `price_c`). */
+    price_c?: unknown;
     priceType?: unknown;
     lat?: unknown;
     lng?: unknown;
@@ -64,6 +66,21 @@ export interface PostFieldsIn {
 /** A number of units for a deal: finite, from POST_HOURS_MIN to POST_HOURS_MAX. */
 export function isDealQuantity(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && v >= POST_HOURS_MIN && v <= POST_HOURS_MAX;
+}
+
+/**
+ * What `quantity` units at `perUnit` (whole hundredths of a Bean) come to, in whole hundredths, by exact integer arithmetic:
+ * the quantity counted in hundredths of a unit (1.5 hours is 150; a quantity is 0.01 to 10,000, so this is a count, not
+ * money), the product truncated once (@beanpool/core shareOf), so the payer keeps a part below a hundredth. A quantity or
+ * price out of range throws, as shareOf does.
+ */
+export function dealAmountFor(perUnit: number, quantity: number): number {
+    return shareOf(perUnit, quantityHundredths(quantity), 100);
+}
+
+/** A deal quantity in whole hundredths of a unit, for dealAmountFor and an hourly deal's re-rate (engine/escrow.ts). */
+export function quantityHundredths(quantity: number): number {
+    return Math.round(quantity * 100);
 }
 
 /** The refusal for a quantity that is given but isn't one (isDealQuantity), at a door where a fixed price ignores it. */
@@ -82,9 +99,9 @@ export function dealQuantityFromBody(raw: unknown): number | undefined {
     return NaN;
 }
 
-/** A listing's price in Beans: a finite number, 0 or more, at most POST_CREDITS_MAX. */
+/** A listing's price: whole hundredths of a Bean, 0 or more, at most POST_PRICE_MAX_C. */
 export function isListingPrice(v: unknown): v is number {
-    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= POST_CREDITS_MAX;
+    return isHundredths(v) && v >= 0 && v <= POST_PRICE_MAX_C;
 }
 
 /** A listing's text the rule refuses for its length, in the words both apps show. */
@@ -131,8 +148,8 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (mode === 'create' || has('title')) text(fields, 'title', 'Title', true, LISTING_TITLE_LIMIT, LISTING_TITLE_TOO_LONG, stored.title);
     if (has('description')) text(fields, 'description', 'Description', false, LISTING_DESCRIPTION_LIMIT, LISTING_DESCRIPTION_TOO_LONG, stored.description);
     if (has('category')) text(fields, 'category', 'Category', true, LISTING_CATEGORY_LIMIT, LISTING_CATEGORY_TOO_LONG, stored.category);
-    if (has('credits') && !isListingPrice(fields.credits)) {
-        throw new Error(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`);
+    if (has('price_c') && !isListingPrice(fields.price_c)) {
+        throw new Error('The price must be a number of Beans from 0 to 1000000');
     }
     if (has('priceType') && !(POST_PRICE_TYPES as readonly unknown[]).includes(fields.priceType)) {
         throw new Error(`The price type must be one of ${POST_PRICE_TYPES.join(', ')}`);

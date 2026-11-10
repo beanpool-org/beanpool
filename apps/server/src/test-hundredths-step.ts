@@ -5,13 +5,50 @@
  * goals none, the money settings back to their defaults), one log line names what was dropped, LedgerAudit passes on it
  * (all zero), and the next boot does nothing. A fresh install boots and the step has nothing to do.
  *
+ * Round 2 (the deciding review of #3033): an old removal, pause or branch vote keeps no balance or debt in its params, so
+ * none is served to any member or to an admin who can't vote in it (only the `*_c` keys are filtered now); an old
+ * crowdfund still taking pledges is closed (its goal went with the old money, and a goal of 0 is funded by the first
+ * pledge); the settings log's money lines and a standby's two kept records of its main server are cleared, not read as
+ * hundredths.
+ *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-hundredths-step.ts
  */
 import Database from 'better-sqlite3';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runConservationCheck } from '@beanpool/engine';
 import { assert, bootInto, columns, tmp, runSchemaSuite } from './schema-upgrade-test-harness.js';
 import { MONEY_COLUMNS, MONEY_RECORD_TABLES, MONEY_SETTINGS } from './db/hundredths-step.js';
+
+const SRC = path.dirname(fileURLToPath(import.meta.url));
+
+/** The keys an old Decision recorded a figure under (whole Beans), at its top level or on a branch vote's account. */
+const OLD_DECISION_FIGURE = /"(balance|debt|commonsPool|branchDebt)"\s*:/;
+
+/**
+ * A boot that also serves the three old votes as the node does: to every member (publicDecision), to a member who isn't
+ * the subject and to the subject (decisionForReader), to a password session or token (decisionForAdmin with no reader)
+ * and to an admin's key session (decisionForAdmin with a key). Prints them on one line, then BOOT_OK.
+ */
+const SERVE_OLD_VOTES = `
+    import { initSchema } from ${JSON.stringify(path.join(SRC, 'db', 'db.ts'))};
+    initSchema();
+    const de = await import(${JSON.stringify(path.join(SRC, 'decisions-engine.ts'))});
+    const served = {};
+    for (const id of ['old-removal', 'old-pause', 'old-branch']) {
+        const d = de.getDecision(id);
+        served[id] = d ? {
+            members: de.publicDecision(d).params,
+            member: de.decisionForReader(d, 'm1').params,
+            subject: de.decisionForReader(d, 'm2').params,
+            password: de.decisionForAdmin(d, null).params,
+            adminKey: de.decisionForAdmin(d, 'm1').params,
+        } : null;
+    }
+    console.log('SERVED ' + JSON.stringify(served));
+    console.log('BOOT_OK');
+    process.exit(0);
+`;
 
 /** The 1.2.37 shape of each money record table: the columns the old rows need, the money ones REAL. */
 const OLD_RECORD_DDL: Record<string, string> = {
@@ -93,6 +130,29 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
     db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, frozen, set_by) VALUES ('m1', 0, 'x'), ('m2', 1, 'x')`).run();
     db.prepare(`INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at) VALUES ('l1', 'x', 'exception_raised', 'm1', 'default', '1800', datetime('now')), ('l2', 'x', 'known_floor', NULL, '500', '1000', datetime('now'))`).run();
     db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, shown_price) VALUES ('copy1', 'offer', 'other', 'A copy', 'A copy', 'm1', '20 fixed')`).run();
+    // Old votes as the 1.2.37 code wrote them, each figure in whole Beans under its old key: a removal a member proposed
+    // (open), an admin's pause vote (closed: the history serves it too), and a branch vote (the node's, its accounts
+    // listed). And a grant (closed), whose amount the step leaves. One open Decision per member author: the rest are closed.
+    const vote = db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, ?, ?, 'old', ?, ?, ?, ?, '1m1v', ?, datetime('now'), datetime('now', '+7 days'), datetime('now'), datetime('now'))`);
+    vote.run('old-removal', 'm1', 'Remove Frozen', 'member', 'remove_member', 'm2',
+        JSON.stringify({ memberName: 'Frozen', reason: 'Gone quiet', debt: 0, commonsPool: 500, balance: 49.25 }), 'open');
+    vote.run('old-pause', 'm1', 'Paused: Frozen', 'member', 'remove_member', 'm2',
+        JSON.stringify({ memberName: 'Frozen', debt: 12.5, commonsPool: 500, balance: -12.5, pausedAt: '2026-11-01T00:00:00.000Z', pausedBy: 'm1', rule: 'pause_vote', reason: 'Paused' }), 'failed');
+    vote.run('old-branch', 'SYSTEM', 'A branch', 'member', 'remove_member', 'm2',
+        JSON.stringify({ branch: [{ pubkey: 'm2', name: 'Frozen', balance: 0.01, debt: 49.25, reply: 'Not me' }], branchDebt: 49.25, commonsPool: 500, pausedBy: 'm1', reason: 'A ring' }), 'open');
+    vote.run('old-grant', 'm1', 'A grant', 'pool', 'grant', null, JSON.stringify({ amount: 50, memo: 'Seeds' }), 'failed');
+    // Two crowdfunds: one still taking pledges, one funded. Both already an enterprise's (migrated_at), as every crowdfund
+    // the apps made is, so the boot's projects-to-enterprises step leaves them alone.
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, goal_amount_c, status, migrated_at) VALUES
+        ('cf-open', 'm1', 'Open', 0, 'ACTIVE', datetime('now')), ('cf-funded', 'm1', 'Funded', 0, 'FUNDED', datetime('now'))`).run();
+    // The settings log: three lines with a figure in Beans, and one without.
+    db.prepare(`INSERT INTO community_settings_log (actor_pubkey, actor_role, setting, old_value, new_value) VALUES
+        ('m1', 'owner', 'voucherBudget', '1000', '1500'), ('m1', 'owner', 'knownFloor.floor', '500', '1000'),
+        ('m1', 'owner', 'memberGift', '100', '20'), ('m1', 'owner', 'join', 'members', 'admins')`).run();
+    // A standby's kept records of its main server, in old figures.
+    db.prepare(`INSERT INTO node_config (key, value) VALUES ('replica_community_settings', '{"record":{"nodeConfig":{"known_floor":"500","ledger_audit_baseline":"-9.82"}}}'),
+        ('replica_main_ledger', '{"total":49.25}')`).run();
     for (const { table, old, add } of MONEY_COLUMNS) {
         const cols = columns(db, table);
         if (cols.length === 0) continue;
@@ -115,6 +175,9 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
     assert(line.includes('known_floor') && line.includes('ledger_audit_baseline'), 'and the money settings it put back to their defaults');
     assert(line.includes('known-floor exceptions that were only an amount 1') && line.includes('known-floor log lines 2') && line.includes("copies' home prices 1"),
         `and the old figures in words it cleared (${line.slice(-400)})`);
+    assert(line.includes('settings log lines with a figure 3') && line.includes('Decisions cleared of a recorded balance or debt: 3')
+        && line.includes('open crowdfunds closed: 1') && line.includes('replica_community_settings') && line.includes('replica_main_ledger'),
+        `and the settings log's money lines, the old votes' figures, the open crowdfund and the standby's kept records (${line.slice(-500)})`);
     const a = new Database(path.join(dir, 'state.db'));
     for (const { table, old } of MONEY_RECORD_TABLES) {
         assert(!columns(a, table).includes(old), `${table}: no ${old}`);
@@ -145,11 +208,46 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
         "a copy's home price in Beans ('20 fixed') is cleared, not read as 20 hundredths");
     const audit = runConservationCheck(a);
     assert(audit.ok && audit.sumBalances === 0 && audit.drift === 0 && audit.badBalances === 0, `LedgerAudit passes on it, all zero (${JSON.stringify(audit)})`);
+    // The old votes: every recorded figure gone from the row, everything else as it was.
+    const params = (id: string) => (a.prepare('SELECT params FROM decisions WHERE id = ?').get(id) as { params: string }).params;
+    for (const id of ['old-removal', 'old-pause', 'old-branch']) {
+        assert(!OLD_DECISION_FIGURE.test(params(id)), `${id}: no balance, debt, pot or branch total is left in its params (${params(id)})`);
+    }
+    const removal = JSON.parse(params('old-removal'));
+    const pause = JSON.parse(params('old-pause'));
+    const branch = JSON.parse(params('old-branch'));
+    assert(removal.memberName === 'Frozen' && removal.reason === 'Gone quiet' && pause.pausedBy === 'm1' && pause.rule === 'pause_vote'
+        && branch.branch?.[0]?.pubkey === 'm2' && branch.branch[0].name === 'Frozen' && branch.branch[0].reply === 'Not me' && branch.reason === 'A ring',
+        `and every other param stays (${JSON.stringify({ removal, pause, branch })})`);
+    assert(JSON.parse(params('old-grant')).amount === 50, 'a grant\'s params are not a member\'s balance: left as they were (execution refuses an old amount)');
+    const crowdfunds = a.prepare(`SELECT id, status FROM projects WHERE id IN ('cf-open', 'cf-funded') ORDER BY id`).all() as { id: string; status: string }[];
+    assert(JSON.stringify(crowdfunds) === JSON.stringify([{ id: 'cf-funded', status: 'FUNDED' }, { id: 'cf-open', status: 'FAILED' }]),
+        `the crowdfund that was taking pledges is closed, so a goal of 0 can't be funded by its next pledge; the funded one stays (${JSON.stringify(crowdfunds)})`);
+    const settingsLog = (a.prepare('SELECT setting FROM community_settings_log ORDER BY id').all() as { setting: string }[]).map((r) => r.setting);
+    assert(JSON.stringify(settingsLog) === JSON.stringify(['join']),
+        `the settings log keeps no line with a figure in Beans to read as hundredths, and keeps the others (${JSON.stringify(settingsLog)})`);
+    for (const key of ['replica_community_settings', 'replica_main_ledger']) {
+        assert(a.prepare('SELECT 1 FROM node_config WHERE key = ?').get(key) === undefined, `a standby's kept ${key} in old figures is gone`);
+    }
     a.close();
 
     // ── The next boot does nothing ──────────────────────────────────────────────────────────────────────────
     const again = bootInto(dir);
     assert(again.ok && !again.output.includes('Old money was dropped'), 'a second boot finds nothing to drop and says nothing');
+
+    // ── The old votes as the node serves them ───────────────────────────────────────────────────────────────
+    const serve = bootInto(dir, {}, SERVE_OLD_VOTES);
+    const servedLine = serve.output.split('\n').find((l) => l.startsWith('SERVED ')) ?? '';
+    const served = servedLine ? JSON.parse(servedLine.slice('SERVED '.length)) as Record<string, Record<string, unknown> | null> : {};
+    assert(serve.ok && ['old-removal', 'old-pause', 'old-branch'].every((id) => served[id] && Object.keys(served[id]!).length === 5),
+        `each old vote is served to every member, a member, its subject, a password session and an admin's key (${serve.ok ? servedLine.slice(0, 200) : serve.output.slice(-600)})`);
+    for (const id of ['old-removal', 'old-pause', 'old-branch']) {
+        for (const [who, shown] of Object.entries(served[id] ?? {})) {
+            assert(!OLD_DECISION_FIGURE.test(JSON.stringify(shown)), `${id}, as ${who} read it: no balance or debt (${JSON.stringify(shown)})`);
+        }
+    }
+    assert(String((served['old-removal']?.members as { memberName?: string } | undefined)?.memberName) === 'Frozen',
+        'and what members read of it is still there (its member\'s name)');
 
     // ── A database halfway (a table missing its *_c column, no old one): the step adds it ─────────────────────
     const halfDir = tmp('hundredths-half');

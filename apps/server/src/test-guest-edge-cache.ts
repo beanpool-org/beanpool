@@ -31,6 +31,7 @@ process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -96,7 +97,7 @@ async function main() {
     const conv = se.createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: no conversation');
     // A line as both apps seal one (engine/messaging.ts isEncryptedDmPayload): the node keeps nothing else in a DM.
-    const sealed = () => [crypto.randomBytes(32).toString('base64'), `x25519-xc20p-v2:${crypto.randomBytes(24).toString('base64')}`] as const;
+    const sealed = () => { const l = lockedDm(); return [l.ciphertext, l.nonce] as const; };
     se.sendMessage(conv.id, alice.pubKeyHex, ...sealed());
 
     type Got = { status: number; cc: string | null; vary: string; view: string | null; etag: string | null; body: string };

@@ -1216,7 +1216,7 @@ async function main(): Promise<void> {
                 disclosure: { epoch: 1, mk: Buffer.alloc(32, 7).toString('base64') } },
             // A line of the pruned account's DM, reported with a disclosure of the right shape: past the body checks to who may read it.
             'POST /api/messages/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
-                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', lineSig: null, words: 'Sentinel' } },
+                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', words: 'Sentinel' } },
             // The pruned convenor: inviting Grid, changing Alice's role, renaming the group.
             'POST /api/groups/:id/members': { targetPubkey: grid.pk },
             'PATCH /api/groups/:id/members/:pubkey': { role: 'member' },

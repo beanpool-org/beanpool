@@ -8,7 +8,8 @@
  *
  *   - The reference (the listing's id, its title as the sender saw it, and its kind) is its own sealed part of the message
  *     ('about', dm-crypto.ts): the same key as the words, bound to the conversation, the sender and the message id, and to
- *     its part name, so the node can't move it to another message or show it as the words. It rides in the message's
+ *     its part name, so the node can't move it to another message or show it as the words, and signed by its sender as
+ *     every part is (format 4), so the other person can't put one in their name. It rides in the message's
  *     metadata as the sealed bytes and nonce, like the photo's nonce rides beside the photo. The node reads nothing new:
  *     no plaintext field, no listing id in the clear, and a line it stores is the same shape it always stored.
  *   - The words themselves are untouched. A chat's list preview, a copy of the line, a quote of it and a report of it all
@@ -181,7 +182,7 @@ export function chatAboutOfLine(keys: DmKeys | null, line: ChatAboutLine): ChatA
     if (!keys || !hasChatAbout(line.metadata)) return null;
     const raw = metaObject(line.metadata)[DM_ABOUT_KEY];
     try {
-        const opened = openDmLine({ ciphertext: raw.ciphertext, nonce: raw.nonce }, keys, { ...line, part: 'about' }, [3]);
+        const opened = openDmLine({ ciphertext: raw.ciphertext, nonce: raw.nonce }, keys, { ...line, part: 'about' });
         return parseChatAbout(opened.text);
     } catch {
         return null;

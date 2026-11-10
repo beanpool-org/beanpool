@@ -1892,7 +1892,6 @@
   "Trust hold cancelled and funds refunded.": "Удержание отменено, средства возвращены.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Сообщение не удалось проверить, поэтому оно не показано.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Сообщение не зашифровано, поэтому BeanPool не может подтвердить автора. Оно не показано.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Отправлено из старой версии приложения: BeanPool не может подтвердить автора.",
   "Shown out of the order it was written in.": "Показано не в порядке отправки.",
   "Moved here from another conversation.": "Перенесено сюда из другой беседы.",
   "From your community's admins. Not a private message: the community's server can read it.": "От администрации сообщества. Не личное сообщение: сервер сообщества может его прочесть.",

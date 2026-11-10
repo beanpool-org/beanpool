@@ -29,7 +29,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => {
     return {
         ...real,
         decodePlaintext: vi.fn((c: string) => c),
-        openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+        openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
         checkDmThread: vi.fn(() => new Map()),
         isEncryptedNonce: vi.fn(() => false),
     };

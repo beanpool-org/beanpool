@@ -1722,7 +1722,6 @@
   "Trust hold cancelled and funds refunded.": "Vincolo di garanzia annullato e fondi rimborsati.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Impossibile verificare questo messaggio, quindi non viene mostrato.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Questo messaggio non era crittografato, quindi BeanPool non può confermare chi l'ha scritto. Non viene mostrato.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Inviato da una versione precedente dell'app: BeanPool non può confermare chi l'ha scritto.",
   "Shown out of the order it was written in.": "Mostrato fuori dall'ordine in cui è stato scritto.",
   "Moved here from another conversation.": "Spostato qui da un'altra conversazione.",
   "From your community's admins. Not a private message: the community's server can read it.": "Dagli amministratori della tua comunità. Non è un messaggio privato: il server della comunità può leggerlo.",

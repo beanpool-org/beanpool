@@ -60,7 +60,7 @@ A direct message is end-to-end encrypted, and it has no key of its own to hand o
 
 - **Signature verified**: the member named really did send this sealed message to the reporter. Its sender can't take that back: the report keeps the sealed message, so deleting or changing it afterwards changes nothing here, and the report says it happened.
 - **Could not be verified**: the signature doesn't match the message, so nothing shows who wrote it.
-- **No signature**: it came from an older app, which doesn't sign its messages. Only your server's records say who sent it.
+- **No signature**: the message was sent before your server's update to BeanPool 1.4, and messages from before then aren't checked. Only your server's records say who sent it.
 - **What the reporter says it says**: their own words, in every case. The signature proves who sent the sealed message, not what it says. Weigh those words as you would any member's account.
 
 A photo stays sealed. No other message in the chat comes with a report, and nobody in the chat is told who reported it. Settings has no button to take a direct message down: its sender can delete it, and the owners and admins can suspend its sender.

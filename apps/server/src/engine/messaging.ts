@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { formatHundredths, isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
+import { DM_NONCE_PREFIX, formatHundredths, isDmLineForm, isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -25,7 +25,6 @@ import {
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
     assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
-import { metadataAfterDmEdit } from './dm-line-report.js';
 import { GroupKeyError, fromEpochOf } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
@@ -199,13 +198,13 @@ export const CHAT_GROUP_REMOVED_ERROR =
     word('Group chats made in Chat were removed. Create a group in Commons instead — every group has its own chat.');
 
 /**
- * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members
- * the server keeps them "in a form only the two of you can read", and that has to be true of every line, not of
- * most. Both apps used to fall back to readable `plaintext-v1` whenever they could not find the other person's key;
- * they now refuse to send instead, and this is the node refusing what an older app still sends (PR #1283 review).
- * What the node writes itself into a DM is not a member's message and stays as it was: the deal notices
- * (injectSystemMessage), a removed message's tombstone, and a message from the node's admin page, which the
- * operator typed on the node.
+ * A member's words in a direct conversation are stored only end-to-end encrypted and signed by their sender, in line
+ * format 4 (core dm-crypto.ts): the privacy policy tells members the server keeps them "in a form only the two of you can
+ * read", and that has to be true of every line, not of most. The node refuses every other form, readable `plaintext-v1`
+ * and a line of an older format (2 or 3, which an app before 1.4.0 seals) among them: old chat is wiped at the 1.4.0
+ * cutover (Marty, 10 Nov 2026), so no other form is ever stored again. What the node writes itself into a DM is not a
+ * member's message and stays as it was: the deal notices (injectSystemMessage), a removed message's tombstone, and a
+ * message from the node's admin page, which the operator typed on the node.
  */
 export const DM_NOT_ENCRYPTED_ERROR =
     "This message wasn't locked for the other person, so it wasn't sent. Only the two of you can read a direct message. Try again in a moment, or update the app.";
@@ -214,28 +213,18 @@ export const DM_NOT_ENCRYPTED_CODE = 'dm_not_encrypted';
 export const DM_NAME_REFUSED_ERROR =
     word('A direct conversation has no name. Send the words as a message: it is locked so only the two of you can read it.');
 
-/** The nonce prefix of an end-to-end encrypted DM (apps/pwa/src/lib/e2e-crypto.ts, apps/native/utils/e2e-crypto.ts). */
-export const DM_ENCRYPTED_NONCE_PREFIX = 'x25519-xc20p-v2:';
-const DM_NONCE_BYTES = 24;       // XChaCha20
-const AEAD_TAG_BYTES = 16;       // Poly1305: what encrypting an empty caption produces
-
-/** `s` is standard, padded base64 exactly as both apps write it, of at least `minBytes` bytes. */
-function isCanonicalBase64(s: unknown, minBytes: number): boolean {
-    if (typeof s !== 'string' || s.length === 0 || s.length % 4 !== 0) return false;
-    const bytes = Buffer.from(s, 'base64');
-    return bytes.length >= minBytes && bytes.toString('base64') === s;
-}
+/** The nonce prefix of an end-to-end encrypted DM line (core dm-crypto.ts DM_NONCE_PREFIX). */
+export const DM_ENCRYPTED_NONCE_PREFIX = DM_NONCE_PREFIX;
 
 /**
- * Whether a DM payload is in the encrypted form (v2): the versioned nonce carrying a 24-byte nonce, and a ciphertext
- * at least as long as the AEAD tag. The node cannot check the words are really encrypted — it has no key, which is the
- * point — but it can refuse every form that is not, `plaintext-v1` first among them.
+ * Whether a DM payload is in line format 4's form (core isDmLineForm): an encrypted line's nonce carrying 24 bytes, and a
+ * ciphertext column holding the format byte, the sender's signature, the time they signed and an AEAD output, in the one
+ * base64 spelling both apps write. The node cannot check the words are really encrypted, nor who signed them: it has no
+ * key and verifies nothing, which both apps do when they open a line. It refuses every form that isn't this one:
+ * `plaintext-v1`, and a line of format 2 or 3, which is the AEAD output alone.
  */
 export function isEncryptedDmPayload(ciphertext: unknown, nonce: unknown): boolean {
-    if (typeof nonce !== 'string' || !nonce.startsWith(DM_ENCRYPTED_NONCE_PREFIX)) return false;
-    const nonceBody = nonce.slice(DM_ENCRYPTED_NONCE_PREFIX.length);
-    if (!isCanonicalBase64(nonceBody, DM_NONCE_BYTES) || Buffer.from(nonceBody, 'base64').length !== DM_NONCE_BYTES) return false;
-    return isCanonicalBase64(ciphertext, AEAD_TAG_BYTES);
+    return isDmLineForm(ciphertext, nonce);
 }
 
 function refuseUnencryptedDm(ciphertext: unknown, nonce: unknown): void {
@@ -243,9 +232,22 @@ function refuseUnencryptedDm(ciphertext: unknown, nonce: unknown): void {
 }
 
 /**
+ * A line's listing reference (core chat-about.ts: `about` in its metadata, its own sealed and signed part) is a member's
+ * words as the line's are: in format 4's form, or the line is refused. A line without one is unchanged.
+ */
+function refuseUnencryptedAbout(metadata: string | undefined): void {
+    if (typeof metadata !== 'string' || !metadata) return;
+    let meta: unknown;
+    try { meta = JSON.parse(metadata); } catch { return; }
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta) || !('about' in meta)) return;
+    const about = (meta as { about?: unknown }).about as { ciphertext?: unknown; nonce?: unknown } | null | undefined;
+    refuseUnencryptedDm(about?.ciphertext, about?.nonce);
+}
+
+/**
  * The id a line relayed from another node is stored under: the sender's own, verbatim, when it is a UUID v4 (lowered, as
- * the send route lowers it). A DM line is sealed to its message id (apps' e2e-crypto, format 3), so a line stored under a
- * new id would be one its recipient can't verify. Anything else gets an id of this node's, as before.
+ * the send route lowers it). A DM line is sealed and signed to its message id (core dm-crypto.ts, format 4), so a line
+ * stored under a new id would be one its recipient can't verify. Anything else gets an id of this node's, as before.
  */
 export function relayedMessageId(id: unknown): string | undefined {
     return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id.toLowerCase() : undefined;
@@ -554,12 +556,13 @@ export function sendMessage(
     }
 
     // Everything that reaches this store is a direct conversation's: a group chat returned above, an event or
-    // enterprise chat was refused. So a member's words — the text and a photo alike — go in encrypted or not at
-    // all. Checked after the participant check, so an outsider learns nothing from it, and after the idempotent
-    // retry above, which stores nothing new.
+    // enterprise chat was refused. So a member's words — the text, a photo and a listing reference alike — go in as
+    // format 4 (sealed, their sender's signature beside the seal) or not at all. Checked after the participant check, so
+    // an outsider learns nothing from it, and after the idempotent retry above, which stores nothing new.
     if (!opts.nodeAuthored) {
         refuseUnencryptedDm(ciphertext, nonce);
         if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
+        refuseUnencryptedAbout(metadata);
         // A tombstone is written only by the node (message-tombstone.ts), never sent: a client's `removed`, `removedBy`,
         // `removedAt` and `accountDeleted` would pose its line as one (#1407 review: a phone read it as a deleted account).
         metadata = withoutTombstoneKeys(metadata);
@@ -969,7 +972,7 @@ export function editMessage(
     if (row.type === 'system') throw new MessagingError(word('System messages cannot be edited'));
     // A keeper-removed message is a tombstone: never editable, by any route.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
-    // An edit is new words: in a direct conversation, encrypted or not at all (see sendMessage).
+    // An edit is new words: in a direct conversation, format 4 or not at all (see sendMessage).
     if (!isGroupChat) refuseUnencryptedDm(ciphertext, nonce);
 
     // A group chat is editable under the group's own rules (chat parity, 2026-09-23 — slice 1 refused it here
@@ -990,10 +993,9 @@ export function editMessage(
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
-    } else {
-        // New sealed bytes, so a new signature, or none (engine/dm-line-report.ts).
-        storedMetadata = metadataAfterDmEdit(row.metadata ?? null, metadata);
     }
+    // A DM edit is new sealed bytes, its sender's new signature in the column beside them (format 4): its metadata (what it
+    // answers, its listing, reactions) is the line's own and stays as it is.
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {

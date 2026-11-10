@@ -20,7 +20,7 @@ import { blockUser } from './blocklist';
 import { requestPreviewLines, requestReportRefused, type RequestReportOutcome } from './dm-requests';
 
 export async function reportDmLine(conversationId: string, line: Pick<ApiMessage, 'id' | 'ciphertext' | 'nonce' | 'metadata'>, words: string, reason: string): Promise<void> {
-    await reportDmLineApi(line.id, reason, dmLineDisclosureFor({ ciphertext: line.ciphertext, nonce: line.nonce, conversationId, metadata: line.metadata }, words));
+    await reportDmLineApi(line.id, reason, dmLineDisclosureFor({ ciphertext: line.ciphertext, nonce: line.nonce, conversationId }, words));
 }
 
 /**

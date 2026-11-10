@@ -686,7 +686,7 @@ export function groupMessageKey(groupKey: Uint8Array, messageId: string): Uint8A
 
 /**
  * A line's associated data: the UTF-8 of [tag, group, String(epoch), sender, message id, part] as a JSON array of strings,
- * and for a reply a seventh, the id of the message it answers (as DM format 3: a reply's never equals a line's that
+ * and for a reply a seventh, the id of the message it answers (as a DM line's: a reply's never equals a line's that
  * answers nothing).
  */
 export function groupLineAad(b: GroupLineBinding): Uint8Array {

@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type DmLineSig, type KnockVia } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -1421,14 +1421,14 @@ export async function sendMessageApi(
     return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
 }
 
+/** Edit a line: a DM line's new words carry their new signature in their own ciphertext (core dm-crypto.ts, format 4). */
 export async function editMessageApi(
     messageId: string,
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
-    lineSig?: DmLineSig,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce, ...(lineSig ? { metadata: { lineSig } } : {}) });
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
 }
 
 /** Report one line of a direct message with what this reporter hands over for it (core dm-line-report.ts). */

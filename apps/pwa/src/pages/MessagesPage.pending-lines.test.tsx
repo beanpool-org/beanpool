@@ -670,7 +670,8 @@ describe('a refused reply keeps what it answers', () => {
         const [refused, again] = vi.mocked(sendMessageApi).mock.calls;
         expect(metadataOf(refused).replyToId).toBe(asked.id);
         expect(metadataOf(again).replyToId).toBe(asked.id);
-        expect(metadataOf(again).lineSig).toBeTruthy();
+        // Its signature is in its own ciphertext (format 4): nothing of it rides in the metadata.
+        expect(metadataOf(again)).toEqual({ replyToId: asked.id });
         expect(screen.queryByText('Replying to Ben')).toBeNull();
 
         // The node's row for it opens, with the seal over that reply, and quotes the question.

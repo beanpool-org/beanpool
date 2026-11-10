@@ -6,7 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus, type EventZone } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
-    sealDmLine, signDmLine, DM_LINE_SIG_KEY, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    sealDmLine, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
@@ -1480,8 +1480,9 @@ export async function getConversations(myPubkey: string) {
         let fromApp = true;
         // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
         // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
-        // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
-        // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
+        // threads), its sender's signature verified. Only words that open are shown as words; a line that doesn't, a row in
+        // a member's name that isn't an encrypted line and the admin page's message say what they are. The node's own
+        // notices are formatted below.
         const lastView = row.lastId && !isNodeReadableChatType(row.convType)
             ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
                 previewIdentity?.privateKey && previewPins && (dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey) ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey } : null, row.id).get(row.lastId)
@@ -1492,13 +1493,12 @@ export async function getConversations(myPubkey: string) {
         if (lastView) {
             if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
             else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
-            else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
             else if (lastView.mark === 'from-admins') {
                 displayMsg = `From your community's admins: ${lastView.text}`;
                 fromApp = false;
             } else {
                 displayMsg = dmLineShownText(lastView);
-                // Only a line that opened (format 2 or 3) holds its author's words; a deleted line's text is fixed.
+                // Only a line that opened (format 4, signed by its author) holds their words; a deleted line's text is fixed.
                 fromApp = lastView.format === null;
             }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
@@ -6627,11 +6627,10 @@ function openDmPartWithFormer(
     payload: { ciphertext: string; nonce: string },
     ctx: PinnedDmKeyContext,
     ref: { conversationId: string; senderPubHex: string; messageId: string; metadata: unknown; part: DmPart },
-    formats?: ReadonlyArray<2 | 3>,
 ): { opened: ReturnType<typeof openDmLine>; keys: DMKeyContext; senderPubHex: string } {
     let first: unknown;
     try {
-        return { opened: openDmLine(payload, ctx, ref as any, formats as any), keys: ctx, senderPubHex: ref.senderPubHex };
+        return { opened: openDmLine(payload, ctx, ref), keys: ctx, senderPubHex: ref.senderPubHex };
     } catch (e) { first = e; }
     const mine = ctx.myPubHex && ref.senderPubHex === ctx.myPubHex;
     for (const peer of ctx.formerPeers) {
@@ -6640,14 +6639,14 @@ function openDmPartWithFormer(
         const keys: DMKeyContext = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: peer, conversationId: ctx.conversationId };
         const senderPubHex = mine ? ref.senderPubHex : peer;
         try {
-            return { opened: openDmLine(payload, keys, { ...ref, senderPubHex } as any, formats as any), keys, senderPubHex };
+            return { opened: openDmLine(payload, keys, { ...ref, senderPubHex }), keys, senderPubHex };
         } catch { /* the next former key */ }
     }
     throw first;
 }
 
 /**
- * What a DM line is sealed to besides its conversation (e2e-crypto, format 3): who sends it, under which message id the
+ * What a DM line is sealed and signed to besides its conversation (e2e-crypto, format 4): who sends it, under which message id the
  * node will store it, which part of the message it is, and the line it is written after.
  */
 interface DmLineToSeal {
@@ -6659,15 +6658,14 @@ interface DmLineToSeal {
     replyToId?: string | null;
 }
 
-/** Seal a DM line, and its words (not its photo) with my signature over them (core dm-line-report.ts), for its metadata. */
-function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string; metadata?: Record<string, unknown> } {
+/**
+ * Seal a DM line and sign it as me, in one (core sealDmLine, format 4): every part, the photo too, so the other person can't
+ * put one in my name. The signature is in the line's own ciphertext, which both apps check when they open it and a report
+ * of it stands on (core dm-line-report.ts); nothing rides beside it.
+ */
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
     try {
-        const sealed = sealDmLine(text, ctx, line);
-        if (line.part === 'attachment') return sealed;
-        const lineSig = signDmLine(sealed, ctx.myEdPrivHex, {
-            conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, at: new Date().toISOString(),
-        });
-        return { ...sealed, metadata: { [DM_LINE_SIG_KEY]: lineSig } };
+        return sealDmLine(text, ctx, line);
     } catch {
         throw new DmNotLockedError();
     }
@@ -6971,8 +6969,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // Every line of a DM judged at once, in the order it is shown (by the node's timestamps, as selected above), by
     // e2e-crypto checkDmThread: an encrypted line is opened bound to the author and id this phone holds it under, and one
     // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
-    // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
-    // as the community admins'. Only the node's own notices are left to the system formatting below.
+    // either, nor one its named sender didn't sign; one the node moved or reordered is marked; the admin page's message
+    // is shown as the community admins'. Only the node's own notices are left to the system formatting below.
     const lineViews = isDm
         ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
@@ -7053,7 +7051,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Raw edit timestamp: pins the text content for cheap change detection
             // (chat screen compares (id, editedAt) instead of the decrypted text).
             editedAt: row.edited_at ?? null,
-            // One line under a DM message the node moved or reordered, an old-format line, or the admin page's message.
+            // One line under a DM message the node moved or reordered, or the admin page's message.
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
@@ -7077,7 +7075,7 @@ const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null) {
     const database = await getDb();
 
-    // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
+    // The id is chosen first: a DM line is sealed and signed to it (e2e-crypto, format 4), so the node must store the line under
     // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
     const tempId = (reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID()).toLowerCase();
 
@@ -7090,8 +7088,8 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         replyToId: replyToIdOf(metadata),
     });
     const { ciphertext, nonce } = locked;
-    // A group line names the epoch it was sealed under, and a DM line carries its signature, beside whatever the caller's
-    // metadata says (a reply).
+    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply). A DM line
+    // carries nothing beside it: its signature is in its own ciphertext (format 4).
     if (locked.metadata) {
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
@@ -7336,12 +7334,6 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
-    // The caption's signature goes in the line's metadata, beside whatever the caller's says (a reply).
-    if (encCap.metadata) {
-        let m: any = {};
-        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
-        metadata = JSON.stringify({ ...m, ...encCap.metadata });
-    }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
@@ -7405,11 +7397,12 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         if (cached.exists) return cachePath;
 
         // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
-        //    in the format they opened in, so neither a photo from another line nor an old-format picture can stand in.
+        //    and signed by that sender (format 4), so neither a photo from another line nor one the other person sealed in
+        //    the sender's name can stand in.
         const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
-        const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }, [words.opened.format]).text;
+        const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }).text;
 
         // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline
@@ -9933,7 +9926,7 @@ export async function reportDmLine(conversationId: string, messageId: string, wo
     try {
         return await _signedRequest('/api/messages/report', {
             messageId, reason,
-            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
+            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId }, words),
         });
     } catch (e: any) {
         throw reportRefusal(e);

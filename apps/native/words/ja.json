@@ -1637,7 +1637,6 @@
   "Trust hold cancelled and funds refunded.": "預かりはキャンセルされ、資金が返金されました。",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 このメッセージは検証できなかったため表示されません。",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ このメッセージは暗号化されていなかったため、BeanPoolは送信者を確認できませんでした。表示されません。",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "古いバージョンのアプリから送信されたため、BeanPoolは送信者を確認できません。",
   "Shown out of the order it was written in.": "投稿された順序とは異なって表示されています。",
   "Moved here from another conversation.": "別の会話からここへ移動されました。",
   "From your community's admins. Not a private message: the community's server can read it.": "コミュニティ管理者からのメッセージです。非公開メッセージではありません：コミュニティのサーバーが読み取ることができます。",

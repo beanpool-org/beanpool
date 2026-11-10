@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, formatHundredths, pluralKey, pseudoLocalise, setLanguage, t } from '@beanpool/core';
-import { sealDmLine, newDmMessageId, encryptDmFormat2 } from './e2e-crypto';
+import { sealDmLine, newDmMessageId } from './e2e-crypto';
+import { DM_LINE_VECTORS, DM_REFUSED_LINES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
 import { sealLine } from './group-chat-crypto';
 import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './home-cards';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
@@ -630,15 +631,22 @@ describe('the chat card', () => {
         expect(out.some(l => l.text.includes('not sealed'))).toBe(false);
     });
 
-    it("an older app's DM line (format 2) is the warning alone, nobody's, even served in the other person's name (#2945 round 2)", () => {
-        // Ana's own old line, which the node serves as Ben's: format 2 binds no sender, so it opens either way.
-        const id = newDmMessageId();
-        const old = encryptDmFormat2('I will pay you 50 Beans', { myEdPrivHex: ana.privateKey, peerEdPubHex: ben.publicKey, conversationId: DM });
-        const line = { id, author: ben.publicKey, who: 'Ben', at: at(5), type: 'text', systemType: null, sealed: { ciphertext: old.ciphertext, nonce: old.nonce, metadata: null } };
-        const out = shown(dmCard([line]))!;
-        expect(out.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, "Sent from an older version of the app: BeanPool can't confirm who wrote it."]]);
-        expect(out.some(l => l.text.includes('50 Beans'))).toBe(false);
-        expect(chatLineText(out[0])).not.toMatch(/^Ben, /);
+    it("a line its named sender didn't sign, or of an older format, is nobody's and never its words, as either person (format 4)", () => {
+        // The frozen vectors (core dm-line-vectors.ts): a line Ana sealed in Ben's name and signed herself (the seal opens for
+        // both, as they share its key), and Ana's format-3 line as a 1.3.x app sent it, its signature beside it.
+        const P = DM_VECTOR_PEOPLE;
+        const [forged, old] = [DM_REFUSED_LINES[1], DM_REFUSED_LINES[0]];
+        const genuine = DM_LINE_VECTORS[1];   // Ben's own line, signed by him: the control
+        const row = (id: string, by: 'ana' | 'ben', p: { ciphertext: string; nonce: string }, metadata: string | null, min: number) =>
+            ({ id, author: P[by].publicKey, who: by === 'ana' ? 'Ana' : 'Ben', at: at(min), type: 'text', systemType: null, sealed: { ...p, metadata } });
+        const lines = [row(old.messageId, 'ana', old.payload, old.metadata, 7), row(forged.messageId, 'ben', forged.payload, null, 6), row(genuine.messageId, 'ben', genuine.payload, null, 5)];
+        const conv = inst('dm', DM_VECTOR_CONVERSATION);
+        const asAna = shown({ cards: { 'chat-1': { kind: 'dm', name: 'Ben', unread: 2, muted: false, lines, peer: P.ben.publicKey } } }, conv, { publicKey: P.ana.publicKey, privateKey: P.ana.pkcs8Hex })!;
+        expect(asAna.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, '🔒 Message'], [null, false, '🔒 Message'], ['Ben', false, 'ok']]);
+        expect(chatLineText(asAna[1])).not.toMatch(/^Ben, /);
+        const asBen = shown({ cards: { 'chat-1': { kind: 'dm', name: 'Ana', unread: 2, muted: false, lines, peer: P.ana.publicKey } } }, conv, { publicKey: P.ben.publicKey, privateKey: P.ben.seedHex })!;
+        expect(asBen.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, '🔒 Message'], [null, false, '🔒 Message'], ['You', true, 'ok']]);
+        expect([...asAna, ...asBen].some(l => /500 Beans|seedlings/.test(l.text))).toBe(false);
     });
 
     it("the node's own line is its words, nobody's", () => {

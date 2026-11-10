@@ -97,7 +97,7 @@ export interface ChatMessage {
      * where 320dp with 1.3× text would cut it (review of #1826, NB9).
      */
     authorHint?: string | null;
-    /** A DM line the node moved or reordered, or an old-format line: the one line shown under it. */
+    /** A DM line the node moved or reordered: the one line shown under it. */
     integrityNote?: string | null;
     /** A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed). */
     unattributed?: boolean;
@@ -109,15 +109,15 @@ export interface ChatMessage {
 export interface DmQuoteView {
     author: string;
     text: string;
-    /** The quoted line's own mark (an old-format line, a moved or reordered one), carried with the quote. */
+    /** The quoted line's own mark (a moved or reordered line), carried with the quote. */
     note: string | null;
 }
 
 /**
  * The quote of the message a DM reply answers, from that message as the thread judged it: its words only if they opened,
  * its named author only if the line is theirs, with its mark. The node can rewrite the row a verified reply answers while
- * keeping its id (as a notice, as the admin page's message, or as another old-format line): the quote then says what
- * the row is, never "You" or the other person's name over words it can't confirm.
+ * keeping its id (as a notice, as the admin page's message, or as a line its named sender didn't sign): the quote then
+ * says what the row is, never "You" or the other person's name over words it can't confirm.
  */
 export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
     if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null };

@@ -1722,7 +1722,6 @@
   "Trust hold cancelled and funds refunded.": "Uzuiaji wa amana umeghairiwa na fedha zimerejeshwa.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Ujumbe huu haukuweza kuthibitishwa, kwa hivyo hauonyeshwi.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Ujumbe huu haukusimbwa, kwa hivyo BeanPool haiwezi kuthibitisha nani aliuandika. Hauonyeshwi.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Umetumwa kutoka toleo la zamani la programu: BeanPool haiwezi kuthibitisha nani aliuandika.",
   "Shown out of the order it was written in.": "Imeonyeshwa bila kufuata mpangilio uliyoandikiwa.",
   "Moved here from another conversation.": "Umehamishiwa hapa kutoka kwa mazungumzo mengine.",
   "From your community's admins. Not a private message: the community's server can read it.": "Kutoka kwa wasimamizi wa jumuiya yako. Si ujumbe wa faragha: seva ya jumuiya inaweza kuusoma.",

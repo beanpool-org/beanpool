@@ -53,7 +53,7 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
-import { copyIdOf as copyIdByKey, copyPriceLine, eventCopyOf, makeCopyKeeper, repeatPatternFor, roundToArea, type CopyPair, type CopyStore } from '@beanpool/core';
+import { copyIdOf as copyIdByKey, copyPriceLine, eventCopyOf, makeCopyKeeper, repeatPatternFor, roundToArea, sealDmLine, type CopyPair, type CopyStore } from '@beanpool/core';
 import { memberSigner } from '../crypto';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
@@ -1199,7 +1199,12 @@ describe('the door on a copy (the phone against two real nodes, slice GD)', () =
         const conv: string = open.conversation?.id ?? open.id;
         const counts = async () => (await signedGet(global_.url, '/api/me/unread', me)).json() as Promise<{ unread: number; requests: number }>;
         expect(conv).toBeTruthy();
-        const line = () => signedPost(global_.url, '/api/messages/send', { conversationId: conv, authorPubkey: reader.publicKey, ciphertext: randomBytes(32).toString('base64'), nonce: `x25519-xc20p-v2:${randomBytes(24).toString('base64')}` }, reader);
+        // A real line, sealed and signed by the reader to the member (format 4), as the app sends one: the node refuses any other form.
+        const line = () => {
+            const id = randomUUID();
+            const sealed = sealDmLine('Is the sourdough still going?', { myEdPrivHex: reader.privateKey, peerEdPubHex: me.publicKey, conversationId: conv }, { senderPubHex: reader.publicKey, messageId: id });
+            return signedPost(global_.url, '/api/messages/send', { conversationId: conv, authorPubkey: reader.publicKey, id, ...sealed }, reader);
+        };
         expect(await counts()).toMatchObject({ unread: 0, requests: 0 });
         expect((await line()).status).toBe(200);
         expect(await counts()).toMatchObject({ unread: 0, requests: 1 });

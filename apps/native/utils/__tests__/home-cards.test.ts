@@ -1828,11 +1828,12 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         });
     });
 
-    it('a DM line from an old app (nothing proves who wrote it) is nobody\'s and says so, never in its author\'s name', async () => {
+    it('a DM line its named sender didn\'t sign, or of an older format, is nobody\'s and says so, never in its author\'s name', async () => {
         const line = dmLine(ana, me, 'meet at 5', 4);
-        const oldApp: HomeChatOpenDeps['judgeDm'] = async (_c, lines) => new Map(lines.map(l => [l.id, { text: 'meet at 5', format: 2 as const, after: null, mark: 'old-app' as const }]));
-        const view = await draw(inst('dm'), dmCard([line]), deps({ judgeDm: oldApp }));
+        // What the thread check makes of it (format 4): it doesn't open as theirs, so no words.
+        const unsigned: HomeChatOpenDeps['judgeDm'] = async (_c, lines) => new Map(lines.map(l => [l.id, { text: null, format: null, after: null, mark: 'not-verified' as const }]));
+        const view = await draw(inst('dm'), dmCard([line]), deps({ judgeDm: unsigned }));
         if (view.state !== 'chat') throw new Error('drawn');
-        expect(view.lines[0]).toEqual({ id: line.id, at: line.at, who: null, text: "Sent from an older version of the app: BeanPool can't confirm who wrote it." });
+        expect(view.lines[0]).toEqual({ id: line.id, at: line.at, who: null, text: "🔒 This message couldn't be verified, so it isn't shown." });
     });
 });

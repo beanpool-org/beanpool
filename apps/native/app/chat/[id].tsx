@@ -1453,7 +1453,7 @@ function ChatScreen({ id }: { id: string }) {
                                 )}
                             </View>
                         ) : null}
-                        {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
+                        {/* A line the node moved or reordered (e2e-crypto checkDmThread). */}
                         {item.integrityNote ? (
                             <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
                                 ⚠️ {chatLineWords(item.integrityNote)}

@@ -32638,6 +32638,9 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://beanpool.org/guide/rules"/>
   </url>
   <url>
+    <loc>https://beanpool.org/guide/standing-deals</loc>
+  </url>
+  <url>
     <loc>https://beanpool.org/guide/the-bean</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://beanpool.org/guide/the-bean"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://beanpool.org/guide/es/the-bean"/>

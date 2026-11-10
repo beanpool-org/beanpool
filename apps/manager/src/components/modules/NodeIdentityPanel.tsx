@@ -655,9 +655,6 @@ export function NodeIdentityPanel({
                         </div>
                     </div>
 
-                    {/* Hidden Coordinate Fields for Legacy ID Compatibility */}
-                    <input type="hidden" id="cfg-lat" value={lat ?? ''} />
-                    <input type="hidden" id="cfg-lng" value={lng ?? ''} />
                 </div>
 
                 {/* Service Radius */}

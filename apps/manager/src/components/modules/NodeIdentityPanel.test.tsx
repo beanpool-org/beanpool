@@ -309,8 +309,10 @@ describe('NodeIdentityPanel Component', () => {
             fireEvent.click(resultItem);
         });
 
-        expect((document.getElementById('cfg-lat') as HTMLInputElement).value).toBe('-28.6474');
-        expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
+        expect(screen.getByText('Lat: -28.6474')).toBeInTheDocument();
+        expect(screen.getByText('Lng: 153.612')).toBeInTheDocument();
+        expect(document.getElementById('cfg-lat')).toBeNull();
+        expect(document.getElementById('cfg-lng')).toBeNull();
     });
 
     it('sends the same Nominatim request it always has (now through the shared @beanpool/core lookup)', async () => {
@@ -420,8 +422,8 @@ describe('NodeIdentityPanel Component', () => {
             fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' });
         });
 
-        expect((document.getElementById('cfg-lat') as HTMLInputElement).value).toBe('-28.6474');
-        expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
+        expect(screen.getByText('Lat: -28.6474')).toBeInTheDocument();
+        expect(screen.getByText('Lng: 153.612')).toBeInTheDocument();
         // Form was not submitted
         expect(onRefreshDiag).not.toHaveBeenCalled();
     });

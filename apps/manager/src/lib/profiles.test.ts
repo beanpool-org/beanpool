@@ -49,16 +49,7 @@ describe('profiles management', () => {
 
     // Fable's web review, M1: localStorage on a node is the members' web app's origin too. A profile's password or
     // replication token is held in memory for the page's lifetime and never written there.
-    it('never writes a profile password or replication token to localStorage, and drops ones an older build stored', () => {
-        store['bp_fleet_profiles'] = JSON.stringify([
-            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', adminPassword: 'old-stored-pw', replicationToken: 'old-stored-token' },
-        ]);
-        const loaded = loadNodeProfiles();
-        expect(loaded[0].adminPassword).toBeUndefined();
-        expect(loaded[0].replicationToken).toBeUndefined();
-        expect(store['bp_fleet_profiles']).not.toContain('old-stored-pw');
-        expect(store['bp_fleet_profiles']).not.toContain('old-stored-token');
-
+    it('never writes a profile password or replication token to localStorage', () => {
         const added = addNodeProfile({ name: 'Fleet Node', url: 'https://fleet.beanpool.org', adminPassword: 'typed-pw' });
         const updated = updateNodeProfile(added.id, { replicationToken: 'typed-token' });
         expect(updated.find(p => p.id === added.id)).toMatchObject({ adminPassword: 'typed-pw', replicationToken: 'typed-token' });
@@ -69,6 +60,16 @@ describe('profiles management', () => {
         saveNodeProfiles(loadNodeProfiles());
         expect(store['bp_fleet_profiles']).not.toContain('typed-pw');
         removeNodeProfile(added.id);
+    });
+
+    it('rewrites a list that holds a credential without it, as the page loads: no password stays in localStorage', () => {
+        store['bp_fleet_profiles'] = JSON.stringify([
+            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', adminPassword: 'by-hand-pw', replicationToken: 'by-hand-token', automationToken: 'bp_by_hand' },
+        ]);
+        loadNodeProfiles();
+        expect(store['bp_fleet_profiles']).not.toContain('by-hand-pw');
+        expect(store['bp_fleet_profiles']).not.toContain('by-hand-token');
+        expect(store['bp_fleet_profiles']).not.toContain('bp_by_hand');
     });
 
     it('updates a node profile', () => {

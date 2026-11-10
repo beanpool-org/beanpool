@@ -22,7 +22,10 @@ describe('EditNodeModal', () => {
         expect(screen.getByText('Configure Node Credentials')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Primary Node')).toBeInTheDocument();
         expect(screen.getByDisplayValue('https://primary.beanpool.org')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('pass123')).toBeInTheDocument();
+        // The memory-held password is not shown, and there is no field to type one into: a profile's credential is its token.
+        expect(screen.queryByDisplayValue('pass123')).toBeNull();
+        expect(screen.queryByText(/Admin Password/i)).toBeNull();
+        expect(screen.getByLabelText('Automation token')).toBeInTheDocument();
     });
 
     it('calls onClose when close icon or cancel button is clicked', async () => {
@@ -37,43 +40,25 @@ describe('EditNodeModal', () => {
         expect(handleClose).toHaveBeenCalledTimes(2);
     });
 
-    it('toggles password visibility when eye button is clicked', async () => {
-        const handleClose = vi.fn();
-        const handleSave = vi.fn();
-        render(<EditNodeModal node={sampleNode} onClose={handleClose} onSave={handleSave} />);
-
-        const passwordInput = screen.getByDisplayValue('pass123');
-        expect(passwordInput).toHaveAttribute('type', 'password');
-
-        await userEvent.click(screen.getByTitle('Show password'));
-        expect(passwordInput).toHaveAttribute('type', 'text');
-
-        await userEvent.click(screen.getByTitle('Hide password'));
-        expect(passwordInput).toHaveAttribute('type', 'password');
-    });
-
-    it('submits updated values when save button is clicked', async () => {
+    it('submits updated values when save button is clicked, leaving a password held for this page alone', async () => {
         const handleClose = vi.fn();
         const handleSave = vi.fn();
         render(<EditNodeModal node={sampleNode} onClose={handleClose} onSave={handleSave} />);
 
         const nameInput = screen.getByDisplayValue('Primary Node');
         const urlInput = screen.getByDisplayValue('https://primary.beanpool.org');
-        const passwordInput = screen.getByDisplayValue('pass123');
 
         await userEvent.clear(nameInput);
         await userEvent.type(nameInput, 'Updated Node Name');
         await userEvent.clear(urlInput);
         await userEvent.type(urlInput, 'https://node2.beanpool.org');
-        await userEvent.clear(passwordInput);
-        await userEvent.type(passwordInput, 'newpassword');
 
         await userEvent.click(screen.getByText('Save Settings'));
 
         expect(handleSave).toHaveBeenCalledWith('node-1', {
             name: 'Updated Node Name',
             url: 'https://node2.beanpool.org',
-            adminPassword: 'newpassword',
+            automationToken: undefined,
         });
         expect(handleClose).toHaveBeenCalledTimes(1);
     });

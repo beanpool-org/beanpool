@@ -13,7 +13,7 @@ describe('AddNodeModal', () => {
         expect(screen.getByText('Connect Sovereign Node')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('e.g. Byron Community Node')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Node Admin Password')).toBeInTheDocument();
+        expect(screen.getByLabelText('Automation token')).toBeInTheDocument();
     });
 
     it('calls onClose when close button or cancel button is clicked', async () => {
@@ -30,56 +30,34 @@ describe('AddNodeModal', () => {
         expect(handleClose).toHaveBeenCalledTimes(2);
     });
 
-    it('toggles password visibility when toggle button is clicked', async () => {
-        const handleClose = vi.fn();
-        const handleAdd = vi.fn();
-        render(<AddNodeModal onClose={handleClose} onAdd={handleAdd} />);
+    it('has no password field: a node is connected with an automation token made from an owner\'s phone', () => {
+        render(<AddNodeModal onClose={vi.fn()} onAdd={vi.fn()} />);
 
-        const passwordInput = screen.getByPlaceholderText('Node Admin Password');
-        expect(passwordInput).toHaveAttribute('type', 'password');
-
-        const toggleBtn = screen.getByTitle('Show password');
-        await userEvent.click(toggleBtn);
-        expect(passwordInput).toHaveAttribute('type', 'text');
-
-        const hideToggleBtn = screen.getByTitle('Hide password');
-        await userEvent.click(hideToggleBtn);
-        expect(passwordInput).toHaveAttribute('type', 'password');
+        expect(screen.getByLabelText('Automation token')).toBeInTheDocument();
+        expect(screen.queryByPlaceholderText('Node Admin Password')).toBeNull();
+        expect(screen.queryByText(/Admin Password/i)).toBeNull();
+        expect(screen.queryByTitle('Show password')).toBeNull();
     });
 
-    it('submits form with normalized URL and trimmed password', async () => {
-        const handleClose = vi.fn();
+    it('submits form with normalized URL, and the trimmed name', async () => {
         const handleAdd = vi.fn();
-        render(<AddNodeModal onClose={handleClose} onAdd={handleAdd} />);
+        render(<AddNodeModal onClose={vi.fn()} onAdd={handleAdd} />);
 
-        const nameInput = screen.getByPlaceholderText('e.g. Byron Community Node');
-        const urlInput = screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443');
-        const passwordInput = screen.getByPlaceholderText('Node Admin Password');
+        await userEvent.type(screen.getByPlaceholderText('e.g. Byron Community Node'), '  Test Node  ');
+        await userEvent.type(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443'), 'localhost:8443');
+        await userEvent.click(screen.getByText('Save Node Profile'));
 
-        await userEvent.type(nameInput, '  Test Node  ');
-        await userEvent.type(urlInput, 'localhost:8443');
-        await userEvent.type(passwordInput, ' secret123 ');
-
-        const submitBtn = screen.getByText('Save Node Profile');
-        await userEvent.click(submitBtn);
-
-        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://localhost:8443', 'secret123', undefined);
+        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://localhost:8443', undefined);
     });
 
-    it('submits form with undefined password if password field is blank', async () => {
-        const handleClose = vi.fn();
+    it('submits with no token when the token field is blank', async () => {
         const handleAdd = vi.fn();
-        render(<AddNodeModal onClose={handleClose} onAdd={handleAdd} />);
+        render(<AddNodeModal onClose={vi.fn()} onAdd={handleAdd} />);
 
-        const nameInput = screen.getByPlaceholderText('e.g. Byron Community Node');
-        const urlInput = screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443');
+        await userEvent.type(screen.getByPlaceholderText('e.g. Byron Community Node'), 'Test Node');
+        await userEvent.type(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443'), 'https://node1.beanpool.org');
+        await userEvent.click(screen.getByText('Save Node Profile'));
 
-        await userEvent.type(nameInput, 'Test Node');
-        await userEvent.type(urlInput, 'https://node1.beanpool.org');
-
-        const submitBtn = screen.getByText('Save Node Profile');
-        await userEvent.click(submitBtn);
-
-        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://node1.beanpool.org', undefined, undefined);
+        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://node1.beanpool.org', undefined);
     });
 });

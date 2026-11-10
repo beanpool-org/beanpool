@@ -610,7 +610,7 @@ export function TelemetryModule({
                                             <button
                                                 onClick={() => onEditNode(profile)}
                                                 className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-bp-chip-need-tint hover:text-bp-chip-need-ink text-white font-bold transition-all border border-nature-700 flex items-center gap-2 text-xs shadow-sm active:scale-95"
-                                                title="Configure Node Credentials & Admin Password"
+                                                title="Configure Node Credentials"
                                             >
                                                 <span className="text-base">⚙️</span>
                                                 <span>Node Settings</span>

@@ -1178,8 +1178,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         }
     };
 
-    const handleAddNode = (name: string, url: string, adminPassword?: string, automationToken?: string) => {
-        const created = addNodeProfile({ name, url, adminPassword, automationToken });
+    const handleAddNode = (name: string, url: string, automationToken?: string) => {
+        const created = addNodeProfile({ name, url, automationToken });
         const updated = loadNodeProfiles();
         setProfiles(updated);
         setActiveProfileId(created.id);

@@ -64,7 +64,6 @@
   "A new project needs an id nothing else has": "新项目需要一个没有被其他项目使用的 ID",
   "A pay-out needs an amount in Beans above 0.": "支出需要大于 0 的豆子数额。",
   "A pending request already exists for this enterprise": "这个企业已有一个待处理的请求",
-  "A positive amount is required": "需要提供大于零的数额",
   "A post can have at most {n} photos": "一条帖子最多可以有 {n} 张照片",
   "A post can have at most {n} photos. Take one off to add another.": "一条帖子最多可以有 {n} 张照片。请先去掉一张，再添加新的。",
   "A project can have at most 10 photos": "一个项目最多可以有 10 张照片",

@@ -65,7 +65,6 @@
   "A new project needs an id nothing else has": "नए प्रोजेक्ट के लिए ऐसी आईडी चाहिए जो किसी और के पास न हो",
   "A pay-out needs an amount in Beans above 0.": "भुगतान के लिए 0 से अधिक फलियों की राशि ज़रूरी है।",
   "A pending request already exists for this enterprise": "इस उद्यम के लिए एक अनुरोध पहले से लंबित है",
-  "A positive amount is required": "धनात्मक राशि ज़रूरी है",
   "A post can have at most {n} photos": "एक पोस्ट में अधिकतम {n} फ़ोटो हो सकती हैं",
   "A post can have at most {n} photos. Take one off to add another.": "एक पोस्ट में अधिकतम {n} फ़ोटो हो सकती हैं। दूसरी जोड़ने के लिए एक फ़ोटो हटाएं।",
   "A project can have at most 10 photos": "एक प्रोजेक्ट में अधिकतम 10 फ़ोटो हो सकती हैं",

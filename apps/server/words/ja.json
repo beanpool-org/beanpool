@@ -64,7 +64,6 @@
   "A new project needs an id nothing else has": "新しいプロジェクトには、ほかのどれとも重ならないIDが必要です",
   "A pay-out needs an amount in Beans above 0.": "支出には、0より大きい豆の金額が必要です。",
   "A pending request already exists for this enterprise": "この事業体には、すでに保留中のリクエストがあります",
-  "A positive amount is required": "正の金額が必要です",
   "A post can have at most {n} photos": "投稿の写真は最大{n}枚です",
   "A post can have at most {n} photos. Take one off to add another.": "投稿の写真は最大{n}枚です。追加するには、ひとつ外してください。",
   "A project can have at most 10 photos": "プロジェクトの写真は最大10枚です",

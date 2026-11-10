@@ -69,7 +69,6 @@
   "A new project needs an id nothing else has": "يحتاج المشروع الجديد إلى معرّف لا يملكه أي شيء آخر",
   "A pay-out needs an amount in Beans above 0.": "يحتاج الصرف إلى مبلغ بالفاصوليا أكبر من 0.",
   "A pending request already exists for this enterprise": "يوجد طلب معلّق لهذه المؤسسة بالفعل",
-  "A positive amount is required": "مطلوب مبلغ موجب",
   "A post can have at most {n} photos": "يمكن أن يحتوي المنشور على {n} صور على الأكثر",
   "A post can have at most {n} photos. Take one off to add another.": "يمكن أن يحتوي المنشور على {n} صور على الأكثر. أزل واحدة لإضافة أخرى.",
   "A project can have at most 10 photos": "يمكن أن يحتوي المشروع على 10 صور على الأكثر",

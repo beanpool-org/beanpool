@@ -87,7 +87,6 @@
   "A new project needs an id nothing else has": "Un proyecto nuevo necesita un id que ningún otro tenga",
   "A pay-out needs an amount in Beans above 0.": "Un pago necesita una cantidad en frijoles mayor que 0.",
   "A pending request already exists for this enterprise": "Ya existe una solicitud pendiente para este emprendimiento",
-  "A positive amount is required": "Se requiere una cantidad positiva",
   "A post can have at most {n} photos": "Una publicación puede tener como máximo {n} fotos",
   "A post can have at most {n} photos. Take one off to add another.": "Una publicación puede tener como máximo {n} fotos. Quita una para añadir otra.",
   "A project can have at most 10 photos": "Un proyecto puede tener como máximo 10 fotos",

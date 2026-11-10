@@ -30,12 +30,16 @@ vi.mock('expo-local-authentication', () => ({
 const who = vi.hoisted(() => ({ identity: null as null | { publicKey: string; privateKey: string; callsign: string } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => who.identity) }));
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
     MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeTooOldText, nodeVersionBelowMinimum, noteHealthAnswer, resetNodeVersionGateForTests,
     tooOldVersionOf,
 } from '../node-version-gate';
-import { checkCommunityForUpdate, createForceUpdateGate, evaluateForceUpdate, onAppRefused, type ForceUpdateDecision, type UpdateBlockShown } from '../force-update';
+import {
+    APP_TOO_OLD_CODE, checkCommunityForUpdate, createForceUpdateGate, evaluateForceUpdate, onAppRefused, type ForceUpdateDecision, type UpdateBlockShown,
+} from '../force-update';
 import { installNodeRequestSigning } from '../node-request-signing';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
@@ -261,38 +265,79 @@ describe('the card goes up as soon as any request hears the server too old, and 
     });
 });
 
+/** A file of the server's source: the phone can't import the server's code (it opens the node's database). */
+const serverSource = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../../server/src', rel), 'utf8');
+
+/**
+ * The 426 the server answers an app it refuses, read from the server itself: its code and its sentence from
+ * engine/member-signature.ts (APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, the refusal `unboundRefusal` builds), in the shape its
+ * signature check answers with (https-server.ts): the sentence in `error`, the code in `code`.
+ */
+function serverAppTooOld(): { error: string; code: string } {
+    const signature = serverSource('engine/member-signature.ts');
+    const code = /export const APP_TOO_OLD_CODE = '([^']+)';/.exec(signature)?.[1];
+    const error = /export const APP_TOO_OLD_ERROR = word\('([^']+)'\);/.exec(signature)?.[1];
+    expect(code, 'the server names APP_TOO_OLD_CODE').toBeTruthy();
+    expect(error, 'the server names APP_TOO_OLD_ERROR').toBeTruthy();
+    expect(signature).toContain('{ ok: false, status: 426, error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE }');
+    expect(serverSource('https-server.ts')).toContain('ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };');
+    return { error: error!, code: code! };
+}
+
+/**
+ * The sign-in pairing route's 426 (settings-signin-pairing.ts, answered by routes/settings-signin.ts): the same code, a
+ * sentence of its own, and no minimum. It refuses only that feature, so it never puts the block up.
+ */
+function serverPairingTooOld(): Record<string, string> {
+    const pairing = serverSource('settings-signin-pairing.ts');
+    const error = /export const SIGNIN_APP_TOO_OLD = '([^']+)';/.exec(pairing)?.[1];
+    expect(error, 'the server names SIGNIN_APP_TOO_OLD').toBeTruthy();
+    expect(pairing).toContain("{ ok: false, status: 426, error: SIGNIN_APP_TOO_OLD, code: 'app_too_old', reason: 'app-too-old' }");
+    expect(serverSource('routes/settings-signin.ts')).toContain('ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}) };');
+    return { error: error!, reason: 'app-too-old', code: 'app_too_old' };
+}
+
 describe('a 426 app_too_old from the community is the full-screen Update required', () => {
-    it('the wrapper hears it from the phone\'s own community, names the node\'s minimum, and hands the answer back as it was', async () => {
+    it('the phone reads the code the server sends: one spelling on both sides', () => {
+        expect(APP_TOO_OLD_CODE).toBe(serverAppTooOld().code);
+    });
+
+    it('the wrapper hears the server\'s own answer (its sentence in error, app_too_old in code) from the phone\'s own community, names the node\'s minimum, and hands the answer back as it was', async () => {
         noteHealthAnswer(HOME, { version: '1.5.0' });
-        answers[`${HOME}/api/posts`] = { status: 426, body: { error: 'app_too_old', minAppVersion: '1.5.0' } };
+        // The node's floor refusal: the server's answer, with the minimum it holds this app to.
+        const body = { ...serverAppTooOld(), minAppVersion: '1.5.0' };
+        answers[`${HOME}/api/posts`] = { status: 426, body };
         const heard: string[] = [];
         const stop = onAppRefused((v) => heard.push(v));
         try {
             const res = await fetch(`${HOME}/api/posts`);
             expect(res.status).toBe(426);
-            expect(await res.json()).toEqual({ error: 'app_too_old', minAppVersion: '1.5.0' });
+            expect(await res.json()).toEqual(body);
         } finally {
             stop();
         }
         expect(heard).toEqual(['1.5.0']);
     });
 
-    it('never from another host, nor for another 426, nor without a version', async () => {
+    it('never from another host, nor for another code or status, nor without a version (the server\'s answer as it is today, the pairing route\'s), nor with the code only in error', async () => {
         noteHealthAnswer(OTHER, { version: '1.5.0' });
         noteHealthAnswer(HOME, { version: '1.5.0' });
-        answers[`${OTHER}/api/posts`] = { status: 426, body: { error: 'app_too_old', minAppVersion: '1.5.0' } };
-        answers[`${HOME}/api/a`] = { status: 426, body: { error: 'something_else', minAppVersion: '1.5.0' } };
-        answers[`${HOME}/api/b`] = { status: 426, body: { error: 'app_too_old' } };
+        const server = serverAppTooOld();
+        answers[`${OTHER}/api/posts`] = { status: 426, body: { ...server, minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/a`] = { status: 426, body: { ...server, code: 'something_else', minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/b`] = { status: 426, body: server };
+        answers[`${HOME}/api/c`] = { status: 426, body: serverPairingTooOld() };
+        answers[`${HOME}/api/d`] = { status: 403, body: { ...server, minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/e`] = { status: 426, body: { error: server.code, minAppVersion: '1.5.0' } };
         const heard: string[] = [];
         const stop = onAppRefused((v) => heard.push(v));
         try {
-            await fetch(`${OTHER}/api/posts`);
-            await fetch(`${HOME}/api/a`);
-            await fetch(`${HOME}/api/b`);
+            for (const p of [`${OTHER}/api/posts`, `${HOME}/api/a`, `${HOME}/api/b`, `${HOME}/api/c`, `${HOME}/api/d`, `${HOME}/api/e`]) await fetch(p);
         } finally {
             stop();
         }
         expect(heard).toEqual([]);
+        expect(calls).toHaveLength(6);
     });
 
     it('the gate puts the block up at once, mid-use, and an answer already on its way cannot take it straight down', async () => {

@@ -37,8 +37,12 @@ export const CHECK_TIMEOUT_MS = 8_000;
 /** The header the app names itself with on every request to its own community (utils/node-request-signing.ts). */
 export const APP_VERSION_HEADER = 'X-BeanPool-App';
 
-/** The error a community answers (426) to an app below its floor: apps/server https-server.ts. */
-export const APP_TOO_OLD_ERROR = 'app_too_old';
+/**
+ * The code a community answers (426) to an app it refuses: the server's APP_TOO_OLD_CODE (apps/server
+ * engine/member-signature.ts), sent as `{ error: <its sentence>, code: 'app_too_old' }` (https-server.ts). The code is
+ * in `code`; `error` is the sentence. The block goes up only when the answer also names the node's `minAppVersion`.
+ */
+export const APP_TOO_OLD_CODE = 'app_too_old';
 
 const refusalListeners = new Set<(version: string) => void>();
 

@@ -28,7 +28,7 @@ import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { getSavedNodes } from './nodes';
-import { APP_TOO_OLD_ERROR, APP_VERSION_HEADER, noteAppRefused } from './force-update';
+import { APP_TOO_OLD_CODE, APP_VERSION_HEADER, noteAppRefused } from './force-update';
 import { languageForNode } from './language-choice';
 import { isHealthRead, learnNodeVersion, noteHealthAnswer, refuseIfNodeTooOld, tooOldVersionOf } from './node-version-gate';
 
@@ -155,10 +155,12 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
         // through again at once, and one a join reads is refused if it is too old. Read from a copy, never the caller's.
         if (healthRead && res.ok) void readCopy(res).then((body) => noteHealthAnswer(url, body));
         // The community refusing this app (its floor, 426 app_too_old): the full-screen "Update required". Only its own
-        // community's answer counts: any other host could say it just to cover the app.
+        // community's answer counts: any other host could say it just to cover the app. The server sends the code in
+        // `code` and a sentence in `error` (force-update.ts APP_TOO_OLD_CODE); with no `minAppVersion` (a refusal of one
+        // feature, such as the sign-in pairing's) noteAppRefused puts nothing up.
         if (toAnchor && res.status === 426) {
             const body = await readCopy(res);
-            if (body && typeof body === 'object' && (body as { error?: unknown }).error === APP_TOO_OLD_ERROR) {
+            if (body && typeof body === 'object' && (body as { code?: unknown }).code === APP_TOO_OLD_CODE) {
                 noteAppRefused((body as { minAppVersion?: unknown }).minAppVersion);
             }
         }

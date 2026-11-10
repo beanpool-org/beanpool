@@ -13,7 +13,8 @@
  *     A point whose tar lost a file point.json lists (a torn unpack), one with no tar, one with no point.json: each 500
  *     in words, no file moved, the database still open. M2: none of those bodies holds a path; the log has the error.
  *  4. H2, a database without the core tables: checkRestoreDatabase refuses an empty database, a dummy table, members(x INT),
- *     a members view, and accounts without balance, in words; a real backup's database passes; a point this server took
+ *     a members view, and accounts without their key column, in words; accounts without a money column are not refused
+ *     for it (the boot's hundredths step makes balance_c and drops old money); a real backup's database passes; a point this server took
  *     passes against a live database that has no schema (ownPoint), which the plain check refuses over triggers.
  *     Through the route on a fresh server: the empty, dummy and members(x INT) files sealed by a pinned key → 400 "is not a
  *     BeanPool database", nothing changed; a real backup then restores 200. (Before: 200 for all three.)
@@ -651,16 +652,24 @@ async function main(): Promise<void> {
             };
             const words = (why: string) => `This backup's state.db is not a BeanPool database (${why}). Nothing was changed.`;
             const viewDb = made('view.db', ['CREATE TABLE m (public_key TEXT, callsign TEXT)', 'CREATE VIEW members AS SELECT * FROM m']);
-            const noBalance = made('no-balance.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
-                'CREATE TABLE node_roles (member_pubkey TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+            // Whole hundredths (restore-checks.ts CORE_TABLES): an accounts table needs its key column; its money column is the
+            // boot's to make (db/hundredths-step.ts makes balance_c on an older shape and drops old money), so a backup without
+            // one is not refused for it. Under float Beans a missing `balance` column was refused here.
+            const noAccountKey = made('no-account-key.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (balance_c INTEGER)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+            const noMoneyColumn = made('no-money-column.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
             for (const [label, f, why] of [
                 ['an empty database', emptyDb, 'no members table'], ['a dummy table', dummyDb, 'no members table'],
                 ['members(x INT)', wrongDb, 'its members table has no public_key column'], ['a members view', viewDb, 'no members table'],
-                ['accounts without balance', noBalance, 'its accounts table has no balance column'],
+                ['accounts without their key column', noAccountKey, 'its accounts table has no public_key column'],
             ] as const) {
                 const r = check(f);
                 assert(!r.ok && (r as any).status === 400 && (r as any).error === words(why), `4. ${label}: refused 400 in words (${JSON.stringify(r)})`);
             }
+            const noMoney = check(noMoneyColumn);
+            assert(noMoney.ok === true && noMoney.untouched === true,
+                `4. accounts without a money column: not refused for it, the boot makes balance_c (${JSON.stringify(noMoney)})`);
             const real = check(realCopy);
             assert(real.ok === true, `4. a real backup's database passes (${JSON.stringify(real)})`);
             // conversion-s0: node_roles came with 2026-09-14's schema, and nothing at boot makes an owner from older data.

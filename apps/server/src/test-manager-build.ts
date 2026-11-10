@@ -26,7 +26,8 @@ async function runTests() {
     console.log('Running Phase 5 Manager Convergence integration tests...\n');
 
     // 1. Verify shared engine calculation & volume cap
-    assert(PER_COUNTERPARTY_VOLUME_CAP === 500, 'Engine volume cap imported correctly: ' + PER_COUNTERPARTY_VOLUME_CAP);
+    // 500 Beans, as whole hundredths (1 Bean = 100) like every money figure: 50,000.
+    assert(PER_COUNTERPARTY_VOLUME_CAP === 500 * 100, 'Engine volume cap imported correctly: 500 Beans, ' + PER_COUNTERPARTY_VOLUME_CAP + ' hundredths');
 
     // 2. Verify undeclared imports guard (ensures apps/manager dependencies are declared in package.json)
     try {

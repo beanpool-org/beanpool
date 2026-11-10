@@ -71,7 +71,8 @@ const HOUR = 60 * 60 * 1000;
 const EXACT = { lat: -28.68731, lng: 153.52219 };
 const ROUNDED = { lat: -28.7, lng: 153.5 };
 const HOST = 'mullum.example.org';
-const PRICE = { beans: 20, per: 'fixed' };
+/** A copy's price at home, as the node keeps it: 20 Beans in whole hundredths (`{ price_c, per }`, engine/event-copy.ts). */
+const PRICE = { price_c: 2000, per: 'fixed' };
 const TAKES = '/api/marketplace/posts/takes-questions';
 
 async function main() {

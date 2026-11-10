@@ -41,6 +41,11 @@ import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { DEFAULT_PRICING_CATALOG } from '@beanpool/core';
 
 let run = 0, passed = 0;
+/**
+ * A listing's price is whole hundredths (posts.price_c, 1 Bean = 100); the guide speaks whole Beans (price_beans), and the
+ * aggregator reads a listing's price_c / 100. `hc` turns the story's Beans figures into a listing's hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) {
@@ -176,10 +181,10 @@ async function main() {
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)
     `);
 
-    insertPost.run('post-mock-1', 'Babysitting and childcare', 'Weekend evening babysitting', 20);
-    insertPost.run('post-mock-2', 'Babysitting after school', 'Friendly babysitting', 22);
-    insertPost.run('post-mock-3', 'Babysitting per hour', 'High school babysitting', 24);
-    insertPost.run('post-mock-4', 'Babysitting joke post', 'Joke post 999 beans', 999); // Outlier (>5x)
+    insertPost.run('post-mock-1', 'Babysitting and childcare', 'Weekend evening babysitting', hc(20));
+    insertPost.run('post-mock-2', 'Babysitting after school', 'Friendly babysitting', hc(22));
+    insertPost.run('post-mock-3', 'Babysitting per hour', 'High school babysitting', hc(24));
+    insertPost.run('post-mock-4', 'Babysitting joke post', 'Joke post 999 beans', hc(999)); // Outlier (>5x)
 
     const aggResult = runPricingAggregationCycle();
     assert(aggResult.updatedCount > 0, 'Runs auto-pricing aggregation cycle across catalog');
@@ -198,13 +203,13 @@ async function main() {
         INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, audience_scope, target_group_id, target_pubkey)
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?, ?)
     `);
-    insertScoped.run('post-group-1', 'Babysitting for the group', 'Group babysitting', 80, 'group', 'group-sitters', null);
-    insertScoped.run('post-direct-1', 'Babysitting for Bea', 'Direct babysitting', 90, 'direct', null, 'author-2');
+    insertScoped.run('post-group-1', 'Babysitting for the group', 'Group babysitting', hc(80), 'group', 'group-sitters', null);
+    insertScoped.run('post-direct-1', 'Babysitting for Bea', 'Direct babysitting', hc(90), 'direct', null, 'author-2');
     runPricingAggregationCycle();
     const afterOffBoard = getPricingGuideItem('ls-001');
     assert(afterOffBoard?.confidenceCount === 3 && afterOffBoard?.priceBeans === 22,
         `a group listing and a direct listing move neither the price nor the count (${afterOffBoard?.priceBeans} beans from ${afterOffBoard?.confidenceCount})`);
-    insertScoped.run('post-board-5', 'Babysitting on weekends', 'Board babysitting', 30, 'public', null, null);
+    insertScoped.run('post-board-5', 'Babysitting on weekends', 'Board babysitting', hc(30), 'public', null, null);
     runPricingAggregationCycle();
     const afterBoard = getPricingGuideItem('ls-001');
     assert(afterBoard?.confidenceCount === 4 && afterBoard?.priceBeans === 23,
@@ -217,10 +222,10 @@ async function main() {
         INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, hidden_by_reports_at)
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?)
     `);
-    insertWithStatus.run('post-hidden-1', 'Babysitting overnight', 'Flagged babysitting', 60, 'active', new Date().toISOString());
+    insertWithStatus.run('post-hidden-1', 'Babysitting overnight', 'Flagged babysitting', hc(60), 'active', new Date().toISOString());
     db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES ('post-hidden-1', 'data:image/jpeg;base64,AA==', 0)`).run();
-    insertWithStatus.run('post-paused-1', 'Babysitting paused', 'Paused babysitting', 70, 'paused', null);
-    insertWithStatus.run('post-cancelled-1', 'Babysitting cancelled', 'Cancelled babysitting', 75, 'cancelled', null);
+    insertWithStatus.run('post-paused-1', 'Babysitting paused', 'Paused babysitting', hc(70), 'paused', null);
+    insertWithStatus.run('post-cancelled-1', 'Babysitting cancelled', 'Cancelled babysitting', hc(75), 'cancelled', null);
     for (const dataSource of ['federation', 'local'] as const) {
         updatePricingConfig({ dataSource });
         runPricingAggregationCycle();
@@ -229,7 +234,7 @@ async function main() {
             `${dataSource}: a listing hidden by reports, a paused one and a cancelled one move neither the price nor the count (${afterOff?.priceBeans} beans from ${afterOff?.confidenceCount}, expected 23 from 4)`);
         assert(!afterOff?.thumbnailUrl, `${dataSource}: the hidden listing's photo is not the item's picture (${afterOff?.thumbnailUrl})`);
     }
-    insertWithStatus.run('post-completed-1', 'Babysitting done', 'Completed babysitting', 26, 'completed', null);
+    insertWithStatus.run('post-completed-1', 'Babysitting done', 'Completed babysitting', hc(26), 'completed', null);
     for (const dataSource of ['federation', 'local'] as const) {
         updatePricingConfig({ dataSource });
         runPricingAggregationCycle();

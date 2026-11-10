@@ -345,15 +345,16 @@ async function main() {
     // The head of the draw, each with a conflict only this node knows of. at(9)'s deal with Sam is older than 90 days.
     const post = crypto.randomUUID();
     db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
-                VALUES (?, 'offer', 'food', 'Plums', '', 5, ?, 'active', 1, ?, ?, 'plums')`).run(post, sam.pk, ago(DAY), ago(DAY));
+                VALUES (?, 'offer', 'food', 'Plums', '', 500, ?, 'active', 1, ?, ?, 'plums')`).run(post, sam.pk, ago(DAY), ago(DAY));
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status, created_at) VALUES (?, ?, ?, ?, 'A report of the plums', 'pending', ?)`)
         .run(crypto.randomUUID(), at(0).pk, gen.pk, post, ago(DAY));
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(at(1).pk, sam.pk);
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(sam.pk, at(2).pk);
     const block = db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)');
     block.run(at(4).pk, sam.pk);
+    // Each deal for 5 Beans, as the listings ask: 500 whole hundredths.
     const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, updated_at)
-                             VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`);
+                             VALUES (?, ?, ?, ?, 500, ?, ?, ?, ?)`);
     deal.run(crypto.randomUUID(), post, at(5).pk, sam.pk, 'completed', ago(20 * DAY), ago(20 * DAY), ago(20 * DAY));
     // at(6) asked for Sam's plums: an open deal they opened.
     deal.run(crypto.randomUUID(), post, at(6).pk, sam.pk, 'pending', ago(DAY), null, ago(DAY));
@@ -375,7 +376,7 @@ async function main() {
         .run(crypto.randomUUID(), unanswered, sam.pk, ago(DAY));
     const theirPost = crypto.randomUUID();
     db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
-                VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
+                VALUES (?, 'offer', 'food', 'Pears', '', 500, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
     deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
     // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer, through the real escrow code: a completed
     // deal, and its trade chat, Sam made alone (reviews of #2793 rounds 2 and 3). It stands nobody aside. Sam may accept: the
@@ -386,9 +387,9 @@ async function main() {
     const lemons = se.acceptPost(freeOffer, sam.pk);
     const lemonsDone = se.completePostTransaction(lemons.id, sam.pk);
     const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, amount_c, status FROM marketplace_transactions WHERE id = ?')
-        .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; credits: number; status: string } | undefined;
+        .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; amount_c: number; status: string } | undefined;
     assert(lemonsDone?.status === 'completed' && lemonsRow?.status === 'completed' && lemonsRow.buyer_pubkey === sam.pk
-        && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.credits === 0,
+        && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.amount_c === 0,
         `Sam's one-step accept of at(17)'s free lemons is completed, Sam the buyer, 0 Beans (${JSON.stringify(lemonsRow)})`);
     // A loan (J2a, call 3): Sam asks to borrow at(19)'s drill, at(19) says yes, and Sam gives it back, through the real escrow
     // code. A loan is always asked for and its lender says yes first, so at(19) made this deal too and stands aside. at(20)
@@ -510,7 +511,8 @@ async function main() {
     const list = await signed('GET', '/api/commons/decisions', jurors[0]);
     const listed = (list.body?.decisions ?? []).find((d: any) => d.id === samVote);
     assert(listed && !('yesWeight' in listed.tally) && listed.tally.totalVoters === 9, 'the list says the same, to a juror too');
-    assert(listed && listed.params?.debt !== undefined && !('debt' in ((card.body?.decision?.params) ?? {})),
+    // The removal's params carry the member's balance and debt in whole hundredths, balance_c and debt_c.
+    assert(listed && listed.params?.debt_c !== undefined && !('debt_c' in ((card.body?.decision?.params) ?? {})) && !('balance_c' in ((card.body?.decision?.params) ?? {})),
         "the member's balance goes to the jury, as it went to a vote's voters, and not to a member not drawn");
     await settle(500);
     // Since J2b the jurors' "a vote opened" is the jury's own push, decision.jury: they were drawn, and are asked to answer.
@@ -826,7 +828,7 @@ async function main() {
     const branchCardOf = async (who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, who); };
     const jurorCard = jurorsB[0] ? await branchCardOf(jurorsB[0]) : null;
     const offCard = await branchCardOf(notSeated);
-    const owing = (a: Answer | null) => (a?.body?.decision?.params?.branch ?? []).filter((e: any) => 'debt' in e && 'balance' in e).length;
+    const owing = (a: Answer | null) => (a?.body?.decision?.params?.branch ?? []).filter((e: any) => 'debt_c' in e && 'balance_c' in e).length;
     assert(jurorCard?.status === 200 && owing(jurorCard) === 3 && 'branchDebt' in (jurorCard.body.decision.params ?? {})
         && offCard.status === 200 && owing(offCard) === 0 && !('branchDebt' in (offCard.body?.decision?.params ?? {})),
         `each account's balance and debt, and their total, go to the jury, not to a member not seated (${owing(jurorCard)}, ${owing(offCard)})`);

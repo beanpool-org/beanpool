@@ -14,6 +14,8 @@
  *   7. the other two limits that read the count: a confirmed member's known grant and an enterprise's line
  *   8. a member already past the new line: spend-frozen, never debited, and back when Beans come in or a real Offer goes up
  *
+ * The story's figures are Beans; every figure the node answers is whole hundredths (`*_c`), converted at the edges (`hc`).
+ *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-offer-copy-credit)
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -71,6 +73,8 @@ const HOME_ID = '5b0d5a3e-5d6c-4f0a-9a57-222222222222';
 const EARNED = 1500;
 /** The usable floor the bands give an earned limit of 1,500: one Offer −200, two −500, three −1000, four and on −1500. */
 const BAND_FLOORS = [-200, -500, -1000, -1500, -1500];
+/** Beans to whole hundredths, for the story's figures (exact: each is whole Beans). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 async function main() {
     console.log('A copy of an Offer is no Offer of the member\'s...\n');
@@ -99,7 +103,7 @@ async function main() {
     const member = (name: string, earned = 0, joinedAt = longAgo): Id => {
         const id = keypair();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury, earned_credit_c, updated_at)
-                    VALUES (?, ?, 'active', ?, 'genesis', 'TEST', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, name, joinedAt, earned);
+                    VALUES (?, ?, 'active', ?, 'genesis', 'TEST', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, name, joinedAt, hc(earned));
         setMemberPhoto(db, id.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
@@ -111,7 +115,7 @@ async function main() {
     const listing = (author: Id, type: 'offer' | 'need', title: string, extra: Record<string, unknown> = {}) => ({
         id: crypto.randomUUID(), type, category: 'food', title, description: 'Fresh this morning', authorPublicKey: author.pubKeyHex, ...PLACE, photos: TEST_PHOTOS, ...extra,
     });
-    const copyFields = (host = HOST) => ({ shownFrom: { host, postId: HOME_ID }, shownPrice: { beans: 20, per: 'fixed' } });
+    const copyFields = (host = HOST) => ({ shownFrom: { host, postId: HOME_ID }, shownPrice: { price_c: hc(20), per: 'fixed' } });
     const post = (who: Id, type: 'offer' | 'need', title: string, extra: Record<string, unknown> = {}) => call('POST', '/api/marketplace/posts', who, listing(who, type, title, extra));
     /** A copy written through the real route, and held to be one: a setup that wrote a plain Offer would prove nothing here. */
     const postCopy = async (who: Id, title: string, host = HOST): Promise<string> => {
@@ -120,22 +124,22 @@ async function main() {
         assert(made.status === 200 && made.body?.post?.shownCopy === true, `setup: "${title}" is a copy (${made.status} ${made.text.slice(0, 100)})`);
         return id;
     };
-    const postReal = async (who: Id, title: string, credits = 0): Promise<string> => {
-        const made = await post(who, 'offer', title, { credits });
+    const postReal = async (who: Id, title: string, beans = 0): Promise<string> => {
+        const made = await post(who, 'offer', title, { price_c: hc(beans) });
         assert(made.status === 200 && !made.body?.post?.shownCopy, `setup: "${title}" is a plain Offer (${made.status} ${made.text.slice(0, 100)})`);
         return made.body?.post?.id;
     };
     const removePost = (who: Id, id: string) => call('POST', '/api/marketplace/posts/remove', who, { id, authorPublicKey: who.pubKeyHex });
     const stored = (id: string) => db.prepare('SELECT * FROM posts WHERE id = ?').get(id) as any;
     const bal = async (who: Id, of = who) => (await call('GET', `/api/ledger/balance/${of.pubKeyHex}`, who)).body;
-    /** What the node says of a member's Offers, the part both apps read. */
+    /** What the node says of a member's Offers, the part both apps read (the usable floor in whole hundredths). */
     const offerFacts = async (who: Id) => {
         const b = await bal(who);
-        return { usableFloor: b?.usableFloor, liveOffers: b?.liveOffers, hasListedOffer: b?.hasListedOffer, hasLiveOffer: b?.hasLiveOffer, isBlockedFromTrading: b?.isBlockedFromTrading };
+        return { usableFloor_c: b?.usableFloor_c, liveOffers: b?.liveOffers, hasListedOffer: b?.hasListedOffer, hasLiveOffer: b?.hasLiveOffer, isBlockedFromTrading: b?.isBlockedFromTrading };
     };
     const show = (v: unknown) => JSON.stringify(v);
     const same = (a: unknown, b: unknown) => show(a) === show(b);
-    const NO_OFFER = { usableFloor: 0, liveOffers: 0, hasListedOffer: false, hasLiveOffer: false, isBlockedFromTrading: true };
+    const NO_OFFER = { usableFloor_c: 0, liveOffers: 0, hasListedOffer: false, hasLiveOffer: false, isBlockedFromTrading: true };
 
     // ── 1. Beans off ── First: a node that has opened an escrow keeps its money on for good.
     console.log('── 1. Beans off, as global runs ──');
@@ -147,7 +151,7 @@ async function main() {
     assert((await post(fern, 'need', 'A Need beside a copy', copyFields())).status === 200, 'Beans off: a copy of a Need goes up too');
     assert((await post(fern, 'need', 'A plain Need beside a copy')).status === 200, 'Beans off: so does a plain Need');
     const fernSays = await bal(fern);
-    assert(fernSays?.isBlockedFromTrading === false && fernSays?.frozen === false && fernSays?.balance === 0, `Beans off: nobody is blocked, frozen or moved (${show([fernSays?.isBlockedFromTrading, fernSays?.frozen, fernSays?.balance])})`);
+    assert(fernSays?.isBlockedFromTrading === false && fernSays?.frozen === false && fernSays?.balance_c === 0, `Beans off: nobody is blocked, frozen or moved (${show([fernSays?.isBlockedFromTrading, fernSays?.frozen, fernSays?.balance_c])})`);
     const fernHome = await call('GET', '/api/home?cards=steps', fern);
     assert(fernHome.status === 200 && fernHome.body?.cards?.steps?.firstPost === true, `Beans off: a copy still ticks "Post something", as it did: the member did post here (${fernHome.status})`);
 
@@ -213,14 +217,14 @@ async function main() {
         realIds.push(await postReal(beside, `Real ${band}`));
         const plainFacts = await offerFacts(plainMember);
         const besideFacts = await offerFacts(beside);
-        assert(plainFacts.liveOffers === band + 1 && plainFacts.usableFloor === BAND_FLOORS[band] && plainFacts.hasListedOffer && plainFacts.hasLiveOffer && !plainFacts.isBlockedFromTrading,
+        assert(plainFacts.liveOffers === band + 1 && plainFacts.usableFloor_c === hc(BAND_FLOORS[band]) && plainFacts.hasListedOffer && plainFacts.hasLiveOffer && !plainFacts.isBlockedFromTrading,
             `${band + 1} real ${band ? 'Offers' : 'Offer'}: ${BAND_FLOORS[band]}, as ever (${show(plainFacts)})`);
         assert(same(besideFacts, plainFacts), `${band + 1} real ${band ? 'Offers' : 'Offer'} beside 3 copies: the same answer, each counted once (${show(besideFacts)})`);
     }
     assert((await post(beside, 'need', 'A Need beside a real Offer')).status === 200, 'a real Offer opens the Need, copies or none');
     for (const id of realIds) await removePost(beside, id);
     const offersGone = await offerFacts(beside);
-    assert(offersGone.liveOffers === 0 && offersGone.usableFloor === 0 && offersGone.hasLiveOffer === false, `the real Offers gone, the copies hold no line (${show(offersGone)})`);
+    assert(offersGone.liveOffers === 0 && offersGone.usableFloor_c === 0 && offersGone.hasLiveOffer === false, `the real Offers gone, the copies hold no line (${show(offersGone)})`);
     assert(offersGone.hasListedOffer === true && offersGone.isBlockedFromTrading === false, `and a real Offer listed once, ever, still counts as listed (${show(offersGone)})`);
     assert((await post(beside, 'need', 'A Need after the Offers went')).status === 200, 'so its Need still goes up');
 
@@ -250,20 +254,25 @@ async function main() {
         .run(crypto.randomBytes(16).toString('hex'), confirmed.pubKeyHex, crypto.randomBytes(16).toString('hex'), confirmer.pubKeyHex);
     await postCopy(confirmed, 'A confirmed member\'s copy');
     const copyOnly = await bal(confirmed);
-    assert(copyOnly?.knownGrant === 1000 && copyOnly?.usableFloor === 0 && copyOnly?.liveOffers === 0, `a confirmed member's known grant waits for a real Offer: a copy doesn't open it (${show([copyOnly?.knownGrant, copyOnly?.usableFloor, copyOnly?.liveOffers])})`);
+    assert(copyOnly?.knownGrant_c === hc(1000) && copyOnly?.usableFloor_c === 0 && copyOnly?.liveOffers === 0, `a confirmed member's known grant waits for a real Offer: a copy doesn't open it (${show([copyOnly?.knownGrant_c, copyOnly?.usableFloor_c, copyOnly?.liveOffers])})`);
     await postReal(confirmed, 'A confirmed member\'s Offer');
     const withOffer = await bal(confirmed);
-    assert(withOffer?.usableFloor === -1000 && withOffer?.liveOffers === 1, `one real Offer opens all of it (${show([withOffer?.usableFloor, withOffer?.liveOffers])})`);
+    assert(withOffer?.usableFloor_c === hc(-1000) && withOffer?.liveOffers === 1, `one real Offer opens all of it (${show([withOffer?.usableFloor_c, withOffer?.liveOffers])})`);
 
     // Signed by the enterprise's own key: a keeper's routes (routes/treasury.ts) take no `shownFrom`, so this is the one way in.
+    // Its line of 1,500: the grandfathered legacy floor is gone (E29), so it is a keeper's earned pledge, as every enterprise's
+    // line now is (@beanpool/engine enterpriseAllowance).
     const enterprise = member('CopyBakeryEnterprise');
-    db.prepare('UPDATE members SET is_treasury = 1, legacy_credit_floor = ? WHERE public_key = ?').run(EARNED, enterprise.pubKeyHex);
+    const bakeryKeeper = member('CopyBakeryKeeper');
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(enterprise.pubKeyHex);
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomUUID(), bakeryKeeper.pubKeyHex, enterprise.pubKeyHex, hc(EARNED));
     await postCopy(enterprise, 'An enterprise\'s copy');
     const copyLine = await bal(enterprise);
-    assert(copyLine?.floor === -EARNED && copyLine?.usableFloor === 0 && copyLine?.liveOffers === 0, `an enterprise's line stays shut with only copies (${show([copyLine?.floor, copyLine?.usableFloor, copyLine?.liveOffers])})`);
+    assert(copyLine?.floor_c === -hc(EARNED) && copyLine?.usableFloor_c === 0 && copyLine?.liveOffers === 0, `an enterprise's line stays shut with only copies (${show([copyLine?.floor_c, copyLine?.usableFloor_c, copyLine?.liveOffers])})`);
     await postReal(enterprise, 'An enterprise\'s Offer');
     const realLine = await bal(enterprise);
-    assert(realLine?.usableFloor === -200 && realLine?.liveOffers === 1, `a real Offer beside it counts once (${show([realLine?.usableFloor, realLine?.liveOffers])})`);
+    assert(realLine?.usableFloor_c === hc(-200) && realLine?.liveOffers === 1, `a real Offer beside it counts once (${show([realLine?.usableFloor_c, realLine?.liveOffers])})`);
 
     // ── 8. Already past the new line ──
     console.log('\n── 8. Already spent against copies ──');
@@ -275,31 +284,31 @@ async function main() {
     const seller2 = member('SellerOfEggs', EARNED);
     const eggs = await postReal(seller2, 'Eggs for Beans', 150);
     const spent = await call('POST', '/api/marketplace/posts/accept', spender, { postId: eggs, buyerPublicKey: spender.pubKeyHex });
-    const spentBalance = (await bal(spender))?.balance;
-    assert(spent.status === 200 && spentBalance < -100, `setup: the member spends into the line (${spent.status} ${spent.text.slice(0, 120)}, balance ${spentBalance})`);
+    const spentBalance = (await bal(spender))?.balance_c;
+    assert(spent.status === 200 && spentBalance < hc(-100), `setup: the member spends into the line (${spent.status} ${spent.text.slice(0, 120)}, balance ${spentBalance} hundredths)`);
     db.prepare('UPDATE posts SET shown_from_host = ? WHERE id = ?').run(HOST, opener);
     const frozenNow = await bal(spender);
-    assert(frozenNow?.balance === spentBalance, `the line narrows and no Bean is taken back: ${spentBalance} before, ${frozenNow?.balance} after`);
-    assert(frozenNow?.usableFloor === 0 && frozenNow?.liveOffers === 0 && frozenNow?.frozen === true, `they are spend-frozen, past a floor of 0 (${show([frozenNow?.usableFloor, frozenNow?.liveOffers, frozenNow?.frozen])})`);
+    assert(frozenNow?.balance_c === spentBalance, `the line narrows and no Bean is taken back: ${spentBalance} before, ${frozenNow?.balance_c} after`);
+    assert(frozenNow?.usableFloor_c === 0 && frozenNow?.liveOffers === 0 && frozenNow?.frozen === true, `they are spend-frozen, past a floor of 0 (${show([frozenNow?.usableFloor_c, frozenNow?.liveOffers, frozenNow?.frozen])})`);
     const ledgerAddsUp = (step: string) => {
         const a = se.runLedgerAudit();
-        assert(a.ok && Math.abs(a.drift) < 0.0001 && a.strandedEscrows === 0 && a.badBalances === 0, `the ledger adds up ${step} (drift ${a.drift}, stranded ${a.strandedEscrows}, not a number ${a.badBalances})`);
+        assert(a.ok && a.drift === 0 && a.strandedEscrows === 0 && a.badBalances === 0, `the ledger adds up ${step} (drift ${a.drift}, stranded ${a.strandedEscrows}, not whole hundredths ${a.badBalances})`);
     };
     ledgerAddsUp('with the member frozen');
     const more = member('MoreForSale', EARNED);
     const moreForSale = await postReal(more, 'More to buy', 5);
     const noMore = await call('POST', '/api/marketplace/posts/accept', spender, { postId: moreForSale, buyerPublicKey: spender.pubKeyHex });
-    assert(noMore.status === 400 && /^CONTRIBUTION_REQUIRED/.test(noMore.body?.error ?? '') && (await bal(spender))?.balance === spentBalance, `spending more is refused, and refusing moves nothing (${noMore.status} ${noMore.text.slice(0, 100)})`);
+    assert(noMore.status === 400 && /^CONTRIBUTION_REQUIRED/.test(noMore.body?.error ?? '') && (await bal(spender))?.balance_c === spentBalance, `spending more is refused, and refusing moves nothing (${noMore.status} ${noMore.text.slice(0, 100)})`);
     const dealId = spent.body?.transaction?.id ?? spent.body?.transactionId;
     const released = await call('POST', '/api/marketplace/transactions/complete', spender, { transactionId: dealId, confirmerPublicKey: spender.pubKeyHex });
     assert(released.status === 200, `the deal already held in trust still pays its seller: the Beans went when it was made (${released.status} ${released.text.slice(0, 120)})`);
-    assert((await bal(spender))?.balance === spentBalance, 'and that takes nothing more from the buyer');
-    se.transfer('genesis', spender.pubKeyHex, 100, 'Beans come in', 'direct', true);
+    assert((await bal(spender))?.balance_c === spentBalance, 'and that takes nothing more from the buyer');
+    se.transfer('genesis', spender.pubKeyHex, hc(100), 'Beans come in', 'direct', true);
     const climbing = await bal(spender);
-    assert(climbing?.balance === Math.round((spentBalance + 100) * 100) / 100 && climbing?.frozen === true, `Beans still come in, and the member stays frozen below the floor (${climbing?.balance})`);
+    assert(climbing?.balance_c === spentBalance + hc(100) && climbing?.frozen === true, `Beans still come in, and the member stays frozen below the floor (${climbing?.balance_c})`);
     await postReal(spender, 'A real Offer at last');
     const reopened = await bal(spender);
-    assert(reopened?.usableFloor === -200 && reopened?.frozen === false, `a real Offer opens the line again and the freeze lifts (${show([reopened?.usableFloor, reopened?.frozen, reopened?.balance])})`);
+    assert(reopened?.usableFloor_c === hc(-200) && reopened?.frozen === false, `a real Offer opens the line again and the freeze lifts (${show([reopened?.usableFloor_c, reopened?.frozen, reopened?.balance_c])})`);
     ledgerAddsUp('at the end');
 
     console.log(`\n${passed}/${run} checks passed`);

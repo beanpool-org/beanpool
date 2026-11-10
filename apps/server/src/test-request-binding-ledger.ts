@@ -31,6 +31,8 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 function assert(cond: unknown, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
@@ -68,14 +70,14 @@ async function main(): Promise<void> {
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
         setMemberPhoto(db, pk, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
-        se.transfer('genesis', pk, 100, `seed ${callsign}`, 'direct', true);
+        se.transfer('genesis', pk, hc(100), `seed ${callsign}`, 'direct', true);
         return { pk, seed, sign: core.ed25519Signer(seed) };
     };
     const founder = crypto.randomBytes(32).toString('hex');
     se.seedGenesisMember(founder, 'Founder');
     const mia = member('Mia');
     const xan = member('Xan');
-    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
+    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, hc(10), 'fixed', pk)!;
     offer(mia.pk, 'Mia seedlings');
     se.completePostTransaction(se.acceptPost(offer(xan.pk, 'Xan bread').id, mia.pk).id, mia.pk);
 
@@ -86,13 +88,13 @@ async function main(): Promise<void> {
 
     try {
         // ── 1. Both formats accepted, the text stored ──
-        const v2Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 4, memo: 'format 2 send' });
+        const v2Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(4), memo: 'format 2 send' });
         const v2 = await post(await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: v2Body, publicKeyHex: mia.pk, sign: mia.sign }), v2Body);
         assert(v2.status === 200 && v2.body?.transaction?.id, `a format-2 send is accepted (${v2.status} ${JSON.stringify(v2.body).slice(0, 120)})`);
         const cutoff = unboundSignaturesCutoff();
         if (typeof cutoff !== 'number') throw new Error('this node refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
         setSignatureSwitchClockForTests(() => cutoff - 1);
-        const v1Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 2, memo: 'old format send' });
+        const v1Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(2), memo: 'old format send' });
         const ts = String(Date.now());
         const nonce = crypto.randomBytes(16).toString('hex');
         const v1Text = core.unboundRequestText({ method: 'POST', path: '/api/ledger/transfer', timestamp: ts, nonce, body: v1Body });
@@ -104,7 +106,7 @@ async function main(): Promise<void> {
         setSignatureSwitchClockForTests(null);
         const v2Id = v2.body.transaction.id as string;
         const v1Id = v1.body.transaction.id as string;
-        const hexBody = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 1, memo: 'hex-spelled send' });
+        const hexBody = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'hex-spelled send' });
         const hexHeaders = await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: hexBody, publicKeyHex: mia.pk, sign: mia.sign });
         const hex = await post({ ...hexHeaders, 'X-Signature': Buffer.from(hexHeaders['X-Signature'], 'base64').toString('hex') }, hexBody);
         const hexRows = (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE memo = 'hex-spelled send'").get() as { n: number }).n;
@@ -120,7 +122,8 @@ async function main(): Promise<void> {
         const snapshot = await se.exportSyncState(nodeId);
         const { signature: _s, publicKey: _p, ...basePayload } = snapshot as any;
         const v2Tx = (basePayload.transactions as any[]).find((t) => t.id === v2Id);
-        const tampered = { ...v2Tx, id: crypto.randomUUID(), amount: 40 };
+        // The signed send was 4 Beans; the copy says 40 (whole hundredths, the payload's amount_c).
+        const tampered = { ...v2Tx, id: crypto.randomUUID(), amount_c: hc(40) };
         const payload = await se.signSyncPayload({ ...basePayload, transactions: [...basePayload.transactions, tampered] });
         for (const txId of accepted) db.prepare('DELETE FROM transactions WHERE id = ?').run(txId);
         se.setNodeRole('backup');

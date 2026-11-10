@@ -66,6 +66,8 @@ import { setMemberPhoto } from '@beanpool/engine';
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Request-Binding-Pw-4471!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 /** The switch (ms), read from the nodes once they are up. */
 let SWITCH = 0;
 
@@ -100,7 +102,7 @@ async function child(): Promise<void> {
     const port = await startHttpsServer(0);
 
     const offer = (pk: string, title: string) => {
-        const post = createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
+        const post = createPost('offer', 'produce', title, `${title}, fresh`, hc(10), 'fixed', pk);
         if (!post) throw new Error(`could not list ${title}`);
         return post;
     };
@@ -115,7 +117,7 @@ async function child(): Promise<void> {
                     .run(m.pk, m.callsign);
                 setMemberPhoto(db, m.pk, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
-                if (a.beans) se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
+                if (a.beans) se.transfer('genesis', m.pk, hc(100), `seed ${m.callsign}`, 'direct', true);
             }
             // A completed trade, so the trader may send Beans directly (the send gate).
             if (a.trader && a.partner) {
@@ -125,7 +127,8 @@ async function child(): Promise<void> {
             }
             return true;
         },
-        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
+        // A member's balance row, whole hundredths.
+        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance_c: number } | undefined)?.balance_c ?? null,
         member: (a: { pk: string }) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(a.pk) as { status: string } | undefined)?.status ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: async (a: { nonce: string }) => (await ms()).requestNonces.isSpent(a.nonce),
@@ -382,8 +385,8 @@ async function main(): Promise<void> {
         console.log('\n— 1. an app from before binding keeps working until the switch —');
         await section('1', async () => {
             const before = await A.send('balance', { pk: xan.pk });
-            const r = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'old app send' }));
-            assert(r.status === 200 && (await A.send('balance', { pk: xan.pk })) === before + 1, `an old-format Beans send is accepted at A (${show(r)})`);
+            const r = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'old app send' }));
+            assert(r.status === 200 && (await A.send('balance', { pk: xan.pk })) === before + hc(1), `an old-format Beans send is accepted at A (${show(r)})`);
             const read = await sendTo(B, 'GET', unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`));
             assert(read.status === 200, `an old-format gated read is accepted at B (${show(read)})`);
             const sock = await socket(B, oldWsQuery(mia));
@@ -399,10 +402,10 @@ async function main(): Promise<void> {
         console.log('\n— 2. a Beans send signed for A, replayed at B —');
         await section('2', async () => {
             const memo = `bound send ${crypto.randomBytes(3).toString('hex')}`;
-            const req = await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 3, memo });
+            const req = await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(3), memo });
             const aBefore = await A.send('balance', { pk: xan.pk });
             const atA = await sendTo(A, 'POST', req);
-            assert(atA.status === 200 && (await A.send('balance', { pk: xan.pk })) === aBefore + 3, `signed for a.test, the send is accepted at A (${show(atA)})`);
+            assert(atA.status === 200 && (await A.send('balance', { pk: xan.pk })) === aBefore + hc(3), `signed for a.test, the send is accepted at A (${show(atA)})`);
             const [bMia, bXan] = [await B.send('balance', { pk: mia.pk }), await B.send('balance', { pk: xan.pk })];
             const atB = await sendTo(B, 'POST', req);
             assert(atB.status === 421 && atB.body?.code === 'wrong_community', `the identical bytes at B → 421 wrong_community (${show(atB)})`);
@@ -410,10 +413,10 @@ async function main(): Promise<void> {
                 "B's balances are unchanged and no transfer was written there");
             assert((await B.send('nonceSpent', { nonce: req.nonce })) === false, 'the nonce is unspent at B');
             assert((await A.send('nonceSpent', { nonce: req.nonce })) === true, '(and spent at A, where it was accepted)');
-            const again = await bound(mia, 'POST', 'https://b.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 3, memo },
+            const again = await bound(mia, 'POST', 'https://b.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(3), memo },
                 { timestamp: Number(req.headers['X-Timestamp']), nonce: req.nonce });
             const reSigned = await sendTo(B, 'POST', again);
-            assert(reSigned.status === 200 && (await B.send('balance', { pk: xan.pk })) === bXan + 3 && (await B.send('transfers', { memo })) === 1,
+            assert(reSigned.status === 200 && (await B.send('balance', { pk: xan.pk })) === bXan + hc(3) && (await B.send('transfers', { memo })) === 1,
                 `the same body re-signed for b.test, with the same nonce and timestamp, is accepted at B, once (${show(reSigned)})`);
             const replayAtB = await sendTo(B, 'POST', again);
             assert(replayAtB.status === 403 && (await B.send('transfers', { memo })) === 1, `and replayed there it is refused as a replay (${show(replayAtB)})`);
@@ -506,11 +509,11 @@ async function main(): Promise<void> {
         console.log('\n— 7. the switch —');
         await section('7', async () => {
             await beforeSwitch(A);
-            const lastDay = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'last day' }));
+            const lastDay = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'last day' }));
             assert(lastDay.status === 200, `the last moment before ${new Date(SWITCH).toISOString().slice(0, 10)}: old format accepted (${show(lastDay)})`);
             await A.send('switchClock', { at: SWITCH });
             const before = await A.send('balance', { pk: xan.pk });
-            const after = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'after the switch' }));
+            const after = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'after the switch' }));
             assert(after.status === 426 && after.body?.code === 'app_too_old' && /too old/.test(after.body?.error) && (await A.send('balance', { pk: xan.pk })) === before,
                 `from the switch: old format → 426 app_too_old, nothing moves (${show(after)})`);
             const oldRead = await sendTo(A, 'GET', unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`));
@@ -526,7 +529,7 @@ async function main(): Promise<void> {
                 `(Mia's own figures, signed for a.test, differ from the node-wide ones: ${miasInfo.body?.transactionCount} vs ${plainInfo.body?.transactionCount})`);
             assert(signedInfo.status === 200 && signedInfo.body?.transactionCount === plainInfo.body?.transactionCount,
                 `and /api/community/info, answered as unsigned: the node-wide figures, not Mia's (${signedInfo.body?.transactionCount} = ${plainInfo.body?.transactionCount})`);
-            const newStill = await sendTo(A, 'POST', await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'new app after switch' }));
+            const newStill = await sendTo(A, 'POST', await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'new app after switch' }));
             assert(newStill.status === 200, `format 2 is unaffected (${show(newStill)})`);
             const oldSock = await socket(A, oldWsQuery(mia));
             assert(oldSock.kind === 'open', `an old-format /ws token after the switch still opens a socket in the default mode (${sockShow(oldSock)})`);
@@ -536,9 +539,9 @@ async function main(): Promise<void> {
             if (oldSock.kind === 'open') oldSock.ws.terminate();
             await beforeSwitch(A);
 
-            const never = await sendTo(C, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'never' }));
+            const never = await sendTo(C, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'never' }));
             assert(never.status === 426 && never.body?.code === 'app_too_old', `with ACCEPT_UNBOUND_SIGNATURES_UNTIL=never (C) the old format is refused now (${show(never)})`);
-            const cBound = await sendTo(C, 'POST', await bound(mia, 'POST', 'https://c.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'c bound' }));
+            const cBound = await sendTo(C, 'POST', await bound(mia, 'POST', 'https://c.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'c bound' }));
             assert(cBound.status === 200, `and format 2 for c.test is accepted (${show(cBound)})`);
             const strictOldSock = await socket(C, oldWsQuery(mia));
             assert(strictOldSock.kind === 'status' && strictOldSock.status === 401, `an old-format /ws token at C (strict, switch passed) → 401 (${sockShow(strictOldSock)})`);
@@ -782,7 +785,7 @@ async function main(): Promise<void> {
             // Signed on a phone 4½ minutes ahead: fresh from its arrival until 9½ minutes after it.
             const arrived = Date.now();
             const ahead = arrived + 4.5 * 60_000;
-            const skewed = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'skewed' }, { timestamp: ahead }));
+            const skewed = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount_c: hc(1), memo: 'skewed' }, { timestamp: ahead }));
             const [first, afterArrivalWindow, lastFresh, stale] = await A.send('verifyAt', {
                 parts: skewed, at: [arrived, arrived + W + 1_000, ahead + W, ahead + W + 1],
             });
@@ -792,7 +795,7 @@ async function main(): Promise<void> {
             assert(stale === 401, `after that it is stale (${stale})`);
             // A clock that agrees: the last fresh millisecond is exactly 5 minutes after it.
             const t = Date.now();
-            const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'on time' }, { timestamp: t }));
+            const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount_c: hc(1), memo: 'on time' }, { timestamp: t }));
             const [once, edge] = await A.send('verifyAt', { parts: onTime, at: [t, t + W] });
             assert(once === 'ok' && edge === 403, `a request on time: accepted once, refused as a replay at the edge of its window (${once}, ${edge})`);
         });

@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     const mallory = member('KeyMallory');
 
     const listing = (author: Id, title: string, photos: string[], extra: Record<string, unknown> = {}) =>
-        post('/api/marketplace/posts', { type: 'offer', category: 'food', title, description: `${title}, described`, credits: 0, authorPublicKey: author.pk, photos, ...extra }, author);
+        post('/api/marketplace/posts', { type: 'offer', category: 'food', title, description: `${title}, described`, price_c: 0, authorPublicKey: author.pk, photos, ...extra }, author);
     const keyOf = (postId: string, n = 0) =>
         (db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, n) as { storage_key: string | null } | undefined)?.storage_key ?? null;
     /** Vera posts a photo; her listing's id, its photo's URL as her read carries it, its key in the store and its bytes. */

@@ -61,6 +61,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the node's own self-signed ce
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Copy-Pages-Main-Pw-5521!';
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 /** M's page bounds, scaled down from 8 MB and 25,000 rows. */
 const PAGE_BYTES = 64 * 1024;
 const PAGE_ROWS = 200;
@@ -166,8 +168,9 @@ async function child(): Promise<void> {
             const member = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`);
             const { setMemberPhoto } = await import('@beanpool/engine');
             const stamp = db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
-            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`);
-            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, 0.01, 'a flood', ?)`);
+            // Whole hundredths: each flood listing asks 1 Bean (100), each flood trade moves 0.01 (1).
+            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 100, ?, ?, ?)`);
+            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, 1, 'a flood', ?)`);
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
                     const u = crypto.randomUUID();
@@ -455,8 +458,8 @@ async function main(): Promise<void> {
         };
         built('Gwen sets a profile photo', await As(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee]) await join(who);
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        const offer = async (who: Id, title: string, beans: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
@@ -510,11 +513,13 @@ async function main(): Promise<void> {
         assert(whole.pages.length > 10, `a whole copy of it takes many pages at ${PAGE_ROWS} rows or ${PAGE_BYTES / 1024} KB (${whole.pages.length})`);
         assert(differing.length === 0 && plainDiffering.length === 0,
             `its pages carry the whole payload's rows, category by category (${categories.length}) and plain table by table (${Object.keys(payload.plainTables ?? {}).length}): differing ${JSON.stringify([...differing, ...plainDiffering])}`);
-        assert(opening.stateHash === payload.stateHash && opening.commonsBalance === payload.commonsBalance
+        // The pot in whole hundredths under the format-15 name the payload carries it by (`commonsBalance_c`), and that name
+        // must be there: two missing figures would read as equal.
+        assert(opening.stateHash === payload.stateHash && typeof payload.commonsBalance_c === 'number' && opening.commonsBalance_c === payload.commonsBalance_c
             && JSON.stringify(opening.treasuryOperators) === JSON.stringify(payload.treasuryOperators)
             && JSON.stringify(opening.communitySettings) === JSON.stringify(payload.communitySettings)
             && JSON.stringify(opening.nodeProfile) === JSON.stringify(payload.nodeProfile) && opening.openJoinKeyId === payload.openJoinKeyId,
-            `its opening page carries the payload's listing hash, pot, keepers, settings and records (${opening.stateHash} / ${payload.stateHash})`);
+            `its opening page carries the payload's listing hash, pot, keepers, settings and records (${opening.stateHash} / ${payload.stateHash}; pot ${opening.commonsBalance_c} / ${payload.commonsBalance_c})`);
         assert(JSON.stringify(closing.tableHashes) !== undefined && JSON.stringify(Object.entries(closing.tableHashes?.tables ?? {}).sort())
             === JSON.stringify(Object.entries(payload.tableHashes?.tables ?? {}).sort()),
             `its last page carries the payload's table hashes (${Object.keys(closing.tableHashes?.tables ?? {}).length} tables)`);
@@ -568,7 +573,7 @@ async function main(): Promise<void> {
             && after.hashes.tables.accounts.hash !== before.hashes.tables.accounts.hash,
             `...not M's now: its lines, members and accounts have moved since (${after.hashes.tables.messages.rows} lines now, ${before.hashes.tables.messages.rows} at the open)`);
         assert(uOpen.stateHash === before.stateHash && uOpen.stateHash !== after.stateHash, `its listing hash is the open's (${uOpen.stateHash}; now ${after.stateHash})`);
-        const copiedLedger = (u.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance: a.balance })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
+        const copiedLedger = (u.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance_c: a.balance_c })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
         assert(JSON.stringify(copiedLedger) === JSON.stringify(ledgerAtOpen), `its accounts are the ledger at the open, balance for balance (${copiedLedger.length} accounts)`);
         const leaked = [
             ...(u.messages ?? []).filter((r: any) => String(r.id).startsWith('during-')).map((r: any) => r.id),
@@ -583,7 +588,7 @@ async function main(): Promise<void> {
         const dIds = new Set((d.messages ?? []).map((r: any) => r.id));
         const dKeys = new Set((d.members ?? []).map((r: any) => r.publicKey));
         const ledgerNow = await main.send('rows', { sql: 'SELECT public_key, balance_c FROM accounts ORDER BY public_key' });
-        const deltaLedger = (d.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance: a.balance })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
+        const deltaLedger = (d.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance_c: a.balance_c })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
         assert(during.messages.every((id) => dIds.has(id)) && during.members.every((k) => dKeys.has(k)),
             `the delta copy from its cursor carries every line and member written during it (${during.messages.filter((id) => dIds.has(id)).length}/${during.messages.length}, ${during.members.filter((k) => dKeys.has(k)).length}/${during.members.length})`);
         assert((d.marketplaceTransactions ?? []).some((r: any) => r.id === dealDuring) && (d.transactions ?? []).length >= 1

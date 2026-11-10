@@ -5,14 +5,18 @@
  * The web app is the node's own copy, fetched fresh on every load, so the node that served the page is always the page's
  * version: nothing here works around an older node on the page's own address. What can be older is another community the
  * page reaches: a peer in the Market's browse, a community a member asks to join or has a copy on, the node Settings'
- * Sovereign Node Connection points the page at. Each of those is asked for its version first, and a community whose
- * `GET /api/community/health` names one below MIN_NODE_VERSION gets one plain line and nothing else: no request but the
- * health read itself reaches it. That one rule replaces the older-node branches the web app kept (audit D14).
+ * Sovereign Node Connection points the page at. Each of those is asked for its version first, at
+ * `GET /api/community/health`, and is called only once it has said it runs MIN_NODE_VERSION or newer.
  *
- * Baked in, never read from anywhere. Every doubt is "not too old": no answer, an answer that is not a health answer, no
- * version, a version that is not a version, or the last-resort 0.0.0 a server reports when it can't resolve its own. In
- * this page's memory only: a reload asks again, and a server is never held to what it said yesterday. The phone's own
- * copy of this rule is apps/native/utils/node-version-gate.ts.
+ * The read is cross-origin, and every server from 1.4.0 answers it readably to any origin (apps/server https-server.ts
+ * HEALTH_CORS_PATH, a plain GET with no credential and no header of its own, so a browser sends no preflight). A server
+ * older than that never does: a browser refuses its answer. So a read that fails (refused by the browser, no network, no
+ * answer in time, not a health answer, no version) means "not known to be 1.4.0", and the call is refused as well, with one
+ * line that says both things it can be. A failure is never kept: the next call asks again. A version heard is kept for
+ * this page's memory only: a reload asks again, and a server is never held to what it said yesterday. The last-resort
+ * 0.0.0 a server reports when it can't resolve its own version is not refused: it answered readably, which a server older
+ * than 1.4.0 does only for an origin its operator lists. That one rule replaces the older-node branches the web app kept
+ * (audit D14). The phone's own copy of the rule is apps/native/utils/node-version-gate.ts.
  */
 import { t } from '@beanpool/core';
 import { isVersionOlder, normaliseVersion } from './app-version';
@@ -20,13 +24,11 @@ import { isVersionOlder, normaliseVersion } from './app-version';
 /** The oldest server version this build talks to. */
 export const MIN_NODE_VERSION = '1.4.0';
 
-/** The health route: the one request a community below the minimum is still sent. */
+/** The health route: the one request a community not known to be MIN_NODE_VERSION or newer is still sent. */
 export const HEALTH_PATH = '/api/community/health';
 
 /** The health read's own limit: a call to a community not heard from yet waits at most this long for it. */
 export const HEALTH_READ_TIMEOUT_MS = 8_000;
-/** A health read that failed is not asked again for a minute, so an offline browser waits for it once a minute at most. */
-const FAILED_READ_PAUSE_MS = 60_000;
 
 /**
  * The server version a health answer names, when it is below MIN_NODE_VERSION; null otherwise (not a health answer, no
@@ -44,16 +46,24 @@ function isHealthAnswer(body: unknown): boolean {
     return !!body && typeof body === 'object' && !Array.isArray(body) && normaliseVersion((body as { version?: unknown }).version) !== null;
 }
 
-/** The line a member reads, in their language. */
+/** The line a member reads, in their language, for a server that named its version. */
 export function nodeTooOldText(version: string): string {
     return t("This community's server runs BeanPool {version}. This app needs {minimum} or newer. Its operator must update.", { version, minimum: MIN_NODE_VERSION });
 }
 
-/** A call this page did not make, because the community's server is below MIN_NODE_VERSION. `message` is the line. */
+/** The line for a server whose version couldn't be read: it is out of reach just now, or older than this app talks to. */
+export function nodeNotReadText(): string {
+    return t("This community's server can't be reached right now, or it runs a BeanPool older than {minimum}. Try again later.", { minimum: MIN_NODE_VERSION });
+}
+
+/**
+ * A call this page did not make, because the community's server is not known to run MIN_NODE_VERSION or newer. `message`
+ * is the line. `nodeVersion` is the version it named when below the minimum, or null when its version couldn't be read.
+ */
 export class NodeTooOldError extends Error {
-    readonly nodeVersion: string;
-    constructor(nodeVersion: string) {
-        super(nodeTooOldText(nodeVersion));
+    readonly nodeVersion: string | null;
+    constructor(nodeVersion: string | null) {
+        super(nodeVersion === null ? nodeNotReadText() : nodeTooOldText(nodeVersion));
         this.name = 'NodeTooOldError';
         this.nodeVersion = nodeVersion;
     }
@@ -76,12 +86,11 @@ function originOf(url: string | null | undefined): string | null {
 
 /** origin → its version when below the minimum, or null when it answered new enough. Absent: not heard this page. */
 const heard = new Map<string, string | null>();
-/** origin → a read of its health in flight. */
-const reading = new Map<string, Promise<void>>();
-/** origin → when its last health read failed. */
-const failedAt = new Map<string, number>();
+/** origin → a read of its health in flight: true when it was heard, false when it failed. */
+const reading = new Map<string, Promise<boolean>>();
 
-async function readHealth(origin: string): Promise<void> {
+/** Reads `origin`'s health once; true when it named a version (now in `heard`), false when it couldn't be read. */
+async function readHealth(origin: string): Promise<boolean> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Given up at the limit whether or not the fetch honours its signal.
@@ -89,43 +98,67 @@ async function readHealth(origin: string): Promise<void> {
         timer = setTimeout(() => { controller.abort(); reject(new Error('health read timed out')); }, HEALTH_READ_TIMEOUT_MS);
     });
     try {
+        // A plain GET: no header of its own and no credential, so a browser sends it without a preflight.
         const body = await Promise.race([timedOut, (async () => {
-            const res = await fetch(`${origin}${HEALTH_PATH}`, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
+            const res = await fetch(`${origin}${HEALTH_PATH}`, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal });
             return res.ok ? await res.json().catch(() => null) : null;
         })()]);
-        if (isHealthAnswer(body)) {
-            heard.set(origin, nodeVersionBelowMinimum(body));
-            failedAt.delete(origin);
-        } else {
-            failedAt.set(origin, Date.now());
-        }
+        if (!isHealthAnswer(body)) return false;
+        heard.set(origin, nodeVersionBelowMinimum(body));
+        return true;
     } catch {
-        failedAt.set(origin, Date.now());
+        return false;
     } finally {
         clearTimeout(timer);
     }
 }
 
+/** What an aborted signal throws: its own reason, or the AbortError a fetch would. */
+function abortReason(signal: AbortSignal): unknown {
+    if (signal.reason !== undefined) return signal.reason;
+    try {
+        return new DOMException('The operation was aborted.', 'AbortError');
+    } catch {
+        const e = new Error('The operation was aborted.');
+        e.name = 'AbortError';
+        return e;
+    }
+}
+
+/** `read`, unless `signal` gives up first: then its reason, and the read goes on for whoever else waits on it. */
+function untilAborted<T>(read: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+    if (!signal) return read;
+    if (signal.aborted) return Promise.reject(abortReason(signal));
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () => reject(abortReason(signal));
+        signal.addEventListener('abort', onAbort, { once: true });
+        read.then(
+            (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+            (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+        );
+    });
+}
+
 /**
- * Throws a NodeTooOldError, having sent nothing but the health read, when the server at `community` (any address on it)
- * is below MIN_NODE_VERSION. The page's own address is never asked: it is this page's version. A server that can't be read
- * is a doubt: the call goes. Waits for the read at most HEALTH_READ_TIMEOUT_MS, once per community at a time.
+ * Throws a NodeTooOldError, having sent nothing but the health read, unless the server at `community` (any address on it)
+ * has said it runs MIN_NODE_VERSION or newer: one that names an older version, and one whose health can't be read. The
+ * page's own address is never asked: it is this page's version. Waits for the read at most HEALTH_READ_TIMEOUT_MS, one
+ * read per community at a time; `signal` gives up the wait (and throws its reason) without stopping the read.
  */
-export async function refuseIfNodeTooOld(community: string): Promise<void> {
+export async function refuseIfNodeTooOld(community: string, signal?: AbortSignal): Promise<void> {
     const origin = originOf(community);
     if (!origin) return;
     if (typeof window !== 'undefined' && origin === window.location.origin) return;
+    if (signal?.aborted) throw abortReason(signal);
     if (!heard.has(origin)) {
         let read = reading.get(origin);
         if (!read) {
-            const failed = failedAt.get(origin);
-            if (failed !== undefined && Date.now() - failed < FAILED_READ_PAUSE_MS) return;
             const started = readHealth(origin);
             read = started;
             reading.set(origin, started);
             void started.finally(() => { if (reading.get(origin) === started) reading.delete(origin); });
         }
-        await read;
+        if (!(await untilAborted(read, signal))) throw new NodeTooOldError(null);
     }
     const version = heard.get(origin);
     if (typeof version === 'string') throw new NodeTooOldError(version);
@@ -135,7 +168,6 @@ export async function refuseIfNodeTooOld(community: string): Promise<void> {
 export function resetNodeVersionGateForTests(): void {
     heard.clear();
     reading.clear();
-    failedAt.clear();
 }
 
 /** Tests only: say a community's server is `version`, so a test that records every fetch sees only its own. */

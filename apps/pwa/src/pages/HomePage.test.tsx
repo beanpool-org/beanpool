@@ -49,6 +49,7 @@ vi.mock('../lib/sync', () => ({
 import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
+import { NodeTooOldError } from '../lib/node-version-gate';
 import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
@@ -227,6 +228,34 @@ describe('one request, the cached answer first (§5)', () => {
         expect(await screen.findByTestId('home-failed')).toHaveTextContent(t('Your account in this community was closed.'));
         expect(screen.queryByTestId('home-offline')).toBeNull();
         expect(screen.queryByTestId('home-card-market')).toBeNull();
+    });
+
+    it('pointed at a server below 1.4.0: the version gate\'s own line, with or without a copy, never "couldn\'t reach" or "what we had"', async () => {
+        const line = new NodeTooOldError('1.2.37').message;
+        expect(line).toBe("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");
+        vi.mocked(api.getHome).mockRejectedValue(new NodeTooOldError('1.2.37'));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        expect(screen.getByTestId('home-failed')).not.toHaveTextContent(HOME_FAILED);
+        cleanup();
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        expect(screen.queryByTestId('home-card-market')).toBeNull();
+    });
+
+    it('pointed at a server whose version can\'t be read: the gate\'s line for that, which says both things it can be', async () => {
+        const line = new NodeTooOldError(null).message;
+        expect(line).toBe("This community's server can't be reached right now, or it runs a BeanPool older than 1.4.0. Try again later.");
+        vi.mocked(api.getHome).mockRejectedValueOnce(new NodeTooOldError(null));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer()));
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByTestId('home-card-market')).toBeInTheDocument();
     });
 
     it('offline with no copy: a sentence and Try again, never a blank page; a 404 is the same failed line, no longer a node older than Home', async () => {

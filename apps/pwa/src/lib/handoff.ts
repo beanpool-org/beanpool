@@ -22,6 +22,7 @@ import { toEd25519Seed } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { getMemberProfile, getNodeApiUrl } from './api';
+import { refuseIfNodeTooOld } from './node-version-gate';
 import { identityFromMnemonic, type BeanPoolIdentity } from './identity';
 import { knockAvatar } from './knock';
 import { validateMnemonic } from './mnemonic';
@@ -277,6 +278,8 @@ async function readHolderPhoto(publicKey: string): Promise<string | null> {
         const base = getNodeApiUrl() || window.location.origin;
         const url = new URL(value, base);
         if (url.origin !== new URL(base).origin) return null;
+        // A raw read past api.ts: the version is asked first (lib/node-version-gate.ts; nothing for the page's own address).
+        await refuseIfNodeTooOld(base);
         const res = await fetch(url.toString());
         if (!res.ok) return null;
         const blob = await res.blob();

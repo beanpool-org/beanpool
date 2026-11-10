@@ -1,7 +1,8 @@
 /**
  * The web app talks only to servers from 1.4.0 when it reaches a community other than the one that served the page
- * (lib/node-version-gate.ts; cutover W). A community whose health names an older version gets one plain line, and
- * nothing but the health read is sent to it. Nothing here contacts a node: fetch is a stub.
+ * (lib/node-version-gate.ts; cutover W). A community whose health names an older version gets one plain line, one whose
+ * health can't be read (a browser's CORS refusal, no network, no answer in time, not a health answer) gets the other, and
+ * nothing but the health read is sent to either. Nothing here contacts a node: fetch is a stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -10,7 +11,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 vi.mock('./identity', async () => ({ ...(await vi.importActual('./identity')), loadIdentity: vi.fn(async () => null) }));
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import {
-    HEALTH_READ_TIMEOUT_MS, MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeTooOldText, nodeVersionBelowMinimum,
+    HEALTH_READ_TIMEOUT_MS, MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeNotReadText, nodeTooOldText, nodeVersionBelowMinimum,
     refuseIfNodeTooOld, resetNodeVersionGateForTests,
 } from './node-version-gate';
 import { fetchMembershipAt, getCommunityHealth, getRemotePosts, request, signedCopyFetch, signedFetchAt, testNodeConnection } from './api';
@@ -19,6 +20,7 @@ import { membershipAt, purgeHere } from './delete-here';
 const OLD = 'https://old.example.org';
 const NEW = 'https://new.example.org';
 const LINE_OLD = "This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.";
+const LINE_NOT_READ = "This community's server can't be reached right now, or it runs a BeanPool older than 1.4.0. Try again later.";
 const KEY = 'a'.repeat(64);
 
 const seed = '07'.repeat(32);
@@ -32,7 +34,8 @@ function communities(versions: Record<string, unknown>, reached: string[] = []) 
         const origin = new URL(url, window.location.origin).origin;
         if (url.endsWith('/api/community/health')) {
             const v = versions[origin];
-            if (v === 'down') throw new TypeError('Failed to fetch');
+            // What a browser's fetch does when the answer carries no Access-Control-Allow-Origin: a TypeError, no Response.
+            if (v === 'down' || v === 'cors') throw new TypeError('Failed to fetch');
             if (v === 'html') return new Response('<html>Sign in to the Wi-Fi</html>', { status: 200 });
             if (v === 'refused') return new Response('{}', { status: 503 });
             return new Response(JSON.stringify(v === undefined ? {} : { version: v }), { status: 200 });
@@ -81,6 +84,14 @@ describe('the rule', () => {
         expect(isNodeTooOldError(e)).toBe(true);
         expect(isNodeTooOldError(new Error('x'))).toBe(false);
     });
+
+    it('says one plain line for a server it couldn\'t read, that covers both things it can be', () => {
+        expect(nodeNotReadText()).toBe(LINE_NOT_READ);
+        const e = new NodeTooOldError(null);
+        expect(e.message).toBe(LINE_NOT_READ);
+        expect(e.nodeVersion).toBeNull();
+        expect(isNodeTooOldError(e)).toBe(true);
+    });
 });
 
 describe('refuseIfNodeTooOld', () => {
@@ -112,30 +123,80 @@ describe('refuseIfNodeTooOld', () => {
         expect(reached).toEqual([]);
     });
 
-    it.each(['down', 'html', 'refused'])('a community that can\'t be read (%s) is a doubt: the call goes, and it is not asked again for a minute', async (how) => {
-        vi.useFakeTimers();
+    it('reads the health with a plain GET: no header of its own and no credential, so a browser sends no preflight', async () => {
+        const fetchStub = vi.fn(async () => new Response(JSON.stringify({ version: '1.4.0' }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchStub);
+        await refuseIfNodeTooOld(NEW);
+        expect(fetchStub).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+        expect(url).toBe(`${NEW}/api/community/health`);
+        expect(init.method).toBe('GET');
+        expect(init.headers).toBeUndefined();
+        expect(init.credentials).toBe('omit');
+        expect(init.body).toBeUndefined();
+    });
+
+    it.each(['cors', 'down', 'html', 'refused'])('a community whose health can\'t be read (%s) is refused with the line for it, nothing else sent', async (how) => {
         const reached = communities({ [OLD]: how });
+        await expect(refuseIfNodeTooOld(OLD)).rejects.toThrow(LINE_NOT_READ);
+        await expect(signedFetchAt('POST', OLD, '/api/join/knock', '{}', kim)).rejects.toThrow(LINE_NOT_READ);
+        expect(reached).toEqual([`${OLD}/api/community/health`, `${OLD}/api/community/health`]);
+    });
+
+    it('a community that says no version is refused as one that couldn\'t be read', async () => {
+        const reached = communities({ [OLD]: undefined });
+        await expect(refuseIfNodeTooOld(OLD)).rejects.toThrow(LINE_NOT_READ);
+        expect(reached).toEqual([`${OLD}/api/community/health`]);
+    });
+
+    it('a failed read is never kept: the very next call asks again, and goes once the community answers 1.4.0', async () => {
+        const versions: Record<string, unknown> = { [OLD]: 'cors' };
+        const reached = communities(versions);
+        await expect(refuseIfNodeTooOld(OLD)).rejects.toThrow(LINE_NOT_READ);
+        versions[OLD] = '1.4.0';
         await expect(refuseIfNodeTooOld(OLD)).resolves.toBeUndefined();
-        await expect(refuseIfNodeTooOld(OLD)).resolves.toBeUndefined();
-        expect(healthReads(reached)).toHaveLength(1);
-        vi.setSystemTime(Date.now() + 61_000);
         await expect(refuseIfNodeTooOld(OLD)).resolves.toBeUndefined();
         expect(healthReads(reached)).toHaveLength(2);
     });
 
-    it('a community that says no version is a doubt', async () => {
-        communities({ [OLD]: undefined });
-        await expect(refuseIfNodeTooOld(OLD)).resolves.toBeUndefined();
+    it('a server that answers readably but can\'t resolve its own version (0.0.0) is not refused', async () => {
+        communities({ [NEW]: '0.0.0' });
+        await expect(refuseIfNodeTooOld(NEW)).resolves.toBeUndefined();
     });
 
-    it('gives up waiting for a silent community at its limit, and lets the call go', async () => {
+    it('gives up waiting for a silent community at its limit, and refuses the call', async () => {
         vi.useFakeTimers();
         vi.stubGlobal('fetch', vi.fn((_u: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_res, reject) => {
             init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
         })));
         const done = refuseIfNodeTooOld(OLD);
+        const settled = expect(done).rejects.toThrow(LINE_NOT_READ);
         await vi.advanceTimersByTimeAsync(HEALTH_READ_TIMEOUT_MS + 1);
-        await expect(done).resolves.toBeUndefined();
+        await settled;
+    });
+
+    it('the caller\'s signal ends its wait for the health read, with the signal\'s own reason; the read goes on for the others', async () => {
+        vi.useFakeTimers();
+        let answer: ((r: Response) => void) | undefined;
+        vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
+        const caller = new AbortController();
+        const mine = refuseIfNodeTooOld(NEW, caller.signal);
+        const theirs = refuseIfNodeTooOld(NEW);
+        const mineSettled = expect(mine).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(1_000);
+        caller.abort();
+        await mineSettled;
+        expect(fetch).toHaveBeenCalledTimes(1);
+        answer?.(new Response(JSON.stringify({ version: '1.4.0' }), { status: 200 }));
+        await expect(theirs).resolves.toBeUndefined();
+    });
+
+    it('a signal already given up sends nothing', async () => {
+        const reached = communities({ [NEW]: '1.4.0' });
+        const caller = new AbortController();
+        caller.abort();
+        await expect(refuseIfNodeTooOld(NEW, caller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+        expect(reached).toEqual([]);
     });
 });
 
@@ -169,6 +230,31 @@ describe('every call to another community goes through it', () => {
         const reached = communities({ [OLD]: '1.2.37' });
         await expect(getRemotePosts(OLD)).rejects.toThrow(LINE_OLD);
         expect(reached).toEqual([`${OLD}/api/community/health`]);
+        sessionStorage.clear();
+    });
+
+    it('a peer\'s posts keep their 5-second limit with the health read inside it', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => { /* never answers, never gives up by itself */ })));
+        const done = getRemotePosts(NEW);
+        const settled = expect(done).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(5_001);
+        await settled;
+        expect(fetch).toHaveBeenCalledTimes(1);
+        sessionStorage.clear();
+    });
+
+    it('every cross-community call is refused, not sent, when the browser refuses the health answer (CORS)', async () => {
+        const reached = communities({ [OLD]: 'cors' });
+        await expect(fetchMembershipAt(OLD, KEY)).rejects.toThrow(LINE_NOT_READ);
+        await expect(signedFetchAt('GET', OLD, '/api/join/knock/status', '', kim)).rejects.toThrow(LINE_NOT_READ);
+        await expect(signedCopyFetch('POST', OLD, '/api/marketplace/posts', { a: 1 }, kim)).rejects.toThrow(LINE_NOT_READ);
+        await expect(getRemotePosts(OLD)).rejects.toThrow(LINE_NOT_READ);
+        localStorage.setItem('bp_node_url', OLD);
+        await expect(request('POST', '/api/posts', { a: 1 })).rejects.toThrow(LINE_NOT_READ);
+        expect(await testNodeConnection(OLD)).toEqual({ ok: false, error: LINE_NOT_READ });
+        expect(reached.every((u) => u === `${OLD}/api/community/health`)).toBe(true);
+        expect(reached).toHaveLength(6);
         sessionStorage.clear();
     });
 
@@ -206,6 +292,12 @@ describe('every call to another community goes through it', () => {
 describe('Delete account (lib/delete-here.ts)', () => {
     it('a community below 1.4.0 is not asked about the key: it counts as one that could not be reached', async () => {
         const reached = communities({ [OLD]: '1.2.37' });
+        expect(await membershipAt(OLD, KEY)).toBe('unreachable');
+        expect(reached).toEqual([`${OLD}/api/community/health`]);
+    });
+
+    it('so is one whose health the browser refuses: not asked, unreachable, the key kept', async () => {
+        const reached = communities({ [OLD]: 'cors' });
         expect(await membershipAt(OLD, KEY)).toBe('unreachable');
         expect(reached).toEqual([`${OLD}/api/community/health`]);
     });

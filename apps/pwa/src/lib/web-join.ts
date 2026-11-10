@@ -64,6 +64,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
+import { refuseIfNodeTooOld } from './node-version-gate';
 import type { DoorWorkChallenge, DoorWorkDoor, DoorWorkSolution } from './door-work';
 import {
     identityStoreProblem,
@@ -749,9 +750,12 @@ export async function checkCallsign(callsign: string, signer?: BeanPoolIdentity 
     if (c.length < 2) return 'unknown';
     try {
         const path = `/api/members/callsign-available/${encodeURIComponent(c)}`;
+        const base = getNodeApiUrl();
+        // Unsigned, it goes past api.ts, so it asks the version itself (lib/node-version-gate.ts); a refusal is 'unknown'.
+        if (!signer && base) await refuseIfNodeTooOld(base);
         const res = signer
             ? await signedFetchWithKey('GET', path, undefined, signer.privateKey, signer.publicKey)
-            : await fetch(`${getNodeApiUrl()}${path}`, { cache: 'no-store' });
+            : await fetch(`${base}${path}`, { cache: 'no-store' });
         if (!res.ok) return 'unknown';
         const data = await res.json();
         return data?.available === true ? 'available' : data?.available === false && !data?.tooShort ? 'taken' : 'unknown';

@@ -87,6 +87,7 @@ import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWor
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
+import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
@@ -1659,13 +1660,16 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         } catch (e) {
             if (!mounted.current || !holds(epoch)) return;
             const standing = standingFromRefusal(e);
-            if (standing) {
+            // The web app is pointed at a server not known to run 1.4.0 (lib/node-version-gate.ts): the gate's own line, which
+            // says what it is, and nothing drawn from before. Never "couldn't reach" or "showing what we had".
+            const refused = standing ? standing.sentence : isNodeTooOldError(e) ? e.message : null;
+            if (refused) {
                 answerRef.current = null;
                 setAnswer(null);
                 statusRef.current = 'failed';
                 setStatus('failed');
-                setFailure({ message: standing.sentence });
-                setLive(standing.sentence);
+                setFailure({ message: refused });
+                setLive(refused);
             } else if (answerRef.current) {
                 statusRef.current = 'offline';
                 setStatus('offline');

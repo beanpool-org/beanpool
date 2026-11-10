@@ -93,7 +93,6 @@ type Screen =
     | { name: 'pick'; accounts: RestoreCandidate[] }
     /** No account here uses this sign-in. */
     | { name: 'none'; provider: JoinProvider }
-    /** The community's server has no find yet. */
     /** Collected, fetched and opened: the sign-in copy becoming the account. */
     | { name: 'restoring' }
     /** Handed to WelcomePage, which asks the node and saves it. */

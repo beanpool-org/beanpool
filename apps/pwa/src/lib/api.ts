@@ -197,7 +197,7 @@ export async function request<T>(method: string, path: string, body?: any, signa
         }
 
         const baseUrl = getNodeApiUrl();
-        if (baseUrl) await refuseIfNodeTooOld(baseUrl);
+        if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
         return fetch(`${baseUrl}${path}`, opts);
     };
 
@@ -228,7 +228,7 @@ export async function signedFetch(method: string, path: string, body?: unknown, 
         Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
     }
     const baseUrl = getNodeApiUrl();
-    if (baseUrl) await refuseIfNodeTooOld(baseUrl);
+    if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
     return fetch(`${baseUrl}${path}`, {
         method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
     });
@@ -255,8 +255,8 @@ async function refusalError(res: Response): Promise<Error> {
     const error = new Error(err.message || err.error || t('Request failed: {status}', { status: res.status }));
     // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
     if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
-    // The status travels with the error: a node older than a route answers 404, and a screen that can
-    // hide a feature quietly needs to tell that apart from the node being down or refusing.
+    // The status travels with the error: a screen that reads a 404 as "nothing there" (a decision with no jury,
+    // isRouteMissing) needs to tell that apart from the node being down or refusing.
     (error as Error & { status?: number }).status = res.status;
     // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
     // in the node's words (lib/node-refusal.ts).
@@ -322,7 +322,7 @@ export async function signedFetchWithKey(
         await signedHeaders(method, path, bodyString, privateKeyHex, publicKeyHex));
 
     const baseUrl = getNodeApiUrl();
-    if (baseUrl) await refuseIfNodeTooOld(baseUrl);
+    if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
     return fetch(`${baseUrl}${path}`, opts);
 }
 
@@ -698,7 +698,7 @@ export async function checkMembership(publicKey: string): Promise<{ isMember: bo
 export async function fetchMembershipAt(community: string, publicKey: string, signal?: AbortSignal): Promise<Response> {
     const path = `/api/community/membership/${encodeURIComponent(publicKey)}`;
     const headers: Record<string, string> = { Accept: 'application/json' };
-    await refuseIfNodeTooOld(community);
+    await refuseIfNodeTooOld(community, signal);
     const identity = await loadIdentity();
     if (identity?.privateKey && identity.publicKey === publicKey) {
         Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
@@ -732,7 +732,7 @@ export async function signedCopyFetch(
     method: 'GET' | 'POST' | 'DELETE', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
-    await refuseIfNodeTooOld(community);
+    await refuseIfNodeTooOld(community, signal);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
     return fetch(`${community}${path}`, {
         method, headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
@@ -2643,12 +2643,13 @@ export async function getRemotePosts(baseUrl: string, filters?: { type?: string;
     if (filters?.category) params.set('category', filters.category);
     const qs = params.toString() ? `?${params}` : '';
 
-    await refuseIfNodeTooOld(baseUrl);
+    // One 5-second limit for the version check and the read together (lib/node-version-gate.ts).
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     let res;
     try {
+        await refuseIfNodeTooOld(baseUrl, controller.signal);
         res = await fetch(`${baseUrl}/api/marketplace/posts${qs}`, { signal: controller.signal });
     } finally {
         clearTimeout(timeoutId);
@@ -3644,7 +3645,7 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     }
     const conditional = !!etag && sameOrigin;
     if (conditional) headers['If-None-Match'] = etag!;
-    if (base) await refuseIfNodeTooOld(base);
+    if (base) await refuseIfNodeTooOld(base, signal);
     const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache', ...(signal ? { signal } : {}) });
     if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
     if (!res.ok) throw await refusalError(res);
@@ -3703,13 +3704,17 @@ export async function pollPairingToPhoneApi(sessionId: string): Promise<{
     status: 'waiting' | 'confirming' | 'released' | 'sent' | 'collected' | 'saved' | 'not-saved' | 'burned' | 'expired' | 'wrong-browser';
     phonePubHex?: string;
 }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
     return res.json().catch(() => ({ status: 'expired' as const }));
 }
 
 /** The account, sealed to the phone's key, sent once its digits matched (the binding cookie goes with it). */
 export async function sendToPhoneApi(sessionId: string, nonceHex: string, ciphertextHex: string): Promise<{ ok: boolean; status: number }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/send`, {
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/send`, {
         method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, nonceHex, ciphertextHex }),
     });
     return { ok: res.ok, status: res.status };
@@ -3720,7 +3725,9 @@ export async function sendToPhoneApi(sessionId: string, nonceHex: string, cipher
  * holding the session's binding cookie, types them: 'released', 'wrong' (tries left), or 'burned' after three wrong.
  */
 export async function confirmPairingApi(sessionId: string, code: string): Promise<{ result: 'released' | 'wrong' | 'burned' | 'wrong-browser' | 'expired' | 'not-confirming'; triesLeft?: number }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/confirm`, {
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/confirm`, {
         method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, code }),
     });
     return res.json().catch(() => ({ result: 'expired' as const }));

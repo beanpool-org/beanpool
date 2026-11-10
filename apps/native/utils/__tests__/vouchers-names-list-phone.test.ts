@@ -410,6 +410,8 @@ describe('the rules the screens call', () => {
         const nameOf = (pk: string) => ({ pk_marty: 'marty', pk_wren: 'wren' } as Record<string, string>)[pk] ?? '';
         expect(voucherCardSubtitle(NODE_CARD, conf, nameOf)).toBe('@jane: confirmed by @marty and @wren, 4 Nov · made a voucher by @marty, 5 Nov');
         expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'migration:vouchers', madeByCallsign: null }, null)).toBe('@jane · made a voucher by role');
+        // An admin an owner made a voucher (I5: source 'role', made by that owner) names the owner, as the web and manager do.
+        expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'pk_marty', madeByCallsign: 'marty' }, null)).toBe('@jane · made a voucher by @marty, 5 Nov');
         // Someone else's confirmation (not this member's) is never shown as theirs.
         expect(voucherCardSubtitle(NODE_CARD, confirmation({ memberPubkey: 'pk_other' }), nameOf)).toBe('@jane · made a voucher by @marty, 5 Nov');
     });

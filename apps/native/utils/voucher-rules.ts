@@ -121,7 +121,9 @@ export function voucherCardSubtitle(
             ? t('{who}: confirmed by {by} and {second}, {date}', { who: who || t('this member'), by: byName(conf.confirmedBy), second: byName(conf.secondedBy), date: day(conf.secondedAt ?? conf.confirmedAt) })
             : t('{who}: confirmed by {by}, {date}', { who: who || t('this member'), by: byName(conf.confirmedBy), date: day(conf.confirmedAt) }))
         : who;
-    const madePart = card.source === 'role'
+    // An owner's own budget is theirs by role; an admin an owner made a voucher (also source 'role') names that owner,
+    // as the web card and the manager do.
+    const madePart = card.source === 'role' && !card.madeByCallsign
         ? t('made a voucher by role')
         : card.madeBy
             ? t('made a voucher by {actor}, {date}', { actor: voucherActorWords({ actor: card.madeBy, actorCallsign: card.madeByCallsign }), date: day(card.madeAt) })

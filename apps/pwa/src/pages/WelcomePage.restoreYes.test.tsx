@@ -18,6 +18,7 @@ import { generateIdentity, loadIdentity, seedViewedKey, type BeanPoolIdentity } 
 import { isEstablishedKey, isKnockKey, knockWaitingKey } from '../lib/knock-key';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const NODE = 'https://byron.example.org';
 const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
@@ -37,6 +38,9 @@ beforeEach(async () => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     localStorage.clear();
     localStorage.setItem('bp_node_url', NODE);
+    // Byron runs 1.4.0 (lib/node-version-gate.ts): the stub answers Byron's own routes alone.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(NODE);
     resetCapturedAuthReturn();
     window.history.replaceState(null, '', '/app');
     calls = [];

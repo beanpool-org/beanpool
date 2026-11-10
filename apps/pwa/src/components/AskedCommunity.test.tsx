@@ -10,6 +10,7 @@ import { t } from '@beanpool/core';
 import { AskedCommunity } from './AskedCommunity';
 import { KNOCK_MESSAGES } from '../lib/knock';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const notAsked = () => false;
@@ -20,6 +21,9 @@ function json(status: number, body: unknown): Response {
 
 function stubList(communities: unknown[]) {
     const asked: string[] = [];
+    // The communities listed run 1.4.0 (lib/node-version-gate.ts): the list and the knock are all this stub answers.
+    resetNodeVersionGateForTests();
+    for (const c of communities) hearNodeVersionForTests((c as { url?: string }).url ?? '');
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
         asked.push(String(input));
         if (String(input).endsWith('/api/join/knock')) return json(201, { knock: { status: 'pending' } });

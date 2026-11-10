@@ -16,6 +16,7 @@ import { accountMessage, answerMessage, readyMessage } from '../lib/handoff';
 import { generateIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { isEstablishedKey, isKnockKey } from '../lib/knock-key';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const NODE = 'https://byron.example.org';
 const GLOBAL = 'https://global.example.org';
@@ -35,6 +36,9 @@ beforeEach(async () => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     localStorage.clear();
     localStorage.setItem('bp_node_url', NODE);
+    // Byron runs 1.4.0 (lib/node-version-gate.ts): the stub answers Byron's own routes alone.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(NODE);
     yes = true;
     statusReads = [];
     account = await generateIdentity('CJ Global');

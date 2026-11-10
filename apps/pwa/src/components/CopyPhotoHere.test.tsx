@@ -16,6 +16,7 @@ import { CopyPhotoHere } from './CopyPhotoHere';
 import { generateIdentity, importIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { rememberLastPhoto, readLastPhoto } from '../lib/last-photo';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const HERE = 'https://second.example.test';
 const FIRST = 'https://first.example.test';
@@ -28,6 +29,9 @@ let answer: () => { ok: boolean; status: number; body: unknown };
 beforeEach(async () => {
     localStorage.clear();
     localStorage.setItem('bp_node_url', HERE);
+    // This community runs 1.4.0 (lib/node-version-gate.ts): the requests recorded are the card's own.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(HERE);
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     saved = await generateIdentity('Rowan');
     await importIdentity(saved);

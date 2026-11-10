@@ -7,15 +7,16 @@
  * stand for is not touched; what paying does is unchanged. utils/__tests__/rest-words-render.test.ts holds every one to
  * the English names-debts.ts writes, for every variant. A community's own words are shown as given (slice S4).
  */
-import { formatNumber, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatHundredths, t, tn, word, type WordKey } from '@beanpool/core';
 import type { PaidToCommons, Repayment } from '../utils/names-debts';
 
-/** names-debts.ts beans(n): "12 Beans", "12.50 Beans", to the cent, in the member's numbers. */
-export function beansWords(n: number): string {
-    const cents = Math.round(n * 100);
-    const amount = cents % 100 === 0 ? formatNumber(cents / 100) : formatNumber(cents / 100, 2);
-    // One English form for every count, as names-debts.ts writes it; a language with more forms has them.
-    return tn(cents / 100, '{amount} Beans', '{amount} Beans', { amount });
+/**
+ * names-debts.ts debtBeans(c): "12 Beans", "12.50 Beans", from whole hundredths of a Bean (formatHundredths), in the
+ * member's numbers. Anything but whole hundredths reads "—", never a number.
+ */
+export function beansWords(c: number): string {
+    // One English form for every count, as names-debts.ts writes it; a language with more forms has them, read from the Beans.
+    return tn(c / 100, '{amount} Beans', '{amount} Beans', { amount: formatHundredths(c) });
 }
 
 /** Words the screens show as they are: word() keys, t()'d where shown. */
@@ -30,7 +31,7 @@ export function repaymentBannerWords(r: Pick<Repayment, 'left_c' | 'amount_c'>):
         { left: beansWords(r.left_c), amount: beansWords(r.amount_c) });
 }
 
-/** REPAYMENT_COPY.linkLeft. */
+/** REPAYMENT_COPY.linkLeft (`left` in whole hundredths, as every figure here). */
 export function linkLeftWords(left: number): string {
     return t('What was left when the admin shared this: {left}.', { left: beansWords(left) });
 }

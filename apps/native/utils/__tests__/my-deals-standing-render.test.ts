@@ -61,8 +61,8 @@ const PAYER = 'a'.repeat(64);
 const PAYEE = 'b'.repeat(64);
 const short = {
     id: 'tx-short', postId: 'post-1', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: PAYER, buyerCallsign: 'Marty',
-    sellerPublicKey: PAYEE, sellerCallsign: 'Rob', credits: 50, createdAt: '2026-11-09T08:00:00.000Z', ratedByBuyer: false, ratedBySeller: false,
-    standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
+    sellerPublicKey: PAYEE, sellerCallsign: 'Rob', amount_c: 5000, createdAt: '2026-11-09T08:00:00.000Z', ratedByBuyer: false, ratedBySeller: false,
+    standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: null,
     standingNextDueAt: '2026-11-09T09:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z',
     standingStopped: false,
 };
@@ -129,7 +129,7 @@ describe('Your deals, History: an ended standing deal says how it ended; review 
 
 describe('Your deals, My listings: a one-off listing a standing deal took is 🔁 STANDING, never Held in Trust (U2)', () => {
     // The node keeps the listing off the board ('pending') while the standing deal runs; nothing is held in trust (design §1, §3).
-    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', author_pubkey: PAYEE, credits: 50, created_at: '2026-10-01T08:00:00.000Z', photos: [] };
+    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', author_pubkey: PAYEE, price_c: 5000, created_at: '2026-10-01T08:00:00.000Z', photos: [] };
     const openActive = async () => {
         await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: PAYEE }, onClose() {}, initialTab: 'active' }) as any); });
         for (let i = 0; i < 4; i++) await act(async () => {});

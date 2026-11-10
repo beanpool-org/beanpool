@@ -26,20 +26,20 @@ const FIELDS = {
     standingId: '0b16212c-3742-4d58-a36d-788390a5b0bb',
     listingId: 'post-vehicle-storage',
     payee: 'b'.repeat(64),
-    beansPerPeriod_c: 50,
+    beansPerPeriod_c: 5000,
     unit: 'month' as const,
     maxPeriods: 6,
     startsAt: '2026-11-09T08:00:00.000Z',
     nonce: '0123456789abcdef0123456789abcdef',
 };
-/** The exact text, the same in the web's test. */
+/** The exact text, the same in the web's test: version 2 carries the figure as whole hundredths (core STANDING_AUTH_VERSION). */
 const TEXT = [
-    'beanpool-standing-v1',
+    'beanpool-standing-v2',
     'mullum.beanpool.org',
     '0b16212c-3742-4d58-a36d-788390a5b0bb',
     'post-vehicle-storage',
     'b'.repeat(64),
-    '50.00',
+    '5000',
     'month',
     '6',
     '2026-11-09T08:00:00.000Z',

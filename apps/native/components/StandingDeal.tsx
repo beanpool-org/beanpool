@@ -69,10 +69,14 @@ function Step({ label, glyph, disabled, onPress, s }: { label: string; glyph: st
  * Take this up? (§2.2): how long (until stopped, or for k periods) and when it starts (today, or up to 30 days ahead), what is
  * held now and how it runs, then Agree. `now` is for tests.
  */
-export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, onAgree, now, room }: {
-    unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; busy: boolean;
+export function StandingTakeUp({ unit, beans_c, title, payeeName, busy, onCancel, onAgree, now, room }: {
+    /** Per period: the listing's price, whole hundredths of a Bean (the figure the authorisation signs). */
+    unit: StandingPeriodUnit; beans_c: number; title: string; payeeName: string; busy: boolean;
     onCancel: () => void; onAgree: (choice: StandingChoice) => void; now?: number;
-    /** The payer's usable room (balance less their usable floor), when known: short of the first period, Agree is disabled. */
+    /**
+     * The payer's usable room (balance less their usable floor, whole hundredths: core standingRoomOf), when known: short of
+     * the first period, Agree is disabled.
+     */
     room?: number | null;
 }) {
     const s = useStandingStyles();
@@ -83,7 +87,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
     // The start is worked out again at Agree: the node refuses one more than 10 minutes old (checkStandingStart), and a member
     // may come back to this screen from the background long after it opened. The lines show the start as of now.
     const startAt = () => standingStartAt(now ?? Date.now(), later ? daysAhead : 0);
-    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods, room }, day);
+    const l = standingTakeUpLines({ unit, beans: beans_c, title, payeeName, startsAt: startAt(), periods, room }, day);
     const off = busy || !!l.noRoom;
     return (
         <View style={s.box} testID="standing-take-up">

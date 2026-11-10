@@ -192,11 +192,11 @@ describe('one signed read for the whole screen, and the 304', () => {
     it('a change on the node: a new answer (200), and the new tag kept', async () => {
         const first = await readHomeFromNode(NODE, me, asked, null);
         if (first.kind !== 'answer') throw new Error('no answer');
-        node.answer = answer({ cards: { ...node.answer!.cards, beans: { balance: 5, room: 5, tier: 'Resident', activated: true, frozen: false } } });
+        node.answer = answer({ cards: { ...node.answer!.cards, beans: { balance_c: 500, room_c: 500, tier: 'Resident', activated: true, frozen: false } } });
         const again = await readHomeFromNode(NODE, me, asked, first.stored);
         expect(again).toMatchObject({ kind: 'answer', confirmed: false });
         expect(homeReads().map(r => r.status)).toEqual([200, 200]);
-        expect((await readStoredHome(me.publicKey, NODE))?.answer.cards.beans?.balance).toBe(5);
+        expect((await readStoredHome(me.publicKey, NODE))?.answer.cards.beans?.balance_c).toBe(500);
     });
 
     it('a copy for another list of cards is no copy: no tag sent', async () => {

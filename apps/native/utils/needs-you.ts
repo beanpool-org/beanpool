@@ -130,7 +130,8 @@ export interface NeedsYouTransaction {
     standingId?: string | null;
     periodNo?: number | null;
     standingPhase?: StandingPhase | null;
-    standingBeans?: number | null;
+    /** Per period, whole hundredths of a Bean (the node's standingBeans_c). */
+    standingBeans_c?: number | null;
     standingUnit?: StandingPeriodUnit | null;
     standingStartsAt?: string | null;
     standingShortSince?: string | null;

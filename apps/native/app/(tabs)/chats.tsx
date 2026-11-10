@@ -33,7 +33,7 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { t, tn, word, type WordKey } from '@beanpool/core';
+import { formatHundredths, t, tn, word, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
@@ -367,12 +367,13 @@ export default function ChatsScreen() {
                 if (a.unread > 0 && b.unread === 0) return -1;
                 if (a.unread === 0 && b.unread > 0) return 1;
             } else if (sortBy === 'credits_desc') {
-                const credA = a.postCredits || a.pendingAmount || 0;
-                const credB = b.postCredits || b.pendingAmount || 0;
+                // Whole hundredths of a Bean (the conversation's listing price, else what its deal holds): compared exactly.
+                const credA = a.postPrice_c || a.pendingAmount_c || 0;
+                const credB = b.postPrice_c || b.pendingAmount_c || 0;
                 if (credA !== credB) return credB - credA;
             } else if (sortBy === 'credits_asc') {
-                const credA = a.postCredits || a.pendingAmount || 0;
-                const credB = b.postCredits || b.pendingAmount || 0;
+                const credA = a.postPrice_c || a.pendingAmount_c || 0;
+                const credB = b.postPrice_c || b.pendingAmount_c || 0;
                 if (credA !== credB) return credA - credB;
             }
 
@@ -510,9 +511,9 @@ export default function ChatsScreen() {
                     <Text style={styles.actionCardTitle} numberOfLines={1}>{item.postTitle || t('Transaction')}</Text>
                     <Text style={styles.actionCardPeer}>{item.peerCallsign || (item.peerPubkey || '').slice(0, 8)}</Text>
                 </View>
-                {item.credits ? (
+                {item.amount_c ? (
                     <View style={styles.actionAmountBadge}>
-                        <CurrencyDisplay amount={item.credits} style={styles.actionAmountText} asView />
+                        <CurrencyDisplay amount={formatHundredths(item.amount_c)} style={styles.actionAmountText} asView />
                     </View>
                 ) : null}
             </View>

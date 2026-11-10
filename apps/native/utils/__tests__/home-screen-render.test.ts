@@ -232,13 +232,13 @@ function localMember(): HomeAnswer {
                 { id: 'e2', title: 'Repair café', startsAt: iso(now + 5 * 24 * H), endsAt: null, place: null, rsvp: 'going' },
             ], radiusKm: null },
             market: { items: [
-                { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', credits: 12, photoUrl: '/api/photos/p1.jpg' },
+                { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', price_c: 1200, photoUrl: '/api/photos/p1.jpg' },
                 { id: 'p2', type: 'need', title: 'Help moving a couch', category: 'labour', photoUrl: null },
-                { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: null },
+                { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', price_c: 800, photoUrl: null },
             ], total14d: 3, more: false },
             joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }, { callsign: 'Kofi', avatarUrl: null }] },
             pulse: { items: [{ id: 'q1', title: 'How our LETS started', thumbnailUrl: '/x', platform: 'youtube', callsign: 'River Folk Studio', category: 'education', url: null }] },
-            beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
+            beans: { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false },
             community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
         },
     };
@@ -454,9 +454,9 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     const NEEDS = () => {
         const now = Date.now();
         return [
-            { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: iso(now - 2 * H), photoUrl: null },
-            { id: 'n2', title: 'Someone to dig a bed', category: 'labour', credits: 40, createdAt: iso(now - 26 * H), photoUrl: null },
-            { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: iso(now - 3 * 24 * H), photoUrl: null },
+            { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', price_c: 2000, createdAt: iso(now - 2 * H), photoUrl: null },
+            { id: 'n2', title: 'Someone to dig a bed', category: 'labour', price_c: 4000, createdAt: iso(now - 26 * H), photoUrl: null },
+            { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', price_c: 0, createdAt: iso(now - 3 * 24 * H), photoUrl: null },
         ];
     };
     /** A local member whose list holds the card after the Market, with the Needs the node sent and First steps as it stands. */
@@ -496,9 +496,9 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     it('a Need priced by the hour or the month says so, on the row and in the sentence a screen reader hears; a fixed price and Free are as before', async () => {
         const [fixed, , free] = NEEDS();
         node.answer = withAsked({ items: [
-            { ...fixed, id: 'n1', credits: 20, priceType: 'hourly' },
-            { ...fixed, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
-            { ...fixed, id: 'n3', title: 'Lift to Lismore Thursday', credits: 25, priceType: 'fixed' },
+            { ...fixed, id: 'n1', price_c: 2000, priceType: 'hourly' },
+            { ...fixed, id: 'n2', title: 'Someone to mind the shop', price_c: 30000, priceType: 'monthly' },
+            { ...fixed, id: 'n3', title: 'Lift to Lismore Thursday', price_c: 2500, priceType: 'fixed' },
             { ...free, id: 'n4', priceType: 'hourly' },
         ] });
         await render();
@@ -906,7 +906,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
             // A request waiting opens its keepers' console, where it is approved (S7); none waiting, the enterprise's page.
             enterprise: { id: 'ent1', name: 'Tool Library', requests: variant === 1 ? 1 : 0, others: 0 },
             events: { items: [{ id: 'e1', title: 'Seed swap', startsAt: iso(now + 24 * H), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: local ? null : 50 },
-            market: { items: [{ id: 'p1', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null }], total14d: 1, more: false, ...(local ? {} : { examples: true as const }) },
+            market: { items: [{ id: 'p1', type: 'offer', title: 'Sourdough', category: 'food', price_c: 1200, photoUrl: null }], total14d: 1, more: false, ...(local ? {} : { examples: true as const }) },
             decide: variant === 1
                 ? { open: local ? 1 : 0, soonestClosesAt: local ? iso(now + 30 * H) : null, polls: 2, pollsMore: false }
                 : { open: 1, soonestClosesAt: iso(now + 30 * H), polls: 0, pollsMore: false },
@@ -917,7 +917,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
             ], total: 5 },
             joined: local ? { count7d: 3, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }] } : { count7d: 14, radiusKm: 50 },
             pulse: { items: [{ id: 'q1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk Studio', category: 'education', url: null }] },
-            beans: { balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false },
+            beans: { balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false },
             notices: { unseen: 1, first: { id: 'n1', title: 'Market day moved', line: 'Saturday, not Sunday.' } },
             community: local ? { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 } : { name: 'BeanPool', members: 2310, communities: 38 },
         },
@@ -3443,7 +3443,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
 });
 
 describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
-    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', credits: 5, photoUrl: null, distanceKm: km });
+    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', price_c: 500, photoUrl: null, distanceKm: km });
     const withSearch = (body: unknown, q = 'eggs') => {
         const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q, kind: 'any', km: 5 } }, { id: 'market', type: 'market' }],
             dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
@@ -4452,9 +4452,9 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     others: 0,
                     lifecycle: 'ongoing',
                     keepers: 3,
-                    balance: 340,
-                    month: { trades: 5, in: 120, out: 60 },
-                    latest: { amount: 12, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
+                    balance_c: 34000,
+                    month: { trades: 5, in_c: 12000, out_c: 6000 },
+                    latest: { amount_c: 1200, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
                 },
             },
         };
@@ -4488,8 +4488,8 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     others: 0,
                     lifecycle: 'ongoing',
                     keepers: 2,
-                    balance: 200,
-                    latest: { amount: -20, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
+                    balance_c: 20000,
+                    latest: { amount_c: -2000, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
                 },
             },
         };
@@ -4512,8 +4512,8 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     requests: 0,
                     others: 0,
                     keepers: 2,
-                    balance: 180,
-                    latest: { amount: -5, at: iso(now - 1 * H), kind: 'commons', who: null },
+                    balance_c: 18000,
+                    latest: { amount_c: -500, at: iso(now - 1 * H), kind: 'commons', who: null },
                 },
             },
         };
@@ -4536,8 +4536,8 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     requests: 0,
                     others: 0,
                     keepers: 2,
-                    balance: 230,
-                    latest: { amount: 50, at: iso(now - 30 * 60_000), kind: 'deal', who: null },
+                    balance_c: 23000,
+                    latest: { amount_c: 5000, at: iso(now - 30 * 60_000), kind: 'deal', who: null },
                 },
             },
         };
@@ -4668,12 +4668,12 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
             cards: {
                 ...base.cards,
                 beans: {
-                    balance: -35,
-                    room: 165,
+                    balance_c: -3500,
+                    room_c: 16500,
                     tier: 'Resident',
                     activated: true,
                     frozen: false,
-                    month: { trades: 3, in: 40, out: 25, fees: 0, more: false },
+                    month: { trades: 3, in_c: 4000, out_c: 2500, fees_c: 0, more: false },
                 },
             },
         };
@@ -4693,12 +4693,12 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
             cards: {
                 ...base.cards,
                 beans: {
-                    balance: 150,
-                    room: 250,
+                    balance_c: 15000,
+                    room_c: 25000,
                     tier: 'Resident',
                     activated: true,
                     frozen: false,
-                    month: { trades: 200, in: 1200, out: 800, fees: 0, more: true },
+                    month: { trades: 200, in_c: 120000, out_c: 80000, fees_c: 0, more: true },
                 },
             },
         };
@@ -4720,7 +4720,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     members: 81,
                     joined7d: 4,
                     tradesThisMonth: 23,
-                    commonsPot: 310,
+                    commonsPot_c: 31000,
                     listings: 37,
                     eventsSoon: 3,
                 },
@@ -4829,7 +4829,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     others: 0,
                     lifecycle: 'ongoing',
                     keepers: 2,
-                    balance: undefined,
+                    balance_c: undefined,
                 },
             },
         };
@@ -4877,12 +4877,12 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
             cards: {
                 ...base.cards,
                 beans: {
-                    balance: 50,
-                    room: 100,
+                    balance_c: 5000,
+                    room_c: 10000,
                     tier: 'Resident',
                     activated: true,
                     frozen: true,
-                    month: { trades: 2, in: 20, out: 10, fees: 0, more: false },
+                    month: { trades: 2, in_c: 2000, out_c: 1000, fees_c: 0, more: false },
                 },
             },
         };
@@ -4903,7 +4903,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                     name: 'New Community',
                     members: 1,
                     joined7d: 1,
-                    commonsPot: 0,
+                    commonsPot_c: 0,
                 },
             },
         };
@@ -4951,8 +4951,8 @@ describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fa
                 cards: {
                     ...base.cards,
                     market: { items: [
-                        { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: null },
-                        { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', credits: 12, photoUrl: null, pinned: true },
+                        { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', price_c: 800, photoUrl: null },
+                        { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', price_c: 1200, photoUrl: null, pinned: true },
                         { id: 'p2', type: 'need', title: 'Help moving a couch', category: 'labour', photoUrl: null },
                     ], total14d: 3, more: false },
                     events: { items: [

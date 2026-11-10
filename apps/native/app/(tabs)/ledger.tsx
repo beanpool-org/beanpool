@@ -35,8 +35,8 @@ import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import {
-    PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
-    t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
+    PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, beans,
+    t, tn, word, formatDate, formatNumber, formatHundredths, parseHundredths, amountRefusalWords, isAmbiguousAmount, type TierName, type WordKey,
     ledgerCreditLine, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
@@ -59,14 +59,19 @@ import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../../
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
 // There is NO baked-in floor: floor = -(known + earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
-const { CREDIT_MAX_EARNED, TRUST_CURVE_K } = PROTOCOL_CONSTANTS;
+// Every money and credit figure on this screen is whole hundredths of a Bean (the node's `*_c` fields, db.ts getBalance),
+// trust included (the credit a tier is read from): each is written through core's formatHundredths, never converted.
+const { CREDIT_MAX_EARNED, TRUST_CURVE_K, REFERENCE_RATE } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 /** The balance before the member's own has been read. */
 const NO_BALANCE = {
-    balance: 0, floor: 0,
+    balance_c: 0, floor_c: 0,
     tier: { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji },
-    earnedCredit: 0, commons: 0, trustStats: null,
+    earnedCredit_c: 0, commons_c: 0, trustStats: null,
 };
+
+/** A balance with its sign, from whole hundredths: "+49.25", "−9.82", "+500" (a true minus, as formatHundredths writes it). */
+const signedBalance = (c: number) => `${c >= 0 ? '+' : ''}${formatHundredths(c)}`;
 const NO_TXNS: any[] = [];
 
 // Inverse of the curve: qualified value needed to reach a target earned credit.
@@ -519,9 +524,9 @@ export default function LedgerScreen() {
         }, [identity, beansMode])
     );
 
-    // The typed amount, read once (core parseAmount): what handleSend sends is what "Recipient receives" shows. The
-    // decimals are the cents guard's below, as they were parseFloat's.
-    const sendRead = parseAmount(sendAmount, undefined, ANY_DECIMALS);
+    // The typed amount, read once (core parseHundredths): whole hundredths of a Bean, never a float, so what handleSend sends
+    // is exactly what "Recipient receives" shows. At most two decimals, as the node takes it.
+    const sendRead = parseHundredths(sendAmount);
 
     const handleSend = async () => {
         if (preview) return;
@@ -529,19 +534,19 @@ export default function LedgerScreen() {
         // The amount as the confirmation line shows it (sendRead): the language's decimal mark, never parseFloat's "12,5" → 12.
         // What could be a thousand ("1.000" in French) is refused in words that say so; anything else not an amount, as before.
         if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) { setSendError(amountRefusalWords(sendRead.refusal)); return; }
-        const amount = sendRead.ok ? sendRead.value : NaN;
-        if (isNaN(amount) || amount <= 0) { setSendError(t('Enter a valid amount')); return; }
-        // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
-        if (!isWholeCents(amount)) { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
+        // To the cent, as the node takes it: 1.234 is refused here, in words, before anything is sent.
+        if (!sendRead.ok && sendRead.refusal === 'too-many-decimals') { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
+        if (!sendRead.ok || sendRead.value <= 0) { setSendError(t('Enter a valid amount')); return; }
+        const amount_c = sendRead.value;
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
-        if (amount > balanceState.balance) {
-            setSendError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatNumber(balanceState.balance, 2) }));
+        if (amount_c > balanceState.balance_c) {
+            setSendError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatHundredths(balanceState.balance_c) }));
             return;
         }
         setSending(true); setSendError(null); setSendSuccess(false);
         try {
-            await sendTransfer(identity.publicKey, sendTo, amount, sendMemo || '');
+            await sendTransfer(identity.publicKey, sendTo, amount_c, sendMemo || '');
             hapticSuccess();
             setSendSuccess(true);
             setSendTo(''); setSendAmount(''); setSendMemo(''); setMemberSearch('');
@@ -557,11 +562,11 @@ export default function LedgerScreen() {
         if (preview) return;
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) { setSendError(amountRefusalWords(sendRead.refusal)); return; }
-        const amount = sendRead.ok ? sendRead.value : NaN;
-        if (isNaN(amount)) { setSendError(t('Enter a valid amount')); return; }
+        if (!sendRead.ok) { setSendError(t('Enter a valid amount')); return; }
         setSending(true); setSendError(null); setSendSuccess(false);
         try {
-            await giveCreditLine(identity.publicKey, sendTo, amount);
+            // Whole hundredths (a gift is whole Beans: the node refuses any other figure in its own words).
+            await giveCreditLine(identity.publicKey, sendTo, sendRead.value);
             hapticSuccess();
             setSendSuccess(true);
             setSendTo(''); setSendAmount(''); setMemberSearch('');
@@ -606,7 +611,7 @@ export default function LedgerScreen() {
     };
 
     // Trust calculations (value-based)
-    const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
+    const earned = balanceState.earnedCredit_c || 0;   // from the saturating value curve (hundredths)
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
     // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
     // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
@@ -614,10 +619,10 @@ export default function LedgerScreen() {
     const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
     const notEarned = Math.max(0, totalCredit - earned); // grants — fixed, not grown by trading
-    const qualifiedValue = balanceState.qualifiedValue || 0;
+    const qualifiedValue = balanceState.qualifiedValue_c || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
-    const canSend = balanceState.balance > 0 && earned > 0; // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
+    const canSend = balanceState.balance_c > 0 && earned > 0; // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
     // The Credit line tab is there when the node offers it (0 in the owner's setting: never), and opens Send on its own
     // when the node says part of the line can be given now.
     const giftTab = !preview && giftOffer?.offered === true;
@@ -688,13 +693,13 @@ export default function LedgerScreen() {
                     <View style={{ flex: 1 }}>
                         <Text style={styles.tierHeroLabel}>{t('YOUR TRUST LEVEL')}</Text>
                         <Text style={[styles.tierHeroName, { color: tier.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t(TIER_WORDS[tier.name])}</Text>
-                        <Text style={styles.heroSub}>{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</Text>
+                        <Text style={styles.heroSub}>{tn(ec / 100, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { n: formatHundredths(ec), level: tierIdx + 1, levels: TIERS.length })}</Text>
                     </View>
                 </View>
 
                 <View style={styles.heroProgressRow}>
                     {nextTier
-                        ? <Text style={styles.heroProgressText}>{richWords(tn(creditsToNext, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) }), { fontWeight: '900', color: tier.color })}</Text>
+                        ? <Text style={styles.heroProgressText}>{richWords(tn(creditsToNext / 100, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { n: formatHundredths(creditsToNext), emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) }), { fontWeight: '900', color: tier.color })}</Text>
                         : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontWeight: '800' }]}>{t('✨ Highest level reached')}</Text>
                     }
                 </View>
@@ -744,7 +749,7 @@ export default function LedgerScreen() {
                             <Text style={[styles.shelfName, { color: lvl.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t(TIER_WORDS[lvl.name])}</Text>
                             {/* A quarter of the row: a longer language's words take a second line and shrink, never cut short. */}
                             <Text style={[styles.shelfState, { textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
+                                {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min / 100, '{n} trust', '{n} trust', { n: formatHundredths(lvl.min) })}
                             </Text>
                         </Pressable>
                     );
@@ -766,7 +771,7 @@ export default function LedgerScreen() {
                     </View>
                 </View>
 
-                <Text style={styles.detailBlurb}>{selCurrent && selLevel === 0 && balanceState.floor < 0
+                <Text style={styles.detailBlurb}>{selCurrent && selLevel === 0 && balanceState.floor_c < 0
                     // Your own Newcomer level with your credit line already open (a grant, or the admins' confirmation): not
                     // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
                     ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
@@ -777,7 +782,7 @@ export default function LedgerScreen() {
                     <MaterialCommunityIcons name={selCurrent ? 'scale-balance' : 'shield-star-outline'} size={18} color={sel.color} />
                     <View style={{ flex: 1 }}>
                         <Text style={styles.detailFloorLabel}>
-                            {selCurrent ? t('Your current floor') : tn(sel.min, 'from {n} trust', 'from {n} trust')}
+                            {selCurrent ? t('Your current floor') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
                         </Text>
                         {selCurrent && (
                             <Text style={{ fontSize: 10, color: colors.text.muted, marginTop: 1 }}>
@@ -787,7 +792,7 @@ export default function LedgerScreen() {
                     </View>
                     {selCurrent && (
                         <Text style={[styles.detailFloorVal, { color: sel.color }]}>
-                            {formatNumber(balanceState.floor)}
+                            {formatHundredths(balanceState.floor_c)}
                         </Text>
                     )}
                 </View>
@@ -800,7 +805,7 @@ export default function LedgerScreen() {
                 ))}
 
                 {!selReached && selNeeded > 0 && (
-                    <Text style={styles.detailNote}>{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: sel.min, left: selNeeded })}</Text>
+                    <Text style={styles.detailNote}>{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: formatHundredths(sel.min), left: formatHundredths(selNeeded) })}</Text>
                 )}
                 <Text style={styles.detailNote}>{preview
                     ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
@@ -825,13 +830,13 @@ export default function LedgerScreen() {
                             <MaterialCommunityIcons name="information-outline" size={14} color={colors.text.link} />
                         </View>
                     </View>
-                    <Text style={styles.pathGap}>{tn(creditsToNext, '{n} trust to go', '{n} trust to go')}</Text>
+                    <Text style={styles.pathGap}>{tn(creditsToNext / 100, '{n} trust to go', '{n} trust to go', { n: formatHundredths(creditsToNext) })}</Text>
                     <Text style={styles.pathHint}>
                         {t('Trust grows with the real value you trade. Trading with someone NEW counts fastest — value with any one partner is capped, so a wide circle beats repeat trades with the same person.')}
                     </Text>
                     <View style={styles.pathRow}>
                         <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{Number.isFinite(valueToNext) ? `~${formatNumber(valueToNext)}` : '—'}</Text>
+                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{Number.isFinite(valueToNext) ? `~${formatHundredths(valueToNext)}` : '—'}</Text>
                             <Text style={styles.pathLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{t('beans of value to trade')}</Text>
                             <Text style={[styles.pathLeverTag, { color: colors.brand.primary }]}>{t('THE LEVER')}</Text>
                         </View>
@@ -849,7 +854,7 @@ export default function LedgerScreen() {
             <Text style={styles.sectionLabel}>{t('WHAT BUILDS YOUR TRUST')}</Text>
             <View style={styles.achieveRow}>
                 {[
-                    { icon: '💰', label: t('VALUE TRADED'), big: formatNumber(qualifiedValue), foot: tn(earned, '+{n} trust', '+{n} trust'), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
+                    { icon: '💰', label: t('VALUE TRADED'), big: formatHundredths(qualifiedValue), foot: tn(earned / 100, '+{n} trust', '+{n} trust', { n: formatHundredths(earned) }), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
                     { icon: '👥', label: t('PARTNERS'), big: formatNumber(uniquePartners), foot: t('diverse = faster'), pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
                     { icon: '⭐', label: t('RATING'), big: reviewCount > 0 ? formatNumber(avgRating, 1) : '—', foot: reviewCount > 0 ? tn(reviewCount, '{n} review', '{n} reviews') : t('no reviews yet'), pct: reviewCount > 0 ? avgRating / 5 : 1, color: colors.market.need.fg, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (
@@ -881,12 +886,13 @@ export default function LedgerScreen() {
     // ─── Wallet Tab ───────────────────────────────────────────────────────────
     const renderActivityHeader = () => {
         // The ledger's own monthly demurrage: core's one copy of the brackets (circulation.ts), never a copy here.
-        const monthly = monthlyCirculation(balanceState.balance);
-        const amber = balanceState.balance > 1000;
+        // Whole hundredths: the charge is truncated once (core circulationChargeOf), so it is 0 or at least one hundredth.
+        const monthly = monthlyCirculation(balanceState.balance_c);
+        const amber = balanceState.balance_c > beans(1000);
         const now = new Date();
         const nextRun = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const daysUntil = Math.ceil((nextRun.getTime() - now.getTime()) / 86400000);
-        const isPositive = balanceState.balance >= 0;
+        const isPositive = balanceState.balance_c >= 0;
         const heroBg = isPositive
             ? (theme === 'dark' ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)')
             : (theme === 'dark' ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.06)');
@@ -913,23 +919,24 @@ export default function LedgerScreen() {
                     <CurrencyDisplay
                         asView
                         style={[styles.walletBigBalance, isPositive ? styles.pos : styles.neg]}
-                        amount={`${isPositive ? '+' : ''}${formatNumber(balanceState.balance, 1)}`}
+                        amount={signedBalance(balanceState.balance_c)}
                     />
                     <Text style={styles.heroSub}>
-                        {t('≈ {hours} hrs of value · Floor {floor}', { hours: formatNumber(Math.abs(balanceState.balance) / 40, 1), floor: balanceState.floor })}
+                        {/* Hours at the reference rate (40 Beans an hour, in hundredths): a count of hours, not money. */}
+                        {t('≈ {hours} hrs of value · Floor {floor}', { hours: formatNumber(Math.abs(balanceState.balance_c) / REFERENCE_RATE, 1), floor: formatHundredths(balanceState.floor_c) })}
                     </Text>
 
                     {/* Key metrics strip */}
                     <View style={styles.walletMetricRow}>
                         <Pressable style={styles.walletMetric} accessibilityRole="button" onPress={() => setShowCommonsInfo(true)}>
                             <MaterialCommunityIcons name="sprout" size={14} color={theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg} />
-                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg }]} amount={formatNumber(balanceState.commons, 1)} />
+                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg }]} amount={formatHundredths(balanceState.commons_c)} />
                             <Text style={styles.walletMetricLabel}>{t('COMMONS ⓘ')}</Text>
                         </Pressable>
                         <View style={styles.walletMetricDivider} />
                         <View style={styles.walletMetric}>
                             <MaterialCommunityIcons name="scale-balance" size={14} color={colors.text.secondary} />
-                            <Text style={styles.walletMetricVal}>{formatNumber(balanceState.floor)}</Text>
+                            <Text style={styles.walletMetricVal}>{formatHundredths(balanceState.floor_c)}</Text>
                             <Text style={styles.walletMetricLabel}>{t('CREDIT FLOOR')}</Text>
                         </View>
                         {escrowTotal > 0 && (
@@ -948,7 +955,7 @@ export default function LedgerScreen() {
                                     }}
                                 >
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
-                                    <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>
+                                    <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatHundredths(escrowTotal)}</Text>
                                     <Text style={styles.walletMetricLabel}>{t('HELD IN TRUST')}</Text>
                                 </Pressable>
                             </>
@@ -957,7 +964,7 @@ export default function LedgerScreen() {
                 </View>
 
                 {/* ── Community Circulation ── */}
-                {balanceState.balance > 0 && (
+                {balanceState.balance_c > 0 && (
                     <Pressable style={[styles.circBox, amber && styles.circBoxAmber]} accessibilityRole="button" onPress={() => setShowCirculationInfo(true)}>
                         <View style={styles.circRow}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
@@ -965,8 +972,8 @@ export default function LedgerScreen() {
                                 <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>{t('Community Circulation ⓘ')}</Text>
                             </View>
                             {monthly > 0 && (
-                                // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
-                                <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly < 0.005 ? `<${formatNumber(0.01, 2)}` : formatNumber(monthly, 2)} />
+                                // Whole hundredths, written as every figure is: never below 0.01, never a zero that reads broken.
+                                <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={formatHundredths(monthly)} />
                             )}
                         </View>
                         {monthly > 0 ? (
@@ -979,7 +986,7 @@ export default function LedgerScreen() {
                         ) : (
                             // At or under the fee-free line: say so in words, not "0.00 per month".
                             <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }} testID="ledger-circulation-free">
-                                {t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })}
+                                {t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: formatHundredths(CIRCULATION_FREE_BEANS) })}
                             </Text>
                         )}
                         {amber && (
@@ -1003,7 +1010,7 @@ export default function LedgerScreen() {
                                     <Text style={styles.pledgeName} numberOfLines={1}>{pl.projectTitle}</Text>
                                     <Text style={styles.pledgeDate}>{dayOf(pl.timestamp) ?? ''}</Text>
                                 </View>
-                                <Text style={styles.pledgeAmt}>{t('-{amount} B', { amount: pl.amount })}</Text>
+                                <Text style={styles.pledgeAmt}>{t('-{amount} B', { amount: formatHundredths(pl.amount_c) })}</Text>
                             </View>
                         ))}
                     </View>
@@ -1070,8 +1077,8 @@ export default function LedgerScreen() {
                                 <Text style={styles.giftWords} testID="credit-gift-words">
                                     {(giftOffer?.canGive ?? 0) > 0
                                         ? (selectedMember
-                                            ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatNumber(giftOffer?.canGive ?? 0) })
-                                            : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatNumber(giftOffer?.canGive ?? 0) }))
+                                            ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatHundredths(giftOffer?.canGive ?? 0) })
+                                            : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatHundredths(giftOffer?.canGive ?? 0) }))
                                         : (giftOffer?.why ?? '')}
                                 </Text>
                                 <TextInput style={styles.sendInput} accessibilityLabel={t('Credit line to give')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="number-pad" value={sendAmount} onChangeText={setSendAmount} />
@@ -1087,13 +1094,13 @@ export default function LedgerScreen() {
                                 <TextInput style={styles.sendInput} accessibilityLabel={t('Amount to send')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
                                 <TextInput style={styles.sendInput} accessibilityLabel={t('Memo')} placeholder={t('Memo (optional)')} placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
                                 {(() => {
-                                    const parsedAmount = sendRead.ok ? sendRead.value : NaN;
-                                    if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                                    // A send is fee-free: the recipient receives the whole typed figure (whole hundredths).
+                                    if (sendRead.ok && sendRead.value > 0) {
                                         return (
                                             <View style={styles.taxBreakdown}>
                                                 <View style={styles.breakdownRow}>
                                                     <Text style={styles.breakdownLabel}>{t('Recipient receives:')}</Text>
-                                                    <CurrencyDisplay amount={formatNumber(parsedAmount, 2)} style={styles.breakdownValue} asView />
+                                                    <CurrencyDisplay amount={formatHundredths(sendRead.value)} style={styles.breakdownValue} asView />
                                                 </View>
                                             </View>
                                         );
@@ -1173,7 +1180,7 @@ export default function LedgerScreen() {
                     <Text style={styles.txnTime}>{rowWhen(item)}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{formatNumber(Number(item.amount))}</Text>
+                    <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{formatHundredths(item.amount_c)}</Text>
                     <Image source={require('../../assets/images/bean.png')} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" style={{ width: 16, height: 16, marginLeft: 2, resizeMode: 'contain', flexShrink: 0 }} />
                     {deal && <MaterialCommunityIcons name="chevron-right" size={18} color={colors.text.muted} />}
                 </View>
@@ -1222,8 +1229,8 @@ export default function LedgerScreen() {
                 <Pressable style={styles.balanceChunk} accessibilityRole="button" onPress={() => { setActiveTab('financials'); }}>
                     <CurrencyDisplay
                         asView
-                        style={[styles.bigBalance, balanceState.balance >= 0 ? styles.pos : styles.neg]}
-                        amount={`${balanceState.balance >= 0 ? '+' : ''}${formatNumber(balanceState.balance, 1)}`}
+                        style={[styles.bigBalance, balanceState.balance_c >= 0 ? styles.pos : styles.neg]}
+                        amount={signedBalance(balanceState.balance_c)}
                     />
                     <Text style={styles.balanceWord}>{t('BEANS')}</Text>
                 </Pressable>
@@ -1238,8 +1245,8 @@ export default function LedgerScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }} accessibilityRole="header">{t(KNOWN_FROZEN.title)}</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>{t(KNOWN_FROZEN.body)}</Text>
-                            {frozenDebitLine(balanceState.balance) && (
-                                <Text testID="ledger-frozen-debit" style={{ fontSize: 12.5, fontWeight: '700', color: colors.text.heading, lineHeight: 18, marginTop: 6 }}>{frozenDebitLine(balanceState.balance)}</Text>
+                            {frozenDebitLine(balanceState.balance_c) && (
+                                <Text testID="ledger-frozen-debit" style={{ fontSize: 12.5, fontWeight: '700', color: colors.text.heading, lineHeight: 18, marginTop: 6 }}>{frozenDebitLine(balanceState.balance_c)}</Text>
                             )}
                         </View>
                     </View>
@@ -1270,7 +1277,7 @@ export default function LedgerScreen() {
                     style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} usableFloor={balanceState.usableFloor} liveOffers={balanceState.liveOffers} knownGrant={balanceState.knownGrant} />
+                    <CreditBar balance_c={balanceState.balance_c} floor_c={balanceState.floor_c} colors={colors} usableFloor_c={balanceState.usableFloor_c} liveOffers={balanceState.liveOffers} knownGrant_c={balanceState.knownGrant_c} />
                     {knownFrozenPartNote(balanceState) && (
                         <Text style={{ fontSize: 11.5, color: colors.text.body, lineHeight: 16, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
                     )}
@@ -1285,7 +1292,7 @@ export default function LedgerScreen() {
                             {tn(balanceState.liveOffers ?? 0,
                                 '⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
                                 '⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                { limit: Math.abs(balanceState.usableFloor ?? balanceState.floor) })}
+                                { limit: formatHundredths(Math.abs(balanceState.usableFloor_c ?? balanceState.floor_c)) })}
                         </Text>
                     )}
                 </Pressable>
@@ -1356,7 +1363,7 @@ export default function LedgerScreen() {
 
             </View>
             <BalanceInfoModal isOpen={showBalanceInfo} onClose={() => setShowBalanceInfo(false)} />
-            <CommonsInfoModal isOpen={showCommonsInfo} onClose={() => setShowCommonsInfo(false)} commonsBalance={balanceState.commons} />
+            <CommonsInfoModal isOpen={showCommonsInfo} onClose={() => setShowCommonsInfo(false)} commonsBalance={balanceState.commons_c} />
             <CirculationInfoModal isOpen={showCirculationInfo} onClose={() => setShowCirculationInfo(false)} />
             <TrustInfoModal isOpen={showTrustInfo} onClose={() => setShowTrustInfo(false)} initialTab={trustInfoTab} />
             <SliderInfoModal isOpen={showSliderInfo} onClose={() => setShowSliderInfo(false)} />
@@ -1399,14 +1406,14 @@ export default function LedgerScreen() {
                                         {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure and no held line. */}
                                         {myVouching.noLimit
                                             ? t(VOUCH_PRESET_WORDS.noLimit)
-                                            : t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
+                                            : t('{left} of {total} left', { left: formatHundredths(myVouching.budget.left), total: formatHundredths(myVouching.budget.level) })}
                                     </Text>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 2 }}>
-                                        {t('Vouched {amount} to {people} who joined', { amount: formatNumber(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}
+                                        {t('Vouched {amount} to {people} who joined', { amount: formatHundredths(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}
                                     </Text>
                                     {!myVouching.noLimit && (
                                         <Text style={{ fontSize: 12, color: colors.text.secondary }}>
-                                            {t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}
+                                            {t('Held {amount} on {invites} not used yet', { amount: formatHundredths(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}
                                         </Text>
                                     )}
                                 </View>

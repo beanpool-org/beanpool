@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -557,10 +557,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             <Text style={styles.dateText}>
                                 {dealDate(item.createdAt)}
                             </Text>
+                            {/* What the deal holds, whole hundredths, as formatHundredths writes it ("—" for no figure). */}
                             {showsBeans && (
                             <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
                                 <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.primary }]} numberOfLines={1}>
-                                    {isBuyer ? '- ' : '+ '}{item.credits}
+                                    {isBuyer ? '- ' : '+ '}{formatHundredths(item.amount_c)}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
@@ -679,10 +680,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                     <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>{t('⏸ PAUSED')}</Text></View>
                                 )}
                             </View>
+                            {/* The listing's price, whole hundredths: none sent reads "?", as it always did; one that isn't whole hundredths "—". */}
                             {showsBeans && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.creditAmount} numberOfLines={1}>
-                                    {item.credits ?? '?'}
+                                    {item.price_c === undefined ? '?' : formatHundredths(item.price_c)}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>

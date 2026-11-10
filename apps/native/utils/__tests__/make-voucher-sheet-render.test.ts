@@ -67,7 +67,7 @@ const draw = async (props: Record<string, unknown> = {}) => {
         } as any) as any);
     });
 };
-const all = (id: string) => [...host.querySelectorAll(`[data-testid="${id}"]`)] as HTMLElement[];
+const all = (id: string) => Array.from(host.querySelectorAll(`[data-testid="${id}"]`)) as HTMLElement[];
 const one = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const click = async (el: Element | null) => { await act(async () => { (el as HTMLElement).click(); await new Promise((r) => setTimeout(r, 0)); }); };
 

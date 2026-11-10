@@ -58,9 +58,10 @@ import { signedRequestWords } from '../../components/signed-request-lines';
 import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 import { DoorRuleLine } from '../../components/DoorRuleLine';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings } from '../../utils/names-list';
+import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings, type VoucherCandidates } from '../../utils/names-list';
 import { VoucherCard } from '../../components/VoucherCard';
 import { VouchersBlock } from '../../components/VouchersBlock';
+import { MakeVoucherSheet } from '../../components/MakeVoucherSheet';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -235,7 +236,6 @@ export default function PeopleScreen() {
     // Pending is open with a bound invite in it, and the Vouchers block has a waiting row: either reads a name from the list.
     const [pendingNeedsList, setNeedList] = useState(false);
     const [waitingNeedsList, setWaitingNeedsList] = useState(false);
-    const needList = pendingNeedsList || waitingNeedsList;
     
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
@@ -244,11 +244,15 @@ export default function PeopleScreen() {
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
-    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; settings: VoucherSettings } | null>(null);
+    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; candidates?: VoucherCandidates; settings: VoucherSettings } | null>(null);
     // Whether the node said this member is on the credit committee (it answers GET /api/names/vouchers only for them; a 403 is
     // its no). Undefined while not heard, or when the ask failed: never read as a no.
     const [onCommittee, setOnCommittee] = useState<boolean | undefined>(undefined);
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
+    // "+ Make someone a voucher" (I5): the sheet of admins and confirmed names the node offers, over the block.
+    const [makingVoucher, setMakingVoucher] = useState(false);
+    // The sheet offers people confirmed on the names list: their names are read from the list too, as a waiting row's are.
+    const needList = pendingNeedsList || waitingNeedsList || (makingVoucher && (vouchersData?.candidates?.confirmed?.length ?? 0) > 0);
 
     const [members, setMembers] = useState<any[]>([]);
     // The search the list on screen was read for, set with it; null until the first read lands. Only a list read for no
@@ -1450,7 +1454,8 @@ export default function PeopleScreen() {
                                     names={inviteNames.entryNames}
                                     onNeedNames={setWaitingNeedsList}
                                     onOpen={setSelectedVoucherPubkey}
-                                    onMakeVoucher={() => router.push('/names-list')}
+                                    onMakeVoucher={() => setMakingVoucher(true)}
+                                    onOpenWaiting={() => router.push('/names-list')}
                                 />
                             )}
 
@@ -1702,6 +1707,22 @@ export default function PeopleScreen() {
 
 
             </KeyboardAvoidingView>
+
+            <Modal visible={makingVoucher && !!vouchersData} animationType="slide" onRequestClose={() => setMakingVoucher(false)}>
+                <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.app }} edges={['top', 'left', 'right', 'bottom']} testID="make-voucher-modal">
+                    {anchorUrl && identity && vouchersData && (
+                        <MakeVoucherSheet
+                            anchorUrl={anchorUrl}
+                            identity={identity}
+                            candidates={vouchersData.candidates}
+                            defaultBudget={vouchersData.settings?.voucherBudget}
+                            names={inviteNames.entryNames}
+                            onClose={() => setMakingVoucher(false)}
+                            onMade={() => { void reloadVouchers(); }}
+                        />
+                    )}
+                </SafeAreaView>
+            </Modal>
 
             <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
                 {/* A full-screen iOS Modal draws under the status bar: inside the safe area, as names-list.tsx's modals are. */}

@@ -47,7 +47,7 @@ const flows = createNamesFlows(PHONE_NAMES_PLATFORM);
 export const {
     setNamesRequestTimeout, fetchNamesState, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthSummary,
     fetchHealthLog, confirmMember, secondConfirmation, revokeConfirmation, fetchVouchers, fetchVoucherCard,
-    makeNamesVoucher, stopNamesVoucher, setVoucherBudget, deleteNamesEntry, setNamesSettings, namesTrustStoreKey,
+    makeNamesVoucher, makeAdminVoucher, stopNamesVoucher, setVoucherBudget, deleteNamesEntry, setNamesSettings, namesTrustStoreKey,
     readNamesPinFrom, writeNamesPinTo, saveNamesCopiesBeforeLeaving, checkEachOther, unkeptRemovalsOf, removeOldKey,
     removeOldKeyAndOpen, openNamesList, makeKeyOnThisPhone, putHistoryBack, followServerHistory, startAfreshOnThisPhone,
     sendKeysAgain, addNamesEntry, inviteForNamesEntry, revokeEntryInvite, readBoundInvites, editNamesEntry, pendingRemovals, saveNamesEntry,
@@ -65,6 +65,6 @@ export {
 export type {
     NamesAdminRow, NamesState, NamesMyCopy, SealedEntryRow, ConfirmationStatus, ConfirmationRow, NamesListBody,
     NamesAction, NamesLogLine, NamesResult, VoucherSummaryRow, VoucherSettings, VoucherHistoryLine, VoucherPersonRow,
-    VoucherCardData, VouchersBlockBody, NamesPinStore, NamesCopyUnconfirmed, EachOtherCheck, NamesOpened, OpenedEntry,
+    VoucherCardData, VouchersBlockBody, VoucherCandidate, VoucherCandidates, NamesPinStore, NamesCopyUnconfirmed, EachOtherCheck, NamesOpened, OpenedEntry,
     CommunityMember,
 } from '@beanpool/core';

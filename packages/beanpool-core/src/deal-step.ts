@@ -93,11 +93,17 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
         state = tx.standingPhase === 'short' ? 'short' : 'standing';
     } else if (tx.status === 'requested') {
         state = isAuthor ? 'to-answer' : 'asked';
+    } else if (tx.status === 'pending' && tx.standingId) {
+        // Nothing of a standing deal is held (each period is paid at its start), so a row of one that a copy still reads as
+        // pending (an older period, a stale phone row) is nobody's step to release: it runs by itself.
+        state = 'standing';
     } else if (tx.status === 'pending') {
         state = isPayer ? 'to-release' : 'to-deliver';
     } else if (tx.status === 'completed') {
         const hasReviewed = isPayer ? Boolean(tx.ratedByBuyer) : Boolean(tx.ratedBySeller);
-        state = hasReviewed ? 'done' : 'done-to-review';
+        // A standing deal is reviewed once, on its first period (design §3): every later period's row is silent.
+        const laterPeriod = !!tx.standingId && Number(tx.periodNo) > 1;
+        state = hasReviewed || laterPeriod ? 'done' : 'done-to-review';
     } else if (tx.status === 'cancelled') {
         state = 'cancelled';
     } else if (tx.status === 'rejected' || tx.status === 'declined') {

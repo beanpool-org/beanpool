@@ -1551,6 +1551,7 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
                mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
                mt.post_title as postTitle, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                (SELECT c.id FROM conversations c
                   WHERE c.type = 'dm' AND c.post_id IS NULL
@@ -1584,6 +1585,7 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt

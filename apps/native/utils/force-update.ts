@@ -25,7 +25,8 @@
  *     block then says so ("Its operator must update"), with no store button, and the phone sends it nothing else.
  */
 import { normaliseVersion, isVersionOlder, pickStoreVersion, type AppStoreVersions } from './app-version';
-import { nodeVersionBelowMinimum, noteHealthAnswer } from './node-version-gate';
+import { onCommunitySwitched } from './community-switch';
+import { nodeVersionBelowMinimum, noteHealthAnswer, onNodeVersionHeard, tooOldVersionOf } from './node-version-gate';
 
 /** How long away makes a return a safe moment. */
 export const SAFE_RETURN_MS = 5 * 60 * 1000;
@@ -357,6 +358,42 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
             asks++;
             show(null);
         },
+    };
+}
+
+/**
+ * What moves the block besides AppState, wired to `gate` (components/ForceUpdateBlock.tsx): a switch of community
+ * (utils/community-switch.ts), the community refusing this app (426, noteAppRefused), and what this run knows of the
+ * community's server version (utils/node-version-gate.ts). `anchorUrl` reads the community in use. Returns the way to
+ * stop.
+ *
+ * What is known of the server is applied as it stands, not only when it changes: at once (the block mounts after the
+ * app's first requests, which may have heard it already), after every switch, and whenever it changes. So a community
+ * heard below the minimum earlier in the run (by an unread round's request, say) gets its card on the switch to it even
+ * when the switch's own check fails (a network blink, a door's prompt): the header's ping then reads the same version,
+ * which is no change and tells nobody, while every request to that community is refused on the phone (#3043's review).
+ */
+export function followCommunityForUpdate(gate: ForceUpdateGate, anchorUrl: () => Promise<string | null>): () => void {
+    let stopped = false;
+    /** The server's card for the community in use, from what this run knows of its version: up, down, or as it is. */
+    const applyKnown = async () => {
+        let anchor: string | null;
+        try { anchor = await anchorUrl(); } catch { return; }
+        if (stopped || !anchor) return;
+        const heard = tooOldVersionOf(anchor);
+        if (typeof heard === 'string') gate.serverTooOld(heard);
+        else if (heard === null) gate.serverCurrent();
+    };
+    const stops = [
+        // The switch takes the block down and asks the community now in use; what is known of it applies at once too.
+        onCommunitySwitched(() => { void gate.communitySwitched(); void applyKnown(); }),
+        onAppRefused((version) => { gate.refused(version); }),
+        onNodeVersionHeard(() => { void applyKnown(); }),
+    ];
+    void applyKnown();
+    return () => {
+        stopped = true;
+        for (const stop of stops) stop();
     };
 }
 

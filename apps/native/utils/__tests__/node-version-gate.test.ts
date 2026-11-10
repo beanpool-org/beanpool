@@ -38,8 +38,10 @@ import {
     tooOldVersionOf,
 } from '../node-version-gate';
 import {
-    APP_TOO_OLD_CODE, checkCommunityForUpdate, createForceUpdateGate, evaluateForceUpdate, onAppRefused, type ForceUpdateDecision, type UpdateBlockShown,
+    APP_TOO_OLD_CODE, checkCommunityForUpdate, createForceUpdateGate, evaluateForceUpdate, followCommunityForUpdate, onAppRefused, type ForceUpdateDecision,
+    type UpdateBlockShown,
 } from '../force-update';
+import { communitySwitched } from '../community-switch';
 import { installNodeRequestSigning } from '../node-request-signing';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
@@ -243,6 +245,95 @@ describe('the card goes up as soon as any request hears the server too old, and 
         gate.refused('1.5.0');
         gate.serverCurrent();
         expect(shown[shown.length - 1]).toEqual({ version: '1.5.0' });
+    });
+
+    /**
+     * The block's own wiring (followCommunityForUpdate, as components/ForceUpdateBlock.tsx mounts it), the real gate, the
+     * real wrapper. `blinks`: how many of the gate's own health checks fail first (a network blink: fetchJson throws).
+     */
+    function mountBlock(blinks: { left: number }) {
+        const shown: Array<UpdateBlockShown | null> = [];
+        const anchorUrl = async () => mem.get('beanpool_anchor_url') ?? null;
+        const gate = createForceUpdateGate({
+            now: () => 0,
+            check: () => checkCommunityForUpdate({
+                anchorUrl,
+                fetchJson: async (url) => {
+                    if (blinks.left > 0) { blinks.left--; throw new Error('network blink'); }
+                    const res = await fetch(url);
+                    return res.ok ? res.json() : null;
+                },
+                localVersion: '1.4.0',
+                platform: 'android',
+            }),
+            show: (b) => shown.push(b),
+        });
+        const started = gate.start('active');
+        const stop = followCommunityForUpdate(gate, anchorUrl);
+        return { shown, started, stop };
+    }
+    /** Lets the wiring's reads of the phone's community and the gate's checks finish. */
+    const settleAll = async () => { for (let i = 0; i < 10; i++) await settle(); };
+    const CARD = { version: '1.2.37', nodeTooOld: true };
+
+    it('a community heard too old earlier in the run gets its card on the switch to it, even when the switch\'s own check fails (#3043 review)', async () => {
+        // B (HOME, the phone's community) is at 1.4.0; A (OTHER) is saved on the phone, at 1.2.37.
+        mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }, { url: OTHER }]));
+        answers[`${HOME}/api/community/health`] = { version: '1.4.0' };
+        answers[`${OTHER}/api/community/health`] = { version: '1.2.37' };
+        answers[`${OTHER}/api/posts`] = { ok: true };
+        const blinks = { left: 0 };
+        const { shown, started, stop } = mountBlock(blinks);
+        try {
+            await started;
+            // An unread round's request to A reads A's health and is refused; the community in use is B, so no card.
+            await expect(fetch(`${OTHER}/api/unread`)).rejects.toBeInstanceOf(NodeTooOldError);
+            await settleAll();
+            expect(tooOldVersionOf(OTHER)).toBe('1.2.37');
+            expect(shown).toEqual([]);
+
+            // The member switches to A while A's next health check fails once.
+            mem.set('beanpool_anchor_url', OTHER);
+            blinks.left = 1;
+            communitySwitched();
+            await settleAll();
+            expect(blinks.left).toBe(0);
+            expect(shown).toEqual([CARD]);
+
+            // A request to A is refused on the phone, and three good header pings read the same 1.2.37: the card stays.
+            await expect(fetch(`${OTHER}/api/posts`)).rejects.toBeInstanceOf(NodeTooOldError);
+            for (let i = 0; i < 3; i++) expect((await fetch(`${OTHER}/api/community/health`)).status).toBe(200);
+            await settleAll();
+            expect(shown).toEqual([CARD]);
+            expect(calls.filter(c => c.url.startsWith(OTHER)).map(c => c.url)).toEqual(Array(4).fill(`${OTHER}/api/community/health`));
+
+            // Back to B: the card was A's, so it comes down, and B is asked as usual.
+            mem.set('beanpool_anchor_url', HOME);
+            communitySwitched();
+            await settleAll();
+            expect(shown).toEqual([CARD, null]);
+        } finally {
+            stop();
+        }
+        // Stopped: a switch moves nothing.
+        mem.set('beanpool_anchor_url', OTHER);
+        communitySwitched();
+        await settleAll();
+        expect(shown).toEqual([CARD, null]);
+    });
+
+    it('a community heard too old before the block mounted gets its card at once, even when the start\'s own check fails', async () => {
+        // The app's first requests (before the block's effect ran) read the community's health: 1.2.37.
+        answers[`${HOME}/api/community/health`] = { version: '1.2.37' };
+        await expect(fetch(`${HOME}/api/community/me`)).rejects.toBeInstanceOf(NodeTooOldError);
+        const { shown, started, stop } = mountBlock({ left: 1 });
+        try {
+            await started;
+            await settleAll();
+            expect(shown).toEqual([CARD]);
+        } finally {
+            stop();
+        }
     });
 
     it('every health answer the phone reads tells the block, once per change', async () => {

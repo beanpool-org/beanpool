@@ -103,6 +103,7 @@ vi.mock('../force-update', () => ({
     checkCommunityForUpdate: async () => null,
     appVersionHeaderValue: () => '1.2.70',
     onAppRefused: () => () => {},
+    followCommunityForUpdate: () => () => {},
 }));
 vi.mock('../identity', () => ({ hasMnemonic: () => who.words }));
 vi.mock('../LocalAuth', () => ({

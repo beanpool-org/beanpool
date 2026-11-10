@@ -10,9 +10,8 @@ import { useIdentity } from '../app/IdentityContext';
 import { useNodeStatus } from '../app/NodeStatusContext';
 import { useTheme } from '../app/ThemeContext';
 import { bootClockMs } from '../modules/boot-clock';
-import { onCommunitySwitched } from '../utils/community-switch';
-import { checkCommunityForUpdate, createForceUpdateGate, onAppRefused, type UpdateBlockShown } from '../utils/force-update';
-import { MIN_NODE_VERSION, onNodeVersionHeard, tooOldVersionOf } from '../utils/node-version-gate';
+import { checkCommunityForUpdate, createForceUpdateGate, followCommunityForUpdate, type UpdateBlockShown } from '../utils/force-update';
+import { MIN_NODE_VERSION } from '../utils/node-version-gate';
 import { hasMnemonic } from '../utils/identity';
 import { authenticateUser, doorPrompts, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -154,24 +153,13 @@ export default function ForceUpdateBlock() {
         });
         void gate.start(AppState.currentState);
         const sub = AppState.addEventListener('change', (next) => { void gate.appStateChanged(next); });
-        const stopSwitches = onCommunitySwitched(() => { void gate.communitySwitched(); });
-        // The community refusing this app on any request (426 app_too_old: utils/node-request-signing.ts).
-        const stopRefusals = onAppRefused((version) => { gate.refused(version); });
-        // The community's server heard below the minimum by any request's first read of its health, or new enough again.
-        const stopVersions = onNodeVersionHeard(() => {
-            void AsyncStorage.getItem('beanpool_anchor_url').then((anchor) => {
-                if (!mounted || !anchor) return;
-                const heard = tooOldVersionOf(anchor);
-                if (typeof heard === 'string') gate.serverTooOld(heard);
-                else if (heard === null) gate.serverCurrent();
-            }).catch(() => {});
-        });
+        // A switch of community, the community refusing this app on any request (426 app_too_old:
+        // utils/node-request-signing.ts), and its server's version as this run knows it (utils/force-update.ts).
+        const stopFollowing = followCommunityForUpdate(gate, () => AsyncStorage.getItem('beanpool_anchor_url'));
         return () => {
             mounted = false;
             sub.remove();
-            stopSwitches();
-            stopRefusals();
-            stopVersions();
+            stopFollowing();
         };
     }, []);
 

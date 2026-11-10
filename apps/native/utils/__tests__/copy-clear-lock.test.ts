@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +29,7 @@ const h = vi.hoisted(() => ({
 vi.mock('expo-sqlite', async () => {
     const { DatabaseSync: Sqlite } = await import('node:sqlite');
     const { join } = await import('node:path');
-    const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+    const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as SQLInputValue[];
     return {
         openDatabaseAsync: vi.fn(async (name: string) => {
             const sql = new Sqlite(join(h.dir, name));
@@ -114,7 +114,7 @@ import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { GROUP_KEY_TABLES_SQL } from '../group-chat-store';
 
 // Nothing here reaches a network.
-(globalThis as any).fetch = vi.fn(async () => { throw new TypeError('offline'); });
+globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as unknown as typeof fetch;
 
 const root = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'bp-copy-clear-lock-'));
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));

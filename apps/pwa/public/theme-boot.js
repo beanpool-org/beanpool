@@ -11,11 +11,8 @@
     var theme = 'dark';
     try {
         var stored = localStorage.getItem('beanpool-theme-mode');
-        var migrated = localStorage.getItem('beanpool-theme-default-light-v1') !== null;
-        var legacy = localStorage.getItem('beanpool-theme');
         var preference = 'dark';
-        if (stored === 'light' || stored === 'dark' || (stored === 'system' && migrated)) preference = stored;
-        else if (stored !== 'system' && (legacy === 'light' || legacy === 'dark')) preference = legacy;
+        if (stored === 'light' || stored === 'dark' || stored === 'system') preference = stored;
         if (preference === 'system') {
             theme = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         } else {

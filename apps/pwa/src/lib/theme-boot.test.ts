@@ -12,8 +12,6 @@ const BOOT = fs.readFileSync(path.resolve(__dirname, '../../public/theme-boot.js
 const INDEX = fs.readFileSync(path.resolve(__dirname, '../../index.html'), 'utf8');
 
 const MODE = [null, 'light', 'dark', 'system', 'junk'] as const;
-const MARKER = [null, 'done'] as const;
-const LEGACY = [null, 'light', 'dark'] as const;
 
 function setDevice(dark: boolean) {
     window.matchMedia = ((query: string) => ({
@@ -50,13 +48,10 @@ describe('theme-boot.js agrees with useTheme for every stored state', () => {
     });
     afterEach(() => { window.matchMedia = realMatchMedia; });
 
-    const cases = MODE.flatMap((mode) => MARKER.flatMap((marker) => LEGACY.flatMap((legacy) =>
-        [false, true].map((deviceDark) => [mode, marker, legacy, deviceDark] as const))));
+    const cases = MODE.flatMap((mode) => [false, true].map((deviceDark) => [mode, deviceDark] as const));
 
-    it.each(cases)('mode=%s marker=%s legacy=%s device dark=%s', (mode, marker, legacy, deviceDark) => {
+    it.each(cases)('mode=%s device dark=%s', (mode, deviceDark) => {
         store('beanpool-theme-mode', mode);
-        store('beanpool-theme-default-light-v1', marker);
-        store('beanpool-theme', legacy);
         setDevice(deviceDark);
 
         const boot = bootTheme();
@@ -81,11 +76,9 @@ describe('theme-boot.js agrees with useTheme for every stored state', () => {
 
     it('only reads storage: the first paint never writes a theme', () => {
         store('beanpool-theme-mode', 'system');
-        store('beanpool-theme', 'light');
         bootTheme();
         expect(localStorage.getItem('beanpool-theme-mode')).toBe('system');
-        expect(localStorage.getItem('beanpool-theme')).toBe('light');
-        expect(localStorage.getItem('beanpool-theme-default-light-v1')).toBeNull();
+        expect(localStorage.length).toBe(1);
     });
 });
 

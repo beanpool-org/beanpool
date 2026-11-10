@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
-import { amountRefusalWords, ANY_DECIMALS, formatDate, formatNumber, inCapitalsOf, isAmbiguousAmount, parseAmount, t } from '@beanpool/core';
+import { amountRefusalWords, formatDate, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, parseHundredths, t } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { signedRequestWords } from '../components/signed-request-lines';
 
@@ -96,12 +96,12 @@ export default function ProposeProjectModal() {
         if (!lifecycle) errors.add('lifecycle');
         if (!title.trim() || title.trim().length < 2) errors.add('title');
         if (!description.trim()) errors.add('description');
-        // The goal in the language's decimal mark (core parseAmount): fr "12,5" is read, not refused; "1.000", which could be
-        // a thousand, is refused in words that say so. Whole Beans are sent, as parseInt sent them.
-        const goal = parseAmount(goalAmount, undefined, ANY_DECIMALS);
+        // The goal in the language's decimal mark, to whole hundredths (core parseHundredths, never a float times 100): fr
+        // "12,5" is 1,250, not refused; "1.000", which could be a thousand, and a third decimal are refused in words that say so.
+        const goal = parseHundredths(goalAmount);
         const goalValue = goal.ok ? goal.value : NaN;
         if (lifecycle === 'bounded') {
-            if (!goalAmount.trim() || isNaN(goalValue) || goalValue <= 0) errors.add('goalAmount');
+            if (!goalAmount.trim() || !isHundredths(goalValue) || goalValue <= 0) errors.add('goalAmount');
         }
         setValidationErrors(errors);
         if (errors.size > 0) {
@@ -110,7 +110,7 @@ export default function ProposeProjectModal() {
                 setTimeout(() => setValidationToast(''), 3000);
                 return;
             }
-            const goalWhy = lifecycle === 'bounded' && !goal.ok && isAmbiguousAmount(goal.refusal) ? amountRefusalWords(goal.refusal) : null;
+            const goalWhy = lifecycle === 'bounded' && !goal.ok && (isAmbiguousAmount(goal.refusal) || goal.refusal === 'too-many-decimals') ? amountRefusalWords(goal.refusal) : null;
             setValidationToast(goalWhy ?? t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
             return;
@@ -129,7 +129,8 @@ export default function ProposeProjectModal() {
                 purpose: description.trim(),
                 description: description.trim(),
                 lifecycle: lifecycle!,
-                goalAmount: lifecycle === 'bounded' ? (Math.trunc(goalValue) || 0) : null,
+                // Whole hundredths of a Bean, as the node takes a project's goal (goalAmount_c).
+                goalAmount_c: lifecycle === 'bounded' ? goalValue : null,
                 deadlineAt: parsedDeadline,
                 photos,
                 avatar: photos.length > 0 ? photos[0] : undefined,

@@ -144,7 +144,8 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
                 category: 'community',
                 title: cleanQuestion,
                 description: description.trim(),
-                credits: 0,
+                // A poll is never priced: 0 hundredths of a Bean.
+                price_c: 0,
                 price_type: 'fixed',
                 author_pubkey: identity.publicKey,
                 created_at: new Date().toISOString(),

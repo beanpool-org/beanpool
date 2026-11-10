@@ -20,7 +20,7 @@ import {
     seasonBanner, LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, plSummaryText, type LedgerPeriod
 } from '../utils/enterprise-season';
 import { approvedApplicantText } from '../utils/keeper-governance';
-import { deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, inCapitalsOf, isHundredths, keeperWords, t, tn, isSampleId, parseHundredths, amountRefusalWords, isAmbiguousAmount } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ReportReasonBox } from '../components/ReportReasonBox';
@@ -108,6 +108,7 @@ export default function TreasuryDetailScreen() {
     const [messagingLead, setMessagingLead] = useState(false);
 
     // Keeper Join Request State
+    // Whole Beans of standing as typed (the pledge is sent as whole hundredths: joinBacking_c below).
     const [joinBackingPledge, setJoinBackingPledge] = useState('0');
     const [submittingJoin, setSubmittingJoin] = useState(false);
 
@@ -466,7 +467,8 @@ export default function TreasuryDetailScreen() {
     // On focus, and again whenever the period changes.
     useFocusEffect(useCallback(() => { loadLedger(ledgerPeriod); }, [loadLedger, ledgerPeriod]));
 
-    const balance = detail?.balance ?? 0;
+    // Whole hundredths of a Bean, as the node sends every figure of the detail (`*_c`); a balance that isn't one counts 0.
+    const balance = isHundredths(detail?.balance_c) ? detail.balance_c : 0;
     // The name its members gave it, as written; the words only when there is none.
     const name = detail?.name || nameParam || t('Community Enterprise');
     const avatar = detail?.avatar || avatarParam;
@@ -505,7 +507,11 @@ export default function TreasuryDetailScreen() {
 
     const banner = seasonBanner(detail);
 
-    const availableToBack = detail?.availableToBack ?? 0;
+    // What the reader has left to back with, whole hundredths (the detail's availableToBack_c).
+    const availableToBack = isHundredths(detail?.availableToBack_c) ? Math.max(0, detail.availableToBack_c) : 0;
+    // The join box's pledge: whole Beans typed, as whole hundredths (core parseHundredths); anything else is no pledge.
+    const joinBackingRead = parseHundredths(joinBackingPledge);
+    const joinBacking_c = joinBackingRead.ok ? joinBackingRead.value : NaN;
     const myPendingRequest = detail?.myPendingRequest || null;
     const keeperList: any[] = (detail?.keepers || []).map((k: any) => ({ ...k, publicKey: k.publicKey || k.pubkey || k.memberPubkey }));
     const myPubkey: string | null = identity?.publicKey ?? null;
@@ -554,24 +560,26 @@ export default function TreasuryDetailScreen() {
 
     const handleJoinRequest = async () => {
         if (!treasuryKey || submittingJoin) return;
-        const available = detail?.availableToBack ?? 0;
-        const amt = Number(joinBackingPledge);
-        if (isNaN(amt) || amt < 0) {
+        // Whole hundredths of a Bean, both: what the reader has left to back with, and the pledge typed (joinBacking_c).
+        const available = availableToBack;
+        const amt = joinBacking_c;
+        if (!isHundredths(amt) || amt < 0) {
             Alert.alert(t('Invalid Backing'), t('Please enter 0 or a positive number of standing beans.'));
             return;
         }
         if (amt > available) {
+            const values = { n: formatHundredths(available) };
             Alert.alert(t('Exceeds Available Standing'), project
-                ? tn(available, 'You have {n} Beans of standing available to back this project.', 'You have {n} Beans of standing available to back this project.')
-                : tn(available, 'You have {n} Beans of standing available to back this enterprise.', 'You have {n} Beans of standing available to back this enterprise.'));
+                ? tn(available / 100, 'You have {n} Beans of standing available to back this project.', 'You have {n} Beans of standing available to back this project.', values)
+                : tn(available / 100, 'You have {n} Beans of standing available to back this enterprise.', 'You have {n} Beans of standing available to back this enterprise.', values));
             return;
         }
         setSubmittingJoin(true);
         try {
             await requestToJoinEnterprise(treasuryKey, amt);
             Alert.alert(t('Request Submitted 🌱'), project
-                ? t('Your request to join as a collaborator with {amount} 🫘 backing has been submitted for review.', { amount: amt })
-                : t('Your request to join as a keeper with {amount} 🫘 backing has been submitted for review.', { amount: amt }));
+                ? t('Your request to join as a collaborator with {amount} 🫘 backing has been submitted for review.', { amount: formatHundredths(amt) })
+                : t('Your request to join as a keeper with {amount} 🫘 backing has been submitted for review.', { amount: formatHundredths(amt) }));
             load();
         } catch (e: any) {
             Alert.alert(t('Request Failed'), e.message ? signedRequestWords(e.message) : (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
@@ -582,27 +590,26 @@ export default function TreasuryDetailScreen() {
 
     const handlePledge = async () => {
         if (!treasuryKey || pledging) return;
-        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
-        // could be a thousand, is refused in words that say so. The cents guard below decides the decimals, as before.
-        const read = parseAmount(pledgeAmount, undefined, ANY_DECIMALS);
+        // The language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250, never refused as not a
+        // number; "1.000", which could be a thousand, is refused in words that say so, and so is a third decimal.
+        const read = parseHundredths(pledgeAmount);
+        if (!read.ok && read.refusal === 'too-many-decimals') {
+            Alert.alert(t('Invalid amount'), t('The amount is a number of Beans above 0, to the cent.'));
+            return;
+        }
         if (!read.ok && isAmbiguousAmount(read.refusal)) {
             Alert.alert(t('Invalid Amount'), amountRefusalWords(read.refusal));
             return;
         }
         const amt = read.ok ? read.value : NaN;
-        if (isNaN(amt) || amt <= 0) {
+        if (!isHundredths(amt) || amt <= 0) {
             Alert.alert(t('Invalid Amount'), t('Please enter a positive number of Beans to pledge.'));
-            return;
-        }
-        // To the cent, as the node takes it (core isWholeCents).
-        if (!isWholeCents(amt)) {
-            Alert.alert(t('Invalid amount'), t('The amount is a number of Beans above 0, to the cent.'));
             return;
         }
         setPledging(true);
         try {
             await treasuryPledge(treasuryKey, amt, pledgeMemo.trim() || undefined);
-            Alert.alert(t('Pledge Successful! 🌱'), t('Thank you for pledging {amount} 🫘 to {name}.', { amount: amt, name }));
+            Alert.alert(t('Pledge Successful! 🌱'), t('Thank you for pledging {amount} 🫘 to {name}.', { amount: formatHundredths(amt), name }));
             setPledgeAmount('');
             setPledgeMemo('');
             load();
@@ -638,7 +645,8 @@ export default function TreasuryDetailScreen() {
     const flow: any[] = detail?.flow || [];
     const deferredClaims: any[] = detail?.deferredClaims || [];
     const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
-    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
+    // Each claim's amount_c, whole hundredths (routes/treasury.ts deferredClaims): summed exactly; one that isn't counts nothing.
+    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (isHundredths(c.amount_c) ? c.amount_c : 0), 0);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -752,16 +760,17 @@ export default function TreasuryDetailScreen() {
                         <ShopfrontKeepers keepers={shopfrontKeepers} project={project} navigable={!isEffectivePreview} />
 
                         {/* Funding Progress (for Bounded Enterprises with a goal) */}
-                        {detail?.goalAmount != null && detail.goalAmount > 0 && (() => {
-                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
-                            const goal = detail.goalAmount;
+                        {isHundredths(detail?.goalAmount_c) && detail.goalAmount_c > 0 && (() => {
+                            // Whole hundredths of a Bean, both (the detail's goalAmount_c and currentAmount_c).
+                            const current = isHundredths(detail.currentAmount_c) ? detail.currentAmount_c : Math.max(0, balance);
+                            const goal: number = detail.goalAmount_c;
                             const progress = Math.min(100, (current / goal) * 100);
                             const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
                             const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle, detail?.deadlineAt);
                             // What happens to the backers' Beans if the goal isn't reached, and once they have gone back, that they did.
-                            const returnLine = pledgeReturnLine({ ...detail, currentAmount: current });
+                            const returnLine = pledgeReturnLine({ ...detail, currentAmount_c: current });
                             const wentBack = !!returnLine && !!detail?.pledgesReturnedAt;
                             return (
                                 <View style={styles.progressCard}>
@@ -769,11 +778,11 @@ export default function TreasuryDetailScreen() {
                                         <View>
                                             <Text style={[styles.currentAmt, isFunded && { color: colors.brand.primary }]}>
                                                 <Sentence
-                                                    text={t('{amount} 🫘 {raised}', { amount: current })}
+                                                    text={t('{amount} 🫘 {raised}', { amount: formatHundredths(current) })}
                                                     parts={{ raised: <Text style={styles.progressLabel}>{t('raised', undefined, 'pledges towards a goal')}</Text> }}
                                                 />
                                             </Text>
-                                            <Text style={styles.goalAmt}>{t('Goal: {amount} 🫘', { amount: goal })}</Text>
+                                            <Text style={styles.goalAmt}>{t('Goal: {amount} 🫘', { amount: formatHundredths(goal) })}</Text>
                                         </View>
                                         {daysRemaining && (
                                             <Text style={[styles.deadlineBadge, daysRemaining.expired && styles.deadlineExpired]}>
@@ -903,8 +912,9 @@ export default function TreasuryDetailScreen() {
                                         {myPendingRequest.pendingChange
                                             ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt, undefined, kw)
                                             : project
-                                                ? t('You asked to join this project with {amount} 🫘 of backing standing. Awaiting review by the leader.', { amount: myPendingRequest.pledgedBacking })
-                                                : t('You asked to join this enterprise with {amount} 🫘 of backing standing. Awaiting review by the lead keeper.', { amount: myPendingRequest.pledgedBacking })}
+                                                // The pledge is whole hundredths (the node keeps the key pledgedBacking: a listed deviation of M1).
+                                                ? t('You asked to join this project with {amount} 🫘 of backing standing. Awaiting review by the leader.', { amount: formatHundredths(myPendingRequest.pledgedBacking) })
+                                                : t('You asked to join this enterprise with {amount} 🫘 of backing standing. Awaiting review by the lead keeper.', { amount: formatHundredths(myPendingRequest.pledgedBacking) })}
                                     </Text>
                                 </View>
                             ) : (
@@ -918,27 +928,29 @@ export default function TreasuryDetailScreen() {
 
                                     <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>
                                         {inCapitalsOf(project
-                                            ? t('Back this project with your standing: 0 … {n}', { n: availableToBack })
-                                            : t('Back this enterprise with your standing: 0 … {n}', { n: availableToBack }))}
+                                            ? t('Back this project with your standing: 0 … {n}', { n: formatHundredths(availableToBack) })
+                                            : t('Back this enterprise with your standing: 0 … {n}', { n: formatHundredths(availableToBack) }))}
                                     </Text>
                                     <View style={styles.joinInputRow}>
                                         <TextInput
                                             style={styles.joinInput}
                                             value={joinBackingPledge}
                                             onChangeText={(typed) => {
-                                                // Whole Beans of standing, read as every typed amount is (core parseAmount).
-                                                const read = parseAmount(typed, undefined, ANY_DECIMALS);
-                                                const raw = Math.floor(read.ok ? read.value : 0);
-                                                const clamped = Math.max(0, Math.min(availableToBack, raw));
-                                                setJoinBackingPledge(isNaN(raw) ? '0' : String(clamped));
+                                                // Whole Beans of standing, read as every typed amount is (core parseHundredths), and never
+                                                // more than the reader has left to back with: both in whole hundredths, dropped to whole
+                                                // Beans, so the field always holds a whole number it reads back exactly.
+                                                const read = parseHundredths(typed);
+                                                const typed_c = read.ok ? read.value : 0;
+                                                const clamped = Math.max(0, Math.min(availableToBack - (availableToBack % 100), typed_c - (typed_c % 100)));
+                                                setJoinBackingPledge(String((clamped - (clamped % 100)) / 100));
                                             }}
                                             keyboardType="numeric"
                                             accessibilityLabel={project
-                                                ? t('Back this project with your standing: 0 to {n}', { n: availableToBack })
-                                                : t('Back this enterprise with your standing: 0 to {n}', { n: availableToBack })}
+                                                ? t('Back this project with your standing: 0 to {n}', { n: formatHundredths(availableToBack) })
+                                                : t('Back this enterprise with your standing: 0 to {n}', { n: formatHundredths(availableToBack) })}
                                         />
                                         <Text style={styles.joinAvailableText}>
-                                            {t('/ {n} 🫘 available', { n: availableToBack })}
+                                            {t('/ {n} 🫘 available', { n: formatHundredths(availableToBack) })}
                                         </Text>
                                     </View>
                                     <Text style={{ fontSize: 11, color: colors.text.muted, marginBottom: 12 }}>
@@ -948,12 +960,12 @@ export default function TreasuryDetailScreen() {
                                     </Text>
 
                                     <Pressable
-                                        style={[styles.joinButton, (submittingJoin || Number(joinBackingPledge) > availableToBack) && styles.joinButtonDisabled]}
-                                        disabled={submittingJoin || Number(joinBackingPledge) > availableToBack}
+                                        style={[styles.joinButton, (submittingJoin || joinBacking_c > availableToBack) && styles.joinButtonDisabled]}
+                                        disabled={submittingJoin || joinBacking_c > availableToBack}
                                         onPress={handleJoinRequest}
                                         accessibilityRole="button"
                                         accessibilityLabel={project ? t('Request to join as a collaborator') : t('Request to join as a keeper')}
-                                        accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}
+                                        accessibilityState={{ disabled: submittingJoin || joinBacking_c > availableToBack, busy: submittingJoin }}
                                     >
                                         {submittingJoin ? (
                                             <ActivityIndicator size="small" color={colors.text.inverse} />
@@ -967,15 +979,16 @@ export default function TreasuryDetailScreen() {
 
                         {/* The money in one line, and today's figures and its ledger behind "Money and backing" (round 3 §0 row 9): public
                             to every member as the Commons design says. Open from the start in a preview, which shows everything. */}
-                        <ShopfrontMoney line={moneyLine(balance, Number(detail.creditLine ?? 0))} initiallyOpen={isEffectivePreview}>
+                        {/* Whole hundredths, both (the detail's balance_c and creditLine_c), as moneyLine writes them. */}
+                        <ShopfrontMoney line={moneyLine(balance, isHundredths(detail.creditLine_c) ? detail.creditLine_c : 0)} initiallyOpen={isEffectivePreview}>
                             {/* Balance */}
                             <View style={styles.balanceCard}>
                                 <Text style={styles.balanceLabel}>{inCapitalsOf(t('Balance'))}</Text>
-                                <Text style={[styles.balanceValue, balance < 0 ? styles.balanceNeg : styles.balancePos]}>{formatNumber(balance)} 🫘</Text>
+                                <Text style={[styles.balanceValue, balance < 0 ? styles.balanceNeg : styles.balancePos]}>{formatHundredths(balance)} 🫘</Text>
                                 <View style={styles.balanceMetaRow}>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Credit line'))}</Text>
-                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatHundredths(isHundredths(detail.creditLine_c) ? detail.creditLine_c : 0)} 🫘</Text>
                                     </View>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Live offers'))}</Text>
@@ -985,11 +998,11 @@ export default function TreasuryDetailScreen() {
                                 <View style={styles.balanceMetaRow}>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Earned surplus'))}</Text>
-                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatHundredths(isHundredths(detail.earnedSurplus_c) ? detail.earnedSurplus_c : 0)} 🫘</Text>
                                     </View>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Capital ceiling'))}</Text>
-                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{detail.workingCapitalCeiling_c != null ? `${formatHundredths(detail.workingCapitalCeiling_c)} 🫘` : t('Uncapped')}</Text>
                                     </View>
                                 </View>
                                 {balance < 0 && (
@@ -997,14 +1010,14 @@ export default function TreasuryDetailScreen() {
                                         accessible={true}
                                         accessibilityRole="alert"
                                         accessibilityLabel={project
-                                            ? t('Warning: Operator eats last. This project is currently in deficit with {amount} beans. Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
-                                            : t('Warning: Operator eats last. This enterprise is currently in deficit with {amount} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
+                                            ? t('Warning: Operator eats last. This project is currently in deficit with {amount} beans. Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: formatHundredths(balance) })
+                                            : t('Warning: Operator eats last. This enterprise is currently in deficit with {amount} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: formatHundredths(balance) })}
                                         style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
                                     >
                                         <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
                                             {project
-                                                ? t('⚠️ OPERATOR EATS LAST: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
-                                                : t('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
+                                                ? t('⚠️ OPERATOR EATS LAST: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: formatHundredths(balance) })
+                                                : t('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: formatHundredths(balance) })}
                                         </Text>
                                     </View>
                                 )}
@@ -1015,7 +1028,7 @@ export default function TreasuryDetailScreen() {
                                                 {inCapitalsOf(t('Pending Wage Claims ({n})', { n: pendingClaims.length }))}
                                             </Text>
                                             <Text style={{ flexShrink: 0, fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
-                                                {formatNumber(pendingClaimsTotal)} 🫘
+                                                {formatHundredths(pendingClaimsTotal)} 🫘
                                             </Text>
                                         </View>
                                         <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
@@ -1028,12 +1041,13 @@ export default function TreasuryDetailScreen() {
                             </View>
 
                             {/* What each keeper backs it with, as their chips said before the shopfront (#106). */}
-                            {keeperList.some((k: any) => Number(k.backing) > 0) && (
+                            {/* Each keeper's backing_c, whole hundredths (state-engine.ts treasuryKeepersForReader). */}
+                            {keeperList.some((k: any) => isHundredths(k.backing_c) && k.backing_c > 0) && (
                                 <View style={styles.plCard} testID="enterprise-backing">
                                     <Text style={styles.plTitle}>{inCapitalsOf(project ? t('Backed by its collaborators') : t('Backed by its keepers'))}</Text>
-                                    {keeperList.filter((k: any) => Number(k.backing) > 0).map((k: any) => (
+                                    {keeperList.filter((k: any) => isHundredths(k.backing_c) && k.backing_c > 0).map((k: any) => (
                                         <Text key={k.publicKey} style={[styles.ledgerWith, { marginTop: 6 }]}>
-                                            {t('{name} · {amount} 🫘', { name: k.callsign, amount: formatNumber(Number(k.backing)) }, "a keeper's backing")}
+                                            {t('{name} · {amount} 🫘', { name: k.callsign, amount: formatHundredths(k.backing_c) }, "a keeper's backing")}
                                         </Text>
                                     ))}
                                 </View>
@@ -1123,14 +1137,14 @@ export default function TreasuryDetailScreen() {
                                                         key={entry.id}
                                                         style={styles.ledgerRow}
                                                         accessible
-                                                        accessibilityLabel={tn(entry.runningBalance, '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', {
-                                                            flow: labels.flow, amount: signedBeans(entry.amount, entry.direction), what: labels.what, with: labels.with, when,
-                                                            n: formatNumber(entry.runningBalance, 2),
+                                                        accessibilityLabel={tn(entry.runningBalance / 100, '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', {
+                                                            flow: labels.flow, amount: signedBeans(entry.amount_c, entry.direction), what: labels.what, with: labels.with, when,
+                                                            n: formatHundredths(entry.runningBalance),
                                                         })}
                                                     >
                                                         <View style={styles.ledgerLine}>
                                                             <Text style={styles.ledgerWhat} numberOfLines={2}>{labels.what}</Text>
-                                                            <Text style={[styles.ledgerAmount, { color: amountColor }]} numberOfLines={1}>{signedBeans(entry.amount, entry.direction)}</Text>
+                                                            <Text style={[styles.ledgerAmount, { color: amountColor }]} numberOfLines={1}>{signedBeans(entry.amount_c, entry.direction)}</Text>
                                                         </View>
                                                         <Text style={styles.ledgerWith} numberOfLines={1}>
                                                             <Sentence
@@ -1140,7 +1154,7 @@ export default function TreasuryDetailScreen() {
                                                         </Text>
                                                         <View style={styles.ledgerLine}>
                                                             <Text style={styles.ledgerWhen} numberOfLines={1}>{when}</Text>
-                                                            <Text style={styles.ledgerRunning} numberOfLines={1}>{t('Balance {amount} 🫘', { amount: formatNumber(entry.runningBalance, 2) })}</Text>
+                                                            <Text style={styles.ledgerRunning} numberOfLines={1}>{t('Balance {amount} 🫘', { amount: formatHundredths(entry.runningBalance) })}</Text>
                                                         </View>
                                                     </View>
                                                 );
@@ -1154,13 +1168,13 @@ export default function TreasuryDetailScreen() {
                                                 <Text style={styles.ledgerFooterText}>
                                                     <Sentence
                                                         text={t('Starting balance: {amount}')}
-                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.startingBalance, 2)} 🫘</Text> }}
+                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatHundredths(ledger.summary.startingBalance)} 🫘</Text> }}
                                                     />
                                                 </Text>
                                                 <Text style={styles.ledgerFooterText}>
                                                     <Sentence
                                                         text={t('Ending balance: {amount}')}
-                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.endingBalance, 2)} 🫘</Text> }}
+                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatHundredths(ledger.summary.endingBalance)} 🫘</Text> }}
                                                     />
                                                 </Text>
                                             </View>
@@ -1184,7 +1198,8 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.flowTime}>{formatTime(f.timestamp)}</Text>
                                 </View>
                                 <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.fg }]}>
-                                    {f.incoming ? '+' : '−'}{formatNumber(Math.abs(f.amount))} 🫘
+                                    {/* The line's amount_c, whole hundredths (routes/treasury.ts flow). */}
+                                    {f.incoming ? '+' : '−'}{formatHundredths(isHundredths(f.amount_c) ? Math.abs(f.amount_c) : null)} 🫘
                                 </Text>
                             </View>
                         ))}

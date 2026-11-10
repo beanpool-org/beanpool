@@ -205,8 +205,9 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         await type('Price in Beans', '6');
         await click(button('POST OFFER'), 'POST OFFER');
         expect(net.calls).toContain('db.treasuryPostOffer');
+        // The price typed in Beans goes as whole hundredths (price_c), as the node takes it: 6 is 600.
         expect(net.args.get('treasuryPostOffer')).toEqual([ENT, {
-            category: 'food', title: 'Dozen eggs', description: '', credits: 6, priceType: 'fixed', repeatable: true, photos: [PICKED],
+            category: 'food', title: 'Dozen eggs', description: '', price_c: 600, priceType: 'fixed', repeatable: true, photos: [PICKED],
         }]);
         expect(alerts.said).toContain('Offer posted');
     });
@@ -231,7 +232,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         await type('Price in Beans', '10');
         await click(button('POST NEED'), 'POST NEED');
         expect(net.args.get('treasuryPostNeed')).toEqual([ENT, {
-            category: 'food', title: 'Tend the flock', description: '', credits: 10, priceType: 'fixed', repeatable: false, photos: [PICKED],
+            category: 'food', title: 'Tend the flock', description: '', price_c: 1000, priceType: 'fixed', repeatable: false, photos: [PICKED],
         }]);
         expect(device.asked.filter((a) => a.includes('library'))).toEqual([]);
     });

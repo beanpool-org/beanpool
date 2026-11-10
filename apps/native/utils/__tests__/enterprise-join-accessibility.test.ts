@@ -14,7 +14,9 @@ describe('enterprise join request button accessibility', () => {
         );
         expect(joinSection).toContain('accessibilityRole="button"');
         expect(joinSection).toContain("accessibilityLabel={project ? t('Request to join as a collaborator') : t('Request to join as a keeper')}");
-        expect(joinSection).toContain('accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}');
+        // Disabled while it sends or while the pledge is more than the reader can back: both whole hundredths of a Bean (the
+        // typed pledge read by core parseHundredths, the detail's availableToBack_c), so Beans are never compared with hundredths.
+        expect(joinSection).toContain('accessibilityState={{ disabled: submittingJoin || joinBacking_c > availableToBack, busy: submittingJoin }}');
         expect(joinSection).toContain('ActivityIndicator');
     });
 });

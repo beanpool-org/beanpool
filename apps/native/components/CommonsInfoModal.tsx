@@ -5,7 +5,7 @@ import { InfoModal, InfoModalTab } from './InfoModal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { palette } from '../constants/colors';
 import { useStyles, useTheme } from '../app/ThemeContext';
-import { formatNumber, t, tn } from '@beanpool/core';
+import { formatHundredths, formatNumber, t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 const BRACKETS = [
@@ -26,6 +26,7 @@ function exampleWorking(): string {
 interface Props {
     isOpen: boolean;
     onClose: () => void;
+    /** The Commons pot, whole hundredths of a Bean (the node's commonsBalance_c). */
     commonsBalance?: number;
     initialTab?: 'flow' | 'brackets' | 'qv';
 }
@@ -280,7 +281,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                     {commonsBalance !== undefined && (
                         <View style={styles.balanceContainer}>
                             <Text style={styles.balanceLabel}>{t('CURRENT COMMONS BALANCE')}</Text>
-                            <CurrencyDisplay amount={formatNumber(commonsBalance, 2)} style={styles.balanceAmount} />
+                            <CurrencyDisplay amount={formatHundredths(commonsBalance)} style={styles.balanceAmount} />
                         </View>
                     )}
 

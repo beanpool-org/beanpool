@@ -115,9 +115,10 @@ describe('the Commons screen shows the sections a node has', () => {
 
 describe('Groups is one list, with a kind chip each (pick 7)', () => {
     const group = (id: string, over: Partial<GroupItem> = {}) => ({ id, name: id, category: 'social', viewerStatus: null, ...over }) as unknown as GroupItem;
-    const ent = (publicKey: string, over: { lifecycle?: string; goalAmount?: number | null } = {}) => ({ publicKey, ...over });
+    const ent = (publicKey: string, over: { lifecycle?: string; goalAmount_c?: number | null } = {}) => ({ publicKey, ...over });
     const CHAT = [group('garden'), group('mine'), group('waiting', { viewerStatus: 'pending_approval' } as Partial<GroupItem>)];
-    const ENTS = [ent('roof', { lifecycle: 'bounded', goalAmount: 500 }), ent('eggs', { lifecycle: 'ongoing' }), ent('kept', { lifecycle: 'ongoing' }), ent('shade', { goalAmount: 200 })];
+    // A goal is whole hundredths of a Bean, as the node sends it (goalAmount_c): 500 and 200 Beans.
+    const ENTS = [ent('roof', { lifecycle: 'bounded', goalAmount_c: 50000 }), ent('eggs', { lifecycle: 'ongoing' }), ent('kept', { lifecycle: 'ongoing' }), ent('shade', { goalAmount_c: 20000 })];
     const YOURS = [{ kind: 'group', id: 'mine' }, { kind: 'enterprise', id: 'kept' }];
     const keys = (kind: GroupKind, f: NodeFeatures | null | undefined = LOCAL) => commonsGroupRows(kind, CHAT, ENTS, YOURS, f).map(r => r.key);
 
@@ -352,9 +353,9 @@ describe('yoursRows: kept enterprises and projects first (lead first, then by na
         };
 
         const summaries = [
-            { publicKey: 'ent-1', balance: 100, liveOffers: 2 },
-            { publicKey: 'ent-2', balance: 40, goalAmount: 500, currentAmount: 120 },
-            { publicKey: 'ent-3', balance: 40, liveOffers: 3 },
+            { publicKey: 'ent-1', balance_c: 10000, liveOffers: 2 },
+            { publicKey: 'ent-2', balance_c: 4000, goalAmount_c: 50000, currentAmount_c: 12000 },
+            { publicKey: 'ent-3', balance_c: 4000, liveOffers: 3 },
         ];
 
         const res = yoursRows([kept1, grp, kept2, ev, kept3] as any, summaries as any);

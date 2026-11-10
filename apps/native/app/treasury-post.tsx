@@ -14,7 +14,7 @@ import { PostPhotoRow } from '../components/PostPhotoRow';
 import { TagPicker } from '../components/TagPicker';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
-import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, isShopCategory, parseAmount, t, word, type WordKey } from '@beanpool/core';
+import { amountRefusalWords, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, isShopCategory, parseHundredths, t, word, type WordKey } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
@@ -108,18 +108,18 @@ export default function TreasuryPostScreen() {
         const errs = new Set<string>();
         if (!title.trim()) errs.add('title');
         if (!category) errs.add('category');
-        // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5. Any decimals, as before; "1.000",
-        // which could be a thousand, is refused in words that say so.
-        const price = parseAmount(credits, undefined, ANY_DECIMALS);
+        // The price in the language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250; "1.000",
+        // which could be a thousand, and a third decimal are refused in words that say so.
+        const price = parseHundredths(credits);
         const priceValue = price.ok ? price.value : NaN;
-        if (!credits.trim() || isNaN(priceValue) || priceValue <= 0) errs.add('credits');
+        if (!credits.trim() || !isHundredths(priceValue) || priceValue <= 0) errs.add('credits');
         if (photos.length === 0) errs.add('photos');
         setErrors(errs);
         if (errs.size > 0) {
             if (errs.has('photos') && errs.size === 1) {
                 setToast(t('📷 Add a photo'));
             } else {
-                setToast(!price.ok && isAmbiguousAmount(price.refusal) ? amountRefusalWords(price.refusal) : t('⚠️ Add a title, category and price'));
+                setToast(!price.ok && (isAmbiguousAmount(price.refusal) || price.refusal === 'too-many-decimals') ? amountRefusalWords(price.refusal) : t('⚠️ Add a title, category and price'));
             }
             setTimeout(() => setToast(''), 3000);
             return;
@@ -137,7 +137,8 @@ export default function TreasuryPostScreen() {
             category,
             title: title.trim(),
             description: description.trim(),
-            credits: priceValue,
+            // Whole hundredths of a Bean, as the node takes a listing's price (price_c).
+            price_c: priceValue,
             priceType,
             repeatable,
             ...(photos.length > 0 ? { photos } : {}),

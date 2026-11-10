@@ -13,7 +13,7 @@ import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { enterpriseCardStatus } from '../utils/enterprise-card';
-import { deadlineDaysRemaining, formatNumber, inCapitalsOf, t, tn } from '@beanpool/core';
+import { deadlineDaysRemaining, formatHundredths, inCapitalsOf, isHundredths, t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 /** The Commons cards' styles, the enterprise card's and (in projects.tsx) the group card's, which shares most of them. */
@@ -86,8 +86,10 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
     const { colors } = useTheme();
     const styles = useStyles((t) => StyleSheet.create(commonsCardStyles(t)));
     const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta } = enterpriseCardStatus(item);
-    const goalAmount = item.goalAmount || 1;
+    // Whole hundredths of a Bean, every figure (the node's `*_c` fields); the bar is their ratio, never a figure shown.
+    const goalAmount = hasGoal ? item.goalAmount_c as number : 1;
     const progress = Math.min(100, (currentRaised / goalAmount) * 100);
+    const balance_c = isHundredths(item.balance_c) ? item.balance_c : null;
     const daysRemaining = getDaysRemaining(item.deadlineAt);
 
     return (
@@ -160,12 +162,12 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                 <View style={styles.financeRow}>
                     <View style={{ flexShrink: 1 }}>
                         <Text style={styles.financeLabel}>{inCapitalsOf(t('Balance'))}</Text>
-                        {item.balance < 0 && (
+                        {balance_c !== null && balance_c < 0 && (
                             <Text style={styles.deficitWarning}>{t('in deficit (keepers eat last)')}</Text>
                         )}
                     </View>
-                    <Text style={[styles.balanceText, item.balance < 0 ? styles.balanceNeg : styles.balancePos]}>
-                        {formatNumber(item.balance)} 🫘
+                    <Text style={[styles.balanceText, balance_c !== null && balance_c < 0 ? styles.balanceNeg : styles.balancePos]}>
+                        {formatHundredths(balance_c)} 🫘
                     </Text>
                 </View>
 
@@ -175,11 +177,11 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                         <View style={styles.progressHeader}>
                             <Text style={[styles.currentText, isFunded && styles.currentTextFunded]}>
                                 <Sentence
-                                    text={t('{amount} 🫘 {raised}', { amount: currentRaised })}
+                                    text={t('{amount} 🫘 {raised}', { amount: formatHundredths(currentRaised) })}
                                     parts={{ raised: <Text style={{ fontWeight: 'normal', color: colors.text.secondary }}>{t('raised', undefined, 'pledged to a project so far')}</Text> }}
                                 />
                             </Text>
-                            <Text style={styles.goalText}>{t('Goal: {amount} 🫘', { amount: item.goalAmount ?? 0 })}</Text>
+                            <Text style={styles.goalText}>{t('Goal: {amount} 🫘', { amount: formatHundredths(goalAmount) })}</Text>
                         </View>
                         <View style={styles.progressBarBg}>
                             <View

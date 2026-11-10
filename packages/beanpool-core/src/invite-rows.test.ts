@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-    INVITE_LIFE_DAYS, INVITE_LIFE_MS, INVITE_URGENT_DAYS, inviteCarries, inviteExpiryMs, inviteFolds, inviteLapsed, inviteMadeTitle, inviteTimeLeft, inviteWho,
-    joinedHeading, joinedInvites, pendingHeading, pendingInvites, type InviteRowSource,
+    INVITE_LIFE_DAYS, INVITE_LIFE_MS, INVITE_URGENT_DAYS, inviteCarries, inviteExpiryMs, inviteFolds, inviteLapsed, inviteMadeTitle, inviteOutLine,
+    inviteRevocable, inviteRevokeAsk, inviteTimeLeft, inviteWho, joinedHeading, joinedInvites, pendingHeading, pendingInvites, type InviteRowSource,
 } from './invite-rows.js';
+import { formatHistoryLine } from './vouch-presets.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse('2026-11-10T12:00:00.000Z');
@@ -137,5 +138,37 @@ describe('the folds are closed at first and remembered for the session', () => {
         expect(inviteFolds.isOpen('joined')).toBe(false);
         inviteFolds.set('pending', false);
         expect(inviteFolds.isOpen('pending')).toBe(false);
+    });
+});
+
+describe('Revoke (invites-vouching I2)', () => {
+    it('asks with the design’s words: the names-list sentence only for a bound invite, with its name where opened', () => {
+        expect(inviteRevokeAsk(inv(1))).toEqual({ title: 'Revoke this invite?', body: 'Whoever has the link can’t use it.' });
+        expect(inviteRevokeAsk(inv(1, { intendedFor: 'Sam' }), 'Sam').body).toBe('Whoever has the link can’t use it.');
+        expect(inviteRevokeAsk(inv(1, { namesEntryId: 'e1' }), 'Dee Dee').body)
+            .toBe('Whoever has the link can’t use it. Dee Dee’s name stays on the names list, not confirmed.');
+        // The web holds no list key: the name is not known there.
+        expect(inviteRevokeAsk(inv(1, { namesEntryId: 'e1' }), null).body)
+            .toBe('Whoever has the link can’t use it. The name stays on the names list, not confirmed.');
+        expect(inviteRevokeAsk(inv(1, { namesEntryId: 'e1' }), '   ').body).toContain('The name stays');
+    });
+
+    it('is offered on an unused code the community holds, never on a used one or an offline ticket', () => {
+        expect(inviteRevocable(inv(1))).toBe(true);
+        expect(inviteRevocable(inv(1, { usedBy: 'ab'.repeat(32) }))).toBe(false);
+        expect(inviteRevocable({ code: 'BP-eyJ0aWNrZXQiOnRydWV9', createdAt: made(1) })).toBe(false);
+    });
+
+    it('says an entry’s invite is out, by whom and for how long, until it is used or lapses', () => {
+        expect(inviteOutLine(inv(7), 'marty', NOW)).toBe('Invite out by @marty · 23 days left');
+        expect(inviteOutLine(inv(29), 'marty', NOW)).toBe('Invite out by @marty · 1 day left');
+        expect(inviteOutLine(inv(7), '', NOW)).toBe('Invite out · 23 days left');
+        expect(inviteOutLine(inv(30), 'marty', NOW)).toBeNull();
+        expect(inviteOutLine(inv(7, { usedBy: 'ab'.repeat(32) }), 'marty', NOW)).toBeNull();
+    });
+
+    it('a budget history line for a revoked invite says so', () => {
+        expect(formatHistoryLine({ kind: 'return', amount: 100, why: 'revoked' })).toBe('+100 back, invite revoked');
+        expect(formatHistoryLine({ kind: 'return', amount: 100, why: 'stopped' })).toBe('+100 back, budget stopped');
     });
 });

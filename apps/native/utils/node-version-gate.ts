@@ -8,10 +8,11 @@
  *
  * How "no other request" holds (utils/node-request-signing.ts, services/ws-client.ts): a request to one of this phone's
  * communities whose version this run hasn't heard yet first waits for a read of its health (unsigned, one per community at
- * a time, at most HEALTH_WAIT_MS), and one to a community heard below the minimum is refused here, before anything leaves
- * the phone (NodeTooOldError). The health read itself always goes: it is how the phone learns, and how it hears that the
- * server was updated. Every health answer the phone reads anywhere is noted (noteHealthAnswer), so a server updated while
- * the block is up is let through again at once.
+ * a time), until it answers or is given up at its own limit (HEALTH_READ_TIMEOUT_MS), so nothing reaches a server below
+ * the minimum however slowly it answers; and one to a community heard below the minimum is refused here, before anything
+ * leaves the phone (NodeTooOldError). The health read itself always goes: it is how the phone learns, and how it hears
+ * that the server was updated. Every health answer the phone reads anywhere is noted (noteHealthAnswer), so a server
+ * updated while the block is up is let through again at once.
  *
  * Every doubt is "not too old": no answer, an answer that is not a health answer, no version, a version that is not a
  * version, or the last-resort 0.0.0 a server reports when it can't resolve its own (apps/server/src/version.ts). In memory
@@ -24,11 +25,9 @@ import { plainOriginOf } from './node-url';
 /** The oldest server version this build talks to. */
 export const MIN_NODE_VERSION = '1.4.0';
 
-/** How long a request to a community not heard from yet waits for its health: the read goes on after, for the next one. */
-export const HEALTH_WAIT_MS = 1_500;
-/** The health read's own limit. */
-const HEALTH_READ_TIMEOUT_MS = 8_000;
-/** A health read that failed is not asked again for a minute, so an offline phone isn't held up. */
+/** The health read's own limit: a request to a community not heard from yet waits at most this long for it. */
+export const HEALTH_READ_TIMEOUT_MS = 8_000;
+/** A health read that failed is not asked again for a minute, so an offline phone is held once a minute at most. */
 const FAILED_READ_PAUSE_MS = 60_000;
 
 /** The health route: the one request a community below the minimum is still sent. */
@@ -139,9 +138,10 @@ async function readHealth(origin: string, fetchImpl: FetchLike): Promise<void> {
 
 /**
  * Make sure this run has heard the version of the server at `url` before a request goes to it: nothing to do when it
- * has; else wait for a read of its health already in flight, or start one (through `fetchImpl`, unsigned), for at most
- * HEALTH_WAIT_MS. A server that couldn't be read is left unheard (a doubt: the request goes) and not asked again for a
- * minute. Never throws.
+ * has; else wait for the read of its health already in flight, or start one (through `fetchImpl`, unsigned), until it
+ * answers or is given up (HEALTH_READ_TIMEOUT_MS). Nothing is sent to the server meanwhile: a request that stopped waiting
+ * sooner reached a 1.2.37 server whose health took longer (#3043's review, at 1.5 s). A server that couldn't be read is
+ * left unheard (a doubt: the request goes) and not asked again for a minute. Never throws.
  */
 export async function learnNodeVersion(url: string, fetchImpl: FetchLike): Promise<void> {
     const origin = plainOriginOf(url);
@@ -155,9 +155,7 @@ export async function learnNodeVersion(url: string, fetchImpl: FetchLike): Promi
         reading.set(origin, started);
         void started.finally(() => { if (reading.get(origin) === started) reading.delete(origin); });
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([read, new Promise<void>((resolve) => { timer = setTimeout(resolve, HEALTH_WAIT_MS); })]);
-    clearTimeout(timer);
+    await read;
 }
 
 /** Throws NodeTooOldError, having sent nothing, when the server at `url` was heard below the minimum. */

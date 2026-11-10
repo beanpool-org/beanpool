@@ -6,7 +6,7 @@
  *
  * Nothing here contacts a node: every answer is the test's.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
@@ -34,7 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeTooOldText, nodeVersionBelowMinimum, noteHealthAnswer, resetNodeVersionGateForTests,
+    HEALTH_READ_TIMEOUT_MS, MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeTooOldText, nodeVersionBelowMinimum, noteHealthAnswer, resetNodeVersionGateForTests,
     tooOldVersionOf,
 } from '../node-version-gate';
 import {
@@ -56,6 +56,8 @@ interface Call { url: string; method: string; headers: Record<string, string> }
 let calls: Call[] = [];
 /** Each answer by `origin + path`: a body (200) or `{ status, body }`. */
 let answers: Record<string, unknown> = {};
+/** An answer by `origin + path` that waits for this to resolve first (a slow server). */
+let held: Record<string, Promise<void>> = {};
 
 function reply(status: number, body: unknown): Response {
     const make = (): any => ({
@@ -72,6 +74,7 @@ async function stubFetch(input: string, init?: RequestInit): Promise<Response> {
     const url = String(input);
     calls.push({ url, method: init?.method ?? 'GET', headers: { ...(init?.headers as Record<string, string> ?? {}) } });
     const u = new URL(url);
+    await held[`${u.origin}${u.pathname}`];
     const a = answers[`${u.origin}${u.pathname}`];
     if (a === undefined) return reply(404, { error: 'Not Found' });
     if (a && typeof a === 'object' && 'status' in a) {
@@ -88,6 +91,7 @@ installNodeRequestSigning({ appVersionHeader: '1.4.0 android' });
 beforeEach(() => {
     calls = [];
     answers = {};
+    held = {};
     mem.clear();
     mem.set('beanpool_anchor_url', HOME);
     mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }]));
@@ -218,6 +222,91 @@ describe('a community whose server is 1.2.37: one card, and no other request', (
         expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
         // And the check's answer holds for every request to it, whoever asked.
         expect(tooOldVersionOf(HOME)).toBe('1.2.37');
+    });
+});
+
+describe('a request waits for its community\'s health to answer: nothing goes to a server not yet known new enough (#3043 review)', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    /** Phone time moves on (setTimeout and Date only: settle's setImmediate stays real), and the wrapper's work runs. */
+    async function after(ms: number) {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 20; i++) await settle();
+    }
+    /** The community's health answers only when `answer()` is called: a slow server. */
+    function slowHealth(version: string) {
+        let answer: () => void = () => {};
+        held[`${HOME}/api/community/health`] = new Promise<void>((resolve) => { answer = resolve; });
+        answers[`${HOME}/api/community/health`] = { version };
+        answers[`${HOME}/api/sync/posts`] = { posts: [] };
+        answers[`${HOME}/api/push-tokens`] = { ok: true };
+        return () => answer();
+    }
+    const HEALTH = `${HOME}/api/community/health`;
+
+    it('a 1.2.37 server whose health takes 2 s gets neither the GET nor the POST sent meanwhile, and both are refused once it answers', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.2.37');
+        const outcomes = Promise.allSettled([
+            fetch(`${HOME}/api/sync/posts`),
+            fetch(`${HOME}/api/push-tokens`, { method: 'POST', body: '{}' }),
+        ]);
+        await after(2_000);
+        expect(tooOldVersionOf(HOME)).toBeUndefined();
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        answer();
+        await after(0);
+        const [get, post] = await outcomes;
+        expect(get.status === 'rejected' && get.reason).toBeInstanceOf(NodeTooOldError);
+        expect(post.status === 'rejected' && post.reason).toBeInstanceOf(NodeTooOldError);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+    });
+
+    it('a 1.4.0 server whose health takes 2 s gets both once it has answered, after the health', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.4.0');
+        const get = fetch(`${HOME}/api/sync/posts`);
+        const post = fetch(`${HOME}/api/push-tokens`, { method: 'POST', body: '{}' });
+        await after(2_000);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        answer();
+        await after(0);
+        expect((await get).status).toBe(200);
+        expect((await post).status).toBe(200);
+        // The health first; the two after it, in whichever order they finish leaving (the GET is signed first).
+        expect(calls[0].url).toBe(HEALTH);
+        expect(calls.slice(1).map(c => c.url).sort()).toEqual([`${HOME}/api/push-tokens`, `${HOME}/api/sync/posts`]);
+    });
+
+    it('a health that never answers is given up at its own limit (8 s), a doubt: the held request goes then, and one within the minute after goes at once', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        slowHealth('1.2.37');
+        const first = fetch(`${HOME}/api/sync/posts`);
+        await after(HEALTH_READ_TIMEOUT_MS - 100);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        await after(200);
+        expect((await first).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([HEALTH, `${HOME}/api/sync/posts`]);
+        expect((await fetch(`${HOME}/api/sync/posts`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([HEALTH, `${HOME}/api/sync/posts`, `${HOME}/api/sync/posts`]);
+    });
+
+    it('a held request its caller gives up on is not sent: it fails at once, as an aborted fetch does', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.4.0');
+        const controller = new AbortController();
+        const outcome = fetch(`${HOME}/api/sync/posts`, { signal: controller.signal }).then(() => 'sent', (e: unknown) => e);
+        await after(1_000);
+        controller.abort();
+        await after(0);
+        expect((await outcome as { name?: unknown }).name).toBe('AbortError');
+        // Already given up when it is made: the same, with nothing sent.
+        const late = new AbortController();
+        late.abort();
+        expect(await fetch(`${HOME}/api/sync/posts`, { signal: late.signal }).then(() => 'sent', (e: unknown) => (e as { name?: unknown }).name)).toBe('AbortError');
+        answer();
+        await after(0);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
     });
 });
 

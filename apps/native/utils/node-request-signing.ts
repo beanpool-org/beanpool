@@ -107,15 +107,18 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
         }
 
         // A server older than this app talks to (node-version-gate.ts) is sent its health read and nothing else: one of
-        // this phone's communities not heard from yet this run is asked first, and a server heard below the minimum (one
-        // of ours, or one a join read the health of) is refused here, before anything is sent. Not swallowed below.
+        // this phone's communities not heard from yet this run is asked first, and the request is held until it answers;
+        // a server heard below the minimum (one of ours, or one a join read the health of) is refused here, before
+        // anything is sent. Not swallowed below.
         const healthRead = !!url && isHealthRead(url);
         if (url && !healthRead) {
+            let learning: Promise<void> | null = null;
             try {
-                if (tooOldVersionOf(url) === undefined && await isSavedCommunity(url)) await learnNodeVersion(url, originalFetch);
+                if (tooOldVersionOf(url) === undefined && await isSavedCommunity(url)) learning = learnNodeVersion(url, originalFetch);
             } catch {
                 // The saved communities unreadable: a doubt, and a doubt sends the request.
             }
+            if (learning) await unlessAborted(learning, init?.signal ?? (typeof input !== 'string' ? input?.signal : undefined));
             refuseIfNodeTooOld(url);
         }
 
@@ -166,6 +169,32 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
         }
         return res;
     };
+}
+
+/**
+ * Waits for `wait` (a request held for its community's health), unless the caller's `signal` gives up first: then it
+ * throws what an aborted fetch throws, and the request is never sent. A caller's own time limit stays its own.
+ */
+async function unlessAborted(wait: Promise<void>, signal: AbortSignal | null | undefined): Promise<void> {
+    if (!signal || typeof signal.addEventListener !== 'function') return wait;
+    if (signal.aborted) throw abortedError(signal);
+    let onAbort = () => {};
+    const givenUp = new Promise<never>((_, reject) => { onAbort = () => reject(abortedError(signal)); });
+    signal.addEventListener('abort', onAbort);
+    try {
+        await Promise.race([wait, givenUp]);
+    } finally {
+        signal.removeEventListener('abort', onAbort);
+    }
+}
+
+/** The signal's own reason where it has one (a DOMException named AbortError), else an Error named AbortError. */
+function abortedError(signal: AbortSignal): unknown {
+    const reason = (signal as { reason?: unknown }).reason;
+    if (reason !== undefined) return reason;
+    const e = new Error('Aborted');
+    e.name = 'AbortError';
+    return e;
 }
 
 /** The JSON of a copy of `res`, or null: the caller's own body is never read here. */

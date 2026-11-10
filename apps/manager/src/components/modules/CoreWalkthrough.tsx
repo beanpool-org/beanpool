@@ -162,8 +162,8 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
             if (placeNeeded && place) await saveCommunityPlace(activeNode.url, nodeCredential(activeNode), place, getTfaSessionToken(activeNode.id));
             const res = await confirmCoreSettings(activeNode.url, nodeCredential(activeNode), changesFrom(shape, draft), getTfaSessionToken(activeNode.id));
             onLocked(res.shape, res.told);
-        } catch (err: any) {
-            setError(err?.message || t('Could not confirm. Nothing was locked.'));
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : t('Could not confirm. Nothing was locked.'));
         } finally {
             setBusy(false);
         }

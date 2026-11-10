@@ -393,4 +393,28 @@ describe('CoreWalkthrough Component', () => {
             expect(screen.getByTestId('walk-error')).toHaveTextContent('Server error while saving core settings');
         });
     });
+
+    it('falls back to default error message when thrown error has empty message or is non-Error', async () => {
+        const shape = makeShape();
+        const onLocked = vi.fn();
+        vi.spyOn(communityShapeLib, 'confirmCoreSettings').mockRejectedValueOnce(
+            new Error('')
+        );
+
+        render(
+            <CoreWalkthrough
+                activeNode={NODE}
+                shape={shape}
+                startAt="review"
+                onLeave={vi.fn()}
+                onLocked={onLocked}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('walk-confirm'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('walk-error')).toHaveTextContent('Could not confirm. Nothing was locked.');
+        });
+    });
 });

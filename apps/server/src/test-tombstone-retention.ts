@@ -197,7 +197,7 @@ async function child(): Promise<void> {
             const now = new Date().toISOString();
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 100, ?, ?, ?)`)
                         .run(`flood-${crypto.randomUUID()}`, `Flood ${i}`, a.author, now, now);
                 }
             })();
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
             built(`${who.name} sets a profile photo (listings need one)`, await api(m, '/api/profile/update', who, { avatar: TINY_PNG }));
         }
         const offer = async (who: Id, title: string) => built(`${who.name} offers ${title}`, await api(m, '/api/marketplace/posts', who, {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits: 3, priceType: 'fixed', authorPublicKey: who.pk,
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: 300, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         await offer(ann, 'Honey');

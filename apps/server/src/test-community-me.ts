@@ -92,7 +92,7 @@ const photo = (seed: string) => {
 };
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** A post written straight into the engine two days ago: kept, and out of every window. */
 function oldPost(id: Id, title: string): void {
     const p = createPost('offer', 'other', title, `${title} description`, 0, 'fixed', id.pk)!;

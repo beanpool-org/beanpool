@@ -37,7 +37,7 @@ function main(): void {
     // Step 1: Initialize schema in current data directory
     initSchema();
 
-    // Seed test data
+    // Seed test data (money in whole hundredths of a Bean: 15050 is 150.50 Beans)
     const nowIso = new Date().toISOString();
     db.prepare(`
         INSERT INTO members (public_key, callsign, joined_at)
@@ -46,26 +46,26 @@ function main(): void {
 
     db.prepare(`
         INSERT INTO posts (id, type, category, author_pubkey, title, description, price_c, created_at)
-        VALUES ('post_1', 'offer', 'goods', 'pubkey_alice', 'Apples', 'Fresh apples', 10, ?)
+        VALUES ('post_1', 'offer', 'goods', 'pubkey_alice', 'Apples', 'Fresh apples', 1000, ?)
     `).run(nowIso);
 
     db.prepare(`
         INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
         VALUES
-            ('pubkey_alice', 150.5, 4, ?),
-            ('pubkey_bob', 49.5, 2, ?),
-            ('escrow_proj123', 100.0, 0, ?),
-            ('project_proj123', 0.0, 0, ?)
+            ('pubkey_alice', 15050, 4, ?),
+            ('pubkey_bob', 4950, 2, ?),
+            ('escrow_proj123', 10000, 0, ?),
+            ('project_proj123', 0, 0, ?)
     `).run(nowIso, nowIso, nowIso, nowIso);
 
     db.prepare(`
         INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp)
-        VALUES ('tx_1', 'pubkey_alice', 'pubkey_bob', 10.0, 'Test tx', ?)
+        VALUES ('tx_1', 'pubkey_alice', 'pubkey_bob', 1000, 'Test tx', ?)
     `).run(nowIso);
 
     db.prepare(`
         INSERT INTO node_config (key, value)
-        VALUES ('ledger_audit_baseline', '200.0'), ('other_config', 'true')
+        VALUES ('ledger_audit_baseline', '20000'), ('other_config', 'true')
     `).run();
 
     // Verify seeded state
@@ -114,7 +114,7 @@ function main(): void {
     const afterTxCount = (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c;
     const afterMemberCount = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
     const afterPostCount = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c;
-    const remainingAccounts = db.prepare('SELECT public_key, balance_c, last_demurrage_epoch FROM accounts').all() as { public_key: string; balance: number; last_demurrage_epoch: number }[];
+    const remainingAccounts = db.prepare('SELECT public_key, balance_c, last_demurrage_epoch FROM accounts').all() as { public_key: string; balance_c: number; last_demurrage_epoch: number }[];
     const baselineConfig = db.prepare("SELECT value FROM node_config WHERE key = 'ledger_audit_baseline'").get();
     const otherConfig = db.prepare("SELECT value FROM node_config WHERE key = 'other_config'").get() as { value: string } | undefined;
 
@@ -123,7 +123,7 @@ function main(): void {
     assert(afterPostCount === beforePostCount, 'posts table count is preserved');
     assert(remainingAccounts.length === 2, 'transient escrow and project accounts were deleted, leaving 2 member accounts');
 
-    const balancesZero = remainingAccounts.every(a => a.balance === 0 && a.last_demurrage_epoch === 0);
+    const balancesZero = remainingAccounts.every(a => a.balance_c === 0 && a.last_demurrage_epoch === 0);
     assert(balancesZero, 'remaining member account balances and demurrage epochs were reset to 0');
 
     assert(baselineConfig === undefined, 'ledger_audit_baseline key was deleted from node_config');

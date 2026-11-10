@@ -175,7 +175,7 @@ async function main(): Promise<void> {
     reconcileLedgerFromDb();
 
     const offer = async (who: Id, title: string, extra: Record<string, unknown> = {}) => call('POST', who, '/api/marketplace/posts', {
-        type: 'offer', category: 'tools', title, description: `${title}, in good order`, credits: 0, authorPublicKey: who.pk,
+        type: 'offer', category: 'tools', title, description: `${title}, in good order`, price_c: 0, authorPublicKey: who.pk,
         lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra,
     });
     const offerId = async (who: Id, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
@@ -240,7 +240,7 @@ async function main(): Promise<void> {
     const ladderId = await offerId(dave, 'Ladder', { shopId: daveShop, lendable: true, lendMaxDays: 7 });
     const tentId = await offerId(dave, 'Tent', { shopId: daveShop });
     const postsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
-    const need = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, shopId: daveShop, photos: TEST_PHOTOS });
+    const need = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', price_c: 0, authorPublicKey: dave.pk, shopId: daveShop, photos: TEST_PHOTOS });
     const event = await call('POST', dave, '/api/marketplace/posts', { type: 'event', title: 'Tool swap', description: 'Bring one, take one', authorPublicKey: dave.pk,
         lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: daveShop, photos: TEST_PHOTOS });
     const others = await offer(dave, 'Into Ann\'s', { shopId: annShop });
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
     const toggledOut = await edit(dave, oldOfferId, { shopId: null });
     assert(toggledOut.status === 200 && !('shopId' in (toggledOut.body?.post ?? { shopId: 1 })) && shopIdOf(oldOfferId) === null && (postRow(oldOfferId)?.updated_at ?? '') > stampIn,
         `and takes it out again, the row restamped for the copies (${show(toggledOut)})`);
-    const daveNeed = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS });
+    const daveNeed = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', price_c: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS });
     const needIntoShop = await edit(dave, daveNeed.body?.post?.id, { shopId: daveShop });
     const editOthers = await edit(dave, oldOfferId, { shopId: annShop });
     assert(needIntoShop.status === 400 && needIntoShop.body?.code === 'shop_offers_only' && shopIdOf(daveNeed.body?.post?.id) === null
@@ -294,13 +294,13 @@ async function main(): Promise<void> {
     const bikesShopRow = shopRowOf(bikes);
     const bikesShop = bikesShopRow?.id ?? '';
     assert(!!bikesShopRow && bikesShopRow.name === null && bikesShopRow.owner_pubkey === bikes, 'an enterprise\'s shop is made with it, owned by the enterprise');
-    const entOffer = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Bike tune-up', credits: 0, shopId: bikesShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
+    const entOffer = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Bike tune-up', price_c: 0, shopId: bikesShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entOffer.status === 200 && entOffer.body?.post?.shopId === bikesShop && shopIdOf(entOffer.body?.post?.id) === bikesShop,
         `a keeper puts the enterprise's Offer in its shop through its own route (${show(entOffer)})`);
     const keeperOwnIntoEnt = await offer(bo, 'Bo\'s own pump', { shopId: bikesShop });
     const boShop: string = (await call('PUT', bo, MINE, {})).body?.shop?.id;
-    const entIntoKeeper = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Into Bo\'s', credits: 0, shopId: boShop, photos: TEST_PHOTOS });
-    const entNeed = await call('POST', bo, `/api/treasury/${bikes}/need`, { category: 'transport', title: 'Need tubes', credits: 0, shopId: bikesShop, photos: TEST_PHOTOS });
+    const entIntoKeeper = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Into Bo\'s', price_c: 0, shopId: boShop, photos: TEST_PHOTOS });
+    const entNeed = await call('POST', bo, `/api/treasury/${bikes}/need`, { category: 'transport', title: 'Need tubes', price_c: 0, shopId: bikesShop, photos: TEST_PHOTOS });
     const entPostsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     const entEvent = await call('POST', bo, `/api/treasury/${bikes}/event`, { title: 'Bike repair night', description: 'Bring a bike',
         lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: bikesShop, photos: TEST_PHOTOS });

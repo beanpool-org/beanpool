@@ -222,7 +222,7 @@ async function main(): Promise<void> {
     // ── 2. the same ring still hides a brand-new account's post ──────────────────────────────────
     console.log('\n── 2. the same ring against a brand-new account ──');
     const sid = member('Sid', 0);
-    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', credits: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
+    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', price_c: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
     assert(sidPost.status === 200, `setup: a member who joined today posts (${sidPost.status})`);
     await reportAll(ring, sidPost.body?.post?.id, sid);
     assert(!!hiddenAt(sidPost.body?.post?.id), 'three week-old members hide a brand-new account\'s post: it is not well above them');

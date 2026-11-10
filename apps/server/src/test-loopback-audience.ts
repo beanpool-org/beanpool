@@ -57,6 +57,8 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Loopback-Audience-Pw-5820!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];
+/** The story's figures are Beans; the node's are whole hundredths: `hc` turns one into the other at the door. */
+const hc = (beans: number) => Math.round(beans * 100);
 /** The switch (ms), read from the nodes once they are up. */
 let SWITCH = 0;
 
@@ -89,7 +91,7 @@ async function child(): Promise<void> {
     const port = await startHttpsServer(0);
 
     const offer = (pk: string, title: string) => {
-        const post = createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
+        const post = createPost('offer', 'produce', title, `${title}, fresh`, hc(10), 'fixed', pk);
         if (!post) throw new Error(`could not list ${title}`);
         return post;
     };
@@ -104,7 +106,7 @@ async function child(): Promise<void> {
                     .run(m.pk, m.callsign);
                 setMemberPhoto(db, m.pk, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
-                se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
+                se.transfer('genesis', m.pk, hc(100), `seed ${m.callsign}`, 'direct', true);
             }
             // A completed trade, so the trader may send Beans directly (the send gate).
             offer(a.trader, 'Trader seedlings');
@@ -112,7 +114,8 @@ async function child(): Promise<void> {
             se.completePostTransaction(t.id, a.trader);
             return true;
         },
-        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
+        // Whole hundredths, as the ledger holds them.
+        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance_c: number } | undefined)?.balance_c ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: (a: { nonce: string }) => ms.requestNonces.isSpent(a.nonce),
         switchCutoff: () => ms.unboundSignaturesCutoff(),
@@ -351,7 +354,7 @@ async function main(): Promise<void> {
             for (const host of LOOPBACK) {
                 await N.send('resetLimits');
                 const memo = `loopback send ${host} ${crypto.randomBytes(3).toString('hex')}`;
-                const send = { from: mia.pk, to: xan.pk, amount: 2, memo };
+                const send = { from: mia.pk, to: xan.pk, amount_c: hc(2), memo };
                 const [miaBefore, xanBefore] = [await N.send('balance', { pk: mia.pk }), await N.send('balance', { pk: xan.pk })];
                 const req = await bound(mia, 'POST', `https://${host}/api/ledger/transfer`, send);
                 const r = await sendTo(N, 'POST', req);
@@ -360,7 +363,7 @@ async function main(): Promise<void> {
                     && (await N.send('transfers', { memo })) === 0, 'no Beans moved and no transfer was written');
                 assert((await N.send('nonceSpent', { nonce: req.nonce })) === false, 'its nonce is unspent');
                 const own = await sendTo(N, 'POST', await bound(mia, 'POST', 'https://named.test/api/ledger/transfer', send, { timestamp: req.timestamp, nonce: req.nonce }));
-                assert(own.status === 200 && (await N.send('balance', { pk: xan.pk })) === xanBefore + 2 && (await N.send('transfers', { memo })) === 1,
+                assert(own.status === 200 && (await N.send('balance', { pk: xan.pk })) === xanBefore + hc(2) && (await N.send('transfers', { memo })) === 1,
                     `the same send re-signed for named.test, with that nonce and timestamp, is accepted once (${show(own)})`);
             }
             for (const host of LOOPBACK) {
@@ -393,8 +396,8 @@ async function main(): Promise<void> {
         await section('2', async () => {
             await N.send('resetLimits');
             const before = await N.send('balance', { pk: xan.pk });
-            const r = await sendTo(N, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'old app send' }));
-            assert(r.status === 200 && (await N.send('balance', { pk: xan.pk })) === before + 1, `an old-format Beans send is accepted at N (${show(r)})`);
+            const r = await sendTo(N, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'old app send' }));
+            assert(r.status === 200 && (await N.send('balance', { pk: xan.pk })) === before + hc(1), `an old-format Beans send is accepted at N (${show(r)})`);
             const s = await socket(N, oldWsQuery(mia));
             assert(s.kind === 'open', `an old-format /ws token opens a member socket at N (ENFORCE_WS_AUTH=true) (${sockShow(s)})`);
             const ch = await challenge(N);

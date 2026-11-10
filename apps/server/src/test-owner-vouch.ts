@@ -84,16 +84,28 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
 
-const generate = (id: Id, vouchAmount?: unknown) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...(vouchAmount === undefined ? {} : { vouchAmount }) });
+/**
+ * The story's figures are Beans; the node's are whole hundredths (a vouch's `vouchAmount`, a budget's `level`, `left`,
+ * `held` and `vouched`, the presets, keep their names and carry hundredths). `hc` turns a Beans figure into hundredths at
+ * the door and `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
+
+const generate = (id: Id, vouchBeans?: number) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...(vouchBeans === undefined ? {} : { vouchAmount: hc(vouchBeans) }) });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
-const vouch = (by: Id, who: Id, vouchAmount: unknown, raise?: boolean) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount, ...(raise ? { raise: true } : {}) });
-const setLevel = (by: Id, who: Id, level: unknown) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level });
+const vouch = (by: Id, who: Id, vouchBeans: number, raise?: boolean) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount: hc(vouchBeans), ...(raise ? { raise: true } : {}) });
+const setLevel = (by: Id, who: Id, levelBeans: number) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level: hc(levelBeans) });
 
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
-const lines = (pk: string) => db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
+/** A member's allocation lines, each figure in Beans for the checks (the ledger holds whole hundredths). */
+const lines = (pk: string) => (db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount_c: number; actor: string; ref: string | null }[])
+    .map((l) => ({ ...l, amount: beansOf(l.amount_c) }));
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
-const roomOf = (pk: string) => count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'", pk);
-const sumBalances = () => count('SELECT ROUND(COALESCE(SUM(balance_c), 0), 2) AS n FROM accounts');
+/** The room vouched to one person, in Beans. */
+const roomOf = (pk: string) => beansOf(count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'", pk));
+/** Every balance on the node, whole hundredths: an exact sum, nothing rounded. */
+const sumBalances = () => count('SELECT COALESCE(SUM(balance_c), 0) AS n FROM accounts');
 const budgetSlim = (pk: string) => { const b = budgetOf(pk); return { left: b.left, held: b.held, level: b.level }; };
 
 /** A confirmation on a fresh entry, written as the names list's confirmMember writes it (setup only). */
@@ -128,32 +140,32 @@ async function main(): Promise<void> {
     grantNodeRole(dan.pk, 'admin', owen.pk);
     grantNodeRole(ora.pk, 'owner', owen.pk);
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: true })).status === 200, 'Ada is on the credit committee');
-    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(jane, owen), amount: 500 })).status === 201, 'Jane is made a voucher with 500');
-    require_(budgetOf(owen.pk).left === 1000 && budgetOf(ada.pk).left === 1000 && budgetOf(ora.pk).left === 1000, 'every owner and admin holds 1,000 by the role');
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(jane, owen), amount_c: hc(500) })).status === 201, 'Jane is made a voucher with 500');
+    require_(budgetOf(owen.pk).left === hc(1000) && budgetOf(ada.pk).left === hc(1000) && budgetOf(ora.pk).left === hc(1000), 'every owner and admin holds 1,000 by the role');
     const balancesBefore = sumBalances();
 
     // ── 1. The reads ─────────────────────────────────────────────────────────────────────────────────────────────
     const owenMe = await call(owen, 'GET', '/api/vouchers/me');
     assert(owenMe.status === 200 && owenMe.body?.voucher === true && owenMe.body?.noLimit === true
-        && JSON.stringify(owenMe.body?.presets) === '[25,50,75,100,200,500]' && owenMe.body?.vouchMax === 500,
+        && JSON.stringify(owenMe.body?.presets) === JSON.stringify([25, 50, 75, 100, 200, 500].map(hc)) && owenMe.body?.vouchMax === hc(500),
         `1. an owner's own read: no limit, the six presets 25 to 500, 500 for one person (${show(owenMe)})`);
     const adaMe = await call(ada, 'GET', '/api/vouchers/me');
     assert(adaMe.status === 200 && adaMe.body?.voucher === true && adaMe.body?.noLimit === false
-        && JSON.stringify(adaMe.body?.presets) === '[25,50,75,100]' && adaMe.body?.vouchMax === 100 && adaMe.body?.budget?.left === 1000,
+        && JSON.stringify(adaMe.body?.presets) === JSON.stringify([25, 50, 75, 100].map(hc)) && adaMe.body?.vouchMax === hc(100) && adaMe.body?.budget?.left === hc(1000),
         `1. an admin's: the four presets, 100 for one person, a budget of 1,000 (${show(adaMe)})`);
     const janeMe = await call(jane, 'GET', '/api/vouchers/me');
-    assert(janeMe.body?.noLimit === false && JSON.stringify(janeMe.body?.presets) === '[25,50,75,100]' && janeMe.body?.budget?.left === 500,
+    assert(janeMe.body?.noLimit === false && JSON.stringify(janeMe.body?.presets) === JSON.stringify([25, 50, 75, 100].map(hc)) && janeMe.body?.budget?.left === hc(500),
         `1. a names-list voucher's: the four, a budget of 500 (${show(janeMe)})`);
     const melMe = await call(mel, 'GET', '/api/vouchers/me');
-    assert(melMe.body?.voucher === false && melMe.body?.noLimit === false && JSON.stringify(melMe.body?.presets) === '[25,50,75,100]',
+    assert(melMe.body?.voucher === false && melMe.body?.noLimit === false && JSON.stringify(melMe.body?.presets) === JSON.stringify([25, 50, 75, 100].map(hc)),
         `1. a member's: no voucher, no limit false (${show(melMe)})`);
 
     // ── 2. An owner's 500 from a profile ────────────────────────────────────────────────────────────────────────
     const owenBefore = budgetSlim(owen.pk);
     const owen500 = await vouch(owen, mel, 500);
     const owenHold = lines(owen.pk).at(-1);
-    const melRow = db.prepare("SELECT id, from_pubkey, amount_c FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'").get(mel.pk) as { id: string; from_pubkey: string; amount: number } | undefined;
-    assert(owen500.status === 200 && owen500.body?.amount === 500 && owen500.body?.total === 500 && roomOf(mel.pk) === 500,
+    const melRow = db.prepare("SELECT id, from_pubkey, amount_c FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'").get(mel.pk) as { id: string; from_pubkey: string; amount_c: number } | undefined;
+    assert(owen500.status === 200 && owen500.body?.amount === hc(500) && owen500.body?.total === hc(500) && roomOf(mel.pk) === 500,
         `2. an owner vouches 500 for Mel from her profile (${show(owen500)})`);
     assert(JSON.stringify(budgetSlim(owen.pk)) === JSON.stringify(owenBefore),
         `2. the owner's budget is untouched: ${JSON.stringify(owenBefore)} before, ${JSON.stringify(budgetSlim(owen.pk))} after`);
@@ -163,12 +175,12 @@ async function main(): Promise<void> {
     // ── 3. An owner's 200 on an invite ─────────────────────────────────────────────────────────────────────────────
     const owenInvite = await generate(owen, 200);
     const inviteHold = lines(owen.pk).at(-1);
-    assert(owenInvite.status === 200 && owenInvite.body?.invite?.vouchAmount === 200 && JSON.stringify(budgetSlim(owen.pk)) === JSON.stringify(owenBefore)
+    assert(owenInvite.status === 200 && owenInvite.body?.invite?.vouchAmount === hc(200) && JSON.stringify(budgetSlim(owen.pk)) === JSON.stringify(owenBefore)
         && inviteHold?.kind === 'hold' && inviteHold.amount === -200 && inviteHold.actor === OWNER_VOUCH_ACTOR && inviteHold.ref === owenInvite.body?.invite?.code,
         `3. an owner's invite carries 200, held on the ledger as an owner's, the budget untouched (${show(owenInvite)})`);
     const lia = newId('Lia');
     const liaRedeem = await redeem(lia, owenInvite.body?.invite?.code);
-    assert(liaRedeem.status === 200 && liaRedeem.body?.vouch?.landed === 200 && roomOf(lia.pk) === 200,
+    assert(liaRedeem.status === 200 && liaRedeem.body?.vouch?.landed === hc(200) && roomOf(lia.pk) === 200,
         `3. it lands 200 on the joiner at the redeem (${show(liaRedeem)})`);
     const owen5000 = [] as Res[];
     for (const who of [tom, kai]) owen5000.push(await vouch(owen, who, 500));
@@ -190,20 +202,20 @@ async function main(): Promise<void> {
     assert(ada60.status === 400 && ada60.body?.error === VOUCHER_WORDS.badAmount && owen300.status === 400 && owen300.body?.error === VOUCHER_WORDS.badOwnerAmount,
         `4. a 60 from an admin and a 300 from an owner are not presets, each with its sentence (${show(ada60)} | ${show(owen300)})`);
     const ada100 = await vouch(ada, sam, 100);
-    assert(ada100.status === 200 && budgetOf(ada.pk).left === 900 && lines(ada.pk).at(-1)?.actor === ada.pk,
+    assert(ada100.status === 200 && budgetOf(ada.pk).left === hc(900) && lines(ada.pk).at(-1)?.actor === ada.pk,
         `4. an admin's 100 is drawn from her budget as before: 900 left, the hold hers (${show(ada100)})`);
 
     // ── 5. The person cap ───────────────────────────────────────────────────────────────────────────────────────
     const adaOnMel = await vouch(ada, mel, 25);
-    assert(adaOnMel.status === 409 && adaOnMel.body?.code === 'over_person_max' && adaOnMel.body?.personMax === 500
+    assert(adaOnMel.status === 409 && adaOnMel.body?.code === 'over_person_max' && adaOnMel.body?.personMax === hc(500)
         && adaOnMel.body?.error === '@Mel has 500 Beans of vouches already, and one person’s vouches come to 500 at most.',
         `5. Mel holds 500 from an owner: an admin's 25 on top is refused, "${adaOnMel.body?.error}"`);
     require_((await vouch(jane, sam, 100)).status === 200 && (await vouch(dan, sam, 100)).status === 200, 'Jane and Dan vouch 100 each for Sam: 300 from three vouchers');
-    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(uma, owen), amount: 500 })).status === 201, 'Uma is made a voucher');
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(uma, owen), amount_c: hc(500) })).status === 201, 'Uma is made a voucher');
     const fourth = await vouch(uma, sam, 25);
     assert(fourth.status === 409 && fourth.body?.code === 'three_vouches', `5. without an owner, 300 from three vouchers: a fourth voucher refused (${show(fourth)})`);
     const owenTops500 = await vouch(owen, sam, 500);
-    assert(owenTops500.status === 409 && owenTops500.body?.code === 'over_person_max' && owenTops500.body?.personTotal === 300,
+    assert(owenTops500.status === 409 && owenTops500.body?.code === 'over_person_max' && owenTops500.body?.personTotal === hc(300),
         `5. an owner's 500 on Sam's 300 would pass 500: refused (${show(owenTops500)})`);
     const owenTops200 = await vouch(owen, sam, 200);
     assert(owenTops200.status === 200 && roomOf(sam.pk) === 500, `5. an owner tops Sam's 300 up to 500 with a 200, past the three vouchers (${show(owenTops200)})`);
@@ -226,17 +238,17 @@ async function main(): Promise<void> {
         && allLines() === linesBefore6,
         `6. a committee admin and another owner can't set an owner's budget, nor stop it, nothing written (${[adaSetsOwen, oraSetsOwen, adaStopsOwen].map(show).join(' | ')})`);
     const owenSetsAda = await setLevel(owen, ada, 1500);
-    assert(owenSetsAda.status === 200 && budgetOf(ada.pk).level === 1500, `6. an admin's budget is set as before (${owenSetsAda.status})`);
+    assert(owenSetsAda.status === 200 && budgetOf(ada.pk).level === hc(1500), `6. an admin's budget is set as before (${owenSetsAda.status})`);
 
     // ── 7. The block and the card ───────────────────────────────────────────────────────────────────────────────
     const block = await call(ada, 'GET', '/api/names/vouchers');
     const owenRow = block.body?.vouchers?.find((v: any) => v.memberPubkey === owen.pk);
     const adaRow = block.body?.vouchers?.find((v: any) => v.memberPubkey === ada.pk);
-    assert(block.status === 200 && owenRow?.noLimit === true && owenRow?.vouched === 500 + 200 + 500 + 500 + 200 && owenRow?.peopleVouched === 5
-        && adaRow?.noLimit === false && JSON.stringify(block.body?.settings?.ownerPresets) === '[25,50,75,100,200,500]',
-        `7. the block: Owen's row says no limit, every vouch counted (${owenRow?.vouched} to ${owenRow?.peopleVouched} people); Ada's doesn't (${show(block)})`);
+    assert(block.status === 200 && owenRow?.noLimit === true && owenRow?.vouched === hc(500 + 200 + 500 + 500 + 200) && owenRow?.peopleVouched === 5
+        && adaRow?.noLimit === false && JSON.stringify(block.body?.settings?.ownerPresets) === JSON.stringify([25, 50, 75, 100, 200, 500].map(hc)),
+        `7. the block: Owen's row says no limit, every vouch counted (${beansOf(owenRow?.vouched)} to ${owenRow?.peopleVouched} people); Ada's doesn't (${show(block)})`);
     const card = await call(ada, 'GET', `/api/names/vouchers/${owen.pk}`);
-    assert(card.status === 200 && card.body?.noLimit === true && card.body?.history?.some((h: any) => h.kind === 'hold' && h.amount === -500 && h.person?.memberPubkey === mel.pk),
+    assert(card.status === 200 && card.body?.noLimit === true && card.body?.history?.some((h: any) => h.kind === 'hold' && h.amount_c === -hc(500) && h.person?.memberPubkey === mel.pk),
         `7. the card: no limit, and its history names the 500 vouched for Mel (${card.status})`);
 
     // ── 8. A lapsed owner's invite; an owner steps down ─────────────────────────────────────────────────────────
@@ -252,21 +264,21 @@ async function main(): Promise<void> {
     require_(oraInvite.status === 200 && oraVouch.status === 200, `Ora, an owner, holds 500 on an invite and vouches 200 for Uma (${show(oraInvite)} | ${show(oraVouch)})`);
     grantNodeRole(ora.pk, 'admin', owen.pk);
     const oraAfter = budgetSlim(ora.pk);
-    assert(oraAfter.left === 1000 && oraAfter.held === 0 && oraAfter.level === 1000,
+    assert(oraAfter.left === hc(1000) && oraAfter.held === 0 && oraAfter.level === hc(1000),
         `8. Ora steps down to admin: the 1,000 the role gave her is whole, her owner's vouches drew none of it (${JSON.stringify(oraAfter)})`);
     const oraMe = await call(ora, 'GET', '/api/vouchers/me');
     const ora200 = await vouch(ora, sam, 200);
-    assert(oraMe.body?.noLimit === false && JSON.stringify(oraMe.body?.presets) === '[25,50,75,100]' && ora200.status === 403 && ora200.body?.code === 'owner_amount',
+    assert(oraMe.body?.noLimit === false && JSON.stringify(oraMe.body?.presets) === JSON.stringify([25, 50, 75, 100].map(hc)) && ora200.status === 403 && ora200.body?.code === 'owner_amount',
         `8. as an admin she picks from the four again, and a 200 is refused (${show(oraMe)} | ${show(ora200)})`);
     const vic = newId('Vic');
     const vicRedeem = await redeem(vic, oraInvite.body?.invite?.code);
-    assert(vicRedeem.status === 200 && vicRedeem.body?.vouch?.landed === 500 && roomOf(vic.pk) === 500 && JSON.stringify(budgetSlim(ora.pk)) === JSON.stringify(oraAfter),
+    assert(vicRedeem.status === 200 && vicRedeem.body?.vouch?.landed === hc(500) && roomOf(vic.pk) === 500 && JSON.stringify(budgetSlim(ora.pk)) === JSON.stringify(oraAfter),
         `8. her invite made as an owner still lands its 500, and her admin budget is untouched (${show(vicRedeem)})`);
     const setOra = await setLevel(owen, ora, 600);
-    assert(setOra.status === 200 && budgetOf(ora.pk).level === 600, `8. now an admin, her budget is set as any admin's (${setOra.status})`);
+    assert(setOra.status === 200 && budgetOf(ora.pk).level === hc(600), `8. now an admin, her budget is set as any admin's (${setOra.status})`);
 
     // ── 9. No Bean moved; every vouch has its hold ──────────────────────────────────────────────────────────────
-    assert(sumBalances() === balancesBefore, `9. no Bean moved (${balancesBefore} before, ${sumBalances()} after)`);
+    assert(sumBalances() === balancesBefore, `9. no Bean moved (${balancesBefore} hundredths before, ${sumBalances()} after)`);
     const unheld = count(`SELECT COUNT(*) AS n FROM room_gifts g WHERE g.kind = 'vouch' AND NOT EXISTS (SELECT 1 FROM voucher_allocations h
         WHERE h.member_pubkey = g.from_pubkey AND h.kind = 'hold' AND h.ref IN (g.id, g.invite_code))`);
     const ownerHolds = count(`SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'hold' AND actor = ?`, OWNER_VOUCH_ACTOR);

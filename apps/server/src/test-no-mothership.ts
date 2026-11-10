@@ -331,6 +331,8 @@ class Phone {
 }
 const brief = (a: Answer) => `${a.status} ${JSON.stringify(a.body)?.slice(0, 200)}`;
 const ok = (a: Answer) => a.status >= 200 && a.status < 300;
+/** The story's prices are Beans; the node's are whole hundredths (`price_c`): `hc` turns one into the other at the door. */
+const hc = (beans: number) => Math.round(beans * 100);
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
 /**
@@ -525,8 +527,8 @@ async function main(): Promise<void> {
         // ── 3. A listing, a deal, a rating ──
         let dealId = '';
         await step('3. a listing, a deal to completion, a rating', async () => {
-            const offer = (who: Phone, title: string, credits: number) => who.post('/api/marketplace/posts', {
-                type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: TEST_PHOTOS,
+            const offer = (who: Phone, title: string, beans: number) => who.post('/api/marketplace/posts', {
+                type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk, photos: TEST_PHOTOS,
             });
             const honey = await offer(ann, 'Honey', 20);
             need(ok(honey) && honey.body?.post?.id, `Ann lists honey (${brief(honey)})`);
@@ -552,7 +554,7 @@ async function main(): Promise<void> {
         await step('3b. a listing brought along: what the phone sends is an ordinary post, and the node asks nobody', async () => {
             const brought = await ann.post('/api/marketplace/posts', {
                 id: '6f1d3a52-9c1e-4b7a-8a55-0d2e7c4b1f90', type: 'offer', category: 'food', title: 'Seedlings from the global community', description: 'Six trays',
-                credits: 0, priceType: 'fixed', authorPublicKey: ann.pk, lat: -37.06, lng: 144.21,
+                price_c: 0, priceType: 'fixed', authorPublicKey: ann.pk, lat: -37.06, lng: 144.21,
                 photos: [TEST_PHOTO, TEST_PHOTO, TEST_PHOTO, TEST_PHOTO, TEST_PHOTO], repeatable: false, cashAlsoNeeded: false,
             });
             need(ok(brought), `Ann's listing arrives (${brief(brought)})`);
@@ -616,7 +618,7 @@ async function main(): Promise<void> {
             const chats = await newPhone.get(`/api/messages/conversations/${newPhone.pk}`);
             assert(ok(chats) && JSON.stringify(chats.body).includes(dmId), `her DM with Bo is there (${chats.status})`);
             const balance = await newPhone.get(`/api/ledger/balance/${newPhone.pk}`);
-            assert(ok(balance) && Number(balance.body?.balance) > 0, `and her Beans from the honey (${brief(balance)})`);
+            assert(ok(balance) && Number.isInteger(balance.body?.balance_c) && balance.body.balance_c > 0, `and her Beans from the honey (${brief(balance)})`);
         });
 
         // ── 7. A sealed backup, off the box, and a restore ──
@@ -642,7 +644,7 @@ async function main(): Promise<void> {
             const bytes = (await s3.objects()).get(key)?.bytes;
             need(bytes && bytes.length > 1000, 'and it can be read back');
             // A change after the backup, which the restore takes back.
-            const later = await olive.post('/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Jam', description: 'After the backup', credits: 3, priceType: 'fixed', authorPublicKey: olive.pk, photos: TEST_PHOTOS });
+            const later = await olive.post('/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Jam', description: 'After the backup', price_c: hc(3), priceType: 'fixed', authorPublicKey: olive.pk, photos: TEST_PHOTOS });
             need(ok(later), 'Olive lists jam after the backup');
             const startsBefore = A.exits.length;
             const restored = await olive.call('POST', '/api/local/admin/restore', undefined, {
@@ -683,7 +685,7 @@ async function main(): Promise<void> {
             assert(fs.readFileSync(path.join(S.dir, 'libp2p_key')).equals(fs.readFileSync(path.join(B.dir, 'libp2p_key'))), 'S has B\'s node key: it is B now');
             const me = await cy.get('/api/community/me');
             assert(ok(me) && me.body?.publicKey === cy.pk, `Cy's phone, at S, is home (${me.status})`);
-            const listed = await cy.post('/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder', description: 'On the new server', credits: 2, priceType: 'fixed', authorPublicKey: cy.pk, photos: TEST_PHOTOS });
+            const listed = await cy.post('/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder', description: 'On the new server', price_c: hc(2), priceType: 'fixed', authorPublicKey: cy.pk, photos: TEST_PHOTOS });
             assert(ok(listed), `and he lists a ladder: S takes members' writes as the main server (${brief(listed)})`);
         });
 

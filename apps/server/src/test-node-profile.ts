@@ -214,8 +214,8 @@ async function main() {
                 `${label}, ${who}: features are exactly what this build does on ${want} (got ${JSON.stringify(r.body.features)})`);
             const b = r.body;
             assert(typeof b.memberCount === 'number' && typeof b.postCount === 'number' && typeof b.transactionCount === 'number'
-                && typeof b.commonsBalance === 'number' && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
-                `${label}, ${who}: every field from before is still there, same types`);
+                && Number.isInteger(b.commonsBalance_c) && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
+                `${label}, ${who}: every field from before is still there, same types (the Commons pot as commonsBalance_c, whole hundredths)`);
         }
     };
     await checkInfo('local', 'NODE_PROFILE unset');

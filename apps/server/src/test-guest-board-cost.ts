@@ -98,7 +98,7 @@ async function main() {
                 event_start_at, event_end_at, event_place_name, event_private_note, event_state, hidden_by_reports_at)
                 VALUES (@id, @type, @category, @title, @description, @price_c, @author, @at, @at, 1, @status, @lat, @lng, @acceptedBy,
                         @acceptedAt, @pendingTx, @pollOptions, @pollClosesAt, @eventStart, @eventEnd, @eventPlace, @eventNote, @eventState, @hidden)`);
-    const base = { credits: 0, status: 'active', acceptedBy: null, acceptedAt: null, pendingTx: null, pollOptions: null, pollClosesAt: null,
+    const base = { price_c: 0, status: 'active', acceptedBy: null, acceptedAt: null, pendingTx: null, pollOptions: null, pollClosesAt: null,
         eventStart: null, eventEnd: null, eventPlace: null, eventNote: null, eventState: null, hidden: null };
     const cats = ['food', 'goods', 'services', 'skills', 'housing', 'transport'];
     const postIds: string[] = [];
@@ -111,10 +111,10 @@ async function main() {
     }
     const insertPhoto = db.prepare('INSERT INTO post_photos (post_id, order_num, photo_data) VALUES (?, ?, ?)');
     for (let i = 0; i < 60; i += 7) { insertPhoto.run(postIds[i], 0, 'data:image/jpeg;base64,/9j/AAAA'); insertPhoto.run(postIds[i], 1, 'data:image/jpeg;base64,/9j/BBBB'); }
-    // Completed trades, so authors have a trade count and a trust profile with value in it.
+    // Completed trades (10 to 49 Beans, in whole hundredths), so authors have a trade count and a trust profile with value in it.
     const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`);
-    for (let i = 0; i < 40; i++) insertTrade.run(`gbc-trade-${i}`, postIds[i], authors[(i + 1) % 50].pubKeyHex, authors[i % 50].pubKeyHex, 10 + i, iso(-86_400_000), iso(-86_400_000));
+    for (let i = 0; i < 40; i++) insertTrade.run(`gbc-trade-${i}`, postIds[i], authors[(i + 1) % 50].pubKeyHex, authors[i % 50].pubKeyHex, (10 + i) * 100, iso(-86_400_000), iso(-86_400_000));
     // One spoken for, a poll with votes, an event with RSVPs, one hidden by reports, an enterprise paused.
     insertPost.run({ ...base, id: 'gbc-pending', type: 'offer', category: 'goods', title: 'Spoken for', description: 'Pending trade.',
         author: authors[1].pubKeyHex, at: iso(-30_000), lat: -28.6, lng: 153.4, status: 'pending', acceptedBy: authors[2].pubKeyHex, acceptedAt: iso(-20_000), pendingTx: 'gbc-ptx' });

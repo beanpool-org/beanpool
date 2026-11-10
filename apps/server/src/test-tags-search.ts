@@ -97,7 +97,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
 
 async function offer(author: Id, title: string, extra: Record<string, unknown> = {}): Promise<Res> {
     return call('POST', author, '/api/marketplace/posts', {
-        type: 'offer', category: 'food', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: author.pk,
+        type: 'offer', category: 'food', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: author.pk,
         lat: -28.55, lng: 153.5, photos: [TEST_PHOTO], ...extra,
     });
 }
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
         `the listings offered to a peer carry tags, none on an untagged one (${JSON.stringify(offLime?.tags)})`);
     const remoteAuthor = newId('Remy').pk;
     const remote = (id: string, title: string, tags?: unknown) => ({
-        id, type: 'offer', category: 'food', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
+        id, type: 'offer', category: 'food', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
         authorCallsign: 'Remy', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...(tags !== undefined ? { tags } : {}),
     });
     const cached = cacheRemoteListings(PEER, 'https://peer.example', [

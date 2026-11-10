@@ -51,6 +51,13 @@ function assert(cond: unknown, msg: string): void {
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; callsign: string };
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
+
 function keypair(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey, callsign };
@@ -152,7 +159,7 @@ async function main() {
             .run(id.pubKeyHex, callsign, ago(30 * DAY), invitedBy, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
-        if (beans > 0) se.transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
+        if (beans > 0) se.transfer('genesis', id.pubKeyHex, hc(beans), `seed ${callsign}`, 'direct', true);
         return id;
     };
     const otto = seedMember('OwnerOtto');       // a second owner
@@ -175,7 +182,8 @@ async function main() {
     const row = (id: Id): any => db.prepare('SELECT status, credit_frozen FROM members WHERE public_key = ?').get(id.pubKeyHex);
     const statusOf = (id: Id) => row(id)?.status as string | undefined;
     const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
-    const exactBalance = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance: number } | undefined)?.balance;
+    /** A member's balance as the ledger holds it: whole hundredths. */
+    const exactBalance = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance_c: number } | undefined)?.balance_c;
     const decision = (id: string): any => db.prepare('SELECT * FROM decisions WHERE id = ?').get(id);
     const removalRows = () => (db.prepare("SELECT COUNT(*) AS n FROM decisions WHERE effect = 'remove_member'").get() as { n: number }).n;
     const looksAt = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM health_access_log WHERE subject_pubkey = ?').get(id.pubKeyHex) as { n: number }).n;
@@ -241,7 +249,7 @@ async function main() {
     const accountsBeforeOlly = accountsNow();
     fresh();
     const ollyPreview = await admin('GET', `/api/local/admin/members/${olly.pubKeyHex}/offboard/preview`, adaSession);
-    assert(ollyPreview.status === 400 && SAYS_VOTE.test(ollyPreview.body?.error ?? '') && ollyPreview.body?.balance === undefined,
+    assert(ollyPreview.status === 400 && SAYS_VOTE.test(ollyPreview.body?.error ?? '') && ollyPreview.body?.balance_c === undefined,
         `the offboarding preview of Olly, whom no vote removes, is refused 400 in words and shows no balance (${ollyPreview.status} ${ollyPreview.text.slice(0, 200)})`);
     assert(looksAt(olly) === 0, `and no look at Olly's balance is logged (${looksAt(olly)})`);
     for (const [resolution, extra] of [['donate_to_commons', {}], ['gift_to_member', { giftRecipientPubkey: gil.pubKeyHex }]] as const) {
@@ -272,7 +280,7 @@ async function main() {
     assert(decision(halVote.id)?.status === 'execution_pending_grace', `the community votes Yes: Hal's removal waits out its grace window (${decision(halVote.id)?.status})`);
     fresh();
     const halPreview = await admin('GET', `/api/local/admin/members/${hal.pubKeyHex}/offboard/preview`, adaSession);
-    assert(halPreview.status === 200 && halPreview.body?.balance === 37.5 && halPreview.body?.settlesRemoval?.decisionId === halVote.id,
+    assert(halPreview.status === 200 && halPreview.body?.balance_c === hc(37.5) && halPreview.body?.settlesRemoval?.decisionId === halVote.id,
         `in it, the preview answers with his balance and names the removal it settles (${halPreview.status} ${JSON.stringify(halPreview.body?.settlesRemoval)})`);
     const gilBefore = exactBalance(gil)!, halBefore = exactBalance(hal)!, commonsBefore = se.getCommonsBalanceExact();
     const adminRemovalsBefore = adminRemovals();
@@ -280,7 +288,7 @@ async function main() {
     const halOff = await admin('POST', `/api/local/admin/members/${hal.pubKeyHex}/offboard`, adaSession, { resolution: 'gift_to_member', giftRecipientPubkey: gil.pubKeyHex });
     assert(halOff.status === 200 && statusOf(hal) === 'pruned', `Ada offboards Hal in his grace window, giving his Beans to Gil (${halOff.status} ${halOff.text.slice(0, 160)}; ${statusOf(hal)})`);
     assert(exactBalance(gil) === gilBefore + halBefore && exactBalance(hal) === 0 && se.getCommonsBalanceExact() === commonsBefore,
-        `Gil gets exactly Hal's ${halBefore} Beans, Hal holds none, the Commons is unchanged (${exactBalance(gil)}, ${exactBalance(hal)}, ${se.getCommonsBalanceExact()})`);
+        `Gil gets exactly Hal's ${beansOf(halBefore)} Beans, Hal holds none, the Commons is unchanged (hundredths: ${exactBalance(gil)}, ${exactBalance(hal)}, ${se.getCommonsBalanceExact()})`);
     const halDone = decision(halVote.id);
     assert(halDone?.status === 'executed' && /offboard/i.test(halDone?.execution_reason ?? ''),
         `the removal is complete: its Decision is executed, as Accelerate leaves one, and says the offboarding settled it (${halDone?.status}: ${halDone?.execution_reason})`);
@@ -292,9 +300,9 @@ async function main() {
     console.log('\n── 3. Proposing a removal ──');
     const roz = seedMember('ReportedRoz');
     {
-        const tiaPost = createPost('offer', 'food', 'Tia\'s eggs', 'A dozen eggs, fresh', 5, 'fixed', tia.pubKeyHex)!.id;
+        const tiaPost = createPost('offer', 'food', 'Tia\'s eggs', 'A dozen eggs, fresh', hc(5), 'fixed', tia.pubKeyHex)!.id;
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
-                    VALUES (?, ?, ?, ?, 5, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(crypto.randomUUID(), tiaPost, gil.pubKeyHex, tia.pubKeyHex);
+                    VALUES (?, ?, ?, ?, ?, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(crypto.randomUUID(), tiaPost, gil.pubKeyHex, tia.pubKeyHex, hc(5));
     }
     const before3 = removalRows();
     for (const [who, author] of [['Tia, a member who has completed a trade', tia], ['Ada, an admin', ada]] as const) {
@@ -448,12 +456,12 @@ async function main() {
     assert(adminRemovals() === toldBeforeVera + 1, `and the owners are told an admin removed a member (${adminRemovals() - toldBeforeVera})`);
     fresh();
     const vicPreview = await admin('GET', `/api/local/admin/members/${vic.pubKeyHex}/offboard/preview`, adaSession);
-    assert(vicPreview.status === 200 && vicPreview.body?.balance === 50 && !vicPreview.body?.settlesRemoval,
+    assert(vicPreview.status === 200 && vicPreview.body?.balance_c === hc(50) && !vicPreview.body?.settlesRemoval,
         `the offboarding preview answers with no removal to settle (${vicPreview.status} ${JSON.stringify(vicPreview.body?.settlesRemoval)})`);
     const commonsBeforeVic = se.getCommonsBalanceExact();
     fresh();
     const vicOff = await admin('POST', `/api/local/admin/members/${vic.pubKeyHex}/offboard`, adaSession, { resolution: 'donate_to_commons' });
-    assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + 50,
+    assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + hc(50),
         `and offboards Vic, his 50 Beans to the Commons (${vicOff.status} ${vicOff.text.slice(0, 120)}; ${statusOf(vic)})`);
     assert(adminRemovals() === toldBeforeVera + 2, `that is an admin's removal the owners are told of too (${adminRemovals() - toldBeforeVera})`);
     const wynn = seedMember('VotesOffWynn');

@@ -178,7 +178,7 @@ async function main() {
     const base = Date.parse('2026-09-01T00:00:00.000Z');
     let n = 0;
     const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active,
-                               created_at, updated_at, lat, lng) VALUES (?, ?, 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
+                               created_at, updated_at, lat, lng) VALUES (?, ?, 'food', ?, '', 500, ?, 'active', 1, ?, ?, ?, ?)`);
     const around = (c: { lat: number; lng: number }, km: number) => {
         const r = km * Math.sqrt(rand()) / 111;
         const t = rand() * 2 * Math.PI;
@@ -234,7 +234,7 @@ async function main() {
     db.prepare(`UPDATE posts SET status = 'paused' WHERE id = ?`).run(farOwn);
     const farDeal = post({ lat: 40.7, lng: -74 }, authors[5]);
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), farDeal, ana.pubKeyHex, authors[5].pubKeyHex, iso(Date.now()));
+                VALUES (?, ?, ?, ?, 500, 'requested', ?)`).run(crypto.randomUUID(), farDeal, ana.pubKeyHex, authors[5].pubKeyHex, iso(Date.now()));
     const farTalk = post({ lat: 48.8, lng: 2.3 }, authors[6]);
     const conv = crypto.randomUUID();
     db.prepare(`INSERT INTO conversations (id, type, post_id, created_by) VALUES (?, 'dm', ?, ?)`).run(conv, farTalk, ana.pubKeyHex);
@@ -242,7 +242,7 @@ async function main() {
     // A deal of someone else's on a far listing is no tie of Ana's; a closed deal is none either.
     const doneDeal = post({ lat: 40.7, lng: -74 }, authors[7]);
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                VALUES (?, ?, ?, ?, 5, 'completed', ?)`).run(crypto.randomUUID(), doneDeal, ana.pubKeyHex, authors[7].pubKeyHex, iso(Date.now()));
+                VALUES (?, ?, ?, ?, 500, 'completed', ?)`).run(crypto.randomUUID(), doneDeal, ana.pubKeyHex, authors[7].pubKeyHex, iso(Date.now()));
 
     // ── The brute force: every post, every rule, in JavaScript ──
     const nowIso = () => new Date().toISOString();
@@ -490,7 +490,7 @@ async function main() {
     const beforeDeal = await get(`${SYNC}&nearby=1&paged=1`, bea);
     const dealt = beforeDeal.posts.find(r => r.authorPublicKey !== bea.pubKeyHex && !(beforeDeal.tied ?? []).includes(r.id))!;
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, bea.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
+                VALUES (?, ?, ?, ?, 500, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, bea.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
     const afterDeal = await get(`${SYNC}&nearby=1&paged=1`, bea, { 'If-None-Match': beforeDeal.etag || '' });
     assert(afterDeal.status === 200 && afterDeal.etag !== beforeDeal.etag && sameSet(afterDeal.set, beforeDeal.set) && !!afterDeal.tied?.includes(dealt.id),
         `a deal opened on a listing already near her: 200 with a new tag, the same set, the listing now tied (${afterDeal.status})`);
@@ -649,7 +649,7 @@ async function main() {
         // The hash covers `tied` too: a deal opened on a listing already in her set moves no id, and the phone must learn the tie.
         const dealt = first.rows.find(r => r.authorPublicKey !== busy.pubKeyHex && !(held.tied ?? []).includes(r.id))!;
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                    VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, busy.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
+                    VALUES (?, ?, ?, ?, 500, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, busy.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
         const afterDeal = await get(`${SYNC}&nearby=1&setOnce=1&setHash=${held.setHash}&updatedAfter=${encodeURIComponent(iso(Date.now() - 1000))}&paged=1`, busy);
         assert(afterDeal.keys.join() === 'posts,set,setHash,tied' && afterDeal.set.join() === held.set.join() && afterDeal.setHash !== held.setHash
             && !!afterDeal.tied?.includes(dealt.id),
@@ -703,7 +703,7 @@ async function main() {
             'an off-board listing she is tied to by a chat, in her set: with nothing sent again, her tag gets the 304');
         const dealId = crypto.randomUUID();
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                    VALUES (?, ?, ?, ?, 5, 'cancelled', ?)`).run(dealId, tiedOff, reader.pubKeyHex, holidayAuthor.pubKeyHex, iso(Date.now() - 86_400_000));
+                    VALUES (?, ?, ?, ?, 500, 'cancelled', ?)`).run(dealId, tiedOff, reader.pubKeyHex, holidayAuthor.pubKeyHex, iso(Date.now() - 86_400_000));
         for (const sinceMs of [Date.now() - 60_000, Date.now() - 1000]) {
             const resent = await deltaFrom(sinceMs);
             const row = resent.posts.find(r => r.id === tiedOff) as (Row & { resentAt?: string }) | undefined;
@@ -782,7 +782,7 @@ async function main() {
         const dealt = othersIn(dmHeld.set, dm).find(id => !dmHeld.tied.includes(id))!;
         const author = (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(dealt) as { author_pubkey: string }).author_pubkey;
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                    VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), dealt, dm.pubKeyHex, author, iso(Date.now()));
+                    VALUES (?, ?, ?, ?, 500, 'requested', ?)`).run(crypto.randomUUID(), dealt, dm.pubKeyHex, author, iso(Date.now()));
         const after = await get(`${SYNC}&nearby=1&setOnce=1&setHash=${dmHeld.hash}&setDiff=1&updatedAfter=${nowCursor()}&paged=1`, dm);
         const d = bodyOf(after);
         assert(after.keys.join() === 'posts,setAdd,setDrop,setHash,tied' && d.setAdd?.length === 0 && d.setDrop?.length === 0 && !!d.tied?.includes(dealt),
@@ -805,7 +805,7 @@ async function main() {
         const other = memberAt('Twin', { lat: a.area_lat, lng: a.area_lng });
         const otherTie = post({ lat: 51.5, lng: -0.1 }, authors[8]);
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                    VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), otherTie, other.pubKeyHex, authors[8].pubKeyHex, iso(Date.now()));
+                    VALUES (?, ?, ?, ?, 500, 'requested', ?)`).run(crypto.randomUUID(), otherTie, other.pubKeyHex, authors[8].pubKeyHex, iso(Date.now()));
         const otherOwn = post({ lat: 40.7, lng: -74 }, other);
         const otherHeld = await heldOf(other);
         const hers = bruteSet(dm).all;
@@ -875,7 +875,7 @@ async function main() {
     async function postPlaceless(id: Id, fields: Record<string, unknown> = {}): Promise<{ status: number; id?: string; error?: string }> {
         db.prepare("UPDATE members SET avatar_ref = 'seeded-face' WHERE public_key = ?").run(id.pubKeyHex);
         const path = '/api/marketplace/posts';
-        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', credits: 0, photos: TEST_PHOTOS, ...fields, authorPublicKey: id.pubKeyHex });
+        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', price_c: 0, photos: TEST_PHOTOS, ...fields, authorPublicKey: id.pubKeyHex });
         const res = await localFetch(`${BASE}${path}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) } });
         const out = await res.json().catch(() => ({})) as any;
         if (res.status >= 300) console.error('  POST:', res.status, JSON.stringify(out).slice(0, 200));

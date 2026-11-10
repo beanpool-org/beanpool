@@ -98,7 +98,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, type: 'offer' | 'need', body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type, category: 'garden', title: `${type} ${n}`, description: 'Private description words', credits: 20, priceType: 'fixed',
+            type, category: 'garden', title: `${type} ${n}`, description: 'Private description words', price_c: 2000, priceType: 'fixed',
             authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, lat: -28.6, lng: 153.5, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
@@ -130,10 +130,10 @@ async function main(): Promise<void> {
     assert((await askedOf(ana)) === undefined, `a Need only the reader wrote is nothing to show them (${show(await askedOf(ana))})`);
 
     // ── 2. The rows ──────────────────────────────────────────────────────────────────────────────────────────────────
-    const n1 = await need(ben, { title: 'Ben wants a trailer', category: 'tools', credits: 30, priceType: 'hourly' });
-    const n2 = await need(cy, { title: 'Cy needs a bed dug', category: 'garden', credits: 40 });
-    const n3 = await need(dee, { title: 'Dee wants a lift', category: 'transport', credits: 0, priceType: 'fixed' });
-    const n4 = await need(eve, { title: 'Eve seeks seedlings', category: 'garden', credits: 5, priceType: 'fixed' });
+    const n1 = await need(ben, { title: 'Ben wants a trailer', category: 'tools', price_c: 3000, priceType: 'hourly' });
+    const n2 = await need(cy, { title: 'Cy needs a bed dug', category: 'garden', price_c: 4000 });
+    const n3 = await need(dee, { title: 'Dee wants a lift', category: 'transport', price_c: 0, priceType: 'fixed' });
+    const n4 = await need(eve, { title: 'Eve seeks seedlings', category: 'garden', price_c: 500, priceType: 'fixed' });
     madeAgo(own, 5 * HOUR); madeAgo(n1, 4 * HOUR); madeAgo(n2, 3 * HOUR); madeAgo(n3, 2 * HOUR); madeAgo(n4, 1 * HOUR);
 
     const offerOnly = await post(ben, 'offer', { title: 'Ben offers eggs', category: 'food' });
@@ -144,10 +144,10 @@ async function main(): Promise<void> {
     assert(JSON.stringify(ids) === JSON.stringify([n4, n3, n2, n1]),
         `with no stars: other members' open Needs, the newest made first; not her own, not an Offer (${show(ids)})`);
     const keys = Object.keys(plain?.items?.[0] ?? {}).sort();
-    assert(JSON.stringify(keys) === JSON.stringify(['category', 'createdAt', 'credits', 'id', 'photoUrl', 'priceType', 'title']),
-        `a row carries the Market card's fields and no more: id, title, category, credits, priceType, createdAt, photoUrl (${show(keys)})`);
+    assert(JSON.stringify(keys) === JSON.stringify(['category', 'createdAt', 'id', 'photoUrl', 'priceType', 'price_c', 'title']),
+        `a row carries the Market card's fields and no more: id, title, category, price_c (whole hundredths), priceType, createdAt, photoUrl (${show(keys)})`);
     const row1 = plain?.items?.find((i: any) => i.id === n1);
-    assert(row1?.title === 'Ben wants a trailer' && row1?.category === 'tools' && row1?.credits === 30 && row1?.priceType === 'hourly'
+    assert(row1?.title === 'Ben wants a trailer' && row1?.category === 'tools' && row1?.price_c === 3000 && row1?.priceType === 'hourly'
         && typeof row1?.createdAt === 'string' && Math.abs(Date.parse(row1.createdAt) - (Date.now() - 4 * HOUR)) < 60_000 && typeof row1?.photoUrl === 'string',
         `a row says what the Need said: title, category, 30 Beans an hour, when it was made, its photo (${show(row1)})`);
 

@@ -181,7 +181,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
                 door: 'members',
                 beans: true,
                 decisions: true,
-                knownFloor: 1000,
+                knownFloor: 100000,
             };
             expect(communityShapeLines(f)).toContain('**Confirmed members** can owe up to 1,000 Beans (the known floor)');
         });
@@ -191,9 +191,14 @@ describe('communityShapeCard (design §4, slice S5)', () => {
                 door: 'members',
                 beans: true,
                 decisions: true,
-                knownFloor: 1500,
+                knownFloor: 150000,
             };
             expect(communityShapeLines(f)).toContain('**Confirmed members** can owe up to 1,500 Beans (the known floor)');
+        });
+
+        it('the known floor is whole hundredths: 2550 reads 25.50', () => {
+            const f: CommunityShapeFeatures = { door: 'members', beans: true, decisions: true, knownFloor: 2550 };
+            expect(communityShapeLines(f)).toContain('**Confirmed members** can owe up to 25.50 Beans (the known floor)');
         });
 
         it('dmRequests off: messages arrive straight away', () => {

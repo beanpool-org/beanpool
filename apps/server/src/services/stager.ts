@@ -50,6 +50,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import type { PhotoReference } from '../engine/sync.js';
+import { isHundredths } from '@beanpool/core';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 /** The staging directory, inside the data directory; the swap at boot knows it by this name too (db/swap-at-boot.ts). */
@@ -664,7 +665,7 @@ async function stagerChild(): Promise<void> {
                 const backup = (db.prepare(`SELECT COUNT(*) AS n FROM ${q(t)}${where ? ` WHERE (${where})` : ''}`).get() as { n: number }).n;
                 tables.push({ name: t, primary, backup, match: primary === backup });
             }
-            const copyTotal = accounts.reduce((n, x) => n + (typeof x.balance_c === 'number' && Number.isFinite(x.balance_c) ? x.balance_c : 0), 0);
+            const copyTotal = accounts.reduce((n, x) => n + (isHundredths(x.balance_c) ? x.balance_c : 0), 0);
             const hereTotal = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
             return {
                 checkedAt: new Date(now).toISOString(),

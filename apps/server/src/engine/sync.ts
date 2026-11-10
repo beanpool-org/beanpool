@@ -1661,7 +1661,7 @@ function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: num
     const named = new Set<string>();
     for (const raw of rows) {
         const r = raw as Record<string, unknown> | null;
-        if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || typeof r.amount_c !== 'number' || !(r.amount_c > 0) || !Number.isFinite(r.amount_c)
+        if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || !isHundredths(r.amount_c) || !(r.amount_c > 0)
             || (r.pledgedAt !== null && !text(r.pledgedAt)) || (r.releasedAt !== null && !text(r.releasedAt))) {
             skipped++;
             continue;
@@ -2358,8 +2358,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // No number to copy: the row here stays as it is, and the whole-copy check counts the entry. A NULL
                     // (a NaN, as JSON and better-sqlite3 both carry it), text or infinite balance is REFUSED, never
                     // imported (review F1, 2026-10-01): the main server's ledger holding one is broken, and this standby
-                    // keeps the last balance it had for that account. accounts.balance_c is NOT NULL besides.
-                    if (typeof acc.balance_c !== 'number' || !Number.isFinite(acc.balance_c)) {
+                    // keeps the last balance it had for that account. accounts.balance_c is NOT NULL besides. Whole
+                    // hundredths only (isHundredths): a fraction of a hundredth is as broken as a NaN.
+                    if (!isHundredths(acc.balance_c)) {
                         conflictsSkipped++;
                         refusedBalances.push(`${acc.publicKey.slice(0, 16)}=${JSON.stringify(acc.balance_c) ?? String(acc.balance_c)}`);
                         continue;

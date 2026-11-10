@@ -396,9 +396,10 @@ export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | '
 /**
  * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
  * opens (createDecision), so its voters can weigh them. Balances are private (Marty, 2026-09-28): those voters see them,
- * inside that Decision only (decisionForReader), and nobody else does.
+ * inside that Decision only (decisionForReader), and nobody else does. The keys are the ones removalBalanceParams writes:
+ * whole hundredths, named `*_c`. A key here that the params don't carry hides nothing, so this list follows that function.
  */
-const MEMBER_BALANCE_PARAMS = ['balance', 'debt'] as const;
+const MEMBER_BALANCE_PARAMS = ['balance_c', 'debt_c'] as const;
 
 function carriesMemberBalance(params: unknown): params is Record<string, unknown> {
     return !!params && typeof params === 'object'
@@ -1764,7 +1765,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'blocked', reason: 'Invalid grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact()} (hundredths)` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(amount, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -1779,7 +1780,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact()} (hundredths)` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(amount, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -1802,7 +1803,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'blocked', reason: 'Invalid enterprise deficit' };
         }
         if (deficit > 0 && getCommonsBalanceExact() < deficit) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${deficit}, available ${getCommonsBalanceExact()} (hundredths)` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(deficit, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -4519,7 +4520,9 @@ export function tickDecisions(asOfTime?: number): {
             const entAccount = ledger.getAccount(top.subject);
             // No deficit left is 0: the write-off completes without moving anything.
             requiredAmount = entAccount && entAccount.balance_c < 0 ? Math.abs(entAccount.balance_c) : 0;
-            if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
+            // The same question preflight asks (isHundredths): a deficit that isn't whole hundredths is a corrupted balance,
+            // handed to preflight to block now rather than held in the one slot waiting for funds.
+            if (!isHundredths(requiredAmount)) unusable = `deficit ${requiredAmount}`;
         } else {
             let parsed: any = {};
             try {

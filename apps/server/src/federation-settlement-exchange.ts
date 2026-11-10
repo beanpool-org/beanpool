@@ -156,8 +156,9 @@ export function settlementKeyFor(
 }
 
 function requireAmount(amount: number): void {
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-        throw new SettlementError('A settlement amount must be a positive number', 'invalid_amount');
+    // Whole hundredths above 0 (DESIGN-atomic-beans-fable.md §1: every boundary asks isHundredths, node to node too).
+    if (!isHundredths(amount) || amount <= 0) {
+        throw new SettlementError('A settlement amount must be a whole number of hundredths of a Bean above 0', 'invalid_amount');
     }
 }
 
@@ -779,8 +780,9 @@ export function handlePurchaseRequest(input: {
     if (!input.peerId || typeof input.peerId !== 'string') {
         return { accepted: false, reason: 'invalid_peer', message: 'Settlement requires an identified peer.' };
     }
-    if (typeof input.amount_c !== 'number' || !Number.isFinite(input.amount_c) || input.amount_c <= 0) {
-        return { accepted: false, reason: 'invalid_amount', message: 'A settlement amount must be a positive number.' };
+    // A peer's figure is whole hundredths above 0 or nothing is reserved: half a hundredth never reaches the INTEGER column.
+    if (!isHundredths(input.amount_c) || input.amount_c <= 0) {
+        return { accepted: false, reason: 'invalid_amount', message: 'A settlement amount must be a whole number of hundredths of a Bean above 0.' };
     }
     if (!input.sellerPublicKey || !input.buyerPublicKey) {
         return { accepted: false, reason: 'invalid_parties', message: 'Both parties must be identified.' };

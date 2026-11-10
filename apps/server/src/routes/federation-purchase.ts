@@ -34,6 +34,7 @@ import { SettlementError, settlementKeyFor } from '../federation-settlement-exch
 import { answerPotPaused } from '../engine/audit.js';
 import { settlementStartedBy } from '../engine/money-limits.js';
 import { refuseOverMoneyLimits } from './money-limits-gate.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, positiveHundredthsOf } from '../money-body.js';
 import type { RouteDeps } from './types.js';
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
@@ -62,7 +63,8 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
     router.post('/api/federation/purchase', async (ctx) => {
         const body = (ctx as any).requestBody || {};
         const { nodeUrl, peerAddress, sellerPublicKey, postId } = body;
-        const amount = Number(body.amount_c);
+        // Whole hundredths above 0 (money-body.ts), or null: checked at step 4, after the kill switch and the buyer.
+        const amount = positiveHundredthsOf(body);
 
         // 1. THE KILL SWITCH, before anything else. Off by default on every node, and turning it off must
         //    refuse new trades without a hint that some other input might get past it.
@@ -127,9 +129,9 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'sellerPublicKey is required' };
             return;
         }
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (amount === null) {
             ctx.status = 400;
-            ctx.body = { error: 'amount must be a positive number' };
+            ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
             return;
         }
         // A synthetic account is not a person and cannot sell. Escrow, bridge and treasury keys are reachable
@@ -265,7 +267,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 amount_c: amount,
             });
             ctx.status = statusFor(outcome.status);
-            ctx.body = { ...outcome, amount, peer: connector.callsign ?? connector.address };
+            ctx.body = { ...outcome, amount_c: amount, peer: connector.callsign ?? connector.address };
         } catch (e: any) {
             // A throw here means step 1 refused — the local escrow. Nothing has moved, and the reason is the
             // member's to see ("not enough credit to cover this purchase and its fee"). Everything after step 1

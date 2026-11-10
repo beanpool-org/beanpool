@@ -4155,7 +4155,7 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
             throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount: formatHundredths(amount, 'en'), earnedRoom: formatHundredths(earnedRoom, 'en') }));
         }
         throw new Error(tr('Pledge amount ({amount}) exceeds what you can pledge ({room} available: {earnedRoom} earned credit, {knownRoom} from your known floor)',
-            { amount, room: earnedRoom + knownRoom, earnedRoom, knownRoom }));
+            { amount: formatHundredths(amount, 'en'), room: formatHundredths(earnedRoom + knownRoom, 'en'), earnedRoom: formatHundredths(earnedRoom, 'en'), knownRoom: formatHundredths(knownRoom, 'en') }));
     }
     const earnedPart = Math.min(amount, earnedRoom);
     return { earnedPart, knownPart: amount - earnedPart };
@@ -4625,14 +4625,15 @@ export function requestToJoinEnterprise(
         throw new Error(word('A pending request already exists for this enterprise'));
     }
 
-    const parsedAmount = Number(pledgedBacking);
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    // Whole hundredths, 0 or more (the route reads it with optionalHundredthsOf; every other caller is asked the same here).
+    const parsedAmount = pledgedBacking;
+    if (!isHundredths(parsedAmount) || parsedAmount < 0) {
         throw new Error(word('Pledge amount must be non-negative'));
     }
 
     const available = getAvailableBacking(memberPubkey);
     if (parsedAmount > available) {
-        throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({available} available to back across all enterprises)', { amount: parsedAmount, available }));
+        throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({available} available to back across all enterprises)', { amount: formatHundredths(parsedAmount, 'en'), available: formatHundredths(available, 'en') }));
     }
 
     const id = crypto.randomUUID();

@@ -107,10 +107,10 @@ function leaderOf(projectId: string, creator: string | null): string | null {
     return lead?.member_pubkey ?? creator ?? null;
 }
 
-/** Whether its rows say it reached its goal: in cents, as pledgeToProject decides it, or its enterprise's row says so. */
+/** Whether its rows say it reached its goal: whole hundredths compared exactly, as pledgeToProject decides it, or its enterprise's row says so. */
 function readsFunded(p: ProjectRow): boolean {
-    const goal = Math.round(Number(p.goal_amount_c || 0) * 100);
-    return goal <= 0 || Math.round(Number(p.current_amount_c || 0) * 100) >= goal || p.enterprise_status === 'funded';
+    const goal = Number(p.goal_amount_c || 0);
+    return goal <= 0 || Number(p.current_amount_c || 0) >= goal || p.enterprise_status === 'funded';
 }
 
 /**

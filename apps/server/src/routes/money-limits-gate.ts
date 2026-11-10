@@ -66,6 +66,7 @@ import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { admitMoneyActs, assertMoneyActsAllowed, MoneyLimitError, type MoneyAct, type MoneyActHold, type MoneyActsCheck } from '../engine/money-limits.js';
 import { pledgeDispatchKind } from './treasury.js';
+import { positiveHundredthsOf } from '../money-body.js';
 
 /** The account whose acts they are, and `keeper` when that is an enterprise the signer keeps (their enterprise work). */
 type Plan = { account: string; keeper?: string; acts: MoneyAct[] } | null;
@@ -178,11 +179,11 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
     },
     { method: 'POST', path: at('backing'), plan: (actor) => pledge(actor) },
     {
-        // Read as the handler and requestToJoinEnterprise read it (the same `??` chain, then Number): a zero pledge, which
-        // the apps send when there is none, is no pledge; anything else the handler would take as one counts (and is
-        // given back when it refuses it).
+        // Read as the handler reads it (routes/treasury.ts: `pledgedBacking_c`, whole hundredths): a zero pledge, which the
+        // apps send when there is none, is no pledge, and so is a figure the handler refuses (400 amount_c_required, nothing
+        // stored); a pledge the handler would take counts (and is given back when it refuses it for another reason).
         method: 'POST', path: at('keepers/request'),
-        plan: (actor, _m, b) => (Number(b.pledgedBacking ?? b.amount_c ?? b.backing_c ?? 0) === 0 ? null : pledge(actor)),
+        plan: (actor, _m, b) => (positiveHundredthsOf(b, 'pledgedBacking_c') === null ? null : pledge(actor)),
     },
     { method: 'POST', path: at('(?:release|pledge/release|backing/release)'), plan: (actor) => pledge(actor) },
     { method: 'DELETE', path: at('(?:pledge|backing)'), plan: (actor) => pledge(actor) },

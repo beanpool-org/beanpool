@@ -59,13 +59,14 @@ describe('who an invite is for', () => {
 
 describe('what an invite carries', () => {
     it('a vouch, a voucher budget and the confirming, in words', () => {
-        expect(inviteCarries(inv(1, { namesEntryId: 'e1', vouchAmount: 200, voucherLevel: 1000 }))).toBe('200 vouch · voucher budget 1,000 · confirms them as known');
+        expect(inviteCarries(inv(1, { namesEntryId: 'e1', vouchAmount: 20000, voucherLevel: 100000 }))).toBe('200 vouch · voucher budget 1,000 · confirms them as known');
     });
 
     it('each part alone', () => {
-        expect(inviteCarries(inv(1, { vouchAmount: 50 }))).toBe('50 vouch');
+        expect(inviteCarries(inv(1, { vouchAmount: 5000 }))).toBe('50 vouch');
+        expect(inviteCarries(inv(1, { vouchAmount: 2550 }))).toBe('25.50 vouch');
         expect(inviteCarries(inv(1, { namesEntryId: 'e1' }))).toBe('confirms them as known');
-        expect(inviteCarries(inv(1, { namesEntryId: 'e1', voucherLevel: 500 }))).toBe('voucher budget 500 · confirms them as known');
+        expect(inviteCarries(inv(1, { namesEntryId: 'e1', voucherLevel: 50000 }))).toBe('voucher budget 500 · confirms them as known');
     });
 
     it('nothing at all (null from the node, or missing) is a plain invite', () => {

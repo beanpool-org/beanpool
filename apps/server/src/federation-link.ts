@@ -27,6 +27,7 @@
  */
 
 import { keepersChanged } from '@beanpool/engine';
+import { isHundredths } from '@beanpool/core';
 import { db, raiseCreatorOperatorSwitch } from './db/db.js';
 import { bridgeAccountId, ensureBridgeAccount, getEnergyBalance } from './federation-bridge.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap } from './connector-manager.js';
@@ -276,9 +277,10 @@ function balanceOf(publicKey: string): number {
  */
 export function setCommissionCeiling(peerId: string, ceiling: number): FederationLink | null {
     assertPlainTablesWritable();
-    if (!Number.isFinite(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a non-negative number');
+    // Whole hundredths, 0 or more (the column is commission_ceiling_c).
+    if (!isHundredths(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a whole number of hundredths of a Bean, 0 or more');
     const res = db.prepare('UPDATE federation_links SET commission_ceiling_c = ? WHERE peer_id = ?')
-        .run((ceiling), peerId);
+        .run(ceiling, peerId);
     if (res.changes === 0) return null;
     logger.info('P2P', `[Link] Commissioning ceiling for ${peerId.slice(-8)} set to ${ceiling}`);
     return getFederationLink(peerId);

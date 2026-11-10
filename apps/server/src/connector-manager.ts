@@ -29,6 +29,7 @@ import { sweepExpiredDebts } from './engine/names-debts.js';
 import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { deletePeerListings } from './federation-listings.js';
+import { isHundredths } from '@beanpool/core';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 // Experimental peer‑connector toggle – defaults to off for production safety
@@ -712,7 +713,8 @@ export function setConnectorCreditCap(address: string, cap: number | null | unde
         return connector;
     }
 
-    if (!Number.isFinite(cap) || cap < 0) throw new Error('Credit cap must be a non-negative number');
+    // Whole hundredths, 0 or more: it is compared with the bridge account's balance_c (federation-bridge.ts).
+    if (!isHundredths(cap) || cap < 0) throw new Error('Credit cap must be a whole number of hundredths of a Bean, 0 or more');
 
     connector.creditCap = cap;
     saveConnectors();

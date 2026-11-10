@@ -47,14 +47,15 @@ import {
 import { VoucherCard } from '../components/VoucherCard';
 import {
     canMakeVoucher, ownerOnlyVoucherTargets, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+    passedOnAmountOf,
 } from '../utils/voucher-rules';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, showsBoundInviteLine, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
 import {
-    DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
+    DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, debtBeans, type NamesDebt,
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
-import { formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ownerMakesAdminVoucherWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
+import { beans, formatHundredths, formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ownerMakesAdminVoucherWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
@@ -66,11 +67,12 @@ function say(text: string): string {
     return text.split('\n\n').map(keyLineWords).join('\n\n');
 }
 
-/** names-debts.ts beans() in the member's language: "12 Beans", "12.50 Beans" (one English form, as beans() writes it). */
-function beansWords(n: number): string {
-    const cents = Math.round(n * 100);
-    const amount = cents % 100 === 0 ? formatNumber(cents / 100) : formatNumber(cents / 100, 2);
-    return tn(cents / 100, '{n} Beans', '{n} Beans', { n: amount });
+/**
+ * names-debts.ts debtBeans() in the member's language: "12 Beans", "12.50 Beans", from whole hundredths of a Bean
+ * (formatHundredths; one English form, as debtBeans() writes it). Anything but whole hundredths reads "—".
+ */
+function beansWords(c: number): string {
+    return tn(c / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(c) });
 }
 
 export { ErrorBoundary };
@@ -557,8 +559,8 @@ export default function NamesListScreen() {
             try {
                 await createDecision({
                     authorPubkey: identity.publicKey, touches: 'pool', effect: 'forgive_debt', subject: debt.id,
-                    title: `Forgive a debt of ${beans(leftOf(debt))}`,
-                    description: `A member who left owed the Commons ${beans(debt.amount_c)}${debt.repaid_c > 0 ? `, and ${beans(debt.repaid_c)} of it was repaid` : ''}. `
+                    title: `Forgive a debt of ${debtBeans(leftOf(debt))}`,
+                    description: `A member who left owed the Commons ${debtBeans(debt.amount_c)}${debt.repaid_c > 0 ? `, and ${debtBeans(debt.repaid_c)} of it was repaid` : ''}. `
                         + 'Forgiving it moves no Beans: the Commons took the debt when they left. The record stays, marked forgiven.',
                 });
                 setNotice(t('The Decision is open: the community votes on forgiving the debt.'));
@@ -927,19 +929,20 @@ export default function NamesListScreen() {
                                         <Text style={styles.entryNote}>
                                             {v.noLimit
                                                 // An owner vouches with no limit (Marty, 9 Nov): no budget figure.
+                                                // Every budget figure is whole hundredths (formatHundredths); belowZero is a count of people.
                                                 ? t('No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
-                                                    vouched: formatNumber(v.vouched),
+                                                    vouched: formatHundredths(v.vouched),
                                                     belowZero: v.belowZero,
-                                                    writtenOff: formatNumber(v.writtenOff),
-                                                    passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                                    writtenOff: formatHundredths(v.writtenOff),
+                                                    passedOn: formatHundredths(passedOnAmountOf(v.passedOn) ?? 0),
                                                 })
                                                 : t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
-                                                left: formatNumber(v.left),
-                                                level: formatNumber(v.level),
-                                                vouched: formatNumber(v.vouched),
+                                                left: formatHundredths(v.left),
+                                                level: formatHundredths(v.level),
+                                                vouched: formatHundredths(v.vouched),
                                                 belowZero: v.belowZero,
-                                                writtenOff: formatNumber(v.writtenOff),
-                                                passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                                writtenOff: formatHundredths(v.writtenOff),
+                                                passedOn: formatHundredths(passedOnAmountOf(v.passedOn) ?? 0),
                                             })}
                                         </Text>
                                     </View>
@@ -954,14 +957,15 @@ export default function NamesListScreen() {
             </>
         );
     } else if (mode.kind === 'make_voucher') {
-        const QUICK_BUDGETS = [500, 1000, 1500, 2000];
+        // 500 to 2,000 Beans, in whole hundredths as every budget figure is (core beans()).
+        const QUICK_BUDGETS = [beans(500), beans(1000), beans(1500), beans(2000)];
         body = (
             <>
                 <Text style={styles.body}>
                     {t('Make @{callsign} a voucher?', { callsign: mode.callsign })}
                 </Text>
                 <Text style={styles.hint}>
-                    {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.', { amount: formatNumber(makeVoucherAmount) })}
+                    {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.', { amount: formatHundredths(makeVoucherAmount) })}
                 </Text>
 
                 <Text style={styles.label}>{t('BUDGET AMOUNT')}</Text>
@@ -973,10 +977,10 @@ export default function NamesListScreen() {
                             onPress={() => setMakeVoucherAmount(amt)}
                             disabled={off}
                             accessibilityRole="button"
-                            accessibilityLabel={formatNumber(amt)}
+                            accessibilityLabel={formatHundredths(amt)}
                         >
                             <Text style={[styles.chipText, makeVoucherAmount === amt && styles.chipTextActive]}>
-                                {formatNumber(amt)}
+                                {formatHundredths(amt)}
                             </Text>
                         </Pressable>
                     ))}
@@ -993,7 +997,7 @@ export default function NamesListScreen() {
                         <Text style={styles.smallBtnText}>−</Text>
                     </Pressable>
                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.heading }}>
-                        {t('{amount} Beans', { amount: formatNumber(makeVoucherAmount) })}
+                        {t('{amount} Beans', { amount: formatHundredths(makeVoucherAmount) })}
                     </Text>
                     <Pressable
                         style={[styles.smallBtn, (budgetLevelUp(makeVoucherAmount) === null || off) && styles.disabled]}
@@ -1012,7 +1016,7 @@ export default function NamesListScreen() {
                         const done = await makeNamesVoucher(anchor, identity, mode.entry.id, makeVoucherAmount);
                         finish();
                         if (!done.ok) { setError(done.message); return; }
-                        setNotice(t('Made @{callsign} a voucher with a budget of {amount} Beans.', { callsign: mode.callsign, amount: formatNumber(makeVoucherAmount) }));
+                        setNotice(t('Made @{callsign} a voucher with a budget of {amount} Beans.', { callsign: mode.callsign, amount: formatHundredths(makeVoucherAmount) }));
                         setMode({ kind: 'list' });
                         void load();
                     }, 'primary')}
@@ -1178,7 +1182,7 @@ export default function NamesListScreen() {
                                     <Text style={styles.entryMeta}>
                                         {e.voucher.noLimit
                                             ? t('No limit')
-                                            : t('{left} of {level} left', { left: formatNumber(e.voucher.left), level: formatNumber(e.voucher.level) })}
+                                            : t('{left} of {level} left', { left: formatHundredths(e.voucher.left), level: formatHundredths(e.voucher.level) })}
                                     </Text>
                                 </View>
                             ) : null}
@@ -1229,8 +1233,8 @@ export default function NamesListScreen() {
                                     // An owner vouches with no limit (Marty, 9 Nov): no budget figure, as the VOUCHERS section.
                                     ? t('No limit · {vouched} vouched', { vouched: formatNumber(rv.peopleVouched) })
                                     : t('{left} of {level} left · {vouched} vouched', {
-                                        left: formatNumber(rv.left),
-                                        level: formatNumber(rv.level),
+                                        left: formatHundredths(rv.left),
+                                        level: formatHundredths(rv.level),
                                         vouched: formatNumber(rv.peopleVouched),
                                     })}
                             </Text>

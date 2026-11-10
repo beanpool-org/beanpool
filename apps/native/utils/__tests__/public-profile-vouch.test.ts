@@ -120,12 +120,13 @@ vi.mock('../../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityMark: () => null }));
 vi.mock('../../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => null }));
 
+// Every figure is whole hundredths of a Bean, as the node sends them (presets 2500 … 10000 are vouches of 25 … 100 Beans).
 const node = vi.hoisted(() => ({
     voucher: true,
     noLimit: false,
-    presets: [25, 50, 75, 100] as number[],
-    budgetLeft: 550,
-    budgetLevel: 1000,
+    presets: [2500, 5000, 7500, 10000] as number[],
+    budgetLeft: 55000,
+    budgetLevel: 100000,
     history: [] as any[],
     posts: [] as Array<{ path: string; body: any }>,
     postResult: null as any,
@@ -138,11 +139,11 @@ vi.mock('../node-post', () => ({
                 ok: true,
                 json: async () => ({
                     voucher: node.voucher,
-                    budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
+                    budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
                     noLimit: node.noLimit,
                     presets: node.presets,
-                    vouchMax: node.noLimit ? 500 : 100,
-                    budgetMax: 2000,
+                    vouchMax: node.noLimit ? 50000 : 10000,
+                    budgetMax: 200000,
                     vouchedBy: [],
                     history: node.history,
                 }),
@@ -156,7 +157,7 @@ vi.mock('../node-post', () => ({
             return node.postResult;
         }
         // A raise lands the difference between its total and what the history says was vouched; a vouch lands its amount.
-        const before = node.history.reduce((n: number, h: any) => n + (h.person?.memberPubkey === body.memberPubkey ? Math.abs(h.amount) : 0), 0);
+        const before = node.history.reduce((n: number, h: any) => n + (h.person?.memberPubkey === body.memberPubkey ? Math.abs(h.amount_c) : 0), 0);
         const landed = body.raiseTo !== undefined ? body.raiseTo - before : body.vouchAmount;
         return {
             ok: true,
@@ -185,9 +186,9 @@ beforeEach(() => {
     communityRow.value = { public_key: TARGET_KEY, callsign: 'sam', avatar_url: null, bio: null, archetype: null };
     node.voucher = true;
     node.noLimit = false;
-    node.presets = [25, 50, 75, 100];
-    node.budgetLeft = 550;
-    node.budgetLevel = 1000;
+    node.presets = [2500, 5000, 7500, 10000];
+    node.budgetLeft = 55000;
+    node.budgetLevel = 100000;
     node.history = [];
     node.posts = [];
     node.postResult = null;
@@ -243,9 +244,10 @@ describe('Native Public Profile Vouch (§9)', () => {
         expect(node.posts).toHaveLength(1);
         expect(node.posts[0]).toEqual({
             path: '/api/vouch',
+            // The node kept the name `vouchAmount` and reads it as whole hundredths: 25 Beans.
             body: {
                 memberPubkey: TARGET_KEY,
-                vouchAmount: 25,
+                vouchAmount: 2500,
             },
         });
         expect(host?.querySelector('[data-testid="profile-vouch-success"]')?.textContent).toContain('Vouched 25 Beans for @sam.');
@@ -255,7 +257,7 @@ describe('Native Public Profile Vouch (§9)', () => {
         node.history = [
             {
                 kind: 'hold',
-                amount: -100,
+                amount_c: -10000,
                 actor: VIEWER_KEY,
                 actorCallsign: 'Viewer',
                 at: '2026-11-01T00:00:00.000Z',
@@ -297,14 +299,15 @@ describe('Native Public Profile Vouch (§9)', () => {
         expect(submit.hasAttribute('disabled')).toBe(true);
     });
 
-    const vouchedBefore = (amount: number) => [{
-        kind: 'hold', amount: -amount, actor: VIEWER_KEY, actorCallsign: 'Viewer', at: '2026-11-01T00:00:00.000Z', for: 'profile',
+    /** What the viewer vouched for @sam already, in whole hundredths, as their budget's history says it (`amount_c`, held so negative). */
+    const vouchedBefore = (amount_c: number) => [{
+        kind: 'hold', amount_c: -amount_c, actor: VIEWER_KEY, actorCallsign: 'Viewer', at: '2026-11-01T00:00:00.000Z', for: 'profile',
         person: { memberPubkey: TARGET_KEY, callsign: 'sam' },
     }];
     const chipIds = () => Array.from(host?.querySelectorAll('[data-testid^="invite-vouch-"]') ?? []).map((e) => e.getAttribute('data-testid')!.replace('invite-vouch-', ''));
 
     it('a raise from 25 offers Raise to 50 · 75 · 100, never None, and posts the total it ends at (slice I6)', async () => {
-        node.history = vouchedBefore(25);
+        node.history = vouchedBefore(2500);
         await render();
         const card = host?.querySelector('[data-testid="profile-vouch"]');
         expect(card?.textContent).toContain('Raise vouch for @sam');
@@ -318,14 +321,14 @@ describe('Native Public Profile Vouch (§9)', () => {
         await act(async () => { (host?.querySelector('[data-testid="profile-vouch-submit"]') as HTMLButtonElement).click(); });
         await settle();
 
-        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, raiseTo: 75 } }]);
+        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, raiseTo: 7500 } }]);
         expect(host?.querySelector('[data-testid="profile-vouch-success"]')?.textContent).toContain('Raised vouch for @sam to 75 Beans.');
     });
 
     it("an owner's raise from 100 offers 200 and 500 with None gone and nothing greyed, and posts the target", async () => {
         node.noLimit = true;
-        node.presets = [25, 50, 75, 100, 200, 500];
-        node.history = vouchedBefore(100);
+        node.presets = [2500, 5000, 7500, 10000, 20000, 50000];
+        node.history = vouchedBefore(10000);
         await render();
         const card = host?.querySelector('[data-testid="profile-vouch"]');
         expect(card?.textContent).toContain('You already vouched 100 Beans for @sam. You can raise it up to 500 Beans.');
@@ -338,14 +341,14 @@ describe('Native Public Profile Vouch (§9)', () => {
         await act(async () => { (host?.querySelector('[data-testid="profile-vouch-submit"]') as HTMLButtonElement).click(); });
         await settle();
 
-        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, raiseTo: 200 } }]);
+        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, raiseTo: 20000 } }]);
         expect(host?.querySelector('[data-testid="profile-vouch-success"]')?.textContent).toContain('Raised vouch for @sam to 200 Beans.');
     });
 
     it("a first vouch the node says was a raise turns the card into the raise card, with the node's sentence beside it", async () => {
         node.postResult = {
             ok: false,
-            json: async () => ({ error: 'You’ve already vouched for @sam.', code: 'already_vouched', prior: 75 }),
+            json: async () => ({ error: 'You’ve already vouched for @sam.', code: 'already_vouched', prior: 7500 }),
         };
         await render();
         expect(host?.querySelector('[data-testid="profile-vouch"]')?.textContent).toContain('Vouch for @sam');
@@ -355,7 +358,7 @@ describe('Native Public Profile Vouch (§9)', () => {
         await settle();
 
         // The post was a first vouch; no confirm prompt is asked, and the card now offers the totals above 75.
-        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, vouchAmount: 25 } }]);
+        expect(node.posts).toEqual([{ path: '/api/vouch', body: { memberPubkey: TARGET_KEY, vouchAmount: 2500 } }]);
         expect(alerts.alert).not.toHaveBeenCalled();
         const card = host?.querySelector('[data-testid="profile-vouch"]');
         expect(card?.textContent).toContain('Raise vouch for @sam');

@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, freePriceWords, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -555,11 +555,13 @@ export default function PublicProfileScreen() {
 
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
 
+    // What you have vouched for this person, from your own budget's history: whole hundredths, summed exactly (a line whose
+    // figure isn't whole hundredths counts nothing).
     const myPriorVouch = useMemo(() => {
         if (!myVouching?.history || !pubKeyStr) return 0;
         let sum = 0;
         for (const h of myVouching.history) {
-            if (h.person?.memberPubkey === pubKeyStr && (h.for === 'profile' || h.outcome === 'vouched')) {
+            if (h.person?.memberPubkey === pubKeyStr && (h.for === 'profile' || h.outcome === 'vouched') && isHundredths(h.amount_c)) {
                 sum += Math.abs(h.amount_c);
             }
         }
@@ -1213,7 +1215,8 @@ export default function PublicProfileScreen() {
                                         <Text style={[styles.trustTierName, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{trust.tier?.name ? tierWords(trust.tier.name) : t('Member', undefined, 'trust tier')}</Text>
                                         <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
                                             <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
-                                                {tn(Math.round(trust.earnedCredit || 0), '{n} Trust Points', '{n} Trust Points')}
+                                                {/* The trust profile's earnedCredit keeps its name and carries whole hundredths (M1). */}
+                                                {tn((isHundredths(trust.earnedCredit) ? trust.earnedCredit : 0) / 100, '{n} Trust Points', '{n} Trust Points', { n: formatHundredths(isHundredths(trust.earnedCredit) ? trust.earnedCredit : 0) })}
                                             </Text>
                                         </View>
                                     </View>
@@ -1471,9 +1474,9 @@ export default function PublicProfileScreen() {
                                             {isRaise && (
                                                 <Text style={styles.vouchSub}>
                                                     {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
-                                                        prior: effectivePriorVouch,
+                                                        prior: formatHundredths(effectivePriorVouch),
                                                         name: profile?.callsign || callsignStr || '',
-                                                        max: pairMax,
+                                                        max: formatHundredths(pairMax),
                                                     })}
                                                 </Text>
                                             )}
@@ -1523,8 +1526,8 @@ export default function PublicProfileScreen() {
                                                         // The node's new total: the heading and the raise choices follow it.
                                                         if (res.total > 0) setNodePriorVouch(res.total);
                                                         setVouchSuccess(isRaise
-                                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })
-                                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: profileVouchPreset }));
+                                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: formatHundredths(res.total) })
+                                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: formatHundredths(profileVouchPreset) }));
                                                         setProfileVouchPreset(null);
                                                         // A failed re-read keeps the card, its figures and this banner.
                                                         void rereadMyVouching(anchorUrl, identity, setMyVouching);
@@ -1577,12 +1580,13 @@ export default function PublicProfileScreen() {
                             <Text style={styles.trustEmoji} allowFontScaling={false}>{balanceInfo.tier?.emoji || '🌱'}</Text>
                             <View style={{ flexShrink: 1 }}>
                                 <Text style={styles.trustTierName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member', undefined, 'trust tier')}</Text>
-                                <Text style={styles.trustSub} numberOfLines={1}>{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</Text>
+                                <Text style={styles.trustSub} numberOfLines={1}>{tn((balanceInfo.earnedCredit_c || 0) / 100, '{n} trust points', '{n} trust points', { n: formatHundredths(balanceInfo.earnedCredit_c || 0) })}</Text>
                             </View>
                         </View>
                         <View style={styles.trustRight}>
                             <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={styles.trustBalance}>{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance ?? 0, 1)}</Text>
+                                {/* Whole hundredths (getBalance's balance_c): a true minus below zero, a plus at and above it. */}
+                                <Text style={styles.trustBalance}>{(balanceInfo.balance_c ?? 0) >= 0 ? '+' : ''}{formatHundredths(balanceInfo.balance_c ?? 0)}</Text>
                                 <Text style={styles.trustSub}>{t('Beans')}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.secondary} />
@@ -1812,9 +1816,10 @@ export default function PublicProfileScreen() {
                                                                 </View>
                                                                 {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                                    {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). */}
-                                                                    {freePriceWords(p.credits, p.type) ? <Text style={styles.creditAmount}>{freePriceWords(p.credits, p.type)}</Text> : <>
-                                                                    <Text style={styles.creditAmount}>{p.credits ?? '?'}</Text>
+                                                                    {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). The price is
+                                                                        whole hundredths (the copy's price_c): formatHundredths, "—" for one that isn't. */}
+                                                                    {freePriceWords(p.price_c, p.type) ? <Text style={styles.creditAmount}>{freePriceWords(p.price_c, p.type)}</Text> : <>
+                                                                    <Text style={styles.creditAmount}>{formatHundredths(p.price_c)}</Text>
                                                                     <Image accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                                                                     </>}
                                                                 </View>

@@ -2,6 +2,9 @@
  * Trust tiers on the phone come from @beanpool/core — the card badge, the Elder card, the Market trust
  * filter and the Newcomer label colour. Before this, the cards started Resident/Steward/Elder at
  * 120/520/1320 and the Ledger at 180/580/1380, against the node's 200/600/1400.
+ *
+ * A listing's author_energy_cycled is the author's tier start, in whole hundredths as every credit figure is (the node's
+ * tierForCredit(…).minCredit since atomic Beans, M1): Resident starts at 20000 (200 Beans of credit).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -10,7 +13,7 @@ import { getTrustTier, isElder } from '../trust-tier';
 import { feedPostVisible, DEFAULT_MARKET_FILTERS } from '../market-filters';
 import { lightColors, darkColors } from '../../constants/colors';
 
-const BOUNDARIES = [0, 199, 200, 599, 600, 1399, 1400, 2000];
+const BOUNDARIES = [0, 19999, 20000, 59999, 60000, 139999, 140000, 200000];
 const coreTier = (credit: number) => getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit).name;
 
 describe('the card badge', () => {
@@ -21,7 +24,7 @@ describe('the card badge', () => {
     });
 
     it('starts each tier where the node does', () => {
-        expect([199, 200, 599, 600, 1399, 1400].map(c => getTrustTier(c).name))
+        expect([19999, 20000, 59999, 60000, 139999, 140000].map(c => getTrustTier(c).name))
             .toEqual(['Newcomer', 'Resident', 'Resident', 'Steward', 'Steward', 'Elder']);
     });
 
@@ -31,8 +34,8 @@ describe('the card badge', () => {
     });
 
     it('gives Elder card treatment from 1400 exactly', () => {
-        expect(isElder(1399)).toBe(false);
-        expect(isElder(1400)).toBe(true);
+        expect(isElder(139999)).toBe(false);
+        expect(isElder(140000)).toBe(true);
     });
 });
 

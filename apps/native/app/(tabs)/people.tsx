@@ -1014,7 +1014,7 @@ export default function PeopleScreen() {
                     sql += ' ORDER BY callsign COLLATE NOCASE ASC';
                     break;
                 case 'trusted':
-                    sql += ' ORDER BY earned_credit DESC, joined_at DESC';
+                    sql += ' ORDER BY earned_credit_c DESC, joined_at DESC';
                     break;
                 case 'active':
                     sql += ' ORDER BY last_active_at DESC NULLS LAST, joined_at DESC';

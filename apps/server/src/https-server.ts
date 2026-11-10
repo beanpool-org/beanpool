@@ -204,7 +204,7 @@ import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, requestNonces, STORE_FULL_CODE, ST
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion, parseAppVersionHeader } from './app-version-counts.js';
-import { floorRefusing } from './app-store-versions.js';
+import { floorLetsThrough, floorRefusing } from './app-store-versions.js';
 import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
@@ -812,19 +812,22 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
                 }
             }
 
-            // The app's heartbeat on the sync WebSocket, `{"type":"ping"}`, is answered `{"type":"pong"}`: the app's
-            // watchdog (native services/ws-client.ts, the PWA lib/sync.ts) reconnects a socket that hears none. Every
-            // ping is answered: the `wantPong` opt-in kept apps from before it (~17 Sep) out of a doorbell-driven sync
-            // loop, and those are below the 1.4.0 floor (cutover N2, audit E10). The apps still send `wantPong: true`;
-            // it is not read.
+            // Reply to opt-in application-level ping on the sync WebSocket.
+            // Tiny & fast: skips JSON parsing unless an opt-in key is present in dataStr.
+            // Old clients send {"type":"ping"} and receive no reply, preventing
+            // unexpected doorbell-driven sync loops on un-upgraded clients.
+            // One opt-in key, and the cheap substring check is for that key only. Prefiltering on
+            // a bare 'pong' matched any message that merely CONTAINED the word and forced a
+            // JSON.parse of it — on a 1-CPU node shared with four other containers, per client,
+            // per message. Accepting a second alias bought nothing but another way to be wrong.
             // Length-bounded before the substring scan, let alone the parse. Without it a
-            // client could stream multi-megabyte frames containing "ping" and force a
+            // client could stream multi-megabyte frames containing "wantPong" and force a
             // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
-            // four other nodes. A real heartbeat is well under 256 bytes.
-            if (type === 'sync' && bytes.length < 256 && bytes.includes('ping')) {
+            // four other nodes. A legitimate opt-in ping is well under 256 bytes.
+            if (type === 'sync' && bytes.length < 256 && bytes.includes('wantPong')) {
                 try {
                     const msg = JSON.parse(bytes.toString('utf8'));
-                    if (msg && msg.type === 'ping') {
+                    if (msg && msg.type === 'ping' && msg.wantPong === true) {
                         if (ws.readyState === 1) { // OPEN
                             try { ws.send(PONG_PAYLOAD); } catch {}
                         }
@@ -1100,9 +1103,9 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 ws._memberFeed = connect.kind === 'member' && connect.feed;
                 ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
                 ws._openFeed = WS_AUTH_MODE === 'open';
-                // Every member's socket hears the bell's events (state-engine.ts tellBell). The `bell=1` opt-in kept
-                // apps from before the bell, which took them for a doorbell, out; those are below the 1.4.0 floor
-                // (cutover N2, audit E9). The apps still send it; it is not read.
+                // The app reads the bell's events (`bell=1`, state-engine.ts tellBell): an older one took them for
+                // a doorbell, and an old phone ran a full sync for each.
+                ws._bell = parsedUrl.searchParams.get('bell') === '1';
 
                 addWsClient(ws);
                 trackConnection(ws, 'sync', req);
@@ -1676,10 +1679,14 @@ export async function startHttpsServer(port: number): Promise<number> {
             && !peekReadAllowed(ctx as unknown as { method: string; path: string; query: Record<string, unknown> });
         // The phone floor (cutover 1.4.0, design §1): an app whose X-BeanPool-App names a version below its platform's
         // floor, once that floor's update block applies (app-store-versions.ts floorRefusing: never before its store has
-        // the build), is refused every write and gated read, 426 app_too_old with the floor, and puts up its full-screen
-        // "Update required" (apps/native/utils/force-update.ts). Public reads still answer, /api/community/health among
-        // them. Only the phone app sends the header: the web app (this server's own copy), the manager and scripts never do.
-        if (isMutatingApi || isGatedRead) {
+        // the build), is refused every write and gated read, 426 app_too_old with the floor. An app from 1.4.0 on puts up
+        // its full-screen "Update required" at once on that answer (apps/native utils/node-request-signing.ts); an older
+        // one doesn't read it, so what it tries fails until its next safe moment, a start or a return after 5 minutes
+        // away, puts the screen up (utils/force-update.ts). The screen's ways out are let through (floorLetsThrough: the
+        // push token's DELETE and a leave statement), so a phone that leaves stops getting alerts. Public reads still
+        // answer, /api/community/health among them. Only the phone app sends the header: the web app (this server's own
+        // copy), the manager and scripts never do.
+        if ((isMutatingApi || isGatedRead) && !floorLetsThrough(ctx.method, ctx.path)) {
             const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
             const floor = app ? floorRefusing(app.platform, app.version) : null;
             if (floor) {
@@ -1925,7 +1932,8 @@ export async function startHttpsServer(port: number): Promise<number> {
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
     // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything here. An
-    // app below the community's floor was refused before this, once the floor's block applies (requireSignature).
+    // app below the community's floor was refused before this, once the floor's block applies (requireSignature), on
+    // everything but its ways out (floorLetsThrough), which are counted as any answered request is.
     app.use(async (ctx, next) => {
         const actor = ctx.state.actor as string | undefined;
         if (actor) noteAppVersion(actor, ctx.get(APP_VERSION_HEADER), k => isNodeMember(k) || isLiveVisitor(k));

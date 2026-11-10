@@ -7258,15 +7258,15 @@ export function markConversationRead(pubkey: string, conversationId: string): vo
 
 /**
  * One of the bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS) to the member's own sockets, found by the
- * socket index's key (an announcement to every member is one lookup each, never every socket per member). Every app on
- * the 1.4.0 floor reads them, so no socket opts in any more (cutover N2, audit E9: `bell=1` kept apps from before the
- * bell, which took an event they didn't know for a doorbell, out). Never a visitor's socket. Never throws.
+ * socket index's key (an announcement to every member is one lookup each, never every socket per member), and only those
+ * whose app said it reads them (`bell=1` on its connect, https-server.ts `_bell`): an app from before them takes any event
+ * it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's socket. Never throws.
  */
 function tellBell(pubkey: string, event: { type: string } & Record<string, unknown>): void {
     try {
         const msg = JSON.stringify(event);
         for (const ws of wsClients.reachable([pubkey], null, 0)) {
-            if (ws._visitor || ws._memberPubkey !== pubkey) continue;
+            if (!ws._bell || ws._visitor || ws._memberPubkey !== pubkey) continue;
             try { ws.send(msg); } catch { wsClients.delete(ws); }
         }
     } catch { /* the app's next read catches up */ }

@@ -7,7 +7,7 @@
  *
  * FRAMES. The apps send one frame and nothing else: the heartbeat `{"type":"ping","wantPong":true}` (31 bytes, every
  * 30 s while the app is in front: native services/ws-client.ts PING_INTERVAL_MS, the PWA lib/sync.ts
- * HEARTBEAT_INTERVAL_MS; every ping is answered, `wantPong` is no longer read). The Settings page's /ws/logs socket sends
+ * HEARTBEAT_INTERVAL_MS; an app before the opt-in sends `{"type":"ping"}`). The Settings page's /ws/logs socket sends
  * nothing (static/settings.js), and the manager opens no socket. So a frame is capped at 4 KiB, over a hundred times the
  * largest real one; ws refuses a bigger one itself, closing the socket with 1009 before buffering past the cap. A socket
  * may send `framesPerMinute` frames a minute (60: thirty times the heartbeat); past that it is closed with 1008.

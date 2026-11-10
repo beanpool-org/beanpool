@@ -7,9 +7,15 @@ related: updates-and-health, what-the-server-sees, troubleshooting
 
 ## What the floor does
 
-Your server tells every phone app the oldest version it should run: the floor. An app below it shows a banner that cannot be closed while it is in use. Once the grace date has passed, it also stops with a full-screen **Update required** and one **Update** button that opens the store. On its own the app does that only at a safe moment: when it starts, or when someone comes back to it after 5 minutes or more away. Your server refusing it (below) puts the screen up at once.
+Your server tells every phone app the oldest version it should run: the floor. An app below it shows a banner that cannot be closed while it is in use. Once the grace date has passed, it also stops with a full-screen **Update required** and one **Update** button that opens the store. On its own the app does that only at a safe moment: when it starts, or when someone comes back to it after 5 minutes or more away. An app from version 1.4.0 on also puts the screen up at once when your server refuses it (below).
 
-Once a floor stops apps, your server also refuses them: an app below it can't send anything or read anything private, and it puts up **Update required** at once, even mid-use, because nothing it does would work. Public reads, such as your community's name and the floor itself, still answer, so the app can say what to do. Before the floor stops apps (its store has no version that meets it yet, or its grace date is still ahead), your server refuses nothing for an app's version.
+Once a floor stops apps, your server also refuses them: an app below it can't send anything or read anything private. What the member then sees depends on the app's version:
+
+- **From 1.4.0 on** (refused by a floor you raised later): it puts up **Update required** at once, even mid-use.
+- **Older, from the version with the full-screen update:** it does not know that refusal. What it tries fails, with no screen, until its next start or return puts **Update required** up.
+- **Older still:** it does not say its version, so your server does not refuse it. It shows the banner only.
+
+Public reads, such as your community's name and the floor itself, still answer, so the app can say what to do, and so do the screen's ways out (below). Before the floor stops apps (its store has no version that meets it yet, or its grace date is still ahead), your server refuses nothing for an app's version.
 
 A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone.
 
@@ -17,14 +23,14 @@ A floor never stops anyone the store cannot help. Your server reads Google Play'
 
 In .env:
 
-- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.4.2. Unset, it is 1.4.0: apps older than that can't work with this server, so it holds them off without anything set.
+- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.4.2. Unset, it is 1.4.0: apps older than that can't work with this server, so it holds them off without anything set. You can raise it, never lower it.
 - **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.
 - **MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.
 - **MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone.
 
 Then run: docker compose up -d
 
-A floor that is not a version is ignored. A grace date that is not a date turns the full-screen update off for that kind of phone until you fix it, and the log says so.
+A floor that is not a version is ignored. So is one below 1.4.0, such as a floor set before this version: your server uses 1.4.0 in its place, and its log says so once when it starts. A grace date that is not a date turns the full-screen update off for that kind of phone until you fix it, and the log says so.
 
 ## Raising it safely
 
@@ -38,7 +44,7 @@ Apps from before the full-screen update show the banner only, whatever the date.
 
 ## Undoing it
 
-A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor, or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
+A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor (not below 1.4.0), or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
 
 ## What the screen still lets a member do
 
@@ -48,7 +54,7 @@ The screen stops your community only, never the member's account. From it a memb
 - **See their 12 words** on the screen itself, after the phone's own lock, or add them to a phone that has none, so they never lose the account.
 - **Leave this community.** The phone forgets it and its copy, and opens the next community on the phone. Nothing is deleted on your server: the member can come back with an invite or their 12 words. On a phone with no other community, leaving takes the account off the phone, as Sign Out does, after showing the 12 words. Someone who never finished joining simply forgets your community and can use another invite.
 
-None of these asks your server anything. Leaving asks it, in passing, to stop sending that phone notifications, and nothing it answers changes what happens. Leaving for another community on the phone never waits for it; leaving the last one, as Sign Out, waits a few seconds at most. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it.
+None of these asks your server anything. Leaving asks it, in passing, to stop sending that phone notifications, and nothing it answers changes what happens. Your server takes that from an app below its floor too, so a phone that leaves stops getting your community's notifications. Leaving for another community on the phone never waits for it; leaving the last one, as Sign Out, waits a few seconds at most. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it.
 
 ## The web app
 

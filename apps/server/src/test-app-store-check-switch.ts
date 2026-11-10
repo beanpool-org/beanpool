@@ -7,7 +7,9 @@
  *      this process makes goes through a recorder that refuses any host but this machine, so a store asked is a store
  *      counted.
  *   2. Off is unknown, never "up to date": /api/community/health serves null versions and no enforced floor (an app below
- *      MIN_APP_VERSION gets its banner only), and the manager's route says the check is off (`storeCheckOff`).
+ *      MIN_APP_VERSION gets its banner only), and the manager's route says the check is off (`storeCheckOff`). The floor
+ *      it serves is never below the built-in 1.4.0: this suite's MIN_APP_VERSION=1.2.60 is ignored, and the start (1)
+ *      says so in one line.
  *   3. The control: unset, or any value but 'true', the same call asks both stores (the recorder sees itunes.apple.com
  *      and play.google.com, refuses them, and the versions stay null: a refused store invents nothing).
  *   4. The switch reaches a node and its operator: docker-compose.yml passes it from .env, .env.example lists it empty,
@@ -29,6 +31,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { logger } from './logger.js';
 import {
     checkAppStoreVersions,
     getAppStoreVersions,
@@ -82,8 +85,19 @@ async function main() {
     console.log('\n— 1. DISABLE_APP_STORE_CHECK=true: no timer, no request —');
     __resetAppStoreVersionsForTest();
     const before = outside.length;
-    const armed = timersArmedBy(() => initAppStoreVersionChecks());
+    const said: string[] = [];
+    const realWarn = logger.warn.bind(logger);
+    (logger as any).warn = (cat: string, msg: string, ...rest: unknown[]) => { said.push(String(msg)); return (realWarn as any)(cat, msg, ...rest); };
+    let armed: number[];
+    try {
+        armed = timersArmedBy(() => initAppStoreVersionChecks());
+    } finally {
+        (logger as any).warn = realWarn;
+    }
     assert(armed.length === 0, `the boot's lookup arms no timer (${armed.length ? `armed ${armed.join(', ')} ms` : 'none'})`);
+    // The floor in .env below the built-in one (#3047's deciding review, finding 2): ignored, and the start says so, once.
+    const ignoredLines = said.filter(l => l.includes('MIN_APP_VERSION=1.2.60 in .env is below') && l.includes('1.4.0 applies'));
+    assert(ignoredLines.length === 1, `the start says, in one line, that MIN_APP_VERSION=1.2.60 is ignored and 1.4.0 applies (${said.join(' | ') || 'nothing said'})`);
     const checked = await checkAppStoreVersions();
     assert(storesAsked(before).length === 0, `a check asks neither store (${storesAsked(before).join(', ') || 'none asked'})`);
     assert(outside.length === before, `and nothing else outside this machine (${outside.slice(before).join(', ') || 'nothing'})`);
@@ -99,7 +113,7 @@ async function main() {
     const health = await (await fetch(`${base}/api/community/health`)).json() as any;
     assert(health.appVersions?.android === null && health.appVersions?.ios === null && health.appVersions?.checkedAt === null,
         `health tells the phones no store version: null, not a version (${JSON.stringify(health.appVersions)})`);
-    assert(health.minAppVersion === '1.2.60', `the floor is still served, for the banner (${health.minAppVersion})`);
+    assert(health.minAppVersion === '1.4.0', `the floor is still served, for the banner: the built-in 1.4.0, never the lower 1.2.60 set here (${health.minAppVersion})`);
     assert(health.appFloors?.android?.min === null && health.appFloors?.android?.blocking === false
         && health.appFloors?.ios?.min === null && health.appFloors?.ios?.blocking === false,
         `no floor is enforced on an unknown store, so no app is stopped (${JSON.stringify(health.appFloors)})`);

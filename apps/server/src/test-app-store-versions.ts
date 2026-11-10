@@ -84,8 +84,11 @@ async function main() {
     // ── The floor ────────────────────────────────────────────────────────────────
     delete process.env.MIN_APP_VERSION;
     assert(getMinAppVersion() === '1.4.0', 'the default floor is 1.4.0, the cutover: in code, so every node holds old apps off');
+    process.env.MIN_APP_VERSION = 'v1.5.0';
+    assert(getMinAppVersion() === '1.5.0', 'an operator can raise the floor, leading v and all');
+    // Never lower it (#3047's deciding review, finding 2): 1.1.0 was a raise over the old 1.0.75 default, and is a cut now.
     process.env.MIN_APP_VERSION = 'v1.1.0';
-    assert(getMinAppVersion() === '1.1.0', 'an operator can raise the floor, leading v and all');
+    assert(getMinAppVersion() === '1.4.0', 'a floor below the built-in one is ignored: 1.4.0 stands');
     process.env.MIN_APP_VERSION = 'nonsense';
     assert(getMinAppVersion() === '1.4.0', 'an unparseable floor falls back to the default');
     delete process.env.MIN_APP_VERSION;

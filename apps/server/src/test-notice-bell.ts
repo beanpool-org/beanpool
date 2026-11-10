@@ -8,8 +8,8 @@
  *   1. kept for all: a push to a member with no phone keeps them a notice as it does a member with one (the phone still the
  *      only one Expo is asked to reach); a member with the category off, and a key that is no member here, get none
  *   2. the socket: the member's own sockets hear `{ type: 'push_notice', id, kind }` the moment it is kept, with no words;
- *      nobody else's socket hears it; a socket that sends no `bell=1` hears it too (the opt-in for apps from before the
- *      bell is gone: they are below the 1.4.0 floor, cutover N2, audit E9)
+ *      nobody else's socket hears it, nor a socket of an app from before the bell (no `bell=1`), which would take it for a
+ *      doorbell
  *   3. the list (GET /api/notices/push): the signer's own only, newest first, with their words, where a tap lands, and
  *      seenAt; unseen=1 the unseen only; unsigned 401, a key that is no member 403; private, no-store
  *   4. the mark (POST /api/notices/push/seen): only the signer's own ids are marked (another member's stay unseen), once;
@@ -84,7 +84,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
 }
 
 type Sock = { ws: WebSocket; events: any[] };
-/** A member's socket; `bell` false: one that doesn't send `bell=1`, which the node no longer reads (cutover N2, E9). */
+/** A member's socket; `bell` false: an app from before the bell, which never said it reads its events. */
 function socket(id: Id, bell = true): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -182,10 +182,12 @@ async function main() {
         assert(heard.length === 1 && Object.keys(heard[0]).sort().join(',') === 'id,kind,type', 'and nothing else: no words, no chat, no sender');
         const annHeard = annSock.events.filter(e => e.type === 'push_notice');
         assert(annHeard.length === 1 && annHeard[0].id === rowsOf(ann)[0]?.id, "another member's socket hears only their own notice");
-        // No opt-in any more (cutover N2, audit E9): every app on the 1.4.0 floor reads the bell's events.
-        const oldHeard = webOld.events.filter(e => e.type === 'push_notice');
-        assert(oldHeard.length === 1 && oldHeard[0].id === webRows[0]?.id,
-            `the same member's socket that sent no bell=1 hears it too (${show(oldHeard)})`);
+        // An app from before the bell takes any event it doesn't know for a doorbell (an old phone: a full sync each). The
+        // opt-in is the protocol, kept through the cutover (N2, audit E9; #3047's deciding review). A live socket first, so
+        // its silence below is the opt-in's doing.
+        assert(webOld.ws.readyState === WebSocket.OPEN && webOld.events.some(e => e.type === 'state_snapshot'),
+            'the socket that sent no bell=1 is open and heard its state snapshot');
+        assert(!webOld.events.some(e => e.type === 'push_notice'), "the same member's socket from an app before the bell (no bell=1) hears nothing of it");
 
         // ── 3. The list ────────────────────────────────────────────────────────────────────────────────────
         console.log('\n--- 3. GET /api/notices/push: the signer\'s own ---');
@@ -222,9 +224,7 @@ async function main() {
         assert((await call('POST', web, '/api/notices/push/seen', { ids: [first?.id] })).body?.marked === 0, 'marked once: again marks nothing');
         await sleep(50);
         const seenHeard = webSock.events.filter(e => e.type === 'push_notices_seen');
-        const oldSeenHeard = webOld.events.filter(e => e.type === 'push_notices_seen');
-        assert(oldSeenHeard.length === 1 && JSON.stringify(oldSeenHeard[0].ids) === JSON.stringify([first?.id]),
-            `the socket that sent no bell=1 hears the mark too (${show(oldSeenHeard)})`);
+        assert(!webOld.events.some(e => e.type === 'push_notices_seen'), 'nor of the mark');
         assert(seenHeard.length === 1 && JSON.stringify(seenHeard[0].ids) === JSON.stringify([first?.id]),
             `the member's sockets hear which were marked, so every open app's count follows (${show(seenHeard)})`);
         for (const [body, why] of [[{}, 'no ids'], [{ ids: [] }, 'an empty list'], [{ ids: 'x' }, 'not a list'], [{ ids: Array(101).fill('a') }, 'more than 100'], [{ ids: [7] }, 'not a string']] as const) {

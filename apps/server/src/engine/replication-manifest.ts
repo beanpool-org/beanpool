@@ -821,6 +821,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     backing_drift_said: { kind: 'per-server', reason: "the enterprise counts this server's boot last said in its log, so it says them once per change (state-engine.ts reportBackingFigureDriftAtBoot)" },
     'doorNumbers.*': { kind: 'per-server', reason: "the open door's numbers, this server's own and never copied (engine/door-signal.ts)" },
     'migration_*': { kind: 'per-server', reason: "one-shot boot markers of this server's own database" },
+    schema_release: { kind: 'per-server', reason: "the release whose schema steps last ran on this server's own file, its half of the stamp (db/schema-gate.ts); each server stamps its own" },
 };
 
 /** Fields of the `node_config` row's JSON object (state-engine.ts NodeConfig). */

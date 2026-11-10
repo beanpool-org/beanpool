@@ -19,7 +19,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
     getGatewayConfig, isBreakGlassMode, isPasswordRetired,
 } from '../config/local-config.js';
-import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession, revokeAdminSession, ADMIN_SESSION_COOKIE } from '../admin-key-auth.js';
+import { validateAdminSession, restampPasswordSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, requireFreshProof, PASSWORD_RETIRED_CODE, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
@@ -87,11 +87,9 @@ const handleAppleAppSiteAssociation = async (ctx: any) => {
                             "/": "/",
                             "?": { "invite": "*" },
                             "comment": "Match invite links with query parameters"
-                        },
-                        {
-                            "/": "/app*",
-                            "comment": "Match legacy app paths"
                         }
+                        // No "/app*": every link the phone opens is on "/" (app/+native-intent.ts), and /app is the
+                        // web app's, which a browser keeps (cutover N2, audit E5).
                     ]
                 }
             ]
@@ -142,28 +140,11 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     // build is there, keeps the older one.
     useAppDocumentPolicy(ctx);
 
-    // 1. Deep-link Handshake Token Exchange (an older phone app's Manage button): a page in the phone's in-app
-    //    browser, so the phone hand-off's short idle limit (admin-key-auth.ts PHONE_HANDOFF_IDLE_TTL_MS).
-    const token = ctx.query.token as string | undefined;
-    if (token) {
-        const exchangeRes = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
-        if (exchangeRes.ok && exchangeRes.sessionId) {
-            // The session this browser held is ended, as a password sign-in ends it (AUTH-06): replaced here, it would otherwise
-            // stay valid until its idle limit.
-            const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
-            if (held) revokeAdminSession(held);
-            setAdminSessionCookie(ctx, exchangeRes.sessionId);
-            ctx.redirect('/settings');
-            return;
-        } else {
-            ctx.status = exchangeRes.replay ? 401 : (exchangeRes.expired ? 401 : 400);
-            ctx.type = 'text/html';
-            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${escapeHtml(exchangeRes.error || 'The authentication token is invalid or has expired.')}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
-            return;
-        }
-    }
+    // The phone's Manage button hands its sign-in over in the fragment (`/settings#handoff=…`), which the manager
+    // redeems with POST /api/local/admin/auth/exchange (routes/admin.ts). The query form `/settings?token=` of builds
+    // before 1.2.57 is gone (cutover N2, audit E4): a token in the query is never read here, so it signs nobody in.
 
-    // 2. Break-glass mode enforcement: settings is restricted to enrolled key sessions
+    // Break-glass mode enforcement: settings is restricted to enrolled key sessions
     if (isBreakGlassMode()) {
         const rawToken =
             (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||

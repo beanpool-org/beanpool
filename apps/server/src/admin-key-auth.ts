@@ -60,7 +60,7 @@ export const SESSION_IDLE_TTL_MS = 2 * 60 * 60 * 1000;   // 2 hours idle timeout
 export const SESSION_HARD_TTL_MS = 12 * 60 * 60 * 1000;  // 12 hours hard maximum
 /**
  * Idle limit for a session opened by the phone app's "Manage <community>" hand-off (/settings#handoff=…, redeemed
- * through POST /api/local/admin/auth/exchange, or an older app's GET /settings?token=). That page lives in the phone's
+ * through POST /api/local/admin/auth/exchange). That page lives in the phone's
  * in-app browser, which App Lock can't cover on Android (a Custom Tab is a task of its own) and only closes on an iPhone
  * as the lock screen goes up (deciding review of #1413, 2026-10-01). So the node locks it itself: 15 minutes with no
  * request from it. While Settings is on screen and in use it polls every few seconds, which keeps the session; its

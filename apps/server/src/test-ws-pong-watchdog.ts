@@ -1,10 +1,11 @@
 /**
- * WebSocket Opt-in Application-level Pong Integration Test
+ * WebSocket application-level pong integration test
  *
  * Verifies:
- * 1. Default/legacy ping {"type":"ping"} receives NO pong reply (Trap 1: protecting old clients)
- * 2. Opt-in ping {"type":"ping","wantPong":true} receives {"type":"pong"}
- * 3. Opt-in ping {"type":"ping","pong":true} receives {"type":"pong"}
+ * 1. A plain ping {"type":"ping"} receives {"type":"pong"}: every ping is answered (cutover N2, audit E10; the
+ *    `wantPong` opt-in kept apps from before ~17 Sep, now below the 1.4.0 floor, out of a sync loop)
+ * 2. The apps' heartbeat {"type":"ping","wantPong":true} receives {"type":"pong"} (the key is not read)
+ * 3. A ping in a frame of 256 bytes or more is never parsed, so it gets no reply (the DoS bound stays)
  * 4. Non-ping or malformed messages are handled safely without crashing
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -49,31 +50,29 @@ async function main() {
     assert(receivedMessages.length > 0 && receivedMessages[0].type === 'state_snapshot', 'Initial state_snapshot received on connection');
     receivedMessages.length = 0;
 
-    // 1. Legacy ping without opt-in flag must NOT receive a pong
+    // 1. A plain ping is answered: no opt-in any more (cutover N2, audit E10)
     ws.send(JSON.stringify({ type: 'ping' }));
     await sleep(250);
-    const legacyPongReceived = receivedMessages.some(m => m.type === 'pong');
-    assert(!legacyPongReceived, 'Trap 1: Legacy {"type":"ping"} receives NO pong reply');
+    const plainPongReceived = receivedMessages.some(m => m.type === 'pong');
+    assert(plainPongReceived, 'A plain {"type":"ping"} receives {"type":"pong"}');
     receivedMessages.length = 0;
 
-    // 2. Opt-in ping with wantPong: true must receive {"type":"pong"}
+    // 2. The apps' heartbeat, which still says wantPong: true, is answered the same
     ws.send(JSON.stringify({ type: 'ping', wantPong: true }));
     await sleep(150);
-    const optInPongReceived = receivedMessages.some(m => m.type === 'pong');
-    assert(optInPongReceived, 'Opt-in {"type":"ping","wantPong":true} receives {"type":"pong"}');
+    const heartbeatPongReceived = receivedMessages.some(m => m.type === 'pong');
+    assert(heartbeatPongReceived, 'The heartbeat {"type":"ping","wantPong":true} receives {"type":"pong"}');
     receivedMessages.length = 0;
 
-    // 3. `wantPong` is the ONLY opt-in key. A second alias bought nothing but another way to be
-    // wrong, and prefiltering on a bare 'pong' substring forced a JSON.parse of any message that
-    // merely contained the word.
-    ws.send(JSON.stringify({ type: 'ping', pong: true }));
+    // 3. The length bound stays: a frame of 256 bytes or more is never scanned or parsed, ping or not.
+    ws.send(JSON.stringify({ type: 'ping', pad: 'x'.repeat(256) }));
     await sleep(150);
-    const aliasPongReceived = receivedMessages.some(m => m.type === 'pong');
-    assert(!aliasPongReceived, 'A ping WITHOUT wantPong receives no reply, even if it says pong');
+    const longPongReceived = receivedMessages.some(m => m.type === 'pong');
+    assert(!longPongReceived, 'A ping in a frame of 256 bytes or more receives no reply');
     receivedMessages.length = 0;
 
-    // 4. Non-ping message with wantPong: true must NOT receive a pong
-    ws.send(JSON.stringify({ type: 'other_message', wantPong: true }));
+    // 4. A message that is not a ping, though it says "ping" (so it is parsed), must NOT receive a pong
+    ws.send(JSON.stringify({ type: 'other_message', wantPong: true, note: 'ping' }));
     await sleep(150);
     const otherPongReceived = receivedMessages.some(m => m.type === 'pong');
     assert(!otherPongReceived, 'Non-ping message does NOT trigger pong reply');

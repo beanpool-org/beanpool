@@ -812,22 +812,19 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
                 }
             }
 
-            // Reply to opt-in application-level ping on the sync WebSocket.
-            // Tiny & fast: skips JSON parsing unless an opt-in key is present in dataStr.
-            // Old clients send {"type":"ping"} and receive no reply, preventing
-            // unexpected doorbell-driven sync loops on un-upgraded clients.
-            // One opt-in key, and the cheap substring check is for that key only. Prefiltering on
-            // a bare 'pong' matched any message that merely CONTAINED the word and forced a
-            // JSON.parse of it — on a 1-CPU node shared with four other containers, per client,
-            // per message. Accepting a second alias bought nothing but another way to be wrong.
+            // The app's heartbeat on the sync WebSocket, `{"type":"ping"}`, is answered `{"type":"pong"}`: the app's
+            // watchdog (native services/ws-client.ts, the PWA lib/sync.ts) reconnects a socket that hears none. Every
+            // ping is answered: the `wantPong` opt-in kept apps from before it (~17 Sep) out of a doorbell-driven sync
+            // loop, and those are below the 1.4.0 floor (cutover N2, audit E10). The apps still send `wantPong: true`;
+            // it is not read.
             // Length-bounded before the substring scan, let alone the parse. Without it a
-            // client could stream multi-megabyte frames containing "wantPong" and force a
+            // client could stream multi-megabyte frames containing "ping" and force a
             // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
-            // four other nodes. A legitimate opt-in ping is well under 256 bytes.
-            if (type === 'sync' && bytes.length < 256 && bytes.includes('wantPong')) {
+            // four other nodes. A real heartbeat is well under 256 bytes.
+            if (type === 'sync' && bytes.length < 256 && bytes.includes('ping')) {
                 try {
                     const msg = JSON.parse(bytes.toString('utf8'));
-                    if (msg && msg.type === 'ping' && msg.wantPong === true) {
+                    if (msg && msg.type === 'ping') {
                         if (ws.readyState === 1) { // OPEN
                             try { ws.send(PONG_PAYLOAD); } catch {}
                         }
@@ -1103,9 +1100,9 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 ws._memberFeed = connect.kind === 'member' && connect.feed;
                 ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
                 ws._openFeed = WS_AUTH_MODE === 'open';
-                // The app reads the bell's events (`bell=1`, state-engine.ts tellBell): an older one took them for
-                // a doorbell, and an old phone ran a full sync for each.
-                ws._bell = parsedUrl.searchParams.get('bell') === '1';
+                // Every member's socket hears the bell's events (state-engine.ts tellBell). The `bell=1` opt-in kept
+                // apps from before the bell, which took them for a doorbell, out; those are below the 1.4.0 floor
+                // (cutover N2, audit E9). The apps still send it; it is not read.
 
                 addWsClient(ws);
                 trackConnection(ws, 'sync', req);

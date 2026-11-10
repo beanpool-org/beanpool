@@ -230,7 +230,7 @@ async function child(): Promise<void> {
             const c = getLocalConfig();
             return !!(c.adminHash && c.salt && verifyPassword(a.password, c.adminHash, c.salt));
         },
-        /** An old bug's drift, as a raw write, for the admin to accept as the audit baseline. */
+        /** An old bug's drift, as a raw write, for the admin to accept as the audit baseline. `amount`: whole hundredths. */
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
@@ -491,15 +491,16 @@ async function main(): Promise<void> {
         built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
             reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
-        built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
+        // 0.1 Beans is 10 hundredths: the ledger and its baseline are whole hundredths now.
+        built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 10 })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
         let mSettings: Settings = await main.send('settings');
         require_(mSettings.rows.door === 'admins', `M: only its admins invite (door ${j(mSettings.rows.door)})`);
         require_(mSettings.rows.confirmation === 'off', `M: the dial is switched off, an 'off' row (${j(mSettings.rows.confirmation)})`);
         require_(typeof mSettings.rows.core_settings_lock === 'string' && JSON.parse(mSettings.rows.core_settings_lock).at,
             `M: its core settings are confirmed and locked (${j(mSettings.rows.core_settings_lock)})`);
-        require_(mSettings.rows.ledger_audit_baseline && Math.abs(Number(mSettings.rows.ledger_audit_baseline) - 0.1) < 1e-9,
-            `M: its accepted baseline is 0.1 (${mSettings.rows.ledger_audit_baseline})`);
+        require_(mSettings.rows.ledger_audit_baseline === '10',
+            `M: its accepted baseline is 0.1 Beans, the integer text 10 (${mSettings.rows.ledger_audit_baseline})`);
 
         // ── 2. S, with settings of its own, and its first copy ──
         console.log('\n— 2. a standby with settings of its own takes its first copy —');
@@ -630,7 +631,7 @@ async function main(): Promise<void> {
         assert(j(s2.localConfig.gateway?.adminIpAllowlist) === j(['192.0.2.44']) && s2.kept?.installedAt,
             `S2 keeps its own admin IP allowlist, and the record says when it was installed (${j({ allowlist: s2.localConfig.gateway?.adminIpAllowlist, installedAt: s2.kept?.installedAt })})`);
         const s2Audit = await standby2.send('ledger-audit');
-        assert(s2Audit.ok === true && Math.abs(s2Audit.baseline - 0.1) < 1e-9 && Math.abs(s2Audit.drift) < 0.01,
+        assert(s2Audit.ok === true && s2Audit.baseline === 10 && s2Audit.drift === 0,
             `its ledger audit holds the ledger to M's accepted baseline: it adds up (${j(s2Audit)})`);
         await standby2.send('set-local', { patch: { communityName: 'Renamed After Promotion' } });
         await standby2.send('checkpoint');
@@ -751,7 +752,7 @@ async function main(): Promise<void> {
         console.log('\n— 7. the promotion audit —');
         const audit = inspected.lastPromotionAudit;
         const auditStep = inspected.progress.steps.find((st: any) => st.step === 'audit');
-        assert(audit?.ok === true && Math.abs(audit.drift) < 0.01 && /adds up/.test(auditStep?.detail ?? '') && !/NOT/.test(auditStep?.detail ?? ''),
+        assert(audit?.ok === true && audit.drift === 0 && /adds up/.test(auditStep?.detail ?? '') && !/NOT/.test(auditStep?.detail ?? ''),
             `the audit after the restart holds the ledger to M's baseline: it adds up (${j({ audit, step: auditStep?.detail })})`);
 
         // ── 8. The directory ──

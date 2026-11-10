@@ -66,9 +66,15 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-const r4 = (n: number): number => Math.round(n * 10000) / 10000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths of a Bean: a tab, a ceiling, an allowance, a commission
+ * and its fee (crossNodeFee = feeOf, truncated once), the pot and every balance_c. `hc` turns a Beans figure into
+ * hundredths, so every check below is exact.
+ */
+const hc = (beans: number): number => Math.round(beans * 100);
+/** An account's balance, whole hundredths. */
 const bal = (pk: string): number =>
-    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance_c ?? 0;
 
 /**
  * Every account row except the COMMONS_POOL shadow, plus the live global.
@@ -79,29 +85,30 @@ const bal = (pk: string): number =>
 const nodeTotal = (): number => {
     const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
-    return r4(s + getCommonsBalanceExact());
+    return s + getCommonsBalanceExact();
 };
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
+/** A member with 500 Beans of earned credit, holding `balance` Beans (whole hundredths in the rows). */
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url, is_visitor)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?)`)
+        .run(pk, callsign, hc(500), homeNodeUrl ?? null, isVisitor ? 1 : 0);
     setMemberPhoto(db, pk, TINY_PNG);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+        .run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
 
-/** Move a bridge to a chosen tab. What a settled trade in one direction or the other leaves behind. */
+/** Move a bridge to a chosen tab, in Beans. What a settled trade in one direction or the other leaves behind. */
 function setTab(peerId: string, balance: number): void {
     ensureBridgeAccount(peerId);
-    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(balance, bridgeAccountId(peerId));
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(balance), bridgeAccountId(peerId));
     reconcileLedgerFromDb();
 }
 
@@ -118,7 +125,7 @@ async function main() {
     const PEER_URL = 'https://byron.beanpool.org';
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'byron', PEER_URL);
-    setConnectorCreditCap(PEER_ADDR, 500);
+    setConnectorCreditCap(PEER_ADDR, hc(500));
 
     const link = ensureFederationLink(PEER, 'byron', createTreasury)!;
     assert(link !== null && link.commissionCeiling === 0,
@@ -137,18 +144,18 @@ async function main() {
     ];
     for (const [tab, ceiling, expected, why] of table) {
         setTab(PEER, tab);
-        setCommissionCeiling(PEER, ceiling);
+        setCommissionCeiling(PEER, hc(ceiling));
         const cap = commissionCapacity(PEER)!;
-        assert(cap.allowance === expected,
+        assert(cap.allowance === hc(expected),
             `1. tab ${tab}, ceiling ${ceiling} → allowance ${expected} (got ${cap.allowance}) — ${why}`);
     }
 
     setTab(PEER, -480);
     setCommissionCeiling(PEER, 0);
     const owed = commissionCapacity(PEER)!;
-    assert(owed.redeemable === 480 && owed.energyBalance === -480,
+    assert(owed.redeemable === hc(480) && owed.energyBalance === hc(-480),
         `2a. the two numbers are reported separately (redeemable ${owed.redeemable}, tab ${owed.energyBalance}) — a keeper needs to know how much of their room is credit earned rather than discretion`);
-    assert(owed.ceiling === 0 && owed.allowance === 480,
+    assert(owed.ceiling === 0 && owed.allowance === hc(480),
         '2b. and a ceiling of 0 — the default every link is created with — still permits redemption');
 
     // ── 3. THE FEE IS INSIDE THE ALLOWANCE. ────────────────────────────────────────────────────────────
@@ -157,13 +164,14 @@ async function main() {
     // slightly past the ceiling, AND fund short of what the escrow needs — the same off-by-a-fee landing in
     // two places.
     setTab(PEER, 0);
-    setCommissionCeiling(PEER, 100);
-    setCommonsBalance(1000);
-    const atCeiling = fundCommission(PEER, 100);
+    setCommissionCeiling(PEER, hc(100));
+    setCommonsBalance(hc(1000));
+    const atCeiling = fundCommission(PEER, hc(100));
     assert(atCeiling.ok === false && atCeiling.reason === 'over_allowance',
         `3a. 100 against a ceiling of exactly 100 is REFUSED (${atCeiling.ok ? 'accepted' : (atCeiling as any).reason}) — the 1.5% fee is part of what crosses`);
-    const justUnder = fundCommission(PEER, 98);
-    assert(justUnder.ok === true && justUnder.total === 99.47,
+    // 98 Beans: a fee of floor(9800 × 15 / 1000) = 147 hundredths, truncated once.
+    const justUnder = fundCommission(PEER, hc(98));
+    assert(justUnder.ok === true && justUnder.total === hc(99.47),
         `3b. 98 fits, and the total moved is amount + fee = 99.47 (got ${justUnder.ok ? justUnder.total : 'refused'})`);
 
     // ── 4. FUNDING: the enterprise's own balance first, the Commons for the shortfall only. ─────────────
@@ -172,25 +180,25 @@ async function main() {
     // enterprise rather than the Commons; drawing only the shortfall means the next commission consumes that
     // residue instead of needing a sweep nobody would remember to run.
     db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
-    setCommonsBalance(1000);
+    setCommonsBalance(hc(1000));
     reconcileLedgerFromDb();
     setTab(PEER, 0);
-    setCommissionCeiling(PEER, 500);
+    setCommissionCeiling(PEER, hc(500));
 
     const before4 = nodeTotal();
-    const fresh = fundCommission(PEER, 100);
-    assert(fresh.ok === true && fresh.drawnFromCommons === 101.5,
+    const fresh = fundCommission(PEER, hc(100));
+    assert(fresh.ok === true && fresh.drawnFromCommons === hc(101.5),
         `4a. an empty link draws the WHOLE total from the pot (got ${fresh.ok ? fresh.drawnFromCommons : 'refused'})`);
-    assert(bal(link.treasuryPubkey) === 101.5 && r4(getCommonsBalanceExact()) === 898.5,
-        `4b. and the beans are on the link, not the pot (link ${bal(link.treasuryPubkey)}, pot ${r4(getCommonsBalanceExact())})`);
+    assert(bal(link.treasuryPubkey) === hc(101.5) && getCommonsBalanceExact() === hc(898.5),
+        `4b. and the beans are on the link, not the pot (link ${bal(link.treasuryPubkey)}, pot ${getCommonsBalanceExact()})`);
     assert(nodeTotal() === before4,
         `4c. NOTHING WAS MINTED — the node total is unchanged (${before4} → ${nodeTotal()})`);
 
     // Now the link already holds beans: a second commission of the same size should draw only the top-up.
-    const partial = fundCommission(PEER, 150);
-    assert(partial.ok === true && partial.drawnFromCommons === r4(152.25 - 101.5),
+    const partial = fundCommission(PEER, hc(150));
+    assert(partial.ok === true && partial.drawnFromCommons === hc(152.25) - hc(101.5),
         `4d. a link holding 101.5 draws only the 50.75 shortfall for a 152.25 total (got ${partial.ok ? partial.drawnFromCommons : 'refused'}) — the residue from a reversal drains itself`);
-    assert(bal(link.treasuryPubkey) === 152.25,
+    assert(bal(link.treasuryPubkey) === hc(152.25),
         `4e. leaving exactly the total on the link (got ${bal(link.treasuryPubkey)})`);
     assert(nodeTotal() === before4, '4f. still nothing minted');
 
@@ -199,42 +207,42 @@ async function main() {
     // Each commission moves the tab positive by its amount (that is what settling one does), so it consumes
     // the room it used. Read per-commission, a ceiling of 200 would permit 200 forever.
     db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
-    setCommonsBalance(10_000);
+    setCommonsBalance(hc(10_000));
     reconcileLedgerFromDb();
     setTab(PEER, 0);
-    setCommissionCeiling(PEER, 200);
+    setCommissionCeiling(PEER, hc(200));
 
-    const first = fundCommission(PEER, 150);
+    const first = fundCommission(PEER, hc(150));
     assert(first.ok === true, '5a. the first 150 against a ceiling of 200 is allowed');
     setTab(PEER, 152.25);   // what settling that commission leaves: the tab moved by amount + fee
-    const second = fundCommission(PEER, 150);
+    const second = fundCommission(PEER, hc(150));
     assert(second.ok === false && second.reason === 'over_allowance',
         `5b. THE SECOND 150 IS REFUSED (${second.ok ? 'accepted — the ceiling is not a safety' : (second as any).reason}) — the ceiling is a budget that depletes, not a per-commission formality`);
     const remaining = commissionCapacity(PEER)!;
-    assert(remaining.allowance === r4(200 - 152.25),
+    assert(remaining.allowance === hc(200) - hc(152.25),
         `5c. with exactly the unused remainder left (${remaining.allowance})`);
-    const fits = fundCommission(PEER, 40);
+    const fits = fundCommission(PEER, hc(40));
     assert(fits.ok === true, '5d. and a commission that fits the remainder still goes through');
 
     // ── 6. THE COMMONS IS NOT PUSHED INTO DEFICIT for one person's discretionary act. ───────────────────
     db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
-    setCommonsBalance(10);
+    setCommonsBalance(hc(10));
     reconcileLedgerFromDb();
     setTab(PEER, -1000);
     setCommissionCeiling(PEER, 0);
 
     const before6 = nodeTotal();
-    const short = fundCommission(PEER, 100);
+    const short = fundCommission(PEER, hc(100));
     assert(short.ok === false && short.reason === 'commons_short',
         `6a. a commission well within the allowance still refuses when the pot cannot cover it (${short.ok ? 'accepted' : (short as any).reason})`);
-    assert(r4(getCommonsBalanceExact()) === 10 && bal(link.treasuryPubkey) === 0,
-        `6b. and NOTHING MOVED (pot ${r4(getCommonsBalanceExact())}, link ${bal(link.treasuryPubkey)}) — no allowDeficit here, unlike a reversal that would otherwise strand a fee`);
+    assert(getCommonsBalanceExact() === hc(10) && bal(link.treasuryPubkey) === 0,
+        `6b. and NOTHING MOVED (pot ${getCommonsBalanceExact()}, link ${bal(link.treasuryPubkey)}) — no allowDeficit here, unlike a reversal that would otherwise strand a fee`);
     assert(nodeTotal() === before6, '6c. node total unchanged');
 
     // ── 7. A peer with no link cannot be commissioned from. ────────────────────────────────────────────
     const orphanKey = await generateKeyPair('Ed25519');
     const ORPHAN = peerIdFromPrivateKey(orphanKey).toString();
-    const noLink = fundCommission(ORPHAN, 10);
+    const noLink = fundCommission(ORPHAN, hc(10));
     assert(noLink.ok === false && noLink.reason === 'no_link',
         `7. a peer with no link refuses with no_link (got ${noLink.ok ? 'accepted' : (noLink as any).reason}) — a cap is what creates one`);
 
@@ -260,7 +268,7 @@ async function main() {
 
     // A remote listing, cached the way the pull writes one: a visitor author and an origin_node.
     const remoteSeller = makeMember('ByronBaker', 0, PEER_URL);
-    const remotePost = createPost('offer', 'other', 'A performance in Byron', 'd', 60, 'fixed', remoteSeller)!;
+    const remotePost = createPost('offer', 'other', 'A performance in Byron', 'd', hc(60), 'fixed', remoteSeller)!;
     db.prepare("UPDATE posts SET origin_node = ? WHERE id = ?").run(PEER_URL, remotePost.id);
 
     // §10 below asserts the admin's node-wide override reaches a link. makeMember() leaves
@@ -271,7 +279,7 @@ async function main() {
     const bystander = makeMember('Bystander', 50);
     adminAssignTreasuryOperator(link.treasuryPubkey, keeper);
 
-    setCommonsBalance(10_000);
+    setCommonsBalance(hc(10_000));
     setTab(PEER, -1000);
     setCommissionCeiling(PEER, 0);
     reconcileLedgerFromDb();
@@ -319,7 +327,7 @@ async function main() {
     // A LOCAL listing is an ordinary purchase, not a commission. Without this a keeper could open a bridge
     // tab against a trade that never left the node — real beans, imaginary obligation.
     const localSeller = makeMember('LocalBaker', 0);
-    const localPost = createPost('offer', 'other', 'Bread, here', 'd', 10, 'fixed', localSeller)!;
+    const localPost = createPost('offer', 'other', 'Bread, here', 'd', hc(10), 'fixed', localSeller)!;
     const localAttempt = await commission(keeper, { postId: localPost.id });
     assert(localAttempt.status === 404,
         `8d. a LOCAL listing cannot be commissioned (got ${localAttempt.status}) — that is an ordinary purchase`);
@@ -339,15 +347,15 @@ async function main() {
     // The one assertion that proves funding is genuinely LAST. A 503 here with beans already drawn would be
     // a Commons debit for a commission that never started — and it is exactly what putting the transport
     // check after the funding would produce.
-    setCommonsBalance(10_000);
+    setCommonsBalance(hc(10_000));
     db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     reconcileLedgerFromDb();
     const before9 = nodeTotal();
     const noTransport = await commission(keeper, { postId: remotePost.id });
     assert(noTransport.status === 503,
         `9a. a fully valid commission with no p2p transport returns 503 (got ${noTransport.status}: ${noTransport.body?.error})`);
-    assert(r4(getCommonsBalanceExact()) === 10_000 && bal(link.treasuryPubkey) === 0,
-        `9b. AND NOTHING WAS FUNDED (pot ${r4(getCommonsBalanceExact())}, link ${bal(link.treasuryPubkey)}) — funding is the last thing the route does, so every refusal above it costs the community nothing`);
+    assert(getCommonsBalanceExact() === hc(10_000) && bal(link.treasuryPubkey) === 0,
+        `9b. AND NOTHING WAS FUNDED (pot ${getCommonsBalanceExact()}, link ${bal(link.treasuryPubkey)}) — funding is the last thing the route does, so every refusal above it costs the community nothing`);
     assert(nodeTotal() === before9, '9c. node total unchanged');
 
     // ── 10. An admin cannot spend without a keeper binding; once appointed, they can. ─────────

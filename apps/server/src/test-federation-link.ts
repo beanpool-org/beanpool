@@ -116,6 +116,13 @@ async function signedPost(signer: { pk: string; priv: crypto.KeyObject }, route:
     return { status: res.status, json };
 }
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths of a Bean: a cap's `cap` and a ceiling's `ceiling` (each
+ * keeps its name and carries hundredths), the link's energyBalance, treasuryBalance, commissionCeiling and
+ * commissionAllowance, and every balance_c. `hc` turns a Beans figure into hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+
 const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/credit-cap', body);
 const setCeiling = (body: Record<string, unknown>) => post('/api/local/federation/links/ceiling', body);
 
@@ -123,14 +130,14 @@ const nodeTotal = (): number =>
     (db.prepare('SELECT COALESCE(SUM(balance_c),0) AS t FROM accounts').get() as any).t;
 
 /**
- * Move beans into a peer's bridge account WITHOUT minting any, so the energy-balance read can be exercised
+ * Move `amount` Beans into a peer's bridge account WITHOUT minting any, so the energy-balance read can be exercised
  * against a non-zero tab while the ledger still sums to where it started. A real trade does exactly this
  * shape (escrow → bridge); this is the same paired write with the trade left out.
  */
 function tiltBridge(peerId: string, amount: number): void {
     db.transaction(() => {
-        db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(amount, bridgeAccountId(peerId));
-        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(amount, 'COMMONS_POOL');
+        db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(hc(amount), bridgeAccountId(peerId));
+        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(hc(amount), 'COMMONS_POOL');
     })();
 }
 
@@ -155,7 +162,7 @@ function writeConnectorsJson(): void {
         enabled: true,
         callsign: 'ondisk',
         publicUrl: 'https://ondisk.beanpool.org',
-        creditCap: 250,
+        creditCap: hc(250),
         addedAt: 1,
     }], null, 2));
 }
@@ -208,7 +215,7 @@ async function main() {
         '1c. and the reconciler agrees: nothing to create for a capless peer');
 
     // ── 2. THE POINT OF THE STEP. Setting a cap creates the enterprise, in the same request. ─────────────
-    const capped = await setCap({ password: PW, address: ADDRESS, cap: 100 });
+    const capped = await setCap({ password: PW, address: ADDRESS, cap: hc(100) });
     assert(capped.status === 200, `2a. a cap of 100 is accepted (got ${capped.status})`);
     const link = getFederationLink(PEER_ID);
     assert(link !== null, '2b. THE POINT: the link enterprise now exists, created by the act of setting a cap');
@@ -226,12 +233,12 @@ async function main() {
         .get(link!.treasuryPubkey) as any;
     assert(treasuryRow?.is_treasury === 1,
         '2h. the link IS an enterprise (is_treasury=1), not a parallel concept — so it inherits keepers, demurrage exemption and the Commons card for free');
-    assert(treasuryRow?.earned_credit === 0,
+    assert(treasuryRow?.earned_credit_c === 0,
         '2i. with a credit line of ZERO (§7: a credit line on a link treasury "creates a negative nobody earns back")');
 
     // ── 3. Idempotence. This runs on every boot, and a cap can be set repeatedly. ────────────────────────
     const linksBefore = listFederationLinks().length;
-    await setCap({ password: PW, address: ADDRESS, cap: 250 });
+    await setCap({ password: PW, address: ADDRESS, cap: hc(250) });
     assert(listFederationLinks().length === linksBefore,
         `3a. re-setting the cap does not create a second link (${linksBefore} → ${listFederationLinks().length})`);
     assert(getFederationLink(PEER_ID)?.treasuryPubkey === link!.treasuryPubkey,
@@ -243,12 +250,12 @@ async function main() {
     // positive — their community did the work and ours has not returned it. Getting this backwards on a card
     // would tell a community it is owed when it owes.
     tiltBridge(PEER_ID, 5);
-    assert(getFederationLink(PEER_ID)?.energyBalance === 5,
+    assert(getFederationLink(PEER_ID)?.energyBalance === hc(5),
         `4a. the link reports the bridge tab as its energy balance (got ${getFederationLink(PEER_ID)?.energyBalance})`);
     assert(getFederationLink(PEER_ID)?.treasuryBalance === 0,
         '4b. and the tab did NOT land in the treasury — the two numbers are separate, which is the §2.4 distinction the card must not blur');
     tiltBridge(PEER_ID, -13);
-    assert(getFederationLink(PEER_ID)?.energyBalance === -8,
+    assert(getFederationLink(PEER_ID)?.energyBalance === hc(-8),
         `4c. and it goes negative when they owe us (got ${getFederationLink(PEER_ID)?.energyBalance})`);
     tiltBridge(PEER_ID, 8);   // back to square
     assert(nodeTotal() === baseline, '4d. and the ledger still sums to where it started');
@@ -298,22 +305,22 @@ async function main() {
     tiltBridge(PEER_ID, -480);
     const owedList = await signedGet(reader, '/api/treasuries');
     const owedCard = (owedList.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
-    assert(owedCard?.link?.commissionAllowance === 480,
+    assert(owedCard?.link?.commissionAllowance === hc(480),
         `6e. with a tab of −480 and a ceiling of 0 the card carries an allowance of 480 (got ${owedCard?.link?.commissionAllowance}) — "commissioning off" beside "they owe us 480" told the keeper the opposite of the truth`);
     assert(owedCard?.link?.commissionCeiling === 0,
         '6f. while still reporting the ceiling separately — they are different facts and the card shows both');
     const owedDetail = await signedGet(reader, `/api/treasury/${link!.treasuryPubkey}`);
-    assert(owedDetail.json?.link?.commissionAllowance === 480,
+    assert(owedDetail.json?.link?.commissionAllowance === hc(480),
         `6g. and the detail read agrees with the list (got ${owedDetail.json?.link?.commissionAllowance}) — one shape function, so they cannot drift`);
     tiltBridge(PEER_ID, 480);   // back to square, so the checks below start where they expect
 
     // ── 7. The ceiling: admin-gated, bounded, and with no "unlimited". ───────────────────────────────────
-    assert((await setCeiling({ peerId: PEER_ID, ceiling: 20 })).status === 401, '7a. a missing password is rejected');
-    assert((await setCeiling({ password: 'nope', peerId: PEER_ID, ceiling: 20 })).status === 401, '7b. a wrong password is rejected');
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: hc(20) })).status === 401, '7a. a missing password is rejected');
+    assert((await setCeiling({ password: 'nope', peerId: PEER_ID, ceiling: hc(20) })).status === 401, '7b. a wrong password is rejected');
     assert(getFederationLink(PEER_ID)?.commissionCeiling === 0, '7c. and neither set anything');
 
-    assert((await setCeiling({ password: PW, ceiling: 20 })).status === 400, '7d. a missing peerId is a 400');
-    const unknownPeer = await setCeiling({ password: PW, peerId: '12D3KooWNoSuchPeer', ceiling: 20 });
+    assert((await setCeiling({ password: PW, ceiling: hc(20) })).status === 400, '7d. a missing peerId is a 400');
+    const unknownPeer = await setCeiling({ password: PW, peerId: '12D3KooWNoSuchPeer', ceiling: hc(20) });
     assert(unknownPeer.status === 404 && /credit cap/i.test(unknownPeer.json?.error ?? ''),
         `7e. an unknown peer is a 404 that says how a link comes into being (got ${unknownPeer.status})`);
 
@@ -321,17 +328,17 @@ async function main() {
     const absent = await setCeiling({ password: PW, peerId: PEER_ID });
     assert(absent.status === 400 && /unlimited/i.test(absent.json?.error ?? ''),
         `7f. an ABSENT ceiling is a 400, not "no limit" — there is no unlimited value (got ${absent.status})`);
-    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: '20' })).status === 400,
+    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: String(hc(20)) })).status === 400,
         '7g. a string ceiling is a 400, not coerced');
-    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: -5 })).status === 400,
+    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(-5) })).status === 400,
         '7h. a negative ceiling is refused');
     assert(getFederationLink(PEER_ID)?.commissionCeiling === 0, '7i. none of the malformed requests moved it');
 
-    const ok = await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 20 });
-    assert(ok.status === 200 && ok.json?.link?.commissionCeiling === 20,
+    const ok = await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(20) });
+    assert(ok.status === 200 && ok.json?.link?.commissionCeiling === hc(20),
         `7j. a ceiling of 20 is accepted and echoed (got ${ok.status} ceiling=${ok.json?.link?.commissionCeiling})`);
-    assert(getFederationLink(PEER_ID)?.commissionCeiling === 20, '7k. and reads back through the accessor');
-    assert((await signedGet(reader, '/api/federation/links')).json.links.find((l: any) => l.peerId === PEER_ID)?.commissionCeiling === 20,
+    assert(getFederationLink(PEER_ID)?.commissionCeiling === hc(20), '7k. and reads back through the accessor');
+    assert((await signedGet(reader, '/api/federation/links')).json.links.find((l: any) => l.peerId === PEER_ID)?.commissionCeiling === hc(20),
         '7l. and is visible on the members\' read, which is the point of a ceiling being a safety');
     assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 0 })).json?.link?.commissionCeiling === 0,
         '7m. and 0 turns commissioning back off — the documented way to stop it');
@@ -340,7 +347,7 @@ async function main() {
     await post('/api/local/connectors', {
         password: PW, address: ADDRESS_2, trustLevel: 'peer', callsign: 'eastgippy', enabled: false,
     });
-    await setCap({ password: PW, address: ADDRESS_2, cap: 50 });
+    await setCap({ password: PW, address: ADDRESS_2, cap: hc(50) });
     const second = getFederationLink(PEER_ID_2);
     assert(second !== null,
         '8a. a second peer whose operator chose the SAME callsign still gets a link — two communities picking one name is not a reason to refuse accountability');
@@ -434,7 +441,7 @@ async function main() {
     pruneAuthAttempts(Date.now() + 61_000);
     const riverAdded = await post('/api/local/connectors', { password: PW, address: RIVER_ADDR, trustLevel: 'peer', callsign: 'riverbend', enabled: false });
     const treasuriesBeforeRiver = treasuryCount();
-    const riverCap = await setCap({ password: PW, address: RIVER_ADDR, cap: 40 });
+    const riverCap = await setCap({ password: PW, address: RIVER_ADDR, cap: hc(40) });
     const river = getFederationLink(RIVER);
     assert(riverAdded.status === 200 && riverCap.status === 200 && !!river && river.treasuryPubkey !== hers,
         `12e. THE POINT: capping the new peer makes a NEW link treasury, not Rhea's enterprise (${riverAdded.status} ${riverAdded.json?.error ?? ''}, ${riverCap.status} ${riverCap.json?.error ?? ''}; got ${river?.treasuryPubkey?.slice(0, 12)} vs hers ${hers?.slice(0, 12)})`);
@@ -442,7 +449,7 @@ async function main() {
         `12f. named with the peer's suffix, her name being taken, and exactly one treasury more (got "${river?.name}")`);
     const riverKeepers = keepersOf(river!.treasuryPubkey);
     const riverRow = db.prepare('SELECT is_treasury, earned_credit_c FROM members WHERE public_key = ?').get(river!.treasuryPubkey) as any;
-    assert(riverRow?.is_treasury === 1 && riverRow?.earned_credit === 0 && riverKeepers.length === 1
+    assert(riverRow?.is_treasury === 1 && riverRow?.earned_credit_c === 0 && riverKeepers.length === 1
         && riverKeepers[0].member_pubkey === operator.pk && riverKeepers[0].role === 'keeper' && riverKeepers[0].granted_by === 'system',
         `12g. system-made, no credit line, its one keeper the default operator, granted by the system (${JSON.stringify(riverKeepers)})`);
     assert(markerOf(river!.treasuryPubkey) === RIVER, '12h. and marked as made for this peer');
@@ -456,7 +463,8 @@ async function main() {
 
     // (b) Two peers with one callsign, both link rows lost, the SECOND peer reconciled first. By name, it took the
     // first peer's "eastgippy Link" and the first peer got a brand-new third treasury, the second's own stranded.
-    const MOVED = 7;
+    const MOVED_BEANS = 7;
+    const MOVED = hc(MOVED_BEANS);
     db.transaction(() => {
         db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
         db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
@@ -468,14 +476,14 @@ async function main() {
     assert(secondAgain?.treasuryPubkey === second!.treasuryPubkey,
         `12k. the second peer, reconciled first, takes back its OWN treasury ("${secondAgain?.name}"), not the first peer's`);
     assert(firstAgain?.treasuryPubkey === link!.treasuryPubkey && firstAgain?.treasuryBalance === MOVED,
-        `12l. the first peer takes back its own, with its ${MOVED} Beans (got "${firstAgain?.name}", ${firstAgain?.treasuryBalance})`);
+        `12l. the first peer takes back its own, with its ${MOVED_BEANS} Beans (got "${firstAgain?.name}", ${firstAgain?.treasuryBalance})`);
     assert(treasuryCount() === treasuriesBeforeLoss,
         `12m. and no treasury was made: nothing stranded, nothing duplicated (${treasuriesBeforeLoss} → ${treasuryCount()})`);
 
     // (c) The loss the fallback exists for, on the boot path: one link row gone, the peer still capped.
     resetAdminRateLimit();
     pruneAuthAttempts(Date.now() + 61_000);
-    await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 20 });
+    await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(20) });
     db.prepare('DELETE FROM federation_links WHERE peer_id = ?').run(PEER_ID);
     const treasuriesBeforeBoot = treasuryCount();
     reconcileFederationLinks(createTreasury);

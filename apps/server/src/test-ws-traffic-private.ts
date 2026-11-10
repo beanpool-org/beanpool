@@ -86,9 +86,10 @@ async function main() {
     seedMember(payee.pub, PAYEE_CALLSIGN);
     // A direct send needs Beans held and a completed trade behind the sender (state-engine transfer), as
     // test-blocks-on-beans seeds them.
-    transfer('genesis', payer.pub, 100, 'seed', 'direct', true);
-    const eggs = createPost('offer', 'produce', 'Eggs', 'Eggs, fresh', 10, 'fixed', payee.pub)!;
-    createPost('offer', 'produce', 'Seedlings', 'Seedlings, fresh', 10, 'fixed', payer.pub); // an Offer first: accepting needs one
+    // 100 Beans, and eggs at 10: every figure is whole hundredths of a Bean.
+    transfer('genesis', payer.pub, 10000, 'seed', 'direct', true);
+    const eggs = createPost('offer', 'produce', 'Eggs', 'Eggs, fresh', 1000, 'fixed', payee.pub)!;
+    createPost('offer', 'produce', 'Seedlings', 'Seedlings, fresh', 1000, 'fixed', payer.pub); // an Offer first: accepting needs one
     completePostTransaction(acceptPost(eggs.id, payer.pub).id, payer.pub);
 
     const logs = await open(`${WSS}/ws/logs?ticket=${issueWsTicket()}`);
@@ -97,10 +98,12 @@ async function main() {
     logs.raw.length = 0;
     member.raw.length = 0;
 
-    // A real send, signed by the payer as the apps sign it.
-    const AMOUNT = 3.75;
+    // A real send, signed by the payer as the apps sign it: 87.65 Beans, `amount_c` 8765 on the wire. Four digits no
+    // traffic line's own numbers (a size, a count) come near, so the checks below can't hit one by chance.
+    const AMOUNT_C = 8765;
+    const AMOUNT_BEANS = '87.65';
     const MEMO = 'memo-' + crypto.randomBytes(4).toString('hex');
-    const bodyString = JSON.stringify({ to: payee.pub, amount: AMOUNT, memo: MEMO });
+    const bodyString = JSON.stringify({ to: payee.pub, amount_c: AMOUNT_C, memo: MEMO });
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const res = await fetch(`${BASE}/api/ledger/transfer`, {
@@ -115,7 +118,7 @@ async function main() {
         body: bodyString,
     });
     const resBody = await res.json().catch(() => null) as any;
-    assert(res.status === 200, `the payer sends ${AMOUNT} Beans (got ${res.status} ${JSON.stringify(resBody)})`);
+    assert(res.status === 200, `the payer sends ${AMOUNT_BEANS} Beans (got ${res.status} ${JSON.stringify(resBody)})`);
 
     // A frame the member's socket sends in, with a marker of its own.
     const IN_MARKER = 'in-marker-' + crypto.randomBytes(4).toString('hex');
@@ -142,10 +145,14 @@ async function main() {
         ['the payer\'s key', payer.pub], ['the payee\'s key', payee.pub],
         ['the payer\'s key prefix', payer.pub.slice(0, 16)], ['the payee\'s key prefix', payee.pub.slice(0, 16)],
         ['the payer\'s callsign', PAYER_CALLSIGN], ['the payee\'s callsign', PAYEE_CALLSIGN],
-        ['the amount', String(AMOUNT)], ['the note', MEMO], ['the frame sent in', IN_MARKER],
+        ['the amount in Beans', AMOUNT_BEANS], ['the note', MEMO], ['the frame sent in', IN_MARKER],
     ] as const) {
         assert(!all.includes(secret), `no traffic line holds ${label}`);
     }
+    // The amount as the frame carries it, whole hundredths (`"amount_c":8765`), matched as a JSON number: a timestamp or a
+    // hex id that happens to hold the digits is not a hit.
+    assert(!new RegExp(`[:,\\[]${AMOUNT_C}[,}\\]]`).test(all), 'no traffic line holds the amount in hundredths');
+    assert(!!payFrame && new RegExp(`[:,\\[]${AMOUNT_C}[,}\\]]`).test(payFrame), 'while the transaction frame itself carries it, so the check above can find it');
     assert(lines.every((l: any) => !('preview' in l)), `no traffic line has a preview (got keys ${[...new Set(lines.flatMap((l: any) => Object.keys(l)))].join(', ')})`);
 
     // 4. The frame sent in.

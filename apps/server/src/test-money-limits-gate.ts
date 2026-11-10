@@ -45,7 +45,8 @@ function makeIdentity(): Identity {
     return { pub, priv: privateKey };
 }
 
-function insertMember(id: Identity, callsign: string, balance = 1000): void {
+/** A member with a balance in whole hundredths of a Bean (100000 is 1,000 Beans). */
+function insertMember(id: Identity, callsign: string, balance = 100000): void {
     db.prepare(
         `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
@@ -56,6 +57,7 @@ function insertMember(id: Identity, callsign: string, balance = 1000): void {
     ).run(id.pub, balance);
 }
 
+/** A completed trade, its price in whole hundredths (`price_c`, `amount_c`). */
 function completedTrade(buyer: string, seller: string, credits: number) {
     const pid = `mlg-post-${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
@@ -193,16 +195,16 @@ async function main() {
 
     const memberA = makeIdentity();
     const memberB = makeIdentity();
-    insertMember(memberA, 'member_a', 1000);
-    insertMember(memberB, 'member_b', 1000);
-    completedTrade(memberA.pub, memberB.pub, 50);
+    insertMember(memberA, 'member_a', 100000);
+    insertMember(memberB, 'member_b', 100000);
+    completedTrade(memberA.pub, memberB.pub, 5000);
     reconcileLedgerFromDb();
 
     // Test malformed ID rejection (number)
     const resBadNum = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: 12345, amount: 10 },
+        { to: 12345, amount_c: 1000 },
         memberA
     );
     assert(resBadNum.status === 400, 'POST /api/ledger/transfer with numeric "to" returns 400');
@@ -215,7 +217,7 @@ async function main() {
     const resBadArr = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: [memberB.pub], amount: 10 },
+        { to: [memberB.pub], amount_c: 1000 },
         memberA
     );
     assert(resBadArr.status === 400, 'POST /api/ledger/transfer with array "to" returns 400');
@@ -228,7 +230,7 @@ async function main() {
     const resBadEmpty = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: '', amount: 10 },
+        { to: '', amount_c: 1000 },
         memberA
     );
     assert(resBadEmpty.status === 400, 'POST /api/ledger/transfer with empty string "to" returns 400');
@@ -241,7 +243,7 @@ async function main() {
     const resValid = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: memberB.pub, amount: 10, memo: 'Test transfer' },
+        { to: memberB.pub, amount_c: 1000, memo: 'Test transfer' },
         memberA
     );
     assert(resValid.status === 200, 'POST /api/ledger/transfer with valid parameters returns 200');
@@ -251,10 +253,10 @@ async function main() {
     const resFail = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: memberB.pub, amount: -50 },
+        { to: memberB.pub, amount_c: -5000 },
         memberA
     );
-    assert(resFail.status === 400, 'POST /api/ledger/transfer with negative amount returns 400');
+    assert(resFail.status === 400 && resFail.body?.code === 'amount_c_required', 'POST /api/ledger/transfer with negative amount returns 400 amount_c_required');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

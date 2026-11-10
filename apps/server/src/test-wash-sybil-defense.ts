@@ -24,6 +24,9 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
+/** The story's figures are Beans; the node's are whole hundredths of a Bean (the per-partner cap is 50000: 500 Beans). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 let txc = 0;
 function seedMember(pk: string, joinedAtDaysAgo = 0) {
     const joinedAt = new Date(Date.now() - joinedAtDaysAgo * 24 * 60 * 60 * 1000).toISOString();
@@ -31,14 +34,15 @@ function seedMember(pk: string, joinedAtDaysAgo = 0) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
+/** A completed trade of `credits` Beans (whole hundredths in the rows). */
 function mtx(buyer: string, seller: string, credits: number, completedDaysAgo = 0) {
     const pid = 'wsp-' + (txc++);
     db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
-        .run(pid, credits, seller);
+        .run(pid, hc(credits), seller);
 
     const completedAt = new Date(Date.now() - completedDaysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?,?,?,?,?, 'completed', ?)`)
-        .run('wmtx-' + (txc++), pid, buyer, seller, credits, completedAt);
+        .run('wmtx-' + (txc++), pid, buyer, seller, hc(credits), completedAt);
 }
 
 // Records every SQL string prepared while fn runs.
@@ -75,8 +79,8 @@ async function main() {
         // Cap is 500, so qualified trade value for userA and userB should be 500
         const profileA = getMemberTrustProfile(userA);
         const profileB = getMemberTrustProfile(userB);
-        assert(profileA.qualifiedValue === 500, `Unidirectional trade capped at 500 (got ${profileA.qualifiedValue})`);
-        assert(profileB.qualifiedValue === 500, `Seller also receives 500 qualified value (got ${profileB.qualifiedValue})`);
+        assert(profileA.qualifiedValue === hc(500), `Unidirectional trade capped at 500 Beans (got ${profileA.qualifiedValue})`);
+        assert(profileB.qualifiedValue === hc(500), `Seller also receives 500 Beans of qualified value (got ${profileB.qualifiedValue})`);
 
         // --- Test 2: Wash trading pair (r < 0.15) ---
         const wash1 = 'wash1-' + Date.now();
@@ -101,8 +105,9 @@ async function main() {
         const { result: health, sql: washSql } = preparedSql(() => getCommunityHealth());
         const washFlag = health.flags.find(f => f.type === 'wash_trading' && f.members.includes(wash1));
         assert(!!washFlag, 'Wash trading alert was raised in community health flags');
-        assert(/for pair (WashOne ↔ WashTwo|WashTwo ↔ WashOne) \(gross: 1200\.0\)$/.test(washFlag?.description ?? ''),
-            `Wash flag names the pair by callsign (got ${washFlag?.description})`);
+        // The gross in Beans, 1,200 (whole hundredths inside: 120000), however a figure is written ("1200.0", "1200", "1,200").
+        assert(/for pair (WashOne ↔ WashTwo|WashTwo ↔ WashOne) \(gross: (1200|1,200)(\.0+)?\)$/.test(washFlag?.description ?? ''),
+            `Wash flag names the pair by callsign, and its gross in Beans (got ${washFlag?.description})`);
         assert(!readsAllCallsigns(washSql), 'Wash pair flagged: health does not read the whole members table');
 
         // --- Test 3: Sybil Ring (size <= 12, insularity >= 0.8, >= 50% new members) ---

@@ -42,22 +42,25 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-/** Seed an activated, funded member. `homeNodeUrl` makes them a visitor from another node. */
+/** The story's figures are Beans; the node's are whole hundredths of a Bean (`balance_c`, a body's `amount_c`/`price_c`). */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** Seed an activated, funded member, holding `balance` Beans. `homeNodeUrl` makes them a visitor from another node. */
 function makeIdentity(callsign: string, balance: number, homeNodeUrl?: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     // earned_credit > 0 ⇒ activated (granted-credit lane), so the send gate is open.
     db.prepare(
         `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 200, ?)`
-    ).run(pubKeyHex, callsign, homeNodeUrl ?? null);
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`
+    ).run(pubKeyHex, callsign, hc(200), homeNodeUrl ?? null);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`)
-        .run(pubKeyHex, balance);
+        .run(pubKeyHex, hc(balance));
     return { pubKeyHex, privateKey };
 }
 
 const balanceOf = (pk: string): number =>
-    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance_c ?? 0;
 
 async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex: string; privateKey: crypto.KeyObject }, body?: any) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
@@ -101,7 +104,7 @@ async function main() {
     const vBefore = balanceOf(visitor.pubKeyHex);
     const pBefore = balanceOf(payee.pubKeyHex);
     const vSend = await signedFetch('POST', '/api/ledger/transfer', visitor,
-        { to: payee.pubKeyHex, amount: 5, memo: 'cross-node send' });
+        { to: payee.pubKeyHex, amount_c: hc(5), memo: 'cross-node send' });
     assert(vSend.status === 503, `visitor send is REFUSED (got ${vSend.status} ${vSend.error ?? ''})`);
     assert(vSend.code === 'federation_settlement_disabled', `refusal carries the settlement code (got ${vSend.code ?? 'none'})`);
     assert(balanceOf(visitor.pubKeyHex) === vBefore, 'visitor balance unchanged — nothing debited locally');
@@ -113,7 +116,7 @@ async function main() {
     // is the point: it got past the federation guard and into the ledger logic. (The
     // send gate is orthogonal to #102; activating a credit line does not satisfy it.)
     const lSend = await signedFetch('POST', '/api/ledger/transfer', local,
-        { to: payee.pubKeyHex, amount: 5, memo: 'local send' });
+        { to: payee.pubKeyHex, amount_c: hc(5), memo: 'local send' });
     assert(lSend.status !== 503, `local send is not refused by the settlement guard (got ${lSend.status})`);
     assert(lSend.code !== 'federation_settlement_disabled', 'local send carries no settlement refusal code');
     assert(/completed trade/.test(lSend.error ?? ''), `local send reached the ordinary send gate (got "${lSend.error ?? ''}")`);
@@ -123,7 +126,7 @@ async function main() {
     // ledger work, so ordering is part of what's under test.
     const vAfterSend = balanceOf(visitor.pubKeyHex);
     const vPledge = await signedFetch('POST', '/api/crowdfund/projects/does-not-exist/pledge', visitor,
-        { fromPubkey: visitor.pubKeyHex, amount: 5, memo: 'cross-node pledge' });
+        { fromPubkey: visitor.pubKeyHex, amount_c: hc(5), memo: 'cross-node pledge' });
     assert(vPledge.status === 503, `visitor pledge is REFUSED (got ${vPledge.status} ${vPledge.error ?? ''})`);
     assert(vPledge.code === 'federation_settlement_disabled', `pledge refusal carries the settlement code (got ${vPledge.code ?? 'none'})`);
     assert(balanceOf(visitor.pubKeyHex) === vAfterSend, 'visitor balance unchanged by the refused pledge');
@@ -141,7 +144,7 @@ async function main() {
     // their own first (the contribution covenant), so give each one.
     const mkOffer = async (id: typeof local, title: string) => {
         const r = await signedFetch('POST', '/api/marketplace/posts', id, {
-            type: 'offer', category: 'general', title, description: 'x', credits: 5,
+            type: 'offer', category: 'general', title, description: 'x', price_c: hc(5),
             priceType: 'fixed', authorPublicKey: id.pubKeyHex, photos: TEST_PHOTOS,
         });
         return r.body?.post?.id as string | undefined;
@@ -162,7 +165,7 @@ async function main() {
     // The actor-is-not-the-payer case: a visitor's NEED, requested by a local member. The visitor
     // (post author) is the payer, so it must be refused even though the actor is local.
     const vNeed = await signedFetch('POST', '/api/marketplace/posts', visitor, {
-        type: 'need', category: 'general', title: 'Visiting need', description: 'x', credits: 5,
+        type: 'need', category: 'general', title: 'Visiting need', description: 'x', price_c: hc(5),
         priceType: 'fixed', authorPublicKey: visitor.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(vNeed.status === 200, `a visitor can still POST a need (got ${vNeed.status} ${vNeed.error ?? ''})`);
@@ -174,7 +177,7 @@ async function main() {
     // And the mirror: a local member's need requested by a local member still works, so the guard
     // is not simply refusing everything.
     const lNeed = await signedFetch('POST', '/api/marketplace/posts', local, {
-        type: 'need', category: 'general', title: 'Local need', description: 'x', credits: 5,
+        type: 'need', category: 'general', title: 'Local need', description: 'x', price_c: hc(5),
         priceType: 'fixed', authorPublicKey: local.pubKeyHex, photos: TEST_PHOTOS,
     });
     const lReq = await signedFetch('POST', '/api/marketplace/posts/request', payee,

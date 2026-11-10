@@ -5,8 +5,9 @@
  * The app says its version in a header on every request to its own community, `X-BeanPool-App: <version> <platform>`
  * (apps/native/utils/node-request-signing.ts), from the build that has the update block. A request is counted only once
  * its signature has been checked (https-server.ts requireSignature) and its signer is one of this community's members or a
- * visitor's row: a key anyone can mint counts for nothing. Nothing is ever refused or slowed for the header, or for a
- * version: an app below the floor keeps working with the server until the app itself stops at a safe moment.
+ * visitor's row: a key anyone can mint counts for nothing. Counting never refuses or slows anything; an app below its
+ * platform's floor, once that floor's block applies, is refused before it is counted (426 app_too_old,
+ * app-store-versions.ts floorRefusing, https-server.ts requireSignature).
  *
  * What is kept is in this process's memory and nowhere else: no table, no file, no log line. For each member and
  * platform, a tag (HMAC-SHA-256 of the member's key under 32 random bytes made when the process starts, first 16

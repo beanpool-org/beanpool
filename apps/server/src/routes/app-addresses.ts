@@ -18,9 +18,11 @@
  *                                                 confirm with one tap, which is only ever the host Settings is open at
  *                                                 (`?host=`, on all three), and `heldBack`, every other one, each with
  *                                                 its reason (engine/address-offers.ts; a Settings from before that
- *                                                 shows `unconfirmed` only, so it never offers a held-back one); how
- *                                                 many signed in the old format (apps too old to name a community); the
- *                                                 switch date; where the community lives now (`primaryAddress`, as
+ *                                                 shows `unconfirmed` only, so it never offers a held-back one); until
+ *                                                 when a node that knows none of its names accepts any host
+ *                                                 (`unboundSignaturesUntil`/`Accepted`: engine/member-signature.ts
+ *                                                 UNCONFIGURED_HOSTS_UNTIL; apps too old to name a community are
+ *                                                 refused, CUT4, so none is counted); where the community lives now (`primaryAddress`, as
  *                                                 /api/community/info says it); and how many members' apps signed for any
  *                                                 of its former names, today and on the busiest day of the last 7
  *                                                 (`formerApps`, lost-name L4: the members still to move); and for each
@@ -55,7 +57,7 @@ import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
 import { addressReaches, checkAddressesNow, namesStoppedByProject } from '../services/address-check.js';
 import {
-    ownAddressesUsage, signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
+    ownAddressesUsage, signatureUsage, staffSeenAddresses, unconfiguredHostsAccepted, unconfiguredHostsUntilDay,
 } from '../engine/member-signature.js';
 import { offerablePageHost, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
@@ -113,7 +115,6 @@ export function appAddressesReport(pageHost?: unknown) {
     if (page && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
         place({ address: page, today: 0, busiestDay: 0, ownerOrAdmin: staff.has(page) });
     }
-    const old = count('old_app', '');
     return {
         primaryAddress: primaryAddress(),
         formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
@@ -121,9 +122,8 @@ export function appAddressesReport(pageHost?: unknown) {
         named: knowsItsNames(),
         unconfirmed,
         heldBack,
-        oldApps: { today: old?.today ?? 0, busiestDay: old?.busiestDay ?? 0 },
-        unboundSignaturesUntil: unboundSignaturesUntilDay(),
-        unboundSignaturesAccepted: unboundSignaturesAccepted(),
+        unboundSignaturesUntil: unconfiguredHostsUntilDay(),
+        unboundSignaturesAccepted: unconfiguredHostsAccepted(),
     };
 }
 

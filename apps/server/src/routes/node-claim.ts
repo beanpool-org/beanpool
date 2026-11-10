@@ -103,7 +103,6 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
                 pubKeyHex: key,
                 boundText: (host) => claimText(host, codeId, key, String(body.proof ?? '')),
                 signedFor: body.signedFor,
-                oldTexts: [],
             });
             if (!signed.ok) return signed;
             // A node that knows none of its names takes any host above (audienceRefusal), and every node takes any

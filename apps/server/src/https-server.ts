@@ -200,10 +200,11 @@ import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
-import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
+import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
-import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { APP_VERSION_HEADER, noteAppVersion, parseAppVersionHeader } from './app-version-counts.js';
+import { floorRefusing } from './app-store-versions.js';
 import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
@@ -212,7 +213,7 @@ import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSa
 // timestamp, and each nonce may be used once within that window (engine/member-signature.ts `requestNonces`, spent only
 // once everything else about the request has checked out). A request also names the community it was signed for
 // (request binding): verifyMemberSignature refuses one signed for another community's host (421), and one in the old
-// format, bound to none, once the switch has passed (426).
+// format, bound to none, as too old (426, unchecked: CUT4).
 
 // SRV-2 / SRV-4: read (GET) authorization.
 //
@@ -273,7 +274,7 @@ type WsConnectResult =
  * SRV-4: verify the signed connect token on a /ws upgrade. The client signs the replay-proof scheme with method=WS and
  * an empty body, and passes pubkey/ts/nonce/sig as query params; a current app also passes `for=<host>&v=2` and signs
  * format 2 (@beanpool/core request-signing.ts). `unsigned` when none of them is present, and for a token signed for
- * another community or, after the switch, one in the old format (engine/member-signature.ts): no member feed, public
+ * another community or one in the old format, without `for=` (engine/member-signature.ts, CUT4): no member feed, public
  * doorbells in the default mode and 401 under ENFORCE_WS_AUTH=true, and the app still opens. `invalid` for a partial,
  * stale, replayed or forged token; `busy` for a good one from a key with a row (an established member's or a newcomer's)
  * with a new nonce its region of the nonce store has no room for (a stranger's reads as `unsigned`, as one for another
@@ -1676,6 +1677,21 @@ export async function startHttpsServer(port: number): Promise<number> {
         // A peek ticket's read of the post it opens (peekReadAllowed) is let through by the ticket, as a public read is.
         const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path)
             && !peekReadAllowed(ctx as unknown as { method: string; path: string; query: Record<string, unknown> });
+        // The phone floor (cutover 1.4.0, design §1): an app whose X-BeanPool-App names a version below its platform's
+        // floor, once that floor's update block applies (app-store-versions.ts floorRefusing: never before its store has
+        // the build), is refused every write and gated read, 426 app_too_old with the floor, and puts up its full-screen
+        // "Update required" (apps/native/utils/force-update.ts). Public reads still answer, /api/community/health among
+        // them. Only the phone app sends the header: the web app (this server's own copy), the manager and scripts never do.
+        if (isMutatingApi || isGatedRead) {
+            const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
+            const floor = app ? floorRefusing(app.platform, app.version) : null;
+            if (floor) {
+                ctx.status = 426;
+                ctx.set('Cache-Control', 'no-store');
+                ctx.body = { error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE, minAppVersion: floor };
+                return;
+            }
+        }
         if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
@@ -1728,12 +1744,11 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
-        // Request binding (engine/member-signature.ts): freshness, then the signature over the bytes the request's
-        // format names (format 2 when it carries X-Signed-For, the old bytes when not), then the community it was
-        // signed for (421 wrong_community for another's host; 426 app_too_old for the old format after the
-        // switch), and only then the nonce is spent: a forged request can't burn a real one, and a request refused
-        // for naming another community leaves its nonce unspent. Outside the try below, so the route that runs after
-        // an answer-as-unsigned is never inside it.
+        // Request binding (engine/member-signature.ts): a request without X-Signed-For is the old format, 426
+        // app_too_old, unchecked (CUT4); else freshness, then the signature over the format-2 bytes, then the community
+        // it was signed for (421 wrong_community for another's host), and only then the nonce is spent: a forged request
+        // can't burn a real one, and a request refused for naming another community leaves its nonce unspent. Outside the
+        // try below, so the route that runs after an answer-as-unsigned is never inside it.
         const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
         const signedFor = typeof signedForHeader === 'string' ? signedForHeader : Array.isArray(signedForHeader) ? signedForHeader.join(',') : null;
         const verdict = verifyMemberSignature({
@@ -1757,7 +1772,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         const roomRefused = !verdict.ok && verdict.code === STORE_FULL_CODE;
         const actsHere = roomRefused && !!verdict.scope && verdict.scope !== 'stranger';
         if (roomRefused && !gatewayRefusedForRoom(ctx, verdict.signer, actsHere, ctx.state.gatewayPerMinute ?? 120)) return;
-        // An old app's signature on a PUBLIC read after the switch is answered as that read unsigned, which anyone
+        // An old app's signature on a PUBLIC read is answered as that read unsigned, which anyone
         // may send: every app before binding signs its GETs to its node (native node-request-signing.ts), and it
         // reads its "update BeanPool" banner's minimum version from /api/community/health. A 426 there would hide
         // the one message that tells the member what to do. Its gated reads and writes are refused (426) below.
@@ -1814,11 +1829,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             // SRV-20: stash the verified signing material so a route that creates a
             // transaction can persist it on the row (auth_signer/signature/payload),
             // making the transaction's authorship re-verifiable by any importing node.
-            // `payload` is the text signed; in format 2 the signed bytes are 0xFF then that text (engine/sync.ts
-            // verifyTransactionAuthorship puts it back); @beanpool/core parseSignedText reads either format.
-            // `format`: 1 for the old text bound to no community, 2 for one bound to this host (a route that hands back a
-            // credential refuses 1: routes/node-admin.ts break-glass).
-            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage, format: verdict.format };
+            // `payload` is the text signed, always format 2 (bound to this host): the signed bytes are 0xFF then that text
+            // (engine/sync.ts verifyTransactionAuthorship puts it back).
+            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
@@ -1911,8 +1924,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     app.use(copyOnlyFromOtherSites);
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
-    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything. An app below
-    // the community's floor keeps working with the server; only the app itself stops, at a safe moment.
+    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything here. An
+    // app below the community's floor was refused before this, once the floor's block applies (requireSignature).
     app.use(async (ctx, next) => {
         const actor = ctx.state.actor as string | undefined;
         if (actor) noteAppVersion(actor, ctx.get(APP_VERSION_HEADER), k => isNodeMember(k) || isLiveVisitor(k));

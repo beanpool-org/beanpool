@@ -26,10 +26,12 @@
  *
  * The floors (getAppFloors) are what can stop an app: from the build that has it, an app
  * below its platform's floor shows a full-screen "Update required" at a safe moment
- * (apps/native/utils/force-update.ts). So every rule here fails towards NOT stopping
- * anyone: a floor is enforced only once that platform's store has a build that meets it
- * (an unknown store version enforces nothing), a grace date that is not a date turns the
- * block off, and nothing on the server ever refuses a request for the app's version.
+ * (apps/native/utils/force-update.ts), and from 1.4.0 the server refuses that app's gated
+ * reads and writes, 426 app_too_old (floorRefusing, https-server.ts requireSignature), so
+ * it shows the block at once. So every rule here fails towards NOT stopping anyone: a
+ * floor is enforced only once that platform's store has a build that meets it (an unknown
+ * store version enforces nothing), a grace date that is not a date turns the block off,
+ * and the server refuses an app only where the app's own block applies.
  *
  * DISABLE_APP_STORE_CHECK=true turns the lookup off (appStoreCheckDisabled): no request to
  * either store, ever. The versions then stay unknown (null), never "up to date", with what
@@ -43,15 +45,12 @@ const IOS_BUNDLE_ID = 'org.beanpool.pillar';
 const ANDROID_PACKAGE = 'org.beanpool.pillar';
 
 /**
- * The oldest app build this node expects to work with, as served to clients.
- *
- * Deliberately far below anything in the field. The field exists so a node CAN say
- * "the app talking to me is too old to work properly", and until now it has been a
- * hardcoded string in the health payload that no client ever read. Raising it makes
- * every phone below the value show a banner it cannot dismiss, so it is an operator
- * decision (MIN_APP_VERSION), not a default.
+ * The oldest app build this node works with, as served to clients: 1.4.0, the clean-slate cutover (design §1). Below
+ * it an app is refused (426 app_too_old) and shows "Update required" once its store carries 1.4.0 (getPlatformFloorDetail:
+ * never before), with no grace date. In code, not .env, so every self-hoster's node holds old apps off without
+ * configuring anything; an operator can still raise it (MIN_APP_VERSION, or per platform).
  */
-const DEFAULT_MIN_APP_VERSION = '1.0.75';
+const DEFAULT_MIN_APP_VERSION = '1.4.0';
 
 export function getMinAppVersion(): string {
     return normaliseVersion(process.env.MIN_APP_VERSION) || DEFAULT_MIN_APP_VERSION;
@@ -140,6 +139,17 @@ export function getPlatformFloorDetail(platform: AppPlatform, now: Date = new Da
     const blocking = !!enforced && !fromInvalid && (from === null || now.getTime() >= Date.parse(from));
     noteHeldFloor(platform, floor, store, held, fromInvalid);
     return { floor, store, enforced, held, from, fromInvalid, blocking };
+}
+
+/**
+ * The floor the `platform` app at `version` is refused below, or null when it isn't: the platform's enforced floor while
+ * its update block applies (getPlatformFloorDetail `blocking`), so a node never refuses an app its store cannot replace
+ * yet (a floor ahead of the store, an unknown store, or a grace date still ahead). The signature middleware answers such
+ * an app's gated reads and writes 426 app_too_old with this floor (https-server.ts requireSignature).
+ */
+export function floorRefusing(platform: AppPlatform, version: string, now: Date = new Date()): string | null {
+    const d = getPlatformFloorDetail(platform, now);
+    return d.blocking && d.enforced && isOlder(version, d.enforced) ? d.enforced : null;
 }
 
 /**

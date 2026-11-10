@@ -392,7 +392,7 @@ describe('the rules the screens call', () => {
     it('the Vouchers block row, from the node’s numbers (§11)', () => {
         // Rows say only what matters (I4): who and what is left; an owner's says who and how many they vouched, no budget words.
         expect(voucherRowText(NODE_CARD)).toBe('@jane · 550 left ›');
-        expect(voucherRowText({ ...NODE_CARD, left: 1450 })).toBe('@jane · 1450 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 1450 })).toBe('@jane · 1,450 left ›');
         expect(voucherRowText({ ...NODE_CARD, noLimit: true })).toBe('@jane · 4 vouched ›');
     });
 });

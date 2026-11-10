@@ -4991,7 +4991,6 @@
   "below zero": "нижче нуля",
   "made a voucher by @{name}": "призначено поручителем від @{name}",
   "{amount} Beans{raised} · {source}": "{amount} боби{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} із {total} нижче нуля · списано {off}",
   "{left} left · {held} held": "залишилося {left} · зарезервовано {held}",
   "{left} of {total} left": "залишилося {left} із {total}",
   "{name} · Voucher": "{name} · Поручитель",

@@ -128,6 +128,8 @@ const node = vi.hoisted(() => ({
     inviteDown: false,
     inviteRefusal: null as string | null,
     vouchersDown: false,
+    /** What GET /api/names/vouchers answers in `waiting` (invites-vouching I4). */
+    waiting: [] as Array<Record<string, unknown>>,
     generated: [] as Array<Record<string, unknown>>,
     bound: [] as Array<{ entryId: string; body: Record<string, unknown> }>,
     /** What GET /api/invite/mine/:publicKey answers: the member's own invites, as the node tells their maker. */
@@ -246,7 +248,7 @@ beforeEach(() => {
     nav.on = true;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
-        vouchersDown: false, generated: [], bound: [], mine: [],
+        vouchersDown: false, waiting: [], generated: [], bound: [], mine: [],
     });
     inviteFolds.clear();
 
@@ -264,7 +266,7 @@ beforeEach(() => {
             if (!node.online) throw new TypeError('Network request failed');
             if (node.vouchersDown) return json({ error: 'Something went wrong.' }, 500);
             return node.committee
-                ? json({ vouchers: [], settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 100 } })
+                ? json({ vouchers: [], waiting: node.waiting, settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 100 } })
                 : json({ code: 'committee_only', error: COMMITTEE_ONLY }, 403);
         }
         const bind = u.match(/\/api\/names\/entries\/([^/]+)\/invite$/);
@@ -868,5 +870,59 @@ describe('People → Invites: the made card says who it is for, what it carries 
         await press('invite-make-another');
         await generate();
         expect(q('invite-made-card')?.textContent).toContain('Invite made');
+    });
+});
+
+describe('People → Invites: waiting to join, and the other way into the names list (invites-vouching I4)', () => {
+    const WAITING = { entryId: 'entry-jane', level: 1000, vouchAmount: 25, madeBy: 'a-member-key', madeByCallsign: 'Robin', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
+
+    it('the committee sees "Jane Albury · waiting to join · budget 1,000 ›": the name opened from the list on this phone, by entry id', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        node.waiting = [WAITING];
+        await open();
+        expect(list.opens, 'the phone opened the list (a logged read) to read the name').toBeGreaterThanOrEqual(1);
+        expect(q('vouchers-waiting-heading')?.textContent).toBe('Waiting to join');
+        expect(q('voucher-waiting-row')?.textContent).toBe('Jane Albury · waiting to join · budget 1,000 ›');
+        expect(q('vouchers-block')?.textContent).not.toMatch(/balance/i);
+    });
+
+    it('a waiting row opens the names list', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        node.waiting = [WAITING];
+        await open();
+        await press('voucher-waiting-row');
+        expect(pushed).toEqual(['/names-list']);
+    });
+
+    it('nobody waiting: no heading, and the list is not opened for it', async () => {
+        node.role = 'owner';
+        node.committee = true;
+        await open();
+        expect(q('vouchers-waiting-heading')).toBeNull();
+        expect(q('voucher-waiting-row')).toBeNull();
+        expect(list.opens).toBe(0);
+    });
+
+    it('an owner or admin keeps the names box AND gets "Invite someone from the names list ›", which opens the list', async () => {
+        for (const role of ['owner', 'admin'] as const) {
+            pushed.length = 0;
+            node.role = role;
+            node.committee = role === 'owner';
+            await open();
+            expect(q('invite-names-box'), `${role}: the names box stays`).toBeTruthy();
+            expect(q('invite-from-names-list')?.textContent, role).toBe('Invite someone from the names list ›');
+            await press('invite-from-names-list');
+            expect(pushed, role).toEqual(['/names-list']);
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+    });
+
+    it('a member gets no such link', async () => {
+        node.role = null;
+        await open();
+        expect(q('invite-from-names-list')).toBeNull();
     });
 });

@@ -4463,7 +4463,6 @@
   "below zero": "マイナス",
   "made a voucher by @{name}": "@{name}により保証人に指名",
   "{amount} Beans{raised} · {source}": "{amount} 豆{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "全体 {total} のうち {below} がマイナス · 償却済み {off}",
   "{left} left · {held} held": "残り {left} · 確保中 {held}",
   "{left} of {total} left": "残り {left} / 全体 {total}",
   "{name} · Voucher": "{name} · 保証人",

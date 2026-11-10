@@ -4463,7 +4463,6 @@
   "below zero": "0 아래",
   "made a voucher by @{name}": "@{name} 님이 보증인으로 지정함",
   "{amount} Beans{raised} · {source}": "{amount} 콩{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "총 {total} 중 {below} 0 아래 · {off} 대손 처리됨",
   "{left} left · {held} held": "{left} 남음 · {held} 묶임",
   "{left} of {total} left": "총 {total} 중 {left} 남음",
   "{name} · Voucher": "{name} · 보증인",

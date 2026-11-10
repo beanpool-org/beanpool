@@ -4639,7 +4639,6 @@
   "below zero": "im Minus",
   "made a voucher by @{name}": "von @{name} zum Bürgen ernannt",
   "{amount} Beans{raised} · {source}": "{amount} Bohnen{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} von {total} im Minus · abgeschrieben {off}",
   "{left} left · {held} held": "{left} übrig · {held} reserviert",
   "{left} of {total} left": "{left} von {total} übrig",
   "{name} · Voucher": "{name} · Bürge",

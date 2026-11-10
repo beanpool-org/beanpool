@@ -16,7 +16,7 @@
  * Wraps at 320 px with 1.3x text; each row and link >= 44 px tall; colours from the central tokens, light and dark.
  */
 import { useId, useState } from 'react';
-import { t, INVITE_ADDS_WORDS, PEEK_WORDS } from '@beanpool/core';
+import { t, inviteFromNamesListWords, INVITE_ADDS_WORDS, PEEK_WORDS } from '@beanpool/core';
 import { usePhoneBrowser } from '../lib/global-entry';
 import { openAppDoors } from '../lib/peek';
 
@@ -106,7 +106,7 @@ export function InviteAddsBoxes() {
                     className="mt-1 min-h-[44px] max-w-full cursor-pointer break-words border-0 bg-transparent px-1 py-2 text-left text-[14px] font-bold text-bp-ink-accent"
                     data-testid="invite-from-names-list"
                 >
-                    {t('Invite someone from the names list ›')}
+                    {inviteFromNamesListWords()}
                 </button>
                 <DoneInAppNote asked={asked === 'list'} noteId={noteId} doors={doors} />
             </div>

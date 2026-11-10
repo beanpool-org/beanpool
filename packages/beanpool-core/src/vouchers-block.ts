@@ -15,7 +15,7 @@
  * Nothing here reads the node: the callers pass what GET /api/names/vouchers and the trust profile said. No balance figure
  * anywhere: a budget left is not a balance, "below zero" is a count, and a vouch is a gift of credit line, not a Bean.
  */
-import { t, tn, formatCount, formatNumber } from './words.js';
+import { t, tn, formatCount } from './words.js';
 
 /** A promised voucher budget on an invite not used yet (GET /api/names/vouchers `waiting`). */
 export interface WaitingVoucherRow {
@@ -36,6 +36,9 @@ export function vouchersBlockSections<T extends { noLimit?: boolean }>(vouchers:
 /** The line over the owners: "Owners · no limit". */
 export const ownersHeading = (): string => t('Owners · no limit');
 
+/** The link in the invite panel that opens the names list at an entry's own "Invite this person" (owners and admins; the phone's). */
+export const inviteFromNamesListWords = (): string => t('Invite someone from the names list ›');
+
 /** The heading over the invites that promise a budget: "Waiting to join". */
 export const waitingHeading = (): string => t('Waiting to join');
 
@@ -48,7 +51,7 @@ export function ownerRowWords(callsign: string, peopleVouched: number): string {
 /** Any other voucher's row: "@Rob · 400 left ›". */
 export function voucherRowWords(callsign: string, left: number): string {
     const name = callsign ? `@${callsign}` : t('a voucher');
-    return t('{name} · {left} left ›', { name, left: formatNumber(left) });
+    return t('{name} · {left} left ›', { name, left: formatCount(left) });
 }
 
 /**
@@ -57,7 +60,7 @@ export function voucherRowWords(callsign: string, left: number): string {
  */
 export function waitingRowWords(w: Pick<WaitingVoucherRow, 'level'>, name: string | null | undefined): string {
     const who = name?.trim() || t('Name on the phone');
-    return t('{who} · waiting to join · budget {level} ›', { who, level: formatNumber(w.level) });
+    return t('{who} · waiting to join · budget {level} ›', { who, level: formatCount(w.level) });
 }
 
 /** The numbers a voucher's card puts first (engine/vouchers.ts voucherSummary). */
@@ -76,10 +79,10 @@ export function voucherCardHeadline(c: VoucherHeadlineSource): string {
         'Vouched {amount} to {n} person · {recent} in the last 30 days · {belowZero} below zero · written off {writtenOff}',
         'Vouched {amount} to {n} people · {recent} in the last 30 days · {belowZero} below zero · written off {writtenOff}',
         {
-            amount: formatNumber(c.vouched),
-            recent: formatNumber(c.vouchedLast30Days ?? 0),
-            belowZero: formatNumber(c.belowZero),
-            writtenOff: formatNumber(c.writtenOff),
+            amount: formatCount(c.vouched),
+            recent: formatCount(c.vouchedLast30Days ?? 0),
+            belowZero: formatCount(c.belowZero),
+            writtenOff: formatCount(c.writtenOff),
         },
     );
 }
@@ -97,7 +100,7 @@ export type ProfileVoucherButton =
 export function profileVoucherButtonWords(b: ProfileVoucherButton): string {
     if (b.state === 'add') return t('Add to the names list');
     if (b.state === 'make') return t('Make a voucher');
-    return b.noLimit ? t('Voucher · No limit ›') : t('Voucher · {left} left ›', { left: formatNumber(b.left) });
+    return b.noLimit ? t('Voucher · No limit ›') : t('Voucher · {left} left ›', { left: formatCount(b.left) });
 }
 
 /** Whether a value from the node is a button state this version knows (an older or newer node may say something else). */

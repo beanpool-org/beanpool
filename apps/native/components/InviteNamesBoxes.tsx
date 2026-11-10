@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { formatNumber, t, INVITE_ADDS_WORDS } from '@beanpool/core';
+import { formatNumber, t, inviteFromNamesListWords, INVITE_ADDS_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
@@ -389,7 +389,7 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
             ) : null}
             {/* The names box above stays; this is the other way in (invites-vouching I4): the list's own "Invite this person". */}
             <Pressable onPress={names.openList} accessibilityRole="button" style={styles.linkRow} testID="invite-from-names-list">
-                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>{t('Invite someone from the names list ›')}</Text>
+                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>{inviteFromNamesListWords()}</Text>
             </Pressable>
         </View>
     );

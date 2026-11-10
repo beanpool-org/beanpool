@@ -4639,7 +4639,6 @@
   "below zero": "பூஜ்ஜியத்திற்குக் கீழே",
   "made a voucher by @{name}": "@{name} மூலம் உறுதியளிப்பவராக்கப்பட்டார்",
   "{amount} Beans{raised} · {source}": "{amount} பயறு{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{total}-ல் {below} பூஜ்ஜியத்திற்குக் கீழே · தள்ளுபடி செய்யப்பட்டது {off}",
   "{left} left · {held} held": "{left} மீதம் · {held} நிறுத்தி வைக்கப்பட்டுள்ளது",
   "{left} of {total} left": "{total}-ல் {left} மீதமுள்ளது",
   "{name} · Voucher": "{name} · உறுதியளிப்பவர்",

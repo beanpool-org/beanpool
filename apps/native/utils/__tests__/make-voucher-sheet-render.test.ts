@@ -44,7 +44,7 @@ const IKE = 'a'.repeat(64);
 const LIZ = 'b'.repeat(64);
 const LIZ_ENTRY = 'e'.repeat(32);
 const identity = { publicKey: 'f'.repeat(64), privateKey: '0'.repeat(64), callsign: 'Owen', createdAt: '2026-11-01' };
-const CANDIDATES = { admins: [{ memberPubkey: IKE, callsign: 'Ike' }], confirmed: [{ memberPubkey: LIZ, callsign: 'liz', entryId: LIZ_ENTRY }] };
+const CANDIDATES = { admins: [{ memberPubkey: IKE, callsign: 'Ike' }], confirmed: [{ memberPubkey: LIZ, callsign: 'liz', entryId: LIZ_ENTRY }], adminsOffered: true };
 
 let host: HTMLDivElement;
 let root: Root;
@@ -83,16 +83,23 @@ describe('+ Make someone a voucher (phone)', () => {
     });
 
     it('a committee admin is sent no admins: no Admins heading, the confirmed names still offered', async () => {
-        await draw({ candidates: { admins: [], confirmed: CANDIDATES.confirmed } });
+        await draw({ candidates: { admins: [], confirmed: CANDIDATES.confirmed, adminsOffered: false } });
         expect(one('make-voucher-admins')).toBeNull();
         expect(all('make-voucher-confirmed-row')).toHaveLength(1);
     });
 
     it('nobody to offer says so in one sentence', async () => {
-        await draw({ candidates: { admins: [], confirmed: [] } });
+        await draw({ candidates: { admins: [], confirmed: [], adminsOffered: true } });
         expect(one('make-voucher-nobody')?.textContent).toBe('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
         expect(one('make-voucher-admins')).toBeNull();
         expect(one('make-voucher-confirmed')).toBeNull();
+    });
+
+    it('a committee admin with nobody confirmed waiting is not told every admin is a voucher: only an owner makes an admin one (review, 10 Nov)', async () => {
+        await draw({ candidates: { admins: [], confirmed: [], adminsOffered: false } });
+        const line = one('make-voucher-nobody')?.textContent ?? '';
+        expect(line).toBe('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
+        expect(line).not.toMatch(/every admin/i);
     });
 
     it('an admin picked: the stepper starts at the community default; Make sends { memberPubkey } with the level', async () => {

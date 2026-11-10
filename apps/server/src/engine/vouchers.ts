@@ -1076,14 +1076,16 @@ export interface VoucherCandidate { memberPubkey: string; callsign: string; entr
 
 /**
  * Whom "+ Make someone a voucher" offers `viewer` (slice I5, DESIGN-invites-vouching-review-fable.md §3 ask 1), and nobody
- * else: `admins`, every admin whose role acts, with no live budget (an owner's to make, so empty for a committee admin);
+ * else: `admins`, every admin whose role acts, with no live budget (an owner's to make, so empty for a committee admin,
+ * and `adminsOffered` says which: true for an owner, whose empty `admins` means every admin is a voucher already);
  * `confirmed`, every member confirmed on the names list (seconded where two admins confirm) whom makeVoucher's entry path
  * takes: active, no live budget, no open debt on the entry, never an owner or admin (an admin is in `admins`, and an owner
  * vouches by the role). Never the viewer. By callsign: the names are sealed in the list, so the phone opens them by entry id.
  */
-function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confirmed: VoucherCandidate[] } {
+function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean } {
     const noBudget = (col: string) => `NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = ${col} AND v.stopped_at IS NULL)`;
-    const admins = isNodeOwner(viewer)
+    const adminsOffered = isNodeOwner(viewer);
+    const admins = adminsOffered
         ? db.prepare(`SELECT nr.member_pubkey AS memberPubkey, m.callsign AS callsign FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
             WHERE nr.role = 'admin' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ? AND ${noBudget('nr.member_pubkey')}
             ORDER BY m.callsign COLLATE NOCASE ASC, nr.member_pubkey ASC`).all(viewer) as VoucherCandidate[]
@@ -1096,7 +1098,7 @@ function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confir
               AND NOT EXISTS (SELECT 1 FROM names_debts d WHERE d.entry_id = c.entry_id AND d.status = 'open')
             ORDER BY m.callsign COLLATE NOCASE ASC, c.member_pubkey ASC`).all(viewer) as VoucherCandidate[])
         .filter((c) => !getMember(db, c.memberPubkey)?.isTreasury);
-    return { admins, confirmed };
+    return { admins, confirmed, adminsOffered };
 }
 
 /**

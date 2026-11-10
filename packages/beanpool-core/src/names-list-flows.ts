@@ -242,8 +242,10 @@ export interface VoucherCardData extends VoucherSummaryRow {
 /**
  * Whom "+ Make someone a voucher" offers the viewer (slice I5): `admins` (an owner's to make, no names-list entry needed;
  * empty for a committee admin) and `confirmed` (confirmed on the names list, by entry id: the phone opens the name).
+ * `adminsOffered`: the node offers this viewer admins at all (an owner). When it is false the empty `admins` says nothing
+ * about the admins' budgets, only that an owner makes them.
  */
-export interface VoucherCandidates { admins: VoucherCandidate[]; confirmed: VoucherCandidate[] }
+export interface VoucherCandidates { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean }
 export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
 
 /** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */

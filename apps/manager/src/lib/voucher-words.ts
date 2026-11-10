@@ -17,6 +17,10 @@ export interface VoucherCard {
     memberPubkey: string;
     callsign: string;
     source: 'role' | 'entry' | string | null;
+    /** An owner vouches with no limit, by role; an admin an owner made a voucher has `source` 'role' too, and a limit. */
+    noLimit?: boolean;
+    madeBy?: string | null;
+    madeByCallsign?: string | null;
     left: number;
     level: number;
     held: number;
@@ -83,10 +87,23 @@ export function historyLineWords(h: VoucherHistoryLine): string {
     }
 }
 
-/** Header line for the voucher panel: "Voucher · 550 of 1,000 left · made from the names list" (or "by role"). */
-export function voucherPanelHeader(card: { left: number; level?: number; source?: string | null }): string {
+/**
+ * Header line for the voucher panel: "Voucher · 550 of 1,000 left · made from the names list". Only an owner is a voucher
+ * "by role"; an admin is one when an owner makes them one (slice I5), and that card has a `role` source too, so it reads
+ * "made by @marty", not "by role". The node says which with `noLimit` (true for an owner, false for everyone else).
+ */
+export function voucherPanelHeader(
+    card: { left: number; level?: number; source?: string | null; noLimit?: boolean; madeBy?: string | null; madeByCallsign?: string | null },
+): string {
     const leftStr = formatCount(card.left);
     const levelStr = formatCount(card.level ?? 1000);
-    const sourceStr = card.source === 'role' ? 'by role' : 'made from the names list';
+    let sourceStr = 'made from the names list';
+    if (card.source === 'role') {
+        sourceStr = card.noLimit !== false
+            ? 'by role'
+            : card.madeBy || card.madeByCallsign
+                ? `made by ${voucherActorWords({ actor: card.madeBy, actorCallsign: card.madeByCallsign })}`
+                : 'made by an owner';
+    }
     return `Voucher · ${leftStr} of ${levelStr} left · ${sourceStr}`;
 }

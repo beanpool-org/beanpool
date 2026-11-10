@@ -8,7 +8,7 @@
  */
 import { useRef, useState } from 'react';
 import {
-    t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobody, voucherCandidateWords,
+    t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobodyWords, voucherCandidateWords,
     makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords, VOUCH_PRESET_WORDS, VOUCHER_BUDGET_MAX, isBudgetLevel,
 } from '@beanpool/core';
 import { makeVoucher, type VoucherCandidate, type VouchersBlockData } from '../lib/api';
@@ -93,7 +93,7 @@ export function MakeVoucherSheet({ candidates, defaultBudget, onClose, onMade }:
                 {done && <p role="status" className="m-0 mb-2 p-3 rounded-xl text-sm bg-oat-50 dark:bg-nature-900 text-nature-900 dark:text-white">{done}</p>}
                 {error && <p role="alert" className="m-0 mb-2 text-sm text-amber-700 dark:text-amber-400">{error}</p>}
                 {admins.length === 0 && confirmed.length === 0 && (
-                    <p className="m-0 mb-2 text-sm text-nature-600 dark:text-nature-300" data-testid="make-voucher-nobody">{makeVoucherNobody()}</p>
+                    <p className="m-0 mb-2 text-sm text-nature-600 dark:text-nature-300" data-testid="make-voucher-nobody">{makeVoucherNobodyWords(candidates)}</p>
                 )}
                 {admins.length > 0 && heading(makeVoucherAdminsHeading(), 'make-voucher-admins')}
                 <div className="flex flex-col gap-2">{admins.map((c) => row(c, 'make-voucher-admin-row'))}</div>

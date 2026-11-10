@@ -46,7 +46,7 @@ import {
 } from '../utils/names-list';
 import { VoucherCard } from '../components/VoucherCard';
 import {
-    canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+    canMakeVoucher, ownerOnlyVoucherTargets, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
 } from '../utils/voucher-rules';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, showsBoundInviteLine, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
@@ -54,7 +54,7 @@ import {
     DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
-import { formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
+import { formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ownerMakesAdminVoucherWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
@@ -211,6 +211,8 @@ export default function NamesListScreen() {
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
     const isCommittee = voucherBlock !== null;
     const amOwner = !!state?.admins.some((a) => a.pubkey === identity?.publicKey && a.role === 'owner');
+    // Only an owner makes an admin a voucher (I5): to anyone else no admin's entry offers Make a voucher, as the profile's button doesn't.
+    const ownerOnlyTargets = useMemo(() => ownerOnlyVoucherTargets(state?.admins, amOwner), [state, amOwner]);
     const filteredRoleVouchers = useMemo(() => filterRoleVouchers(roleVouchersWithoutEntry(vouchers, entries), query), [vouchers, entries, query]);
     const filteredShown = useMemo(() => {
         if (filter === 'vouchers') {
@@ -376,17 +378,19 @@ export default function NamesListScreen() {
             setMode({ kind: 'edit', entry: null, addId: newEntryId(), confirmFor: { publicKey: member, callsign: forCallsign } });
             return;
         }
-        if (mine?.confirmation && canMakeVoucher(mine, isCommittee, identity?.publicKey)) {
+        if (mine?.confirmation && canMakeVoucher(mine, isCommittee, identity?.publicKey, ownerOnlyTargets)) {
             setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
             setMode({ kind: 'make_voucher', entry: mine, memberPubkey: member, callsign: voucherCallsignFor(mine, callsignOf) || forCallsign });
         } else if (mine?.voucher) {
             setNotice(t('@{member} is a voucher already.', { member: forCallsign || mine.confirmation?.callsign || '' }));
         } else if (!isCommittee) {
             setError(t('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'));
+        } else if (mine?.confirmation && ownerOnlyTargets.has(mine.confirmation.memberPubkey)) {
+            setNotice(ownerMakesAdminVoucherWords());
         } else {
             setNotice(t('@{member} isn’t confirmed on this list yet, so there is no voucher to make.', { member: forCallsign }));
         }
-    }, [opened, list, loading, entries, isCommittee, identity?.publicKey, voucherBlock, callsignOf, params.act, params.forMember, params.forCallsign]);
+    }, [opened, list, loading, entries, isCommittee, identity?.publicKey, ownerOnlyTargets, voucherBlock, callsignOf, params.act, params.forMember, params.forCallsign]);
 
     /** The matching-name warning (#1597): a name typed here that is on another entry with an open debt is said first. */
     const saveChecked = () => {
@@ -1191,7 +1195,7 @@ export default function NamesListScreen() {
                             ))}
                             <View style={styles.buttonRow}>
                                 {e.voucher ? btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(e.voucher!.memberPubkey), 'small') : null}
-                                {canMakeVoucher(e, isCommittee, identity?.publicKey) && e.confirmation
+                                {canMakeVoucher(e, isCommittee, identity?.publicKey, ownerOnlyTargets) && e.confirmation
                                     ? btn(t('Make a voucher'), () => {
                                         setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
                                         setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: voucherCallsignFor(e, callsignOf) });

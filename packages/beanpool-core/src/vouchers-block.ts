@@ -71,6 +71,14 @@ export const makeVoucherSheetTitle = (): string => t('Make someone a voucher');
 export const makeVoucherAdminsHeading = (): string => t('Admins · no names-list entry needed');
 export const makeVoucherConfirmedHeading = (): string => t('Confirmed on the names list');
 export const makeVoucherNobody = (): string => t('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
+/** For a viewer the node offers no admins (a committee admin: only an owner makes an admin a voucher), so it can't say every admin is one already. */
+export const makeVoucherNobodyForCommittee = (): string =>
+    t('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
+/** The sheet's line when it has nobody to list: the true one for this viewer (the node's `adminsOffered`; not heard yet: the owner's). */
+export const makeVoucherNobodyWords = (candidates: { adminsOffered?: boolean } | null | undefined): string =>
+    candidates && candidates.adminsOffered === false ? makeVoucherNobodyForCommittee() : makeVoucherNobody();
+/** Said where a committee admin asks to make an admin a voucher (the names list's deep link): the node answers 403 `owner_only` to the same. */
+export const ownerMakesAdminVoucherWords = (): string => t('Only an owner makes an admin a voucher.');
 
 /** A row: "Dee Dee · @dee" where the phone opened the name from the names list, else "@dee". */
 export function voucherCandidateWords(callsign: string, name?: string | null): string {

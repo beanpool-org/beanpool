@@ -154,7 +154,7 @@ const BLOCK = {
     vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
     waiting: [WAITING],
     // Whom "+ Make someone a voucher" offers (invites-vouching I5): an admin with no budget, and a name confirmed on the list.
-    candidates: { admins: [{ memberPubkey: key('9'), callsign: 'Kit' }], confirmed: [{ memberPubkey: key('8'), callsign: 'liz', entryId: '6'.repeat(32) }] },
+    candidates: { admins: [{ memberPubkey: key('9'), callsign: 'Kit' }], confirmed: [{ memberPubkey: key('8'), callsign: 'liz', entryId: '6'.repeat(32) }], adminsOffered: true },
     settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
 };
 const COMMITTEE_ONLY = 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.';

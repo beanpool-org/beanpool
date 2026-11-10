@@ -249,7 +249,7 @@ async function main(): Promise<void> {
     const sheetOf = async (who: Id) => {
         const b = await call(who, 'GET', '/api/names/vouchers');
         const c = b.body?.candidates;
-        return { status: b.status, admins: (c?.admins ?? []).map((x: any) => x.memberPubkey), confirmed: (c?.confirmed ?? []).map((x: any) => `${x.memberPubkey}:${x.entryId}`), raw: c };
+        return { status: b.status, admins: (c?.admins ?? []).map((x: any) => x.memberPubkey), confirmed: (c?.confirmed ?? []).map((x: any) => `${x.memberPubkey}:${x.entryId}`), adminsOffered: c?.adminsOffered, raw: c };
     };
     const owenSheet = await sheetOf(owen);
     const adaSheet = await sheetOf(ada);
@@ -258,6 +258,8 @@ async function main(): Promise<void> {
         `23. an owner's sheet offers Ike (an admin with no budget) and Liz (confirmed on the list), and nobody else: no voucher, no owner, not Mel (unconfirmed), not Wyn (waiting for a second admin) (${JSON.stringify(owenSheet.raw)})`);
     assert(adaSheet.status === 200 && adaSheet.admins.length === 0 && JSON.stringify(adaSheet.confirmed) === JSON.stringify([`${liz.pk}:${lizEntry}`]),
         `23. a committee admin's sheet offers no admins (an owner's to make) and the same confirmed names (${JSON.stringify(adaSheet.raw)})`);
+    assert(owenSheet.adminsOffered === true && adaSheet.adminsOffered === false,
+        `23. the sheet says whether admins are offered at all, so an empty admins list is read right: an owner true, a committee admin false (${JSON.stringify(owenSheet.raw?.adminsOffered)} | ${JSON.stringify(adaSheet.raw?.adminsOffered)})`);
     const before23 = allLines();
     const adaMakesIke = await call(ada, 'POST', '/api/names/vouchers', { memberPubkey: ike.pk });
     const owenMakesMel = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: mel.pk });
@@ -272,7 +274,7 @@ async function main(): Promise<void> {
     const owenSheet2 = await sheetOf(owen);
     assert(ikeMade.status === 201 && ikeMade.body?.left === 300 && ikeMade.body?.source === 'role' && ikeAgain.status === 409 && ikeAgain.body?.code === 'already_voucher'
         && lizMade.status === 201 && lizMade.body?.source === 'entry' && lizMade.body?.left === 400
-        && owenSheet2.admins.length === 0 && owenSheet2.confirmed.length === 0,
+        && owenSheet2.admins.length === 0 && owenSheet2.confirmed.length === 0 && owenSheet2.adminsOffered === true,
         `23. Owen makes Ike a voucher with 300 (not twice) and Liz from the entry the sheet named with 400, and the sheet offers neither any more (${show(ikeMade)} | ${show(ikeAgain)} | ${show(lizMade)})`);
 
     // ── 10a. Beans off, before any Bean moves (a node whose ledger moved keeps Beans on: node-profile lockToLedger) ────

@@ -134,13 +134,33 @@ export function voucherCardSubtitle(
 /**
  * Whether the names list offers Make a voucher on an entry: only to the credit committee (`onCommittee`: the node answered
  * GET /api/names/vouchers for this viewer), on an entry that is not a voucher yet, whose confirmation is complete (not
- * waiting for a second admin, not revoked), and never on the viewer's own entry. The node checks all of it again.
+ * waiting for a second admin, not revoked), and never on the viewer's own entry. `ownerOnlyTargets`: the members only an
+ * owner may make a voucher (an admin, to anyone who is not an owner: {@link ownerOnlyVoucherTargets}), who are not offered
+ * it (the node answers 403 `owner_only`). The node checks all of it again.
  */
-export function canMakeVoucher(entry: Pick<OpenedEntry, 'voucher' | 'confirmation'>, onCommittee: boolean, viewer: string | null | undefined): boolean {
+export function canMakeVoucher(
+    entry: Pick<OpenedEntry, 'voucher' | 'confirmation'>,
+    onCommittee: boolean,
+    viewer: string | null | undefined,
+    ownerOnlyTargets?: ReadonlySet<string>,
+): boolean {
     if (!onCommittee || !viewer) return false;
     if (entry.voucher) return false;
     const c = entry.confirmation;
-    return !!c && c.status === 'confirmed' && c.memberPubkey !== viewer;
+    return !!c && c.status === 'confirmed' && c.memberPubkey !== viewer && !ownerOnlyTargets?.has(c.memberPubkey);
+}
+
+/**
+ * The members this viewer may not make a voucher, because only an owner makes an admin one (slice I5; Marty, 10 Nov): every
+ * admin on the names list's state when the viewer is not an owner, and nobody when they are. Owners are not in it: an owner
+ * vouches by role and already holds a budget.
+ */
+export function ownerOnlyVoucherTargets(
+    admins: ReadonlyArray<{ pubkey: string; role: string }> | null | undefined,
+    viewerIsOwner: boolean,
+): ReadonlySet<string> {
+    if (viewerIsOwner || !admins) return new Set();
+    return new Set(admins.filter((a) => a.role === 'admin').map((a) => a.pubkey));
 }
 
 /** Who Make a voucher names: the confirmation's callsign, else the community's, else the entry's name, else nothing. */

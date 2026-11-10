@@ -14,7 +14,7 @@ vi.mock('../lib/api', () => ({ makeVoucher: vi.fn() }));
 const IKE = 'a'.repeat(64);
 const LIZ = 'b'.repeat(64);
 const LIZ_ENTRY = 'e'.repeat(32);
-const CANDIDATES = { admins: [{ memberPubkey: IKE, callsign: 'Ike' }], confirmed: [{ memberPubkey: LIZ, callsign: 'liz', entryId: LIZ_ENTRY }] };
+const CANDIDATES = { admins: [{ memberPubkey: IKE, callsign: 'Ike' }], confirmed: [{ memberPubkey: LIZ, callsign: 'liz', entryId: LIZ_ENTRY }], adminsOffered: true };
 
 describe('MakeVoucherSheet (web, I5)', () => {
     beforeEach(() => {
@@ -34,12 +34,19 @@ describe('MakeVoucherSheet (web, I5)', () => {
     });
 
     it('a committee admin is sent no admins: no Admins heading; nobody at all says so in one sentence', () => {
-        const { unmount } = render(<MakeVoucherSheet candidates={{ admins: [], confirmed: CANDIDATES.confirmed }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        const { unmount } = render(<MakeVoucherSheet candidates={{ admins: [], confirmed: CANDIDATES.confirmed, adminsOffered: false }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
         expect(screen.queryByTestId('make-voucher-admins')).toBeNull();
         expect(screen.getAllByTestId('make-voucher-confirmed-row')).toHaveLength(1);
         unmount();
-        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [] }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: true }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
         expect(screen.getByTestId('make-voucher-nobody')).toHaveTextContent('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
+    });
+
+    it('a committee admin with nobody confirmed waiting is not told every admin is a voucher: only an owner makes an admin one (review, 10 Nov)', () => {
+        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: false }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        const line = screen.getByTestId('make-voucher-nobody').textContent ?? '';
+        expect(line).toBe('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
+        expect(line).not.toMatch(/every admin/i);
     });
 
     it('an admin picked: the stepper starts at the community default, Make sends { memberPubkey } and the level', async () => {

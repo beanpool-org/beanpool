@@ -15,7 +15,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobody, voucherCandidateWords,
+    t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobodyWords, voucherCandidateWords,
     makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -136,7 +136,7 @@ export function MakeVoucherSheet({ anchorUrl, identity, candidates, defaultBudge
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                 {done ? <View style={styles.noticeBox}><Text style={styles.noticeText}>{done}</Text></View> : null}
                 {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
-                {admins.length === 0 && confirmed.length === 0 ? <Text style={styles.empty} testID="make-voucher-nobody">{makeVoucherNobody()}</Text> : null}
+                {admins.length === 0 && confirmed.length === 0 ? <Text style={styles.empty} testID="make-voucher-nobody">{makeVoucherNobodyWords(candidates)}</Text> : null}
                 {admins.length > 0 ? <Text style={styles.sectionLine} accessibilityRole="header" maxFontSizeMultiplier={1.3} testID="make-voucher-admins">{makeVoucherAdminsHeading()}</Text> : null}
                 {admins.map((c) => row(c, 'make-voucher-admin-row'))}
                 {confirmed.length > 0 ? <Text style={styles.sectionLine} accessibilityRole="header" maxFontSizeMultiplier={1.3} testID="make-voucher-confirmed">{makeVoucherConfirmedHeading()}</Text> : null}

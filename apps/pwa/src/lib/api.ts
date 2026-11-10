@@ -937,8 +937,9 @@ export interface VouchersBlockData {
     vouchers: VoucherSummary[];
     /** Invites not used yet that promise a voucher budget, by names-list entry id (the name is on the phone). */
     waiting?: WaitingVoucherRow[];
-    /** Whom "+ Make someone a voucher" offers this viewer (I5): admins (an owner's to make) and confirmed names. */
-    candidates?: { admins: VoucherCandidate[]; confirmed: VoucherCandidate[] };
+    /** Whom "+ Make someone a voucher" offers this viewer (I5): admins (an owner's to make) and confirmed names.
+     *  `adminsOffered`: the node offers this viewer admins at all (an owner); false: only an owner makes an admin a voucher. */
+    candidates?: { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean };
     settings: {
         voucherBudget: number;
         memberGift: number;

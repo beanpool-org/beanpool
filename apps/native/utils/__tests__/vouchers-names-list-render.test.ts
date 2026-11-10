@@ -124,21 +124,25 @@ const ADMINS_ONLY = 'Only the community’s owners and admins can open the names
 
 // ── The list: five entries, sealed with one real key ──────────────────────────────────────────────────────────────
 const KID = '9'.repeat(64);
-const ID = { zara: '1'.repeat(32), ann: '2'.repeat(32), mary: '3'.repeat(32), sally: '4'.repeat(32), tom: '5'.repeat(32) };
+const ID = { zara: '1'.repeat(32), ann: '2'.repeat(32), mary: '3'.repeat(32), sally: '4'.repeat(32), tom: '5'.repeat(32), ash: '6'.repeat(32) };
+/** On for the one test that puts an admin's confirmed entry on the list (Ash, no budget: an admin made after I5 has none). */
+let adminEntryOnList = false;
 const conf = (id: string, entryId: string, memberPubkey: string, callsign: string, status = 'confirmed') => ({
     id, entryId, memberPubkey, callsign, status, confirmedBy: key('b'), confirmedAt: '2026-11-03T09:00:00Z', needsSecond: status === 'awaiting_second',
     secondedBy: null, secondedAt: null, revokedBy: null, revokedAt: null, revokeReason: null,
 });
-function sealedList(listKey: Uint8Array) {
+function sealedList(listKey: Uint8Array, withAdminEntry = false) {
     const entry = (id: string, name: string) => ({ id, keyId: KID, ciphertext: sealNamesEntry(listKey, id, KID, { name, note: '' }), createdBy: key('a'), createdAt: '2026-11-01T00:00:00.000Z', updatedBy: null, updatedAt: '' });
     return {
         current: null,
-        entries: [entry(ID.zara, 'Zara Quinn'), entry(ID.ann, 'Ann Awaiting'), entry(ID.mary, 'Mary Smith'), entry(ID.sally, 'Sally Owner'), entry(ID.tom, 'Tom Unconfirmed')],
+        entries: [entry(ID.zara, 'Zara Quinn'), entry(ID.ann, 'Ann Awaiting'), entry(ID.mary, 'Mary Smith'), entry(ID.sally, 'Sally Owner'), entry(ID.tom, 'Tom Unconfirmed'),
+            ...(withAdminEntry ? [entry(ID.ash, 'Ash Admin')] : [])],
         confirmations: [
             conf('c1', ID.zara, PEOPLE.voucher.publicKey, 'zara'),
             conf('c2', ID.ann, key('7'), 'ann', 'awaiting_second'),
             conf('c3', ID.mary, PEOPLE.member.publicKey, 'Bea'),
             conf('c4', ID.sally, PEOPLE.owner.publicKey, 'Sally'),
+            ...(withAdminEntry ? [conf('c5', ID.ash, PEOPLE.plainAdmin.publicKey, 'Ash')] : []),
         ],
     };
 }
@@ -154,7 +158,7 @@ function openedFor(listKey: Uint8Array, me: (typeof PEOPLE)[Who]) {
         plan: { kind: 'ready' },
         pin: { me: me.publicKey, trusted: ADMINS.map((a) => a.publicKey).filter((k) => k !== me.publicKey), chain: [{ id: KID, n: 1 }], abandoned: [], communityId: 'mullum' },
         ring: { [KID]: listKey }, generations: new Map(),
-        list: sealedList(listKey),
+        list: sealedList(listKey, adminEntryOnList),
         notices: [], made: null, sentTo: [], toCheck: [],
     };
 }
@@ -191,6 +195,7 @@ beforeEach(() => {
     root = createRoot(host);
     alerts.said.length = 0;
     node.calls.length = 0;
+    adminEntryOnList = false;
     const listKey = newNamesListKey();
     names.opened = (pubkey) => {
         const me = Object.values(PEOPLE).find((p) => p.publicKey === pubkey)!;
@@ -247,6 +252,21 @@ describe('the names list with vouchers, exactly as the node answers', () => {
         expect(buttons('Vouchers')).toHaveLength(0);
         expect(host.textContent).not.toContain('550 of 650 left');
         expect(host.textContent).not.toMatch(/\d+ vouchers?\b/);
+    });
+
+    // Only an owner makes an admin a voucher (I5): the node answers a committee admin 403 owner_only, so the list doesn't offer it.
+    it('an admin’s confirmed entry: Make a voucher is offered to an owner and not to a committee admin (the node would refuse them)', async () => {
+        adminEntryOnList = true;
+        await renderAs('owner');
+        expect(host.textContent).toContain('Ash Admin');
+        // Mary Smith (Bea) and Ash's: the owner may make either one.
+        expect(buttons('Make a voucher')).toHaveLength(2);
+        act(() => root.unmount());
+        root = createRoot(host);
+        await renderAs('committeeAdmin');
+        expect(host.textContent).toContain('Ash Admin');
+        // Mary Smith's and Sally's (an owner, who this fake node shows with no budget): not Ash's, an admin's.
+        expect(buttons('Make a voucher')).toHaveLength(2);
     });
 
     for (const w of ['voucher', 'member'] as const) {

@@ -45,7 +45,13 @@ describe('names-list.tsx, arrived at from a profile', () => {
 
     it('make: opens Make a voucher for that member’s confirmed entry, only where the rules allow it', () => {
         expect(src).toMatch(/entries\.find\(\(x\) => x\.confirmation\?\.memberPubkey === member\)/);
-        expect(src).toMatch(/if \(mine\?\.confirmation && canMakeVoucher\(mine, isCommittee, identity\?\.publicKey\)\) \{/);
+        expect(src).toMatch(/if \(mine\?\.confirmation && canMakeVoucher\(mine, isCommittee, identity\?\.publicKey, ownerOnlyTargets\)\) \{/);
         expect(src).toMatch(/setMode\(\{ kind: 'make_voucher', entry: mine, memberPubkey: member, callsign: voucherCallsignFor\(mine, callsignOf\) \|\| forCallsign \}\);/);
+    });
+
+    it('make: an admin’s entry, for a viewer who is not an owner, says only an owner makes an admin a voucher (the same rule as the entry’s button)', () => {
+        expect(src).toMatch(/ownerOnlyTargets = useMemo\(\(\) => ownerOnlyVoucherTargets\(state\?\.admins, amOwner\)/);
+        expect(src).toMatch(/\} else if \(mine\?\.confirmation && ownerOnlyTargets\.has\(mine\.confirmation\.memberPubkey\)\) \{\s*setNotice\(ownerMakesAdminVoucherWords\(\)\);/);
+        expect(src).toMatch(/canMakeVoucher\(e, isCommittee, identity\?\.publicKey, ownerOnlyTargets\)/);
     });
 });

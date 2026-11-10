@@ -173,6 +173,18 @@ describe('voucher-words', () => {
             );
         });
 
+        it('an owner’s card says by role; an admin an owner made a voucher does not (review, 10 Nov; I5)', () => {
+            expect(voucherPanelHeader({ left: 0, level: 0, source: 'role', noLimit: true })).toBe('Voucher · 0 of 0 left · by role');
+            const admin = voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'f'.repeat(64), madeByCallsign: 'marty' });
+            expect(admin).toBe('Voucher · 300 of 300 left · made by @marty');
+            expect(admin).not.toMatch(/by role/);
+            // Made by the shell or from before vouchers started: the actor's words, never a key.
+            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'server:recover' })).toBe('Voucher · 300 of 300 left · made by the server’s shell');
+            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'migration:vouchers' })).toBe('Voucher · 300 of 300 left · made by BeanPool, when vouchers started');
+            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: null, madeByCallsign: null })).toBe('Voucher · 300 of 300 left · made by an owner');
+            expect(admin).not.toMatch(/[0-9a-f]{64}/);
+        });
+
         it('formats header for entry/names list vouchers', () => {
             expect(voucherPanelHeader({ left: 550, level: 1000, source: 'entry' })).toBe(
                 'Voucher · 550 of 1,000 left · made from the names list'

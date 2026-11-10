@@ -10,13 +10,13 @@
  * (or Wipe & Reset) starts the server as a new install, with a claim code only if the community has no owner.
  */
 
-import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt, createHash } from 'node:crypto';
+import { scryptSync, randomBytes, timingSafeEqual, scrypt, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
 import type { RecoveryCodeRecord } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
-import { writeFileAtomic, fsyncDir } from '../write-file-atomic.js';
+import { writeFileAtomic } from '../write-file-atomic.js';
 export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');

@@ -739,7 +739,6 @@ const TOKEN_OWNER_ONLY = 'Only an owner of this node can make, change or remove 
 const COPY_FROM_OWNER_ONLY = 'Only an owner of this node can change the server it copies from';
 const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can change when snapshots are taken and kept';
 const RESYNC_OWNER_ONLY = 'Only an owner of this node can make its standby copy everything again';
-const COPY_OWNER_ONLY = 'Only an owner of this node can copy its whole ledger';
 const CADENCE_OWNER_ONLY = 'Only an owner of this node can change how often it copies from its main server';
 const RESTORE_POINTS_OWNER_ONLY = 'Only an owner of this node can see or roll back to its restore points';
 

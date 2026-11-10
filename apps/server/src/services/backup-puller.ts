@@ -61,7 +61,7 @@ import {
 import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere, takeoverUnderWay } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
-import { getLocalConfig, updateLocalConfig, clampBackupPullSeconds, clampBackupReconcileMinutes } from '../config/local-config.js';
+import { getLocalConfig, clampBackupPullSeconds, clampBackupReconcileMinutes } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull, clearCopiesDroppedBeforeSeal, noteWholeCopyThisProcess } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';

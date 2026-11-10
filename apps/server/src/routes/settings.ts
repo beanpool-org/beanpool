@@ -15,12 +15,11 @@ import {
 import { isPrivatePreview } from '../config/private-preview.js';
 import { placeAs, placeShownTo, type PlaceShown } from '../config/community-place.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig,
+    saveLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
     getGatewayConfig,
 } from '../config/local-config.js';
 import { requireAdminRole, requireFreshProof, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
-import { logger } from '../logger.js';
 import { actingAs } from '../services/security-signal.js';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, directoryPromiseStatus, directoryPromiseSaved } from '../services/directory-publisher.js';
 import { listingFields, publicListingFields, setPromiseTicks } from '../engine/directory-promise.js';

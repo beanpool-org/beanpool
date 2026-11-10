@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    fitNeedsYou, needsYouRowOrder, isOwnInviteChange,
+    fitNeedsYou, needsYouRowOrder, needsYouCounts, isOwnInviteChange,
     NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, type NeedsYouKind,
 } from '../needs-you';
 
@@ -39,5 +39,13 @@ describe('needs-you core helpers', () => {
         expect(isOwnInviteChange({ type: 'group_member_removed', memberPubkey: 'other' }, ME)).toBe(false);
         expect(isOwnInviteChange(null, ME)).toBe(false);
         expect(isOwnInviteChange({}, null)).toBe(false);
+    });
+});
+
+describe('needsYouCounts: what the bell counts (DESIGN-standing-deals-upfront-amend-fable §2)', () => {
+    it("every line but the payee's live line of a short standing deal, the one deal line that is not amber", () => {
+        expect(needsYouCounts({ kind: 'deal', accent: true })).toBe(true);
+        expect(needsYouCounts({ kind: 'deal', accent: false })).toBe(false);
+        for (const kind of ['message', 'group', 'invite', 'vote'] as NeedsYouKind[]) expect(needsYouCounts({ kind, accent: false })).toBe(true);
     });
 });

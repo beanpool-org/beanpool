@@ -26,7 +26,7 @@ let failures = 0;
 const fail = (msg) => { console.error(`✗ ${msg}`); failures++; };
 
 try {
-    for (const view of ['take-up', 'panels', 'short']) {
+    for (const view of ['take-up', 'no-room', 'panels', 'short']) {
         for (const theme of ['light', 'dark']) {
             for (const lang of ['en', 'es']) {
                 const label = `${view} ${theme} ${lang}`;

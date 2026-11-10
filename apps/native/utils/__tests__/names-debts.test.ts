@@ -311,7 +311,8 @@ describe('the names list screen (app/names-list.tsx): every debt control asks fi
     it('a refusal is shown in the node’s words; an entry with an open debt offers settling, not inviting or confirming', () => {
         expect(screen.match(/if \(!done\.ok\) \{ setError\(done\.message\); return; \}/g)?.length).toBeGreaterThanOrEqual(3);
         // The buttons' words go through t() (words S3k): the same English.
-        expect(screen).toContain("!e.confirmation && e.text && !open ? btn(t('Invite this person')");
+        // Invite this person is also held back while the entry has an invite out (I2: one live invite per entry).
+        expect(screen).toContain("!e.confirmation && e.text && !open && !out ? btn(t('Invite this person')");
         expect(screen).toContain("!e.confirmation && e.text && !open ? btn(t('Confirm a member')");
         expect(screen).toContain("btn(t('Work it off')");
     });

@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -429,6 +429,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         }
         return map;
     }, [transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set(transactions
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [transactions]);
 
     // ── Data derivation ──
     const myPosts = posts.filter(p => {
@@ -503,7 +508,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             // A standing deal still running, on its current period's row (DESIGN-standing-deals-fable §2.2): one card with
             // 🔁 STANDING and its panel's line (the payer's short-funds warning, with the end of its week), as on the web.
             const standing = dealsTab === 'pending' ? standingPanel(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
-            const needsReview = !standing && isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+            // Core's rule: a standing deal asks for one review, on its first period (design §3).
+            const needsReview = !standing && isCompleted && step.state === 'done-to-review';
+            // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2).
+            const historyLine = dealsTab === 'history' ? standingHistoryLine(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
             // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
             // never a blank after "From " (DESIGN-global-members-by-area §2.4).
@@ -566,6 +574,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                 {standing ? standing.status : dealStateWords(step, partnerCallsign)}
                             </Text>
                         )}
+                        {historyLine && (
+                            <Text testID={`deal-history-${item.id}`} style={styles.dealStateText}>{historyLine}</Text>
+                        )}
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                 <MemberAvatar avatarUrl={partnerAvatar} pubkey={partnerPubkey || ''} callsign={partnerCallsign || '?'} size={20} />
@@ -625,7 +636,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         // Action Required is drawn bold.
         let actionRequired = false;
 
-        if (item.status === 'pending' || relatedTx?.status === 'pending') {
+        if (item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id)) {
+            displayStatusText = standingLines.chip();
+        } else if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = t('🤝 Held in Trust');
             highlightStyle = heldTone;
             if (isDark) statusInk = colors.feedback.success.fg;

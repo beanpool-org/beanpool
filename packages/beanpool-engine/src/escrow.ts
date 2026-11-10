@@ -40,7 +40,8 @@ export interface MarketplaceTransaction {
     standingId?: string;
     periodNo?: number;
     standingPhase?: 'paid' | 'short' | 'ended';
-    standingBeans?: number;
+    /** The Beans per period, whole hundredths of a Bean. */
+    standingBeans_c?: number;
     standingUnit?: 'week' | 'month';
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string;
@@ -48,6 +49,10 @@ export interface MarketplaceTransaction {
     standingStartsAt?: string;
     /** Since when the period now due is unpaid (phase short): its start; its grace ends half that period later (@beanpool/core standingGraceEndsAt). */
     standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
 }
@@ -58,13 +63,18 @@ function standingFields(r: any): Partial<MarketplaceTransaction> {
     const out: Partial<MarketplaceTransaction> = { standingId: r.standing_id, periodNo: r.period_no ?? undefined };
     if (r.sdPhase) {
         out.standingPhase = r.sdPhase;
-        out.standingBeans = r.sdBeans;
+        out.standingBeans_c = r.sdBeans;
         out.standingUnit = r.sdUnit;
         out.standingMaxPeriods = r.sdMax ?? null;
         out.standingNextDueAt = r.sdNextDueAt;
         out.standingStopped = !!r.sdStoppedAt;
         out.standingStartsAt = r.sdStartsAt;
         out.standingShortSince = r.sdShortSince ?? null;
+        if (r.sdPhase === 'ended') {
+            out.standingEndedReason = r.sdEndedReason ?? null;
+            out.standingStoppedBy = r.sdStoppedBy ?? null;
+            out.standingEndedAt = r.sdEndedAt ?? null;
+        }
     }
     return out;
 }
@@ -90,7 +100,8 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
-               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id
@@ -150,7 +161,8 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
-               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id

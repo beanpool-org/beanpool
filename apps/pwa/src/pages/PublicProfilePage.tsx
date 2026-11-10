@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    addFriendApi, submitRating, getPublicChannels, getMyVouching,
+    addFriendApi, submitRating, getPublicChannels, getMyVouching, getTrustProfile,
     type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo, type PublicCreatorChannel, type MyVouching
 } from '../lib/api';
 import * as api from '../lib/api';
@@ -24,6 +24,7 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, freePriceWords } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
+import { InvitedByCard } from '../components/InvitedByCard';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -39,11 +40,17 @@ interface Props {
      * (App.tsx's one profile overlay), so this is where an enterprise is told apart, and no Trust Profile is drawn for it.
      */
     onOpenTreasury?: (pubkey: string) => void;
+    /** Opens another member's profile in this overlay: a profile's inviter, or someone in its Brought in list (I3). */
+    onOpenProfile?: (pubkey: string) => void;
 }
 
-export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury }: Props) {
+export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury, onOpenProfile }: Props) {
     // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
-    const beansMarked = marked(useFeatureMode('beans'));
+    const beansMode = useFeatureMode('beans');
+    const beansMarked = marked(beansMode);
+    // Who invited them, and whom they brought in (I3), from the trust profile the server tailors to this reader. Beans-gated as
+    // the phone's trust panel is (its inviter line sits there): where Beans are off, neither app draws it.
+    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; for: string } | null>(null);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -229,6 +236,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
         return () => { cancelled = true; };
     }, [pubkey, identity.publicKey, isSelf]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setInvite(null);
+        if (beansMode !== 'live') return;
+        getTrustProfile(pubkey)
+            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, for: pubkey }); })
+            .catch(() => null);
+        return () => { cancelled = true; };
+    }, [pubkey, beansMode]);
 
     const [raisePrompt, setRaisePrompt] = useState<{ prior: number; newTotal: number; amount: number } | null>(null);
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
@@ -431,6 +448,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <ChannelChips channels={channels} />
 
                 </div>
+
+                {/* Invited by, and Brought in n people (I3): the phone's lines, from the same words. */}
+                {invite && invite.for === pubkey && (
+                    <InvitedByCard vouchedInBy={invite.vouchedInBy} broughtIn={invite.broughtIn} isSelf={isSelf} targetPubkey={pubkey} onOpenProfile={onOpenProfile} />
+                )}
 
                 {/* Vouch for @sam (V3 §9) */}
                 {!isSelf && myVouching?.voucher && (!atMax || !!vouchSuccess || !!vouchRefusal) && (

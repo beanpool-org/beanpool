@@ -311,7 +311,7 @@ async function main(): Promise<void> {
     assert(/router\.post\('\/api\/names\/confirmations', \(ctx\) => asAdmin\(/.test(routes) && /router\.post\('\/api\/names\/debts\/:id\/work-off', \(ctx\) => asAdmin\(/.test(routes),
         'both routes run as the signing admin (asAdmin)');
     const invites = fs.readFileSync(path.join(SRC, 'engine', 'invites.ts'), 'utf8');
-    assert(/const boundEntry = namesEntryId === undefined \? null : assertMayBindInvite\(inviterPubkey, namesEntryId\);/.test(invites),
+    assert(/const boundEntry = namesEntryId === undefined \? null : assertMayBindInvite\(inviterPubkey, namesEntryId, replace\);/.test(invites),
         "an invite is bound to an entry only by an admin who can open it (assertMayBindInvite), and confirmByInvite checks the maker is one still");
 
     console.log(`\n${passed}/${run} passed`);

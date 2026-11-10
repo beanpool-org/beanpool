@@ -8,18 +8,20 @@
  *                      carries ("200 vouch · voucher budget 1,000 · confirms them as known"), "23 days left" (red at 3 or fewer)
  *   the whole row      opens the invite: its QR and Share (the caller's, the text message)
  *   the made card      "Invite for Sam · 200 vouch · voucher budget 1,000 · 30 days left" and Share
+ *   Revoke (I2)        on an open invite and the made card, asked first with the design's words (core inviteRevokeAsk); the
+ *                      caller revokes it on the community (DELETE /api/invite/:code). Never on an offline ticket (inviteRevocable).
  *
  * The words are core's (invite-rows.ts), so the web says the same. A name is opened from the names list only by the caller:
  * this draws what it is handed, and says when Pending is open with a bound invite in it (`onNeedNames`) so the caller opens
  * the list (a logged read, as any open of it is). Every row is at least 48 dp tall and wraps at 320 dp with 1.3x text.
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView, StyleSheet, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import {
-    formatDate, inviteCarries, inviteFolds, inviteMadeTitle, inviteTimeLeft, inviteWho, joinedHeading, joinedInvites, pendingHeading, pendingInvites, t,
-    type InviteRowSource,
+    formatDate, inviteCarries, inviteFolds, inviteMadeTitle, inviteRevocable, inviteRevokeAsk, inviteRevokeWords, inviteTimeLeft, inviteWho, joinedHeading,
+    joinedInvites, pendingHeading, pendingInvites, t, type InviteRowSource,
 } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
@@ -48,6 +50,31 @@ function InviteLines({ inv, name, now, nameOnPhone }: { inv: InviteRowSource; na
     );
 }
 
+/** Revoke, asked first (core inviteRevokeAsk). `onRevoke` revokes it on the community and resolves true once it is gone. */
+export function RevokeInviteButton({ inv, name, onRevoke, testID = 'invite-revoke' }: {
+    inv: InviteRowSource; name?: string | null; onRevoke: (inv: InviteRowSource) => Promise<boolean>; testID?: string;
+}) {
+    const styles = useStyles(makeStyles);
+    const [busy, setBusy] = useState(false);
+    const ask = () => {
+        const words = inviteRevokeAsk(inv, name);
+        Alert.alert(words.title, words.body, [
+            { text: inviteRevokeWords.cancel(), style: 'cancel' },
+            {
+                text: inviteRevokeWords.revoke(), style: 'destructive', onPress: async () => {
+                    setBusy(true);
+                    try { await onRevoke(inv); } finally { setBusy(false); }
+                },
+            },
+        ]);
+    };
+    return (
+        <Pressable onPress={ask} disabled={busy} accessibilityRole="button" accessibilityState={{ busy }} style={[styles.revokeBtn, busy && { opacity: 0.6 }]} testID={testID}>
+            <Text style={styles.revokeText} maxFontSizeMultiplier={1.3}>{busy ? inviteRevokeWords.revoking() : inviteRevokeWords.revoke()}</Text>
+        </Pressable>
+    );
+}
+
 export interface PendingInvitesProps {
     /** Every invite the member has made: the node's, and any offline tickets this phone made. */
     invites: readonly InviteRowSource[];
@@ -60,9 +87,11 @@ export interface PendingInvitesProps {
     qrValue: (code: string) => string;
     /** What goes under an open invite's QR: the Share button (or, where invites are only previewed, the marker that says so). */
     shareSlot: (code: string) => React.ReactNode;
+    /** Revoke an open invite on the community (I2); true once it is gone, and the sheet closes. None: no Revoke (a preview). */
+    onRevoke?: (inv: InviteRowSource) => Promise<boolean>;
 }
 
-export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shareSlot }: PendingInvitesProps) {
+export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shareSlot, onRevoke }: PendingInvitesProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const [pendingOpen, togglePending] = useFold('pending');
@@ -139,6 +168,17 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
                             </View>
                             <Text style={styles.code} selectable maxFontSizeMultiplier={1.3}>{opened.code}</Text>
                             {shareSlot(opened.code)}
+                            {onRevoke && inviteRevocable(opened) ? (
+                                <RevokeInviteButton
+                                    inv={opened}
+                                    name={nameFor(opened)}
+                                    onRevoke={async (i) => {
+                                        const gone = await onRevoke(i);
+                                        if (gone) setOpenCode(null);
+                                        return gone;
+                                    }}
+                                />
+                            ) : null}
                             <Pressable onPress={() => setOpenCode(null)} accessibilityRole="button" style={styles.closeBtn} testID="invite-sheet-close">
                                 <Text style={styles.closeText} maxFontSizeMultiplier={1.3}>{t('Close')}</Text>
                             </Pressable>
@@ -157,10 +197,12 @@ export interface InviteMadeCardProps {
     now: number;
     qrValue: string;
     shareSlot: React.ReactNode;
+    /** Revoke it on the community (I2); none in a preview. */
+    onRevoke?: (inv: InviteRowSource) => Promise<boolean>;
 }
 
-/** After Generate: who the invite is for, what it carries, how long it lasts, its QR and Share. */
-export function InviteMadeCard({ who, invite, now, qrValue, shareSlot }: InviteMadeCardProps) {
+/** After Generate: who the invite is for, what it carries, how long it lasts, its QR, Share and Revoke. */
+export function InviteMadeCard({ who, invite, now, qrValue, shareSlot, onRevoke }: InviteMadeCardProps) {
     const styles = useStyles(makeStyles);
     const left = inviteTimeLeft(invite, now);
     return (
@@ -172,6 +214,7 @@ export function InviteMadeCard({ who, invite, now, qrValue, shareSlot }: InviteM
                 <QRCode value={qrValue} size={180} />
             </View>
             {shareSlot}
+            {onRevoke && inviteRevocable(invite) ? <RevokeInviteButton inv={invite} name={invite.namesEntryId ? who : null} onRevoke={onRevoke} testID="invite-made-revoke" /> : null}
         </View>
     );
 }
@@ -199,6 +242,11 @@ const makeStyles = ({ theme, colors }: { theme: string; colors: any }) => StyleS
     code: { fontSize: 13, fontFamily: 'monospace', fontWeight: '600', color: colors.text.heading, textAlign: 'center' },
     closeBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.strong },
     closeText: { fontSize: 15, fontWeight: '700', color: colors.text.body },
+    revokeBtn: {
+        minHeight: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderRadius: 10, borderWidth: 1,
+        borderColor: colors.feedback.danger.fg,
+    },
+    revokeText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.fg, textAlign: 'center' },
     madeCard: {
         backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16,
         padding: 20, alignItems: 'center', marginBottom: 24, gap: 6,

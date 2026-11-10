@@ -69,9 +69,11 @@ function Step({ label, glyph, disabled, onPress, s }: { label: string; glyph: st
  * Take this up? (§2.2): how long (until stopped, or for k periods) and when it starts (today, or up to 30 days ahead), what is
  * held now and how it runs, then Agree. `now` is for tests.
  */
-export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, onAgree, now }: {
+export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, onAgree, now, room }: {
     unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; busy: boolean;
     onCancel: () => void; onAgree: (choice: StandingChoice) => void; now?: number;
+    /** The payer's usable room (balance less their usable floor), when known: short of the first period, Agree is disabled. */
+    room?: number | null;
 }) {
     const s = useStandingStyles();
     const [untilStopped, setUntilStopped] = useState(true);
@@ -81,7 +83,8 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
     // The start is worked out again at Agree: the node refuses one more than 10 minutes old (checkStandingStart), and a member
     // may come back to this screen from the background long after it opened. The lines show the start as of now.
     const startAt = () => standingStartAt(now ?? Date.now(), later ? daysAhead : 0);
-    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods }, day);
+    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods, room }, day);
+    const off = busy || !!l.noRoom;
     return (
         <View style={s.box} testID="standing-take-up">
             <Text style={s.title}>{l.title}</Text>
@@ -117,11 +120,12 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
                 <Text style={s.noteText}>{l.howItRuns}</Text>
                 <Text style={s.noteText}>{l.shortAhead}</Text>
             </View>
+            {l.noRoom && <Text style={[s.noteBold, s.panelWarn, { textAlign: 'center' }]} testID="standing-no-room" accessibilityLiveRegion="polite">{l.noRoom}</Text>}
             <View style={s.buttons}>
                 <Pressable accessibilityRole="button" style={s.quiet} onPress={onCancel} disabled={busy}>
                     <Text style={s.quietText}>{t('Cancel')}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" testID="standing-agree" style={[s.go, busy && { opacity: 0.6 }]} disabled={busy}
+                <Pressable accessibilityRole="button" accessibilityState={{ disabled: off }} testID="standing-agree" style={[s.go, off && { opacity: 0.6 }]} disabled={off}
                     onPress={() => onAgree({ periods: untilStopped ? null : periods, startsAt: startAt() })}>
                     <Text style={s.goText}>{l.agree}</Text>
                 </Pressable>

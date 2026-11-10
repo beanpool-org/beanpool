@@ -26,7 +26,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
@@ -491,10 +491,13 @@ export default function PeopleScreen() {
                         const serverInvitesMap = new Map<string, any>(
                             serverInvites.map((si: any) => [si.code.toLowerCase(), si])
                         );
-                        // The node's row is the truth for a code it knows: used or not, and what the code is for and carries.
-                        const updatedInvites = localInvites.map((localInv: any) => {
+                        // The node's row is the truth for a code it knows: used or not, and what the code is for and carries. A code
+                        // the node made and no longer holds was revoked (by an owner, or on another device: I2) or pruned: it goes.
+                        // An offline ticket (BP-…) is this phone's until someone joins with it, so it stays.
+                        const updatedInvites = localInvites.flatMap((localInv: any) => {
                             const match = serverInvitesMap.get(localInv.code.toLowerCase());
-                            return match ? { ...localInv, ...match } : localInv;
+                            if (match) return [{ ...localInv, ...match }];
+                            return String(localInv.code).startsWith('BP-') ? [localInv] : [];
                         });
 
                         const updatedCodes = new Set<string>(
@@ -729,6 +732,43 @@ export default function PeopleScreen() {
         } finally {
             setGenerating(false);
         }
+    };
+
+    /**
+     * Revoke one of this member's invites on the community (invites-vouching I2: DELETE /api/invite/:code, signed). Gone, it
+     * leaves Pending and the made card, and a vouch it held is back in the budget. A `no_invite` means the community holds no
+     * such unused code of theirs any more (lapsed and pruned): it goes from this phone too. Anything else says so and keeps it.
+     */
+    const revokeMyInvite = async (inv: InviteRowSource): Promise<boolean> => {
+        if (!identity || invitesPreview || !anchorUrl) return false;
+        try {
+            // Signed here: the phone's fetch signs only GETs on its own (utils/node-request-signing.ts), and the node refuses an
+            // unsigned revoke (401).
+            const url = `${anchorUrl}/api/invite/${encodeURIComponent(inv.code)}`;
+            const headers = await buildSignedHeaders('DELETE', url, '', identity.privateKey, identity.publicKey);
+            const res = await fetch(url, { method: 'DELETE', headers });
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                // Only the node's own `no_invite` means it is gone: a node older than Revoke answers 404 too, with no code.
+                if (body?.code !== 'no_invite') {
+                    Alert.alert(t('Not revoked'), typeof body?.error === 'string' && body.error ? body.error : inviteRevokeWords.failed());
+                    return false;
+                }
+            }
+        } catch {
+            Alert.alert(t('Not revoked'), inviteRevokeWords.failed());
+            return false;
+        }
+        const key = inv.code.toLowerCase();
+        const updated = invites.filter((i: any) => String(i.code).toLowerCase() !== key);
+        setInvites(updated);
+        if (newCode && newCode.toLowerCase() === key) {
+            setNewCode('');
+            setMadeCard(null);
+        }
+        await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated)).catch(() => {});
+        if (inv.vouchAmount) void rereadMyVouching(anchorUrl, identity, setMyVouching);
+        return true;
     };
 
     const shareInvite = async (codeToShare: string) => {
@@ -1466,6 +1506,7 @@ export default function PeopleScreen() {
                                                 <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
                                             </Pressable>
                                         )}
+                                        onRevoke={invitesPreview ? undefined : revokeMyInvite}
                                     />
                                 ) : null
                             ) : null}
@@ -1555,6 +1596,7 @@ export default function PeopleScreen() {
                                             <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
                                         </Pressable>
                                     )}
+                                    onRevoke={revokeMyInvite}
                                 />
                             )}
 

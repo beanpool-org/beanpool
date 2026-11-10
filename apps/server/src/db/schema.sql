@@ -95,6 +95,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- cleared: the row stays 'pruned', and nothing brings such an account back (no reinstate vote, no admin path;
     -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
     deleted_by_owner_at TEXT,
+    -- The member's own "Show who invited me to other members" (Settings → Privacy; PUT /api/profile/privacy). 1, the
+    -- default: every member of this community reads "Invited by @x" on their profile. 0: a plain member reads no inviter
+    -- line; owners, admins, the inviter and the member themself still do (state-engine.ts getTrustProfileForViewer,
+    -- DESIGN-invites-vouching-review-fable.md §3 ask 2). In members_touch_updated_at's list, so delta sync carries it.
+    inviter_shown INTEGER DEFAULT 1,
     -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), an
     -- enterprise's `paused` or an off-board `status`, an account's pause among them (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
@@ -1577,7 +1582,7 @@ AFTER UPDATE OF
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
-    is_visitor, deleted_by_owner_at
+    is_visitor, deleted_by_owner_at, inviter_shown
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

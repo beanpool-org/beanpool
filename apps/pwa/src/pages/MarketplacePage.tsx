@@ -30,7 +30,7 @@ import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
-    dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
+    dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, standingRoomOf, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
@@ -1097,17 +1097,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const canLoadBalance = !!identity && isMember !== false && isMember !== null;
     // Gate 1 is a Beans rule (the server holds it only where they are on): in preview the balance is never asked.
     const readsBalance = useReadsOwn('beans', canLoadBalance);
+    const [spendRoom, setSpendRoom] = useState<number | null>(null);
     // The enterprises this member keeps (the balance's keeperOf), for Edit on their listings, as on the phone: an enterprises
     // rule, so read where those are the reader's own as well (app/post/[id].tsx).
     const readsKeepers = useReadsOwn('enterprises', canLoadBalance);
     useEffect(() => {
         // Signed out, or no longer reading them: the enterprises a member kept go with them.
-        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) { setKeeperOf([]); return; }
+        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) { setKeeperOf([]); setSpendRoom(null); return; }
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => {
                 if (cancelled) return;
                 if (readsBalance) setBlockedFromTrading(!!b.isBlockedFromTrading);
+                // What a standing take-up can pay now (core standingRoomOf): Agree is disabled with a plain line below it.
+                setSpendRoom(readsBalance ? standingRoomOf(b) : null);
                 setKeeperOf(readsKeepers && Array.isArray(b.keeperOf) ? b.keeperOf : []);
             })
             .catch(() => {});
@@ -2458,6 +2461,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                     {approvingStanding === req.id && standingUnit && (
                                         <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={requesterCallsign}
+                                            room={selectedPost.authorPublicKey === identity?.publicKey ? spendRoom : null}
                                             busy={accepting} onCancel={() => setApprovingStanding(null)}
                                             onAgree={(choice) => takeUpStanding(choice, req.sellerPublicKey, req.id)} />
                                     )}
@@ -2573,6 +2577,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
                             return showAcceptConfirm && standingOffer && standingUnit ? (
                                 <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={selectedPost.authorCallsign}
+                                    room={spendRoom}
                                     busy={accepting || isRemotePost || !!authorEnterpriseInactive} onCancel={() => setShowAcceptConfirm(false)}
                                     onAgree={(choice) => takeUpStanding(choice, selectedPost.authorPublicKey)} />
                             ) : showAcceptConfirm ? (

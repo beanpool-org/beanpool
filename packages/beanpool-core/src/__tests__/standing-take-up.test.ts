@@ -17,6 +17,8 @@ import {
     standingTakeUpLines,
     standingUnitForListing,
     type StandingDealRow,
+    standingRoomOf,
+    standingHistoryLine,
 } from '../standing-deal.js';
 import { BOUND_SIGNATURE_MARKER, ed25519Signer } from '../request-signing.js';
 import { dealStep, listingDealLines } from '../deal-step.js';
@@ -114,6 +116,24 @@ describe('standingTakeUpLines: the take-up screen (design §3)', () => {
         expect(l.startOn).toBe('On 11 Nov');
         expect(l.paidNow).toBe('12.50 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.50 at the start of each week, until one of you stops it.');
         expect(l.shortAhead).toBe("If you're short when a week is due, you'll be told the day before.");
+    });
+    it("Agree is never a button that fails: short of the first period's room, a plain line says so (design §3)", () => {
+        const base = { unit: 'month' as const, beans: 5000, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 };
+        expect(standingTakeUpLines({ ...base, room: 3000 }, day).noRoom).toBe('You need 50 Beans of room; you have 30');
+        expect(standingTakeUpLines({ ...base, room: -400 }, day).noRoom).toBe('You need 50 Beans of room; you have 0');
+        expect(standingTakeUpLines({ ...base, room: 4999 }, day).noRoom).toBe('You need 50 Beans of room; you have 49.99');
+        // Room enough, or not known (the node still checks): no line, Agree stays.
+        for (const room of [5000, 12000, null, undefined, NaN]) expect(standingTakeUpLines({ ...base, room }, day).noRoom).toBeNull();
+    });
+    it("standingRoomOf: the balance less the usable floor, else the earned floor; null when there's no read", () => {
+        expect(standingRoomOf({ balance_c: 1000, floor_c: -10000, usableFloor_c: -2000 })).toBe(3000);
+        expect(standingRoomOf({ balance_c: 1000, floor_c: -4000 })).toBe(5000);
+        expect(standingRoomOf({ balance_c: -2550, floor_c: -2000, usableFloor_c: -2000 })).toBe(-550);
+        expect(standingRoomOf({ balance_c: 700 })).toBe(700);
+        expect(standingRoomOf(null)).toBeNull();
+        expect(standingRoomOf({ floor_c: -2000 })).toBeNull();
+        // A read that isn't whole hundredths (an old Beans figure) is no read: never a room 100 times off.
+        expect(standingRoomOf({ balance_c: 10.5 })).toBeNull();
     });
 });
 
@@ -217,3 +237,30 @@ describe("listingDealLines.finished: a standing deal still running is never 'don
         expect(listingDealLines.finished('completed')).toBe('That deal is done.');
     });
 });
+
+describe('standingHistoryLine: the History row of an ended standing deal (amendment §1, §2)', () => {
+    // Month 2 (9 Nov) unpaid; stopped in the grace on 12 Nov, or its grace run out.
+    const ended = (o: Partial<StandingDealRow> = {}) => row({
+        periodNo: 1, standingPhase: 'ended', standingShortSince: '2026-11-09T08:00:00.000Z', standingEndedAt: '2026-11-12T08:00:00.000Z',
+        standingEndedReason: 'stopped', standingStoppedBy: PAYEE, standingStopped: true, ...o,
+    });
+    it('stopped in the grace: by you, or by the other side by name; that period unpaid, nothing owed', () => {
+        expect(standingHistoryLine(ended(), PAYEE, day)).toBe('Stopped by you on 12 Nov · this month unpaid · nothing owed');
+        expect(standingHistoryLine(ended(), PAYER, day)).toBe('Stopped by Rob on 12 Nov · this month unpaid · nothing owed');
+        expect(standingHistoryLine(ended({ standingStoppedBy: PAYER, standingUnit: 'week' }), PAYEE, day)).toBe('Stopped by Marty on 12 Nov · this week unpaid · nothing owed');
+    });
+    it("its grace run out: each side's words, and the payee never hears the payer's balance", () => {
+        const out = ended({ standingEndedReason: 'short', standingStoppedBy: null, standingStopped: false });
+        expect(standingHistoryLine(out, PAYER, day)).toBe("Vehicle Storage ended: this month's Beans couldn't be paid. Nothing more will be taken. Talk to Rob about it.");
+        expect(standingHistoryLine(out, PAYEE, day)).toBe("Marty's Vehicle Storage ended: this month's Beans couldn't be paid. Nothing is owed through the app for the days since 9 Nov.");
+        expect(standingHistoryLine(out, PAYEE, day)).not.toMatch(/short|balance/i);
+    });
+    it('stopped after a paid period, another end, still running, a one-off deal or a stranger: no line', () => {
+        expect(standingHistoryLine(ended({ standingShortSince: null }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingEndedReason: 'count_reached' }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingPhase: 'short' }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingId: null }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended(), 'c'.repeat(64), day)).toBeNull();
+    });
+});
+

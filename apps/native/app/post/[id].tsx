@@ -13,7 +13,7 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal,
 } from '../../utils/db';
@@ -52,7 +52,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingUnitForListing, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingRoomOf, standingUnitForListing, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -586,6 +586,7 @@ export default function PostDetailModal() {
     const takeUpTop = useRef(0);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
+    const [spendRoom, setSpendRoom] = useState<number | null>(null);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
     const [acceptHours, setAcceptHours] = useState('1');
     // The request on a standing Need whose author is agreeing to pay for it (DESIGN-standing-deals-fable §4): its payer screen shows.
@@ -974,6 +975,22 @@ export default function PostDetailModal() {
             .catch(() => {});
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
+
+    // What a standing take-up can pay now (core standingRoomOf), read only from the node's own balance read: the phone's
+    // cached getBalance reads floor 0 when its copy is missing or stale, and would disable Agree on a guess. Unknown until
+    // that read lands, and when it fails: Agree stays and the node checks (DESIGN-standing-deals-upfront-fable §3).
+    const takesStanding = !!post && !!standingUnitForListing(post.price_type, post.credits);
+    useEffect(() => {
+        setSpendRoom(null);
+        if (!identity?.publicKey || !takesStanding) return;
+        let cancelled = false;
+        const key = identity.publicKey;
+        readsOwn('beans', key)
+            .then(beans => (beans ? refreshBalanceFromServer(key) : null))
+            .then(fresh => { if (!cancelled) setSpendRoom(standingRoomOf(fresh)); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [identity?.publicKey, takesStanding]);
 
     if (!post) {
         if (!postMissing) {
@@ -2118,6 +2135,7 @@ export default function PostDetailModal() {
                         {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm && standingOffer && standingUnit ? (
                             // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
                             <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={post.author_callsign || t('Peer')}
+                                room={spendRoom}
                                 busy={accepting} onCancel={() => setShowAcceptConfirm(false)}
                                 onAgree={(choice) => takeUpStanding(choice, post.author_pubkey)} />
                         ) : showAcceptConfirm ? (
@@ -2320,6 +2338,7 @@ export default function PostDetailModal() {
                                     {/* A standing Need: its author pays, and agrees to the run on the payer's screen first (§4). */}
                                     {approvingStanding === req.id && standingUnit && (
                                         <StandingTakeUp unit={standingUnit} beans={Number(post.credits)} title={post.title} payeeName={reqCallsign}
+                                            room={post.author_pubkey === identity?.publicKey ? spendRoom : null}
                                             busy={accepting} onCancel={() => setApprovingStanding(null)}
                                             onAgree={(choice) => takeUpStanding(choice, req.seller_pubkey, req.id)} />
                                     )}

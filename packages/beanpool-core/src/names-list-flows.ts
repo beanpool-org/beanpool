@@ -210,7 +210,7 @@ export interface VoucherHistoryLine {
     for?: 'invite' | 'profile';
     inviteMadeAt?: string | null;
     outcome?: 'held' | 'vouched' | 'back';
-    why?: 'expired' | 'stopped' | 'not_landed';
+    why?: 'expired' | 'stopped' | 'not_landed' | 'revoked';
     person?: { memberPubkey: string; callsign: string } | null;
 }
 
@@ -2042,6 +2042,14 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, namesInviteBody(body));
     }
 
+    /**
+     * Revoke the live invite on this entry from the entry's line (invites-vouching I2): its maker or an owner. Bound invites
+     * reach no admin as a code, so the entry names it. The vouch it held comes back to its maker's budget.
+     */
+    function revokeEntryInvite(anchor: string, identity: I, entryId: string) {
+        return call<{ revoked: number; returned: number; promiseEnded: boolean }>(anchor, identity, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`);
+    }
+
     /** Every bound invite on this community, for the admins: used or not, and what each did. */
     function readBoundInvites(anchor: string, identity: I) {
         return call<{ invites: BoundInvite[] }>(anchor, identity, 'GET', `${NAMES_PATH}/invites`);
@@ -2139,6 +2147,7 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         sendKeysAgain,
         addNamesEntry,
         inviteForNamesEntry,
+        revokeEntryInvite,
         readBoundInvites,
         editNamesEntry,
         pendingRemovals,

@@ -67,7 +67,7 @@ import { copyableChatText } from '../lib/copy-chat-text';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { ListPhoto } from '../components/ListPhoto';
-import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -614,14 +614,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return activeConv.participants?.find(p => p !== identity.publicKey) || '';
     }, [activeConv, identity.publicKey]);
     // ⚡ Bolt: memoized pending transaction for active conversation to avoid O(T) array scan on render
+    // The Trust Hold banner's deal: Beans of mine held that core's one rule lets me release (dealMoves). Never a standing
+    // deal's row, whatever its status says: nothing of one is held (DESIGN-standing-deals-upfront-fable §0, §3).
     const activePendingTransaction = useMemo(() => {
         if (!activeConv) return null;
         return userTransactions.find(t =>
-            t.status === 'pending' &&
-            ((t.buyerPublicKey === identity.publicKey && (t.sellerPublicKey === activePeerPubkey || !activePeerPubkey)) ||
-             (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
+            !!dealMoves(t, identity.publicKey)?.release &&
+            ((t.sellerPublicKey === activePeerPubkey || !activePeerPubkey) || (!!t.postId && t.postId === activeConv.postId))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
+    const activePendingMoves = useMemo(
+        () => (activePendingTransaction ? dealMoves(activePendingTransaction, identity.publicKey) : null),
+        [activePendingTransaction, identity.publicKey],
+    );
     // The deals with the open DM's other person that ask something of the chat, newest first: Beans held (either side's), a
     // finished trade I haven't rated, or a request on my listing waiting for my answer (the list's Action Required counts it,
     // so the chat it opens must show it: DESIGN-deals-fable §2.2, every surface opens the deal). The phone's pinned strip
@@ -632,7 +637,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const me = identity.publicKey;
         return userTransactions
             .filter(tx => ((tx.buyerPublicKey === me && tx.sellerPublicKey === activePeerPubkey) || (tx.sellerPublicKey === me && tx.buyerPublicKey === activePeerPubkey))
-                && (tx.status === 'pending' || (tx.status === 'completed' && !iRated(tx, me)) || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
+                && ((tx.status === 'pending' && !tx.standingId) || (tx.status === 'completed' && !iRated(tx, me) && dealStep(tx, me).state === 'done-to-review') || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
                 && tx.id !== activePendingTransaction?.id)
             .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }, [activeConv?.type, userTransactions, identity.publicKey, activePeerPubkey, activePendingTransaction?.id]);
@@ -2397,8 +2402,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     {(() => {
                         const pendingTx = activePendingTransaction;
 
-                        if (!pendingTx) return null;
-                        const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
+                        if (!pendingTx || !activePendingMoves) return null;
+                        // Release and Cancel only as core's dealMoves offers them (never on a standing deal's row).
+                        const isBuyer = activePendingMoves.release;
 
                         return (
                             <div style={{
@@ -2437,7 +2443,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {actionLoading ? '…' : t('✅ Release Credits')}
                                         </button>
-                                        <button
+                                        {activePendingMoves.cancelHold && <button
                                             onClick={() => handleCancelCredits(pendingTx.id)}
                                             disabled={actionLoading}
                                             style={{
@@ -2452,7 +2458,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             }}
                                         >
                                             {t('Cancel')}
-                                        </button>
+                                        </button>}
                                     </div>
                                 ) : (
                                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
@@ -2587,6 +2593,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
                             if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
                             if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
+                            // A standing deal's record line: the node's own sentence (due, covered, ended, stopped).
+                            if (msg.systemType === 'STANDING_DEAL') icon = '🔁';
 
                             return (
                                 <div key={msg.id} style={{
@@ -2621,7 +2629,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         const hasRated = relatedTx ? iRated(relatedTx, identity.publicKey) : false;
                                         // A trade this page doesn't hold (older than the node's page of trades) can't be rated from
                                         // here: the line opens its post, as the funded line's View Post does (review #1980 N2).
-                                        const canRate = !!relatedTx && !hasRated;
+                                        // A standing deal is reviewed once, on its first period: a later period's line opens
+                                        // the post (core's dealStep, design §3).
+                                        const canRate = !!relatedTx && !hasRated && dealStep(relatedTx, identity.publicKey).state === 'done-to-review';
                                         return (
                                             <button
                                                 onClick={() => canRate
@@ -2635,7 +2645,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                             >
-                                                {!relatedTx
+                                                {!relatedTx || (!hasRated && !canRate)
                                                     ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
                                                     : hasRated ? t('✓ Rating Submitted') : <><span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span></>}
                                             </button>

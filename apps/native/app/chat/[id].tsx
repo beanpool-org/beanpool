@@ -5,7 +5,7 @@ import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
 import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
-import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
+import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -1021,18 +1021,26 @@ function ChatScreen({ id }: { id: string }) {
     // answer (core's dealStep `to-answer`: the web's strip carries it too, and Talk's Action Required counts it, so the chat
     // it opens must show it). My own request, a declined one and a stranger's are not here.
     const myKey = identity?.publicKey;
+    // Which deals and which buttons are core's one rule (dealMoves, through utils/deal-rows): a standing deal's rows never
+    // show Release or Cancel, and only its first period asks for a review (DESIGN-standing-deals-upfront-fable §0, §3).
     const activeDeals = React.useMemo(
-        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated) || (!!myKey && isRequestToAnswer(d, myKey))),
+        () => (myKey ? deals.filter(d => isChatStripDeal(d, myKey)) : []),
         [deals, myKey]
     );
 
+    // The inline bar's deal, as core reads it: Release and Cancel only where dealMoves offers them. A deal the phone hasn't
+    // read yet shows no bar (never a button the node would refuse).
+    const pendingMoves = React.useMemo(() => {
+        if (!pendingTx || !myKey) return null;
+        const d = deals.find(x => x.txId === pendingTx.id);
+        return d ? localDealMoves(d, myKey) : null;
+    }, [deals, pendingTx, myKey]);
+    const showInlineBar = !!pendingTx && !!pendingMoves?.release && postContext?.status === 'pending';
+
     // Filter out the deal from the top strip if it is currently displayed in the richer bottom Inline Action Bar
     const visibleDeals = React.useMemo(() => {
-        return activeDeals.filter(d => {
-            const isShownInInlineBar = pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && d.txId === pendingTx.id;
-            return !isShownInInlineBar;
-        });
-    }, [activeDeals, pendingTx, postContext]);
+        return activeDeals.filter(d => !(showInlineBar && d.txId === pendingTx?.id));
+    }, [activeDeals, pendingTx, showInlineBar]);
 
     // Reactive dynamic context: if there is no hardcoded postContext (consolidated thread),
     // derive postContext and pendingTx automatically from active deals where the user is the buyer.
@@ -1040,11 +1048,12 @@ function ChatScreen({ id }: { id: string }) {
         if (!isDynamicContext) return;
 
         let selectedDeal = null;
+        const me = identity?.publicKey ?? '';
         if (focusTx) {
-            selectedDeal = deals.find(d => d.txId === focusTx && d.status === 'pending');
+            selectedDeal = deals.find(d => d.txId === focusTx && (localDealMoves(d, me)?.cancelHold || localDealMoves(d, me)?.release));
         }
         if (!selectedDeal) {
-            selectedDeal = deals.find(d => d.status === 'pending' && d.iAmBuyer);
+            selectedDeal = deals.find(d => localDealMoves(d, me)?.release);
         }
 
         if (selectedDeal) {
@@ -1064,7 +1073,7 @@ function ChatScreen({ id }: { id: string }) {
             setPendingTx(null);
             setPostContext(null);
         }
-    }, [deals, isDynamicContext, focusTx]);
+    }, [deals, isDynamicContext, focusTx, identity?.publicKey]);
 
     // postId -> item title, so escrow events can be labelled by deal in the merged timeline.
     const dealTitleByPostId = React.useMemo(() => {
@@ -1179,6 +1188,11 @@ function ChatScreen({ id }: { id: string }) {
             iconColor = colors.brand.primary;
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
+        }
+        if (item.systemType === 'STANDING_DEAL') {
+            // A standing deal's record line (due, covered, ended, stopped in the grace): the node's own sentence as its text.
+            iconName = 'repeat';
+            iconColor = colors.brand.primary;
         }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
@@ -1549,26 +1563,33 @@ function ChatScreen({ id }: { id: string }) {
                                         <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
                                     </Text>
                                 )}
+                                {(() => {
+                                const moves = localDealMoves(d, identity!.publicKey);
+                                return (
                                 <View style={styles.dealCardActions}>
-                                    {d.status === 'pending' && d.iAmBuyer && (
+                                    {moves?.release && (
                                         <>
                                             <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
                                                 <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
+                                            {moves.cancelHold && (
                                             <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel deal')} style={[styles.dealBtn, styles.dealBtnCancel]} disabled={actionLoading} onPress={() => handleCancelDeal(d.txId)}>
                                                 <Text style={styles.dealBtnCancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                                             </Pressable>
+                                            )}
                                         </>
                                     )}
-                                    {d.status === 'pending' && !d.iAmBuyer && (
+                                    {moves?.step.state === 'to-deliver' && (
                                         <Text style={styles.dealAwaiting}>{t('⏳ Awaiting release')}</Text>
                                     )}
-                                    {d.status === 'completed' && !d.iRated && (
+                                    {moves?.step.state === 'done-to-review' && (
                                         <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Leave a review for {title}', { title: d.postTitle }) : t('Leave a review for deal')} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
                                             <Text style={styles.dealBtnReviewText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('⭐ Review')}</Text>
                                         </Pressable>
                                     )}
                                 </View>
+                                );
+                                })()}
                             </Pressable>
                         ))}
                     </ScrollView>
@@ -1603,8 +1624,8 @@ function ChatScreen({ id }: { id: string }) {
                 </Pressable>
             )}
 
-            {/* Inline Action Bar — Release/Cancel when escrow is pending and user is the payer */}
-            {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
+            {/* Inline Action Bar: Release/Cancel only where core's dealMoves offers them (never on a standing deal) */}
+            {showInlineBar && pendingTx && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
@@ -1628,6 +1649,7 @@ function ChatScreen({ id }: { id: string }) {
                                 )}
                             </Text>
                         </Pressable>
+                        {pendingMoves?.cancelHold && (
                         <Pressable
                             accessibilityRole="button"
                             style={[styles.inlineActionBtn, styles.inlineActionCancel]}
@@ -1637,6 +1659,7 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
                             <Text style={[styles.inlineActionCancelText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
+                        )}
                     </View>
                 </View>
             )}

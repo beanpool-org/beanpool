@@ -2,12 +2,12 @@
 //
 // Extracted from apps/server/src/state-engine.ts to separate invite code database side-effects.
 
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertMayInviteHere, mayInviteHere, ADMINS_ONLY_TICKET_MESSAGE } from '../config/door.js';
 import { isPrivatePreview, PRIVATE_PREVIEW_MESSAGE } from '../config/private-preview.js';
-import { isNodeAdmin } from './node-roles.js';
+import { isNodeAdmin, isNodeOwner } from './node-roles.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -29,8 +29,8 @@ import {
 import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { assertMayBindInvite, confirmByInvite } from './names-list.js';
-import { VoucherError, checkInviteVouch, checkInviteVoucherLevel, holdForInvite, landInviteVouch, landInviteVoucher, promiseInviteVoucher } from './vouchers.js';
+import { assertMayBindInvite, confirmByInvite, liveInvitesOnEntry, NamesListError } from './names-list.js';
+import { VoucherError, checkInviteVouch, checkInviteVoucherLevel, holdForInvite, landInviteVouch, landInviteVoucher, promiseInviteVoucher, returnHoldOnRevoke, endPromiseOnRevoke } from './vouchers.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -109,7 +109,12 @@ function assertInvitesOn(): void {
  * Refused (VoucherError, before the limit and before any write) unless the maker is an owner or a credit-committee admin,
  * for any other level, and where Beans are off. Nothing is allocated now: one `voucher_promised` line, with the code.
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown, voucherLevel?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number }) | null {
+/**
+ * `replace`: on an invite bound to a names-list entry that has a live invite out already (one per entry, invites-vouching
+ * I2), `true` revokes that one in this invite's transaction (its maker or an owner: engine/names-list.ts assertMayBindInvite);
+ * without it the bind is refused (409 `invite_out`). A failure anywhere leaves the old invite as it was and writes nothing.
+ */
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown, voucherLevel?: unknown, replace?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number }) | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
@@ -117,8 +122,12 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     assertMayInviteHere(inviterPubkey);
     // An invite bound to a names-list entry (community modes slice 3): only an admin who could confirm someone against
     // that entry now, and never one with a live confirmation (NamesListError, before the limit and before any write).
-    const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId);
-    const vouch = vouchAmount === undefined || vouchAmount === null ? null : checkInviteVouch(inviterPubkey, vouchAmount);
+    const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId, replace);
+    // Replacing, the old invite's vouch comes back first, in the transaction below, so this invite's vouch is checked there
+    // (holdForInvite checks it again in any case): a voucher replacing a 100 with a 100 from a budget of 100 is not refused.
+    const replacing = boundEntry !== null && replace === true && liveInvitesOnEntry(boundEntry).length > 0;
+    const vouchAsked = vouchAmount !== undefined && vouchAmount !== null;
+    let vouch = !vouchAsked || replacing ? null : checkInviteVouch(inviterPubkey, vouchAmount);
     if (voucherLevel !== undefined && voucherLevel !== null && !boundEntry) {
         throw new VoucherError(400, 'needs_entry', 'A voucher budget comes only with an invite bound to a names-list entry.');
     }
@@ -130,8 +139,11 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    // The code, its vouch's hold and its voucher budget's promise together, or none of them.
+    // The code, its vouch's hold and its voucher budget's promise together, or none of them; replacing, the old invite's
+    // revoke too.
     db.transaction(() => {
+        if (replacing && boundEntry) revokeInvitesOnEntryInside(inviterPubkey, boundEntry);
+        if (replacing && vouchAsked) vouch = checkInviteVouch(inviterPubkey, vouchAmount);
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount_c, voucher_level_c) VALUES (?, ?, ?, ?, ?, ?, ?)`)
             .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch, level);
         if (vouch) holdForInvite(inviterPubkey, code, vouch);
@@ -145,6 +157,100 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
     console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
     return invite;
+}
+
+// ── Revoke (invites-vouching I2; Marty, 10 Nov: the invite's maker and any owner) ──────────────────────────────────
+
+/** A revoke refused: its status, code and sentence for the route. */
+export class InviteRevokeError extends Error {
+    constructor(readonly status: number, readonly code: string, message: string) {
+        super(message);
+        this.name = 'InviteRevokeError';
+    }
+}
+
+export const INVITE_REVOKE_WORDS = {
+    noInvite: word('There is no invite of yours with that code that nobody has used.'),
+    used: word('Someone joined with this invite already, so there is nothing to revoke.'),
+    noEntryInvite: word('This person has no invite out now.'),
+    notYours: word('Only the admin who made that invite, or an owner, can revoke it.'),
+};
+
+/** An invite row as a revoke reads it. */
+interface RevokedRow { code: string; created_by: string; issued_by: string | null; vouch_amount_c: number | null; names_entry_id: string | null; voucher_level_c: number | null }
+
+/** What a revoke did: how many invites went, how much vouch came back to a budget, and whether a promised voucher budget ended. Never the code. */
+export interface RevokeOutcome { revoked: number; returned: number; promiseEnded: boolean }
+
+/**
+ * Revokes one unused invite, inside the caller's transaction: the vouch its code holds back in the holder's budget (a seed
+ * invite's holder is the admin it was issued by, as at the redeem), a promised voucher budget ended, and the row deleted.
+ * The delete leaves a tombstone on a main server (deletePlainRows), so a standby that takes over before its next whole copy
+ * admits nobody with the code either: unlike the hourly prune's codes, a revoked one is still in its 30 days.
+ */
+function revokeRowInside(revoker: string, row: RevokedRow): { returned: number; promiseEnded: boolean } {
+    const holder = row.issued_by || row.created_by;
+    const returned = row.vouch_amount_c ? returnHoldOnRevoke(holder, row.code, revoker) : 0;
+    const promiseEnded = !!row.names_entry_id && row.voucher_level_c != null;
+    if (promiseEnded) endPromiseOnRevoke(revoker, row.names_entry_id!, row.voucher_level_c!);
+    // A revoke runs on a main server only (assertPlainTablesWritable), so the tombstone is always written.
+    const gone = deletePlainRows('invite_codes', 'code = ? AND used_by IS NULL', row.code);
+    // Read in this same transaction as unused, so it is: anything else is a fault, and nothing commits.
+    if (gone !== 1) throw new Error('invite revoke: the row was not deleted');
+    return { returned, promiseEnded };
+}
+
+const selectRevokable = (code: string) => db.prepare(
+    'SELECT code, created_by, issued_by, vouch_amount_c, names_entry_id, voucher_level_c, used_by FROM invite_codes WHERE code = ?',
+).get(code) as (RevokedRow & { used_by: string | null }) | undefined;
+
+/** Inside generateInvite's transaction (`replace: true`): every live invite on the entry revoked by the replacer. */
+function revokeInvitesOnEntryInside(revoker: string, entryId: string): void {
+    for (const live of liveInvitesOnEntry(entryId)) revokeRowInside(revoker, selectRevokable(live.code)!);
+}
+
+/**
+ * DELETE /api/invite/:code (signed): the invite's maker revokes it, or an owner revokes anyone's. Unused only: a used code
+ * is refused (409 `invite_used`) and nothing moves. One transaction: the hold's `return`, a promise's `voucher_promise_ended`,
+ * the row deleted. Anyone else asking, about a code that exists or not, is told there is no such invite of theirs (404
+ * `no_invite`), so the answer says nothing about a code that isn't theirs.
+ */
+export function revokeInvite(revoker: string, code: unknown): RevokeOutcome {
+    assertPlainTablesWritable();
+    assertInvitesOn();
+    const raw = typeof code === 'string' ? code.trim() : '';
+    const found = raw ? db.prepare('SELECT code FROM invite_codes WHERE code COLLATE NOCASE = ?').get(raw) as { code: string } | undefined : undefined;
+    const row = found ? selectRevokable(found.code) : undefined;
+    const mayRevoke = !!row && (row.created_by === revoker || row.issued_by === revoker || isNodeOwner(revoker));
+    if (!row || !mayRevoke) throw new InviteRevokeError(404, 'no_invite', INVITE_REVOKE_WORDS.noInvite);
+    if (row.used_by) throw new InviteRevokeError(409, 'invite_used', INVITE_REVOKE_WORDS.used);
+    const out = db.transaction(() => revokeRowInside(revoker, row))();
+    recordFunnelEvent('invite_revoked');
+    console.log(`🎟️  Invite revoked: ${inviteLogTag(row.code)}`);
+    return { revoked: 1, ...out };
+}
+
+/**
+ * DELETE /api/names/entries/:id/invite (a names-list admin, signed): the live invite on an entry revoked from the entry's
+ * line, by its maker or an owner. Bound invites reach no admin as a code, not even their maker (engine/names-list.ts
+ * readBoundInvites), so the entry names it. None live: 404 `no_invite`; another admin's, for an admin who is no owner: 403
+ * `not_yours`. Otherwise as revokeInvite, every live one on the entry, in one transaction.
+ */
+export function revokeEntryInvite(revoker: string, entryId: unknown): RevokeOutcome {
+    assertPlainTablesWritable();
+    assertInvitesOn();
+    const live = typeof entryId === 'string' ? liveInvitesOnEntry(entryId) : [];
+    if (live.length === 0) throw new NamesListError(404, 'no_invite', INVITE_REVOKE_WORDS.noEntryInvite);
+    if (live.some((l) => l.createdBy !== revoker) && !isNodeOwner(revoker)) throw new NamesListError(403, 'not_yours', INVITE_REVOKE_WORDS.notYours);
+    const out = db.transaction(() => live.reduce((sum, l) => {
+        const r = revokeRowInside(revoker, selectRevokable(l.code)!);
+        return { returned: sum.returned + r.returned, promiseEnded: sum.promiseEnded || r.promiseEnded };
+    }, { returned: 0, promiseEnded: false }))();
+    for (const l of live) {
+        recordFunnelEvent('invite_revoked');
+        console.log(`🎟️  Invite revoked: ${inviteLogTag(l.code)}`);
+    }
+    return { revoked: live.length, ...out };
 }
 
 /**

@@ -77,6 +77,19 @@ describe('Take this up? (§2.2)', () => {
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: null, startsAt: NOW });
     });
+    it('without room for the first month, Agree is disabled with a plain line; with room it stays (design §3)', async () => {
+        const onAgree = vi.fn();
+        await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 30 }));
+        expect(byId('standing-no-room')!.textContent).toBe('You need 50 Beans of room; you have 30');
+        expect(byId('standing-agree')!.getAttribute('aria-disabled')).toBe('true');
+        await tap(byId('standing-agree'));
+        expect(onAgree).not.toHaveBeenCalled();
+        host.remove();
+        await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 80 }));
+        expect(byId('standing-no-room')).toBeNull();
+        await tap(byId('standing-agree'));
+        expect(onAgree).toHaveBeenCalledTimes(1);
+    });
     it('for a count of weeks and a later start', async () => {
         const onAgree = vi.fn();
         await show(createElement(StandingTakeUp, { unit: 'week', beans: 12.5, title: 'Eggs', payeeName: 'Ann', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
@@ -176,7 +189,7 @@ describe('at 320 dp with the text at 1.3x, light and dark from the tokens', () =
             theme.dark = dark;
             const colors = dark ? darkColors : lightColors;
             await show(createElement('div', null,
-                createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'A very long listing title for a garden plot down by the creek', payeeName: 'Bartholomew', busy: false, onCancel: vi.fn(), onAgree: vi.fn(), now: NOW }),
+                createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'A very long listing title for a garden plot down by the creek', payeeName: 'Bartholomew', busy: false, onCancel: vi.fn(), onAgree: vi.fn(), now: NOW, room: 12.5 }),
                 createElement(StandingPanel, { tx: row(SHORT), actingAs: PAYER, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Rob' })));
             const tokens = new Set<string>();
             const walk = (o: unknown) => { if (o && typeof o === 'object') Object.values(o).forEach(walk); else if (typeof o === 'string') tokens.add(o); };

@@ -136,6 +136,8 @@ const NODE = 'https://node.example';
 const LOCAL = { beans: true, invites: true, showcase: false };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
+/** What the mock node holds for GET /api/invite/mine (none unless a test puts one there). */
+const nodeHolds: Array<Record<string, unknown>> = [];
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
@@ -152,11 +154,13 @@ beforeEach(() => {
     phone.copied.length = 0;
     phone.sharedFiles.length = 0;
     let made = 0;
+    nodeHolds.length = 0;
     globalThis.fetch = vi.fn(async (url: unknown) => {
         const u = String(url);
         if (u.endsWith('/api/invite/generate')) return json({ success: true, invite: { code: `INV-TEST-000${++made}` } });
         if (u.endsWith('/api/community/health')) return json({ ok: true });
-        if (u.includes('/api/invite/mine/')) return json({ invites: [] });
+        // The node's own list is the truth for its codes (I2): a code it no longer holds leaves this phone's list.
+        if (u.includes('/api/invite/mine/')) return json({ invites: nodeHolds });
         return never();
     }) as typeof fetch;
 });
@@ -217,7 +221,9 @@ describe('People → Invites: Share sends the whole message as text, never a pic
     });
 
     it('an invite in the pending list (open the row, then Share) sends its own message', async () => {
-        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([{ code: 'INV-ROW-0001', createdAt: new Date().toISOString(), intendedFor: 'Sam' }]));
+        const row = { code: 'INV-ROW-0001', createdAt: new Date().toISOString(), intendedFor: 'Sam' };
+        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([row]));
+        nodeHolds.push({ ...row, createdBy: 'a-member-key', usedBy: null, usedAt: null });
         await open();
         // Pending is folded until opened; the whole row opens the invite, and Share is on it.
         for (const id of ['invites-pending-fold', 'invite-pending-row']) {
@@ -228,6 +234,23 @@ describe('People → Invites: Share sends the whole message as text, never a pic
         }
         await tap(t('📤 Share Invite'));
         sentTheTextOnly('INV-ROW-0001');
+    });
+
+    it('a code the node no longer holds (revoked by an owner or on another device, I2) leaves Pending; an offline ticket stays', async () => {
+        const at = new Date().toISOString();
+        store.map.set('bp_offline_invites_a-member-key', JSON.stringify([
+            { code: 'INV-GONE-0001', createdAt: at, intendedFor: 'Revoked elsewhere' },
+            { code: 'BP-ticket-made-on-this-phone', createdAt: at, intendedFor: 'Ticket' },
+        ]));
+        await open();
+        const fold = host.querySelector('[data-testid="invites-pending-fold"]') as HTMLElement | null;
+        expect(fold?.textContent).toContain('Pending (1)');
+        await act(async () => { fold!.click(); });
+        await settle();
+        const rows = Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]')).map((r) => r.textContent ?? '');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toContain('For: Ticket');
+        expect(JSON.parse(store.map.get('bp_offline_invites_a-member-key') ?? '[]').map((i: { code: string }) => i.code)).toEqual(['BP-ticket-made-on-this-phone']);
     });
 
     it('still shows the invite\'s QR on the screen, for someone beside you to scan', async () => {

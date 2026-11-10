@@ -430,6 +430,12 @@ async function main(): Promise<void> {
         && keptKinds(rob.pk, a7b.id).includes('standing_stopped') && chatLines('Kimi stopped Potting Bench').length >= 1,
         `the payer's Stop now ends it at once too, the payee told, the chat records it (${show(payerStop)})`);
     assert((db.prepare('SELECT status FROM posts WHERE id = ?').get(potting.id) as any).status !== 'cancelled', 'the listing is untouched by a stop');
+    // Your deals' History line (U2, @beanpool/core standingHistoryLine) reads why it ended, who stopped it and when, off the read.
+    const louRead = await call(lou, 'GET', `/api/marketplace/transactions?publicKey=${lou.pk}`);
+    const ended7 = (louRead.body as any[])?.find(t => t.standingId === a7.id && t.standingPhase);
+    assert(ended7?.standingPhase === 'ended' && ended7?.standingEndedReason === 'stopped' && ended7?.standingStoppedBy === rob.pk
+        && ended7?.standingEndedAt === sd7.ended_at && !!ended7?.standingShortSince,
+        `the read carries how an ended one ended, for its History line (${JSON.stringify(ended7)?.slice(0, 300)})`);
     assert(tick(Date.parse(periodEnd(a7.startsAt, 'week', 3))).paid === 0 && periodRows(a7.id).length === 1 && periodRows(a7b.id).length === 1, 'and nothing is paid for either after');
     assertConserved('after Stop now');
 
@@ -635,6 +641,7 @@ async function main(): Promise<void> {
     assert(read1.status === 200 && cur?.standingPhase === 'paid' && cur?.status === 'completed' && cur?.standingUnit === 'week' && near(cur?.standingBeans, 20) && cur?.periodNo === 2
         && cur?.standingMaxPeriods === 6 && cur?.standingNextDueAt === periodEnd(a16.startsAt, 'week', 2) && cur?.standingStopped === false,
         `the read carries the standing fields on the current row (${JSON.stringify(cur)?.slice(0, 260)})`);
+    assert(cur?.standingEndedReason === undefined && cur?.standingStoppedBy === undefined, 'a running one carries no end');
     const older = (read1.body as any[])?.find(t => t.standingId === a16.id && t.periodNo === 1);
     assert(!!older && older.status === 'completed' && older.standingPhase === undefined, 'an older period carries none');
     drain(pia, 2);

@@ -229,14 +229,28 @@ describe('a community that is struggling', () => {
         expect(read).toHaveBeenCalledTimes(2);
     });
 
-    it('a failed read (unreachable) is tried again, slower, and says so in the community\'s own words', async () => {
+    // The retry after a failed read waits 40 s ±20%, and the read after that the ordinary 20 s ±20%. Both waits are drawn with
+    // Math.random, so the draw is pinned (the lowest, the middle and the highest it can give) and the clock is read to the
+    // millisecond. Left to chance, about one run in 30 had the two waits add up to 51 s or less, the moment this test once
+    // looked (a 33 s retry, then 17 s), and counted a third read: CI went red on it on 9 Nov (#3014) and 10 Nov (main 652b31d6).
+    it.each([
+        { draw: 'lowest', random: 0, retryAt: 32_000, thenAt: 16_000 },
+        { draw: 'middle', random: 0.5, retryAt: 40_000, thenAt: 20_000 },
+        { draw: 'highest', random: 0.999999, retryAt: 48_000, thenAt: 24_000 },
+    ])('a failed read (unreachable) is tried again, slower, and says so in the community\'s own words (jitter at its $draw)', async ({ random, retryAt, thenAt }) => {
+        vi.spyOn(Math, 'random').mockReturnValue(random);
         read.mockResolvedValueOnce({ ok: false, kind: 'unreachable', message: 'Couldn\'t reach this community. Check your connection and try again.' });
         await open();
         expect(screen.getByTestId('knock-waiting-line').textContent).toContain('Couldn\'t reach');
-        await pass(31_000); // 40 s ±20%: not yet
+        await pass(retryAt - 1); // not yet: 40 s ±20%, past the 24 s of the ordinary pace
         expect(read).toHaveBeenCalledTimes(1);
-        await pass(20_000);
+        await pass(1);
         expect(read).toHaveBeenCalledTimes(2);
         expect(screen.getByTestId('knock-waiting-line').textContent).toMatch(/arrived/i);
+        // The answer was heard: back to the ordinary pace, 20 s ±20%.
+        await pass(thenAt - 1);
+        expect(read).toHaveBeenCalledTimes(2);
+        await pass(1);
+        expect(read).toHaveBeenCalledTimes(3);
     });
 });

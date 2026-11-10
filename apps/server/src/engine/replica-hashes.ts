@@ -161,14 +161,19 @@ export interface TableHashes {
  * loses held_back_reason and its phase CHECK becomes ('paid', 'short', 'ended'). Raised for the same reason as 21: a standby
  * updated before its main server hashes `standing_deals` over one column fewer. REPLICA_FORMAT stays: each side's import
  * writes only the columns its own table has; the rows communities hold are ended ones, which both CHECKs take.
+ * 28: members gains inviter_shown (a member's "Show who invited me to other members", DESIGN-invites-vouching-review-
+ * fable.md slice I3). Raised for the same reason as 8: a standby updated before its main server hashes `members` over one
+ * more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has (engine/sync.ts
+ * writeMemberStanding); what an older importer drops is a member's switch, and after a take-over from such a copy their
+ * inviter shows again until they switch it off again.
  */
 /**
- * 28: money is whole hundredths (DESIGN-atomic-beans-fable.md): every money column is INTEGER and named *_c (accounts.balance_c,
+ * 29: money is whole hundredths (DESIGN-atomic-beans-fable.md): every money column is INTEGER and named *_c (accounts.balance_c,
  * transactions.amount_c and fee_c, posts.price_c, marketplace_transactions.amount_c, ...), and members loses
  * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
  * copy never crosses the change.
  */
-export const TABLE_HASHES_VERSION = 28;
+export const TABLE_HASHES_VERSION = 29;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

@@ -34,6 +34,10 @@ An admin may **confirm** you: they say your account is the person on your entry.
 - If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to.
 - If you are confirmed and you leave, are removed or delete your account while you owe Beans, the Commons covers the debt as always. The admins' list also keeps a note on your entry of what you owed, why and when, for 3 years, and admins see it next to your name on their phones. Nobody can be confirmed against that entry until it is paid back, worked off or forgiven.
 
+## Who invited whom
+
+Every member can see who invited you on your profile, with **owner** or **admin** beside their name if they are one, unless you turned off **Show who invited me to other members** in Settings. The owners and admins always see it, switch or not, and so does the person who invited you. On anyone's profile, the owners and admins also see **Brought in** and a number: the people that member invited, when each joined and whether they are still here. Looking is not logged.
+
 ## What the names list doesn't show the admins
 
 The list holds names and notes, and which account is whose. Apart from the note, above, of a debt you left owing, it doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See "Your privacy" for what members and admins can see otherwise.

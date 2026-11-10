@@ -129,7 +129,7 @@ const MEMBERS = ['Kofi', 'Rosa', 'Wren', 'Grows tomatoes and fixes bikes.', 'Bik
 const TRUST = (over: Record<string, unknown> = {}) => ({
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
     risk: { band: 'red', headline: NODE_WORDS[0], reasons: [NODE_WORDS[1]], tips: [NODE_WORDS[2]] },
-    vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
+    vouchedInBy: { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null },
     mutualCount: 1, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }],
     joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
     ...over,
@@ -205,7 +205,13 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         const line = xx('🌱 {label} Has not completed any trades yet. Complete a marketplace trade with them to help build their community trust score.').split('{label}');
         expect(host.textContent).toContain(`${line[0]}${xx('New Member:')}${line[1]}`);
         expect(host.textContent).toContain(xx('👥 {n} connection in common').replace('{n}', '1'));
-        expect(host.textContent).toContain(xx('Invited directly by the system admin'));
+        expect(host.textContent).toContain(xx('Invited with an owner’s invite card'));
+        expect(host.textContent).toContain(xx('An owner of this community made it'));
+        // I3: the two old sentences are gone, in English and in the member's language.
+        for (const gone of ['Invited directly by the system admin', 'Vetted by the admin at sign-up']) {
+            expect(host.textContent).not.toContain(gone);
+            expect(host.textContent).not.toContain(xx(gone));
+        }
         expect(host.textContent).toContain(xx('Take the 60-second quiz to get tips for working with {name}.').replace('{name}', 'Kofi'));
         expect(host.textContent).toContain(xx('OVERALL'));
         expect(host.textContent).toContain(xx('Listings ({n})').replace('{n}', '2'));

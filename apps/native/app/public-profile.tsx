@@ -38,6 +38,7 @@ import { Sentence } from '../components/Sentence';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
+import { InvitedByCard } from '../components/InvitedByCard';
 
 
 
@@ -203,14 +204,6 @@ export default function PublicProfileScreen() {
         mutualName: { fontSize: 14, fontWeight: '700', color: colors.text.heading, flex: 1 },
         mutualAsk: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 },
 
-        inviterCard: {
-            backgroundColor: colors.surface.app, marginHorizontal: 16, marginTop: 12, padding: 14,
-            borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, gap: 6,
-        },
-        inviterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-        inviterName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
-        inviterSub: { fontSize: 12, color: colors.text.secondary, fontWeight: '600', marginTop: 1 },
-        systemBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brand.tint, alignItems: 'center', justifyContent: 'center' },
 
         // Synergy & Collaboration
         synergyCard: {
@@ -522,6 +515,8 @@ export default function PublicProfileScreen() {
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
+    // Your own profile's inviter line and Brought in (I3), from the same trust profile read for yourself.
+    const [selfInvite, setSelfInvite] = useState<{ vouchedInBy: any; broughtIn?: number } | null>(null);
     /** The key whose trust profile the node has answered (or failed to): until then, what the key is isn't known. */
     const [trustFor, setTrustFor] = useState<string | null>(null);
     const [editingReview, setEditingReview] = useState<any | null>(null);
@@ -773,6 +768,12 @@ export default function PublicProfileScreen() {
         } else {
             setTrustLoading(false);
             setTrust(null);
+            // Your own profile reads only who invited you and whom you brought in from it (I3), never the trust panel.
+            const asked = pubKeyStr;
+            setSelfInvite(null);
+            getTrustProfile(asked)
+                .then(own => { if (!cancelled && own) setSelfInvite({ vouchedInBy: own.vouchedInBy ?? null, broughtIn: own.broughtIn }); })
+                .catch(() => null);
         }
 
         // 4. Load given ratings asynchronously in the background (if self)
@@ -1132,6 +1133,12 @@ export default function PublicProfileScreen() {
                     )
                 )}
 
+                {/* Your own profile: who invited you ("You were invited by @x"), and whom you brought in (I3). Beans-gated as the
+                    same lines on anyone else's profile are. */}
+                {isSelf && showsBeans && selfInvite && (
+                    <InvitedByCard vouchedInBy={selfInvite.vouchedInBy} broughtIn={selfInvite.broughtIn} isSelf targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                )}
+
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
                     Trust Points, track record and who invited them are all Beans: gated like the own card (`showsBeans`).
                     On a community with Beans off (the worldwide one) every member reads "🌱 Newcomer · 0 Trust Points" and is
@@ -1407,39 +1414,9 @@ export default function PublicProfileScreen() {
                                 </View>
                             )}
 
-                            {/* Invited by */}
-                            {showsBeans && trust.vouchedInBy && (
-                                <View style={styles.inviterCard}>
-                                    {trust.vouchedInBy.kind === 'member' && (
-                                        <Pressable
-                                            accessibilityRole="button"
-                                            style={styles.inviterRow}
-                                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: trust.vouchedInBy.publicKey, callsign: trust.vouchedInBy.callsign || '' } })}
-                                        >
-                                            <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
-                                            <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.inviterName} numberOfLines={1}>{t('🌱 Invited by {name}', { name: trust.vouchedInBy.callsign ?? '' })}</Text>
-                                                <Text style={styles.inviterSub} numberOfLines={2}>{t('{tier} tier · tap to reach out', { tier: tierWords(trust.vouchedInBy.tier) })}</Text>
-                                            </View>
-                                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
-                                        </Pressable>
-                                    )}
-                                    {trust.vouchedInBy.kind !== 'member' && (
-                                        <View style={styles.inviterRow}>
-                                            <View style={styles.systemBadge}>
-                                                <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
-                                            </View>
-                                            <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.inviterName} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
-                                                </Text>
-                                                <Text style={styles.inviterSub} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
+                            {/* Invited by, and Brought in n people (I3): the server says who reads which (InvitedByCard). */}
+                            {showsBeans && (
+                                <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
                             )}
 
                             {/* Vouch for @sam (V3 §9) */}

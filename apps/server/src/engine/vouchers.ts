@@ -298,9 +298,9 @@ export function budgetOf(pk: string, at = Date.now()): Budget {
     return { left, held: held.n, heldInvites: held.c, vouched: vouched.n, peopleVouched: vouched.c, level: left + held.n };
 }
 
-function addLine(pk: string, kind: 'grant' | 'top_up' | 'lower' | 'hold' | 'return' | 'stop', amount: number, actor: string, ref: string | null = null): void {
+function addLine(pk: string, kind: 'grant' | 'top_up' | 'lower' | 'hold' | 'return' | 'stop', amount: number, actor: string, ref: string | null = null, at: string = now()): void {
     db.prepare('INSERT INTO voucher_allocations (id, member_pubkey, kind, amount_c, actor, ref, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(newId(), pk, kind, amount, actor, ref, now());
+        .run(newId(), pk, kind, amount, actor, ref, at);
 }
 
 /** Inside a writer's transaction: the level after it, refused above the ceiling (the allocation's own transaction, §10). */
@@ -779,6 +779,29 @@ export function promiseInviteVoucher(maker: string, entryId: string, level: numb
     logLine(maker, 'voucher_promised', null, entryId, level);
 }
 
+/**
+ * An unused invite revoked (engine/invites.ts revokeInvite; invites-vouching I2), inside its transaction, before its row goes.
+ * The vouch its code holds comes back to `holder` (the maker, or the admin a seed invite was issued by): one `return` line,
+ * actor the revoker, ref the code, beside one `invite_revoked` line in the log stamped the same moment (how the budget's
+ * history tells it from a stop). Only while the hold is open: the hourly prune, a budget writer (a lapsed code) or a budget
+ * stopped may have returned it already, and nothing comes back twice. Returns what came back (0 if nothing was open). An
+ * owner's hold (OWNER_VOUCH_ACTOR) is closed the same way and, as ever, moves no budget.
+ */
+export function returnHoldOnRevoke(holder: string, code: string, revoker: string): number {
+    const hold = db.prepare(`SELECT -h.amount_c AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
+        .get(holder, code) as { amount: number } | undefined;
+    if (!hold) return 0;
+    const at = now();
+    addLine(holder, 'return', hold.amount, revoker, code, at);
+    logLine(revoker, 'invite_revoked', holder, null, hold.amount, at);
+    return hold.amount;
+}
+
+/** The voucher budget a revoked bound invite promised (invites-vouching I2), in its transaction: one `voucher_promise_ended` line. */
+export function endPromiseOnRevoke(revoker: string, entryId: string, level: number): void {
+    logLine(revoker, 'voucher_promise_ended', null, entryId, level);
+}
+
 /** A `voucher_not_made` line (old: the entry, new: why), never throwing: a redeem goes on whatever happens here. */
 function logNotMade(actor: string, joiner: string, entryId: string, why: InviteVoucherOutcome): void {
     try {
@@ -992,7 +1015,7 @@ export interface HistoryLine {
     /** An invite's hold: still held, landed on someone (`vouched`), or back in the budget (expired, stopped or not landed). */
     outcome?: 'held' | 'vouched' | 'back';
     /** A return: the invite lapsed unused (`expired`), the budget stopped first, or the vouch didn't land at the redeem. */
-    why?: 'expired' | 'stopped' | 'not_landed';
+    why?: 'expired' | 'stopped' | 'not_landed' | 'revoked';
     /** Who the vouch went to: a profile vouch's person, an invite's joiner once it landed. Someone the card's people name. */
     person?: { memberPubkey: string; callsign: string } | null;
 }
@@ -1011,6 +1034,7 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
     const landedOn = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE invite_code = ? AND from_pubkey = ? AND kind = 'vouch' LIMIT 1");
     const holdAt = db.prepare("SELECT at FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ? ORDER BY rowid LIMIT 1");
     const returned = db.prepare("SELECT 1 FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'return' AND ref = ?");
+    const revokedAt = db.prepare("SELECT 1 FROM known_floor_log WHERE action = 'invite_revoked' AND member_pubkey = ? AND at = ?");
     const codeRow = db.prepare('SELECT used_by, created_at FROM invite_codes WHERE code = ?');
     const personOf = (who: string) => ({ memberPubkey: who, callsign: callsignOf(who) });
     return rows.map((r): HistoryLine => {
@@ -1021,8 +1045,9 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
         const code = codeRow.get(r.ref) as { used_by: string | null; created_at: string } | undefined;
         if (r.kind === 'return') {
             // The node writes a return when a code lapses (the prune, a writer first) or its vouch can't land at the redeem;
-            // anyone else's is a budget stopped with the code still out.
-            const why = r.actor !== 'node' ? 'stopped' : code?.used_by ? 'not_landed' : 'expired';
+            // anyone else's is an invite revoked (its `invite_revoked` log line stamped the same moment) or a budget stopped
+            // with the code still out.
+            const why = r.actor !== 'node' ? (revokedAt.get(pk, r.at) ? 'revoked' : 'stopped') : code?.used_by ? 'not_landed' : 'expired';
             return { ...line, for: 'invite', inviteMadeAt: (holdAt.get(pk, r.ref) as { at: string } | undefined)?.at ?? null, why };
         }
         const to = (landedOn.get(r.ref, pk) as { pk: string } | undefined)?.pk;
@@ -1085,6 +1110,6 @@ export function myVouching(pk: string) {
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
         vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount_c) AS amount_c, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
             GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount_c: number; at: string }[])
-            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount: r.amount_c, at: r.at })),
+            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount_c: r.amount_c, at: r.at })),
     };
 }

@@ -268,6 +268,27 @@ describe("a standing deal's current row: dealStep, dealMoves, listingDeals", () 
         expect([dealMoves(oneOff, PAYER, [], NOW)!.stop, dealMoves(oneOff, PAYER, [], NOW)!.release, dealMoves(oneOff, PAYER, [], NOW)!.cancelHold]).toEqual([false, true, true]);
     });
 
+    it('dealStep: a standing row is never a step to release, and only its first period asks for a review (design §3)', () => {
+        // Fail-first (the 10 Nov bug): a period's row a copy reads as pending, phase or none, current or older.
+        for (const over of [{ status: 'pending' }, { status: 'pending', standingPhase: null }, { status: 'pending', standingPhase: 'ended' as const, periodNo: 3 }]) {
+            for (const me of [PAYER, PAYEE]) {
+                const s = dealStep(row(over), me, NOW);
+                expect([s.state, s.needsMe]).toEqual(['standing', false]);
+            }
+        }
+        // The first period, done (an older row or an ended deal's): reviewed once. Every later period: silent.
+        expect(dealStep(row({ standingPhase: null, periodNo: 1 }), PAYER, NOW).state).toBe('done-to-review');
+        expect(dealStep(row({ standingPhase: 'ended', periodNo: 1 }), PAYEE, NOW).state).toBe('done-to-review');
+        for (const n of [2, 3, 12]) {
+            expect(dealStep(row({ standingPhase: null, periodNo: n }), PAYER, NOW).state).toBe('done');
+            expect(dealStep(row({ standingPhase: 'ended', periodNo: n }), PAYEE, NOW).state).toBe('done');
+        }
+        // A one-off deal keeps its steps.
+        const oneOff = { standingId: null, standingPhase: null, periodNo: null };
+        expect(dealStep(row({ ...oneOff, status: 'pending' }), PAYER, NOW).state).toBe('to-release');
+        expect(dealStep(row({ ...oneOff, status: 'completed' }), PAYER, NOW).state).toBe('done-to-review');
+    });
+
     it('a keeper of an enterprise payer may stop as the enterprise', () => {
         const k = dealMoves(row({ buyerPublicKey: ENT }), 'keeper', [ENT], NOW)!;
         expect([k.asKeeper, k.stop, k.release, k.cancelHold]).toEqual([true, true, false, false]);

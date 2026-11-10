@@ -9,6 +9,8 @@
  *                      1,000 · confirms them as known"), "23 days left" (red at 3 or fewer)
  *   the whole row      opens the invite: its QR, its code and Share
  *   the made card      "Invite for … · 200 vouch · 30 days left" and Share
+ *   Revoke (I2)        on an open invite and the made card: a first tap shows the design's words in place (core inviteRevokeAsk)
+ *                      with Revoke and Cancel; the caller revokes it on the community. Never on an offline ticket (inviteRevocable).
  *
  * The words are core's (invite-rows.ts), the same as the phone's. Every control is at least 44 px tall and wraps at 320 px
  * with 1.3x text; colours are the central tokens, light and dark.
@@ -16,8 +18,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-    formatDate, inviteCarries, inviteFolds, inviteMadeTitle, inviteTimeLeft, inviteWho, joinedHeading, joinedInvites, pendingHeading, pendingInvites, t,
-    type InviteRowSource,
+    formatDate, inviteCarries, inviteFolds, inviteMadeTitle, inviteRevocable, inviteRevokeAsk, inviteRevokeWords, inviteTimeLeft, inviteWho, joinedHeading,
+    joinedInvites, pendingHeading, pendingInvites, t, type InviteRowSource,
 } from '@beanpool/core';
 import { useDialogFocus } from './dialog-focus';
 
@@ -53,7 +55,67 @@ function InviteLines({ inv, now }: { inv: InviteRowSource; now: number }) {
     );
 }
 
-function InviteDialog({ inv, now, link, share, onClose }: { inv: InviteRowSource; now: number; link: string; share: ReactNode; onClose: () => void }) {
+/**
+ * Revoke, asked in place: the first tap shows the design's words (the name stays on the names list, for a bound invite: the
+ * web holds no list key, so "The name") with Revoke and Cancel. `onRevoke` resolves null once revoked, or the sentence to show.
+ */
+export function RevokeInvite({ inv, onRevoke, testId = 'invite-revoke' }: { inv: InviteRowSource; onRevoke: (inv: InviteRowSource) => Promise<string | null>; testId?: string }) {
+    const [asking, setAsking] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [refused, setRefused] = useState<string | null>(null);
+    const words = inviteRevokeAsk(inv, null);
+    const go = async () => {
+        setBusy(true);
+        setRefused(null);
+        const said = await onRevoke(inv).catch(() => inviteRevokeWords.failed());
+        setBusy(false);
+        if (said) setRefused(said);
+        else setAsking(false);
+    };
+    if (!asking) {
+        return (
+            <button
+                type="button"
+                onClick={() => setAsking(true)}
+                className="w-full min-h-[44px] py-2 px-4 rounded-xl border border-bp-ink-danger bg-transparent text-bp-ink-danger font-bold cursor-pointer"
+                data-testid={testId}
+            >
+                {inviteRevokeWords.revoke()}
+            </button>
+        );
+    }
+    return (
+        <div role="group" aria-label={words.title} className="w-full flex flex-col gap-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 text-left" data-testid={`${testId}-ask`}>
+            <p className="m-0 text-[15px] font-bold text-nature-950 dark:text-white break-words">{words.title}</p>
+            <p className="m-0 text-[13px] leading-snug text-nature-600 dark:text-nature-300 break-words">{words.body}</p>
+            {refused && <p role="alert" className="m-0 text-[13px] font-bold text-bp-ink-danger break-words" data-testid={`${testId}-refused`}>{refused}</p>}
+            <div className="flex gap-2 flex-wrap">
+                <button
+                    type="button"
+                    onClick={go}
+                    disabled={busy}
+                    className="flex-1 min-w-[120px] min-h-[44px] py-2 px-4 rounded-xl border-none bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold cursor-pointer disabled:opacity-60"
+                    data-testid={`${testId}-confirm`}
+                >
+                    {busy ? inviteRevokeWords.revoking() : inviteRevokeWords.revoke()}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => { setAsking(false); setRefused(null); }}
+                    disabled={busy}
+                    className="flex-1 min-w-[120px] min-h-[44px] py-2 px-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white font-bold cursor-pointer"
+                    data-testid={`${testId}-cancel`}
+                >
+                    {inviteRevokeWords.cancel()}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function InviteDialog({ inv, now, link, share, onClose, onRevoke }: {
+    inv: InviteRowSource; now: number; link: string; share: ReactNode; onClose: () => void; onRevoke?: (inv: InviteRowSource) => Promise<string | null>;
+}) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose, { initialFocus: () => dialog.current?.querySelector<HTMLElement>('[data-testid="invite-sheet-close"]') });
     return (
@@ -77,6 +139,7 @@ function InviteDialog({ inv, now, link, share, onClose }: { inv: InviteRowSource
                 </div>
                 <p className="m-0 text-center font-mono text-[13px] font-semibold text-nature-950 dark:text-white break-all" title={inv.code}>{inv.code}</p>
                 {share}
+                {onRevoke && inviteRevocable(inv) && <RevokeInvite inv={inv} onRevoke={onRevoke} />}
                 <button
                     type="button"
                     onClick={onClose}
@@ -98,9 +161,11 @@ export interface PendingInvitesProps {
     linkFor: (code: string) => string;
     /** The Share button for an open invite (or, where invites are only previewed, the marker that says so). */
     shareFor: (code: string) => ReactNode;
+    /** Revoke an open invite on the community (I2): null once gone (the dialog closes), else the sentence to show. */
+    onRevoke?: (inv: InviteRowSource) => Promise<string | null>;
 }
 
-export function PendingInvites({ invites, now, linkFor, shareFor }: PendingInvitesProps) {
+export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke }: PendingInvitesProps) {
     const [pendingOpen, togglePending] = useFold('pending');
     const [joinedOpen, toggleJoined] = useFold('joined');
     const [openCode, setOpenCode] = useState<string | null>(null);
@@ -160,13 +225,30 @@ export function PendingInvites({ invites, now, linkFor, shareFor }: PendingInvit
                 </div>
             )}
 
-            {opened && <InviteDialog inv={opened} now={now} link={linkFor(opened.code)} share={shareFor(opened.code)} onClose={() => setOpenCode(null)} />}
+            {opened && (
+                <InviteDialog
+                    inv={opened}
+                    now={now}
+                    link={linkFor(opened.code)}
+                    share={shareFor(opened.code)}
+                    onClose={() => setOpenCode(null)}
+                    onRevoke={onRevoke && (async (i) => {
+                        const said = await onRevoke(i);
+                        if (!said) setOpenCode(null);
+                        return said;
+                    })}
+                />
+            )}
         </>
     );
 }
 
-/** After Generate: who the invite is for, what it carries, how long it lasts, its QR and Share. */
-export function InviteMadeCard({ who, invite, now, link, actions, testId }: { who: string | null; invite: InviteRowSource; now: number; link: string; actions: ReactNode; testId?: string }) {
+/** After Generate: who the invite is for, what it carries, how long it lasts, its QR, Share and Revoke. */
+export function InviteMadeCard({ who, invite, now, link, actions, testId, onRevoke }: {
+    who: string | null; invite: InviteRowSource; now: number; link: string; actions: ReactNode; testId?: string;
+    /** Revoke it on the community (I2): null once gone, else the sentence to show. None in a preview. */
+    onRevoke?: (inv: InviteRowSource) => Promise<string | null>;
+}) {
     const left = inviteTimeLeft(invite, now);
     return (
         <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md flex flex-col items-center gap-1.5" data-testid={testId ?? 'invite-made-card'}>
@@ -181,6 +263,7 @@ export function InviteMadeCard({ who, invite, now, link, actions, testId }: { wh
                 <QRCodeSVGComponent value={link} size={200} className="block max-w-full h-auto" />
             </div>
             <div className="flex gap-3 justify-center flex-wrap">{actions}</div>
+            {onRevoke && inviteRevocable(invite) && <div className="w-full mt-2"><RevokeInvite inv={invite} onRevoke={onRevoke} testId="invite-made-revoke" /></div>}
         </div>
     );
 }

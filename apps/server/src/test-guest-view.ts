@@ -1190,6 +1190,8 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A member's own switch: past the body check to the member check.
+            'PUT /api/profile/privacy': { inviterShown: false },
             // A find with a provider it verifies: past the provider check to the sign-in, which names the accounts it protects.
             'POST /api/recovery/find': { provider: 'google', idToken: 'sentinel', nonce: 'sentinel' },
             // An assistant's call for the reports, which name members, and the owner switch turned off.
@@ -1344,7 +1346,7 @@ async function main(): Promise<void> {
             'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',
             'POST /api/groups/:id/decisions/:decisionId/vote',
             'GET /api/home',
-            'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
+            'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'DELETE /api/invite/:code', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
@@ -1459,7 +1461,7 @@ async function main(): Promise<void> {
             'POST /api/messages/send',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
-            'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
+            'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
             'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
@@ -1479,7 +1481,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
-            'GET /api/profile/:publicKey', 'POST /api/profile/update',
+            'GET /api/profile/:publicKey', 'POST /api/profile/update', 'GET /api/profile/privacy', 'PUT /api/profile/privacy',
             'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',

@@ -66,7 +66,7 @@ import path from 'node:path';
 import { getMember, isVisitorKey, confirmationDialOn, knownFloor } from '@beanpool/engine';
 import { formatHundredths,
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
-    readNamesCopy, NAMES_COPY_MAX_BYTES, word, wordsFor,
+    readNamesCopy, NAMES_COPY_MAX_BYTES, word, wordsFor, INVITE_LIFE_MS,
 } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -513,7 +513,7 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
  * owner or admin who can open the entry), and the entry has no live confirmation (one person, one entry). Returns the
  * entry's id. The server sees only the id; the name stays sealed on the admins' phones.
  */
-export function assertMayBindInvite(actor: string, entryId: unknown): string {
+export function assertMayBindInvite(actor: string, entryId: unknown, replace: unknown = false): string {
     assertNamesAdmin(actor);
     const entry = requireEntry(entryId);
     if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t invite anyone as that person.'));
@@ -521,7 +521,44 @@ export function assertMayBindInvite(actor: string, entryId: unknown): string {
     // The second-chance rule binds an invite too (design §4.2): no confirming against an entry whose debt is still open.
     const debt = openDebtOfEntry(entry.id);
     if (debt) throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: formatHundredths(debt.amount_c, 'en') }), { debtId: debt.id });
+    assertNoInviteOut(actor, entry.id, replace === true);
     return entry.id;
+}
+
+/** An unused, in-date invite bound to an entry: its maker and when it was made. Its code stays on the server. */
+export interface LiveEntryInvite { code: string; createdBy: string; createdAt: string }
+
+/** The entry's live invites (unused and in their 30 days), newest first. One at most, made since I2; none once it lapses. */
+export function liveInvitesOnEntry(entryId: string, at = Date.now()): LiveEntryInvite[] {
+    return db.prepare(`SELECT code, created_by AS createdBy, created_at AS createdAt FROM invite_codes
+        WHERE names_entry_id = ? AND used_by IS NULL AND created_at > ? ORDER BY created_at DESC`)
+        .all(entryId, new Date(at - INVITE_LIFE_MS).toISOString()) as LiveEntryInvite[];
+}
+
+/** Whole days an invite made at `createdAt` has left, at least 1 while it lives (core inviteTimeLeft's count). */
+function daysLeftOf(createdAt: string, at = Date.now()): number {
+    return Math.max(1, Math.ceil((Date.parse(createdAt) + INVITE_LIFE_MS - at) / (24 * 60 * 60 * 1000)));
+}
+
+/**
+ * One live invite per entry (invites-vouching I2; Marty, 10 Nov: "this is needed or I might try and add her twice"). While
+ * one is out, a second is refused (409 `invite_out`, with its maker and the days it has left), unless the request says
+ * `replace: true`, which the old invite's maker or an owner may do: the old one is revoked in the new one's transaction
+ * (engine/invites.ts generateInvite). Anyone else replacing is refused (403 `not_yours`).
+ */
+function assertNoInviteOut(actor: string, entryId: string, replace: boolean): void {
+    const out = liveInvitesOnEntry(entryId);
+    if (out.length === 0) return;
+    if (!replace) {
+        const maker = out[0].createdBy;
+        const callsign = getMember(db, maker)?.callsign ?? '';
+        const daysLeft = daysLeftOf(out[0].createdAt);
+        throw new NamesListError(409, 'invite_out', tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first to make a new one.', { callsign, days: daysLeft }),
+            { madeBy: maker, madeByCallsign: callsign, daysLeft });
+    }
+    if (out.some((o) => o.createdBy !== actor) && !isNodeOwner(actor)) {
+        throw new NamesListError(403, 'not_yours', word('Only the admin who made that invite, or an owner, can replace it.'));
+    }
 }
 
 /** What a redeem did with an invite's binding: confirmed (or waiting for a second admin), or why it didn't confirm. */

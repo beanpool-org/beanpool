@@ -607,6 +607,22 @@ describe('Needs you: the phone\'s own lines and the node\'s, as the header shows
         expect(merged.some(e => e.kind === 'message')).toBe(false);
     });
 
+    it("a short standing deal's live line on the phone: the node's deal line still shows, its copy of that standing deal doesn't (U2)", () => {
+        const sd = {
+            id: 'sd-m1', postId: 'p-storage', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: 'payer', buyerCallsign: 'Marty',
+            sellerPublicKey: ME, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short' as const, standingBeans: 50,
+            standingUnit: 'month' as const, standingStartsAt: '2026-08-19T08:00:00.000Z', standingShortSince: iso(NOW - 3 * 24 * H),
+        };
+        const nodeCopy = { kind: 'deal' as const, count: 1, accent: false, label: "Marty's 50 Beans for Vehicle Storage: 3 days overdue", target: { to: 'deal' as const, postId: 'p-storage', txId: 'sd-m1' } };
+        const merged = mergeNeeds([...node, nodeCopy], localNeeds(ME, NOW, [sd], []), NOW);
+        const deals = merged.filter(e => e.kind === 'deal');
+        expect(deals.map(e => e.label)).toEqual([
+            expect.stringMatching(/^Marty's 50 Beans for Vehicle Storage: 3 days overdue · we try until .+ · you can stop it now$/),
+            'A deal is waiting for you: Sourdough',
+        ]);
+        expect(deals[0]).toMatchObject({ accent: false, standingId: 'sd-1' });
+    });
+
     it('a vote\'s closing in the member\'s own time ("tonight"), from the node\'s hours', () => {
         const morning = new Date(2026, 9, 2, 6, 0, 0).getTime();
         const evening = new Date(2026, 9, 2, 20, 0, 0).toISOString();

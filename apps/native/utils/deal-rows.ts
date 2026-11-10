@@ -3,7 +3,8 @@
  * chat and Talk ask core's dealStep whose step it is (DESIGN-deals-fable §4) and not a copy of the rule. Pure.
  */
 
-import { dealStep, type DealRow } from '@beanpool/core';
+import { dealMoves, dealStep, type DealMoves, type DealRow } from '@beanpool/core';
+import { standingOfRow } from './standing-row';
 
 /** The columns both reads select: the deal, the other side, the listing's author and kind, and whether `me` rated it. */
 export interface LocalDealRow {
@@ -19,6 +20,10 @@ export interface LocalDealRow {
     postType?: string | null;
     postRepeatable?: boolean | number | null;
     postLendable?: boolean | number | null;
+    /** A standing deal's period: its id, its number and, on its current row, the standing JSON (utils/standing-row.ts). */
+    standing_id?: string | null;
+    period_no?: number | null;
+    standing?: string | null;
 }
 
 export function localDealRow(r: LocalDealRow, me: string): DealRow {
@@ -38,7 +43,26 @@ export function localDealRow(r: LocalDealRow, me: string): DealRow {
         postType: r.postType ?? null,
         postRepeatable: Boolean(r.postRepeatable),
         postLendable: Boolean(r.postLendable),
+        // A period of a standing deal: core never offers Release or Cancel on one, and reviews only its first period.
+        ...standingOfRow(r),
     };
+}
+
+/**
+ * The deal buttons a local row may show `me` (the chat's pinned strip and inline bar), by core's one rule, dealMoves: no
+ * surface reads `status === 'pending' && iAmBuyer` on its own (DESIGN-standing-deals-upfront-fable §3). Null for a stranger.
+ */
+export function localDealMoves(r: LocalDealRow, me: string, now: number = Date.now()): DealMoves | null {
+    if (!me) return null;
+    return dealMoves(localDealRow(r, me), me, [], now);
+}
+
+/** A local row as the chat's pinned strip lists it: Beans held that this member can act on or waits on, a request to answer, a trade to review. */
+export function isChatStripDeal(r: LocalDealRow, me: string, now: number = Date.now()): boolean {
+    const m = localDealMoves(r, me, now);
+    if (!m) return false;
+    const held = r.status === 'pending' && !r.standing_id;
+    return held || m.answer || m.step.state === 'done-to-review';
 }
 
 /**

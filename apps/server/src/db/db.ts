@@ -1731,6 +1731,10 @@ export function initSchema() {
     // When the key's owner deleted the account (state-engine.ts isDeletedByOwner). Before the schema.sql exec, whose
     // members_touch_updated_at (dropped below, so the exec recreates it) lists it. NULL on every existing row.
     try { db.prepare(`ALTER TABLE members ADD COLUMN deleted_by_owner_at TEXT`).run(); } catch { }
+    // The member's "Show who invited me to other members" (state-engine.ts getTrustProfileForViewer). Before the schema.sql
+    // exec, whose members_touch_updated_at (dropped below, so the exec recreates it) lists it. A new column with its
+    // default: 1 (shown) on every existing row, which is what every member reads today; nothing is rewritten.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN inviter_shown INTEGER DEFAULT 1`).run(); } catch { }
     // When what decides whether the board shows a member's listings last changed (the Market delta reads it, engine
     // posts.ts). Before the schema.sql exec, which indexes it and whose members_touch_board_standing sets it. Filled
     // once after the exec (backfillBoardStanding), when member_preferences exists.

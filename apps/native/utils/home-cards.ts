@@ -1153,12 +1153,16 @@ const sameDeal = (a: NeedsYouTarget, b: NeedsYouTarget) => a.to === 'deal' && b.
 export function mergeNeeds(
     node: readonly HomeNeedsItem[] | null | undefined, local: LocalNeeds | null, now: number, features?: HomeAnswer['features'] | null,
 ): NeedsYouEntry[] {
+    // A short standing deal's live line (needs-you.ts standingEntries) is no "deal waiting": the phone holding one still
+    // shows the node's deal line when it has none of its own, less the node's copy of that same standing deal (by txId).
     const phoneHas = (kind: NeedsYouKind) => kind === 'message'
         ? !!local?.kinds.has('message')
-        : kind === 'deal' && !!local?.entries.some(e => e.kind === 'deal');
+        : kind === 'deal' && !!local?.entries.some(e => e.kind === 'deal' && !e.standingId);
+    const phoneStanding = new Set((local?.entries ?? []).flatMap(e => (e.standingId && e.target.to === 'deal' ? [e.target.txId] : [])));
+    const sameStanding = (i: HomeNeedsItem) => i.kind === 'deal' && i.target.to === 'deal' && phoneStanding.has(i.target.txId);
     // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
     const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
-    const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && lands(i))
+    const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && !sameStanding(i) && lands(i))
         .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.

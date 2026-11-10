@@ -16,7 +16,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobody, voucherCandidateWords,
-    makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords,
+    makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { makeNamesVoucher, makeAdminVoucher, type VoucherCandidate, type VoucherCandidates } from '../utils/names-list';
@@ -149,7 +149,7 @@ export function MakeVoucherSheet({ anchorUrl, identity, candidates, defaultBudge
                                 onPress={() => down !== null && setAmount(down)}
                                 disabled={down === null}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Lower')}
+                                accessibilityLabel={t(VOUCH_PRESET_WORDS.decreaseBudget)}
                             >
                                 <Text style={styles.stepperBtnText}>−</Text>
                             </Pressable>
@@ -159,7 +159,7 @@ export function MakeVoucherSheet({ anchorUrl, identity, candidates, defaultBudge
                                 onPress={() => up !== null && setAmount(up)}
                                 disabled={up === null}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Raise')}
+                                accessibilityLabel={t(VOUCH_PRESET_WORDS.increaseBudget)}
                             >
                                 <Text style={styles.stepperBtnText}>+</Text>
                             </Pressable>

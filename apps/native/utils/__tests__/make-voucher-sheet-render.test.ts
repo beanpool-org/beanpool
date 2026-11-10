@@ -99,7 +99,7 @@ describe('+ Make someone a voucher (phone)', () => {
         await draw({ defaultBudget: 800 });
         await click(all('make-voucher-admin-row')[0]);
         expect(one('make-voucher-budget')?.textContent).toContain('Budget: 800 Beans');
-        await click(host.querySelector('[aria-label="Raise"]'));
+        await click(host.querySelector('[aria-label="Increase budget"]'));
         expect(one('make-voucher-budget')?.textContent).toContain('Budget: 900 Beans');
         expect(one('make-voucher-go')?.textContent).toBe('Make @Ike a voucher');
         await click(one('make-voucher-go'));
@@ -127,11 +127,11 @@ describe('+ Make someone a voucher (phone)', () => {
     it('the stepper stays on the node’s levels: never below 100, never above 2,000', async () => {
         await draw({ defaultBudget: 100 });
         await click(all('make-voucher-admin-row')[0]);
-        expect(host.querySelector('[aria-label="Lower"]')?.getAttribute('data-disabled')).toBe('true');
+        expect(host.querySelector('[aria-label="Decrease budget"]')?.getAttribute('data-disabled')).toBe('true');
         act(() => root.unmount());
         root = createRoot(host);
         await draw({ defaultBudget: 2000 });
         await click(all('make-voucher-admin-row')[0]);
-        expect(host.querySelector('[aria-label="Raise"]')?.getAttribute('data-disabled')).toBe('true');
+        expect(host.querySelector('[aria-label="Increase budget"]')?.getAttribute('data-disabled')).toBe('true');
     });
 });

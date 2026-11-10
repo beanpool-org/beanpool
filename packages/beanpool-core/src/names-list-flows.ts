@@ -235,10 +235,19 @@ export interface VoucherCardData extends VoucherSummaryRow {
     history: VoucherHistoryLine[];
     people: VoucherPersonRow[];
     canChange: boolean;
+    /** Whether this viewer may stop this budget now: never an owner's; an admin's by an owner only (slice I5). */
+    canStop?: boolean;
 }
 
+/**
+ * Whom "+ Make someone a voucher" offers the viewer (slice I5): `admins` (an owner's to make, no names-list entry needed;
+ * empty for a committee admin) and `confirmed` (confirmed on the names list, by entry id: the phone opens the name).
+ */
+export interface VoucherCandidates { admins: VoucherCandidate[]; confirmed: VoucherCandidate[] }
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
+
 /** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */
-export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; settings: VoucherSettings }
+export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; candidates?: VoucherCandidates; settings: VoucherSettings }
 
 // ── The pin, sealed at rest ──────────────────────────────────────────────────────────────────
 
@@ -1201,6 +1210,10 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
     const makeNamesVoucher = (anchor: string, id: I, entryId: string, amount?: number) =>
         call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount !== undefined ? { amount } : {}) });
 
+    /** An owner makes an admin a voucher with no names-list entry (slice I5): `{ memberPubkey, amount? }`. */
+    const makeAdminVoucher = (anchor: string, id: I, memberPubkey: string, amount?: number) =>
+        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { memberPubkey, ...(amount !== undefined ? { amount } : {}) });
+
     const stopNamesVoucher = (anchor: string, id: I, memberPubkey: string) =>
         call<VoucherCardData>(anchor, id, 'DELETE', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
 
@@ -2130,6 +2143,7 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         fetchVouchers,
         fetchVoucherCard,
         makeNamesVoucher,
+        makeAdminVoucher,
         stopNamesVoucher,
         setVoucherBudget,
         deleteNamesEntry,

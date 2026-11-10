@@ -119,7 +119,7 @@ export const VOUCH_PRESET_WORDS = {
     setBudgetToTitle: word('Set budget to'),
     vouchers: word('Vouchers'),
     makeSomeoneVoucher: word('+ Make someone a voucher'),
-    makeSomeoneVoucherHelp: word('Make vouchers on the names list in the phone app.'),
+    waitingNameHelp: word('Their name is sealed in the names list: open it in the phone app to see who this is.'),
     pastMax: word('Your vouches for @{name} can’t go past {max} Beans.'),
     seeWhoTheyBroughtIn: word('See who they brought in'),
     theirBudget: word('Their budget'),

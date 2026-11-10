@@ -10,8 +10,8 @@
  * The words are in the member's language (core's t / tn; the constants are word() keys, translated where shown). What
  * members wrote (a vote's title and why) and the node's own words (an execution reason) are shown as written.
  */
-import { TRANSACTION_FEE_RATE } from './ledger.js';
-import { amountRefusalWords, parseAmount } from './amount-input.js';
+import { amountRefusalWords } from './amount-input.js';
+import { feeOf, formatHundredths, parseHundredths, type Hundredths } from './hundredths.js';
 import { t, tn, word } from './words.js';
 
 export type ScopedEffect = 'pay_out' | 'remove_keeper' | 'replace_lead';
@@ -30,7 +30,7 @@ export interface ScopedDecisionCard {
     description: string;
     effect: ScopedEffect | string;
     subject: string | null;
-    params: { amount?: number; memo?: string; role?: string; policy?: string } | null;
+    params: { amount_c?: number; memo?: string; role?: string; policy?: string } | null;
     status: string;
     opensAt: string;
     closesAt: string;
@@ -64,37 +64,30 @@ export interface ScopedDecisionList {
 /** A person on the roll, for the pickers. */
 export interface RollPerson { pubkey: string; name: string; role?: string }
 
-/** Beans to two places at most, never a trailing ".00" ("40", "39.4", "0.6"). */
-export function beansAmount(n: number): string {
-    const cents = Math.round(n * 100);
-    return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2).replace(/0$/, '');
+/** A figure (whole hundredths) in words: "40", "39.40", "0.60" (formatHundredths). */
+export function beansAmount(c: Hundredths): string {
+    return formatHundredths(c);
 }
 
-/** beansAmount as a number, for a sentence: t() writes it with the language's decimal sign ("39,4" in fr). */
-const beansNumber = (n: number): number => Number(beansAmount(n));
+/** tn()'s values for a figure: the plural form read from the Beans, `{n}` written as formatHundredths writes it. */
+const beansCount = (c: Hundredths): [number, { n: string }] => [c / 100, { n: formatHundredths(c) }];
 
-const heldCents = (balance: number) => Math.floor(Math.max(0, balance) * 100 + 1e-6);
-
-/**
- * What an account holds, rounded down to cents, as the node counts what it can pay ("112.31" for 112.3125): never a
- * fraction of a cent, and never more than it can pay.
- */
-export function beansHeld(balance: number): string {
-    return beansAmount(heldCents(balance) / 100);
+/** What an account holds as it can pay it: never below 0 (whole hundredths, as the node counts it). */
+export function beansHeld(balance: Hundredths): string {
+    return formatHundredths(Math.max(0, balance));
 }
 
-/** What a pay-out of `amount` gives: the recipient's share and the Commons' 1.5%, in cents so they add up. */
-export function payOutSplit(amount: number): { receives: number; fee: number } {
-    const cents = Math.floor(amount * 100 + 1e-6);
-    const fee = Math.round(cents * TRANSACTION_FEE_RATE);
-    return { receives: (cents - fee) / 100, fee: fee / 100 };
+/** What a pay-out of `amount` gives: the recipient's share and the Commons' 1.5 % (feeOf, truncated), which add up. */
+export function payOutSplit(amount: Hundredths): { receives: Hundredths; fee: Hundredths } {
+    const fee = feeOf(amount);
+    return { receives: amount - fee, fee };
 }
 
 /** The line under the amount: who gets what, and where the fee goes. */
-export function payOutFeeWords(amount: number, recipient: string): string {
+export function payOutFeeWords(amount: Hundredths, recipient: string): string {
     const { receives, fee } = payOutSplit(amount);
-    const n = beansNumber(receives);
-    return tn(n, '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', { name: recipient, fee: beansNumber(fee) });
+    const [n, nValue] = beansCount(receives);
+    return tn(n, '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', '{name} receives {n} Beans. The 1.5% trade fee ({fee} Beans) goes to the Commons.', { ...nValue, name: recipient, fee: formatHundredths(fee) });
 }
 
 /** The node's words for a wage above the earned surplus (apps/server decisions-engine WAGE_NEEDS_SURPLUS). */
@@ -106,38 +99,38 @@ export const PAY_OUT_WAGE_WORDS = 'Paying a keeper is a wage, and a wage comes o
  * wage, and a wage comes only out of what it has earned above its costs (Rules 5 and 6), as the node checks it. A
  * surplus not known (null) is left to the node. Returns the amount, or the words to show under the field.
  */
-export function checkPayOutAmount(typed: string, held: number, wageSurplus?: number | null): { amount: number } | { error: string } {
-    // The one reading of a typed amount (amount-input.ts): the language's decimal mark and digits, cents at most.
-    const read = parseAmount(typed);
+export function checkPayOutAmount(typed: string, held: Hundredths, wageSurplus?: Hundredths | null): { amount: Hundredths } | { error: string } {
+    // The one reading of a typed amount (hundredths.ts): the language's decimal mark and digits, two decimals at most.
+    const read = parseHundredths(typed);
     if (!read.ok) {
         return { error: read.refusal === 'empty' || read.refusal === 'not-a-number' ? t('Enter an amount in Beans, like 40 or 12.50.') : amountRefusalWords(read.refusal) };
     }
     const amount = read.value;
     if (!(amount > 0)) return { error: t('The amount must be more than 0 Beans.') };
-    if (Math.round(amount * 100) > heldCents(held)) {
-        const n = Number(beansHeld(held));
-        return { error: tn(n, "The enterprise holds {n} Beans, so it can't pay more than that.", "The enterprise holds {n} Beans, so it can't pay more than that.") };
+    if (amount > Math.max(0, held)) {
+        const [n, nValue] = beansCount(Math.max(0, held));
+        return { error: tn(n, "The enterprise holds {n} Beans, so it can't pay more than that.", "The enterprise holds {n} Beans, so it can't pay more than that.", nValue) };
     }
-    if (typeof wageSurplus === 'number' && Math.round(amount * 100) > heldCents(wageSurplus)) {
+    if (typeof wageSurplus === 'number' && amount > Math.max(0, wageSurplus)) {
         // PAY_OUT_WAGE_WORDS, then what the surplus is now: one sentence.
-        const n = Number(beansHeld(wageSurplus));
-        return { error: tn(n, 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.', 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.') };
+        const [n, nValue] = beansCount(Math.max(0, wageSurplus));
+        return { error: tn(n, 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.', 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {n} Beans now.', nValue) };
     }
     return { amount };
 }
 
 /** The line under the amount: a pay-out to a keeper is a wage, with the earned surplus it may come out of when known. */
-export function wageNoteWords(earnedSurplus: number | null | undefined, lifecycle: string | null | undefined): string {
+export function wageNoteWords(earnedSurplus: Hundredths | null | undefined, lifecycle: string | null | undefined): string {
     const project = lifecycle === 'bounded';
     if (typeof earnedSurplus !== 'number') {
         return project
             ? t('Paying a keeper is a wage: only out of what the project has earned.')
             : t('Paying a keeper is a wage: only out of what the enterprise has earned.');
     }
-    const n = Number(beansHeld(earnedSurplus));
+    const [n, nValue] = beansCount(Math.max(0, earnedSurplus));
     return project
-        ? tn(n, 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.')
-        : tn(n, 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.');
+        ? tn(n, 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the project has earned above its costs, {n} Beans now.', nValue)
+        : tn(n, 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.', 'Paying a keeper is a wage: only out of what the enterprise has earned above its costs, {n} Beans now.', nValue);
 }
 
 /** The effects a keeper may propose here: making another keeper the lead only in an ongoing enterprise (§2.4, pick 1). */
@@ -190,8 +183,9 @@ export function scopedEffectWords(d: Pick<ScopedDecisionCard, 'effect' | 'subjec
     const name = d.subject ? nameOf(d.subject) : t('someone');
     switch (d.effect) {
         case 'pay_out': {
-            const n = beansNumber(Number(d.params?.amount) || 0);
-            return tn(n, 'Pay {n} Beans to {name}', 'Pay {n} Beans to {name}', { name });
+            const c = d.params?.amount_c;
+            const [n, nValue] = beansCount(typeof c === 'number' && Number.isSafeInteger(c) ? c : 0);
+            return tn(n, 'Pay {n} Beans to {name}', 'Pay {n} Beans to {name}', { ...nValue, name });
         }
         case 'remove_keeper': return lifecycle === 'bounded' ? t('Remove {name} as a collaborator', { name }) : t('Remove {name} as a keeper', { name });
         case 'replace_lead': return lifecycle === 'bounded' ? t('Make {name} the leader', { name }) : t('Make {name} the lead keeper', { name });

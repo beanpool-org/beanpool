@@ -8,11 +8,17 @@
  * @see docs/protocol-rules.md for the full specification.
  */
 
+import { beans, type Hundredths } from './hundredths.js';
+
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * Every money figure here is WHOLE HUNDREDTHS of a Bean (hundredths.ts): balances, floors, caps, grants and volumes are
+ * all compared in the one unit, so `beans(2000)` is the 2,000-Bean cap. Rates and ratios are plain numbers.
+ */
 export const PROTOCOL_CONSTANTS = {
     // === Reference Rate ===
-    REFERENCE_RATE: 40,                // Beans per hour of community time
+    REFERENCE_RATE: beans(40),         // 40 Beans per hour of community time
     REFERENCE_LABEL: 'hour',
 
     // === Credit Formula (Sliding Scale) ===
@@ -21,8 +27,8 @@ export const PROTOCOL_CONSTANTS = {
     // completed trade earns one (earned > 0) or an admin/genesis grant graduates them (granted > 0).
     // See getMemberTrustProfile.
     CREDIT_BASE_FLOOR: 0,              // no baked-in credit — every bean of the floor is explicit
-    CREDIT_MAX_EARNED: 1920,           // asymptote of the earned-trust curve (see earnedCreditFromValue)
-    CREDIT_FLOOR_CAP: 2000,            // deepest possible floor is -2000 (≈ 50 hours) across ALL sources
+    CREDIT_MAX_EARNED: beans(1920),    // asymptote of the earned-trust curve (see earnedCreditFromValue)
+    CREDIT_FLOOR_CAP: beans(2000),     // deepest possible floor is -2000 Beans (≈ 50 hours) across ALL sources
 
     // === Trust Curve (Trust Model v2 — value-based, saturating) ===
     // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):
@@ -31,8 +37,8 @@ export const PROTOCOL_CONSTANTS = {
     // Proportional at the low end (a tiny trade earns ~nothing → kills the 3-bean cliff),
     // saturating at the top (no single account runs away toward the cap).
     // Tuning: lower K = credit reached with less value (more generous); higher K = stricter.
-    TRUST_CURVE_K: 5000,
-    PER_COUNTERPARTY_VOLUME_CAP: 500,  // Single source of truth: cap on volume to a single partner counting toward earned credit
+    TRUST_CURVE_K: beans(5000),        // in hundredths like the value it is added to, so the curve is the one it was in Beans
+    PER_COUNTERPARTY_VOLUME_CAP: beans(500),  // Single source of truth: cap on volume to a single partner counting toward earned credit
 
 
     // === Community Circulation (formerly Demurrage) ===
@@ -40,9 +46,9 @@ export const PROTOCOL_CONSTANTS = {
     CIRCULATION_EPOCH_DAYS: 30,
 
     // === Tier Thresholds ===
-    GHOST_THRESHOLD: -200,             // floor > this = Newcomer
-    RESIDENT_THRESHOLD: -600,          // -200 ≥ floor > -600 = Resident
-    STEWARD_THRESHOLD: -1400,          // -600 ≥ floor > -1400 = Steward
+    GHOST_THRESHOLD: -beans(200),      // floor > this = Newcomer
+    RESIDENT_THRESHOLD: -beans(600),   // -200 ≥ floor > -600 Beans = Resident
+    STEWARD_THRESHOLD: -beans(1400),   // -600 ≥ floor > -1400 Beans = Steward
     // floor ≤ -1400 = Elder
 
     // === Admin Tier-Badge / Genesis Grants ===
@@ -52,9 +58,9 @@ export const PROTOCOL_CONSTANTS = {
     //   Resident: -200 → granted = 200
     //   Steward:  -600 → granted = 600
     //   Elder:   -1400 → granted = 1400
-    GENESIS_TRUSTED_EARNED: 200,       // Resident badge — floor -200
-    GENESIS_AMBASSADOR_EARNED: 600,    // Steward badge — floor -600
-    GENESIS_ELDER_EARNED: 1400,        // Elder badge — floor -1400
+    GENESIS_TRUSTED_EARNED: beans(200),     // Resident badge — floor -200 Beans
+    GENESIS_AMBASSADOR_EARNED: beans(600),  // Steward badge — floor -600 Beans
+    GENESIS_ELDER_EARNED: beans(1400),      // Elder badge — floor -1400 Beans
 
     // === Transaction Guardrails ===
     TRANSACTION_WARNING_THRESHOLD: 0.5, // Warn when using >50% of remaining credit
@@ -145,9 +151,9 @@ export function tierIndexForName(name: string | null | undefined): number {
  * did, never the known grant, so it can be less than the limit; a freeze doesn't move it) is the figure;
  * CREDIT_BASE_FLOOR − floor only for a node that sends no tierCredit.
  */
-export function memberLevel(answer: { tier?: { name?: string | null } | null; tierCredit?: unknown; floor?: unknown } | null | undefined): { index: number; credit: number } {
-    const floor = typeof answer?.floor === 'number' && Number.isFinite(answer.floor) ? answer.floor : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR;
-    const raw = typeof answer?.tierCredit === 'number' && Number.isFinite(answer.tierCredit) ? answer.tierCredit : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor;
+export function memberLevel(answer: { tier?: { name?: string | null } | null; tierCredit_c?: unknown; floor_c?: unknown } | null | undefined): { index: number; credit: Hundredths } {
+    const floor = typeof answer?.floor_c === 'number' && Number.isSafeInteger(answer.floor_c) ? answer.floor_c : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR;
+    const raw = typeof answer?.tierCredit_c === 'number' && Number.isSafeInteger(answer.tierCredit_c) ? answer.tierCredit_c : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor;
     const credit = Math.max(0, raw);
     const named = tierIndexForName(answer?.tier?.name);
     return { index: named >= 0 ? named : tierIndexForCredit(credit), credit };
@@ -193,9 +199,9 @@ export function grantedCreditForTier(tier: TierName): number {
 // Live offers → deepest usable floor (magnitude, beans):
 //   0 → 0 (spend held beans only)   1 → 200   2 → 500   3 → 1000   4 → 1500   5 → 2000
 // The first band (−200) mirrors the +200 fee-free "green zone" above zero.
-export const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000] as const;
+export const OFFER_BANDS: readonly Hundredths[] = [0, beans(200), beans(500), beans(1000), beans(1500), beans(2000)];
 
-/** Deepest floor magnitude (0…2000) that `liveOffers` live offers unlock. Capped at 5 offers. */
+/** Deepest floor magnitude (0…2000 Beans, in hundredths) that `liveOffers` live offers unlock. Capped at 5 offers. */
 export function offerCapForCount(liveOffers: number): number {
     const n = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(liveOffers || 0)));
     return OFFER_BANDS[n];
@@ -219,9 +225,9 @@ export function offersRequiredForDepth(magnitude: number): number {
 // where creditCap is the community's cap (default CREDIT_FLOOR_CAP, owner-settable up to CREDIT_CAP_MAX). With the dial
 // off, or for an unconfirmed member, knownGrant is 0 and the cap is today's: nothing changes.
 
-export const KNOWN_FLOOR_DEFAULT = 1000;           // 25 hours of work the community trusts a confirmed member for
-export const CREDIT_CAP_DEFAULT = PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP;
-export const CREDIT_CAP_MAX = 5000;
+export const KNOWN_FLOOR_DEFAULT: Hundredths = beans(1000);   // 25 hours of work the community trusts a confirmed member for
+export const CREDIT_CAP_DEFAULT: Hundredths = PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP;
+export const CREDIT_CAP_MAX: Hundredths = beans(5000);
 
 /** An admin's exception for one member's known floor: a different amount (lower, or higher up to the cap), or frozen. */
 export interface KnownFloorException { amount?: number | null; frozen?: boolean }
@@ -265,11 +271,11 @@ export function enterpriseKnownShare(keepers: Array<{ knownGrant: number; enterp
 }
 
 /**
- * Formats a bean amount as an approximate time equivalent.
- * Examples: 5 → "≈ 8min", 40 → "≈ 1.0hr", 320 → "≈ 8hr"
+ * Formats an amount (whole hundredths) as an approximate time equivalent.
+ * Examples: 500 (5 Beans) → "≈ 8min", 4000 (40) → "≈ 1.0hr", 32000 (320) → "≈ 8hr"
  */
-export function formatTimeEquivalent(beans: number): string {
-    const hours = Math.abs(beans) / PROTOCOL_CONSTANTS.REFERENCE_RATE;
+export function formatTimeEquivalent(amount: Hundredths): string {
+    const hours = Math.abs(amount) / PROTOCOL_CONSTANTS.REFERENCE_RATE;
     if (hours < 0.5) return `≈ ${Math.round(hours * 60)}min`;
     if (hours < 10) return `≈ ${hours.toFixed(1)}hr`;
     return `≈ ${Math.round(hours)}hr`;

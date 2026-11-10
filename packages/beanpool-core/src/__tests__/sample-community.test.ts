@@ -51,7 +51,7 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
         expect(s.trust).toBe(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - s.floor);
         expect(TIER_LEVELS).toHaveLength(s.levels);
         expect(tierIndexForCredit(s.trust)).toBe(s.level - 1);
-        expect(memberLevel({ floor: s.floor, tierCredit: s.trust })).toEqual({ index: s.level - 1, credit: s.trust });
+        expect(memberLevel({ floor_c: s.floor, tierCredit_c: s.trust })).toEqual({ index: s.level - 1, credit: s.trust });
         expect(s.trust).toBeLessThan(TIER_LEVELS[s.level].minCredit);
         // All of it earned by trading: the curve gives exactly the trust for the value traded, and one Bean less falls short.
         expect(earnedCreditFromValue(s.valueTraded)).toBe(s.trust);

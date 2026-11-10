@@ -362,6 +362,16 @@ function inCapitals(text: string, caps: DateWords['caps']): string {
     return text.toUpperCase();
 }
 
+/**
+ * Number text already written in ASCII ("1234.56", "1,234.56" in English) in `lang`'s decimal mark and digits, as
+ * formatNumber writes a number: core's money words (hundredths.ts formatHundredths) build their text by string work,
+ * never from a float, and hand it here. The current language when absent.
+ */
+export function numberTextIn(text: string, lang?: UiLang): string {
+    const w = dateWordsOf(lang ?? active.lang);
+    return withDigits(w.decimal === '.' ? text : text.replace('.', w.decimal), w.digits);
+}
+
 function numberIn(lang: UiLang, n: number, decimals?: number): string {
     if (!Number.isFinite(n)) return String(n);
     const w = dateWordsOf(lang);

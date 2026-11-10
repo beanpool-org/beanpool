@@ -35,7 +35,7 @@ export function generateMockNeighborhood(centerPoint: Location, count: number): 
         (passportManager as any).passport = passportState; // dirty override for simulator
 
         // Random Balance between -50 and 500
-        const randomBalance = Math.floor(Math.random() * 550) - 50;
+        const randomBalance = (Math.floor(Math.random() * 550) - 50) * 100; // whole Beans between -50 and 500, in hundredths
 
         const ledgerManager = new LedgerManager([
             { id: did, balance: randomBalance, lastDemurrageEpoch: Math.floor(Date.now() / 86400000) }

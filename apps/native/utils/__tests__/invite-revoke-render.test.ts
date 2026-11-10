@@ -199,6 +199,15 @@ describe('Revoke on the made card', () => {
     });
 });
 
+describe('People’s revoke is a signed DELETE (source pin)', () => {
+    it('signs it itself: the phone’s fetch signs only GETs (utils/node-request-signing.ts), and the node refuses an unsigned revoke', () => {
+        const people = readFileSync(join(__dirname, '..', '..', 'app', '(tabs)', 'people.tsx'), 'utf8');
+        const signing = readFileSync(join(__dirname, '..', 'node-request-signing.ts'), 'utf8');
+        expect(signing).toMatch(/if \(method === 'GET' && toAnchor/);
+        expect(people).toMatch(/const headers = await buildSignedHeaders\('DELETE', url, '', identity\.privateKey, identity\.publicKey\);\s*const res = await fetch\(url, \{ method: 'DELETE', headers \}\);/);
+    });
+});
+
 describe('the names-list entry line while an invite is out (source pins; the line’s words are core inviteOutLine’s, tested in core)', () => {
     const src = readFileSync(join(__dirname, '..', '..', 'app', 'names-list.tsx'), 'utf8');
 

@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts to separate invite code database side-effects.
 
 import { db, deletePlainRows } from '../db/db.js';
-import { assertPlainTablesWritable, getNodeRole } from '../config/node-role.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertMayInviteHere, mayInviteHere, ADMINS_ONLY_TICKET_MESSAGE } from '../config/door.js';
 import { isPrivatePreview, PRIVATE_PREVIEW_MESSAGE } from '../config/private-preview.js';
@@ -193,8 +193,8 @@ function revokeRowInside(revoker: string, row: RevokedRow): { returned: number; 
     const returned = row.vouch_amount ? returnHoldOnRevoke(holder, row.code, revoker) : 0;
     const promiseEnded = !!row.names_entry_id && row.voucher_level != null;
     if (promiseEnded) endPromiseOnRevoke(revoker, row.names_entry_id!, row.voucher_level!);
-    const where = 'code = ? AND used_by IS NULL';
-    const gone = getNodeRole() === 'backup' ? db.prepare(`DELETE FROM invite_codes WHERE ${where}`).run(row.code).changes : deletePlainRows('invite_codes', where, row.code);
+    // A revoke runs on a main server only (assertPlainTablesWritable), so the tombstone is always written.
+    const gone = deletePlainRows('invite_codes', 'code = ? AND used_by IS NULL', row.code);
     // Read in this same transaction as unused, so it is: anything else is a fault, and nothing commits.
     if (gone !== 1) throw new Error('invite revoke: the row was not deleted');
     return { returned, promiseEnded };

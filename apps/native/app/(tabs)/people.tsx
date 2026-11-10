@@ -491,10 +491,13 @@ export default function PeopleScreen() {
                         const serverInvitesMap = new Map<string, any>(
                             serverInvites.map((si: any) => [si.code.toLowerCase(), si])
                         );
-                        // The node's row is the truth for a code it knows: used or not, and what the code is for and carries.
-                        const updatedInvites = localInvites.map((localInv: any) => {
+                        // The node's row is the truth for a code it knows: used or not, and what the code is for and carries. A code
+                        // the node made and no longer holds was revoked (by an owner, or on another device: I2) or pruned: it goes.
+                        // An offline ticket (BP-…) is this phone's until someone joins with it, so it stays.
+                        const updatedInvites = localInvites.flatMap((localInv: any) => {
                             const match = serverInvitesMap.get(localInv.code.toLowerCase());
-                            return match ? { ...localInv, ...match } : localInv;
+                            if (match) return [{ ...localInv, ...match }];
+                            return String(localInv.code).startsWith('BP-') ? [localInv] : [];
                         });
 
                         const updatedCodes = new Set<string>(
@@ -739,7 +742,11 @@ export default function PeopleScreen() {
     const revokeMyInvite = async (inv: InviteRowSource): Promise<boolean> => {
         if (!identity || invitesPreview || !anchorUrl) return false;
         try {
-            const res = await fetch(`${anchorUrl}/api/invite/${encodeURIComponent(inv.code)}`, { method: 'DELETE' });
+            // Signed here: the phone's fetch signs only GETs on its own (utils/node-request-signing.ts), and the node refuses an
+            // unsigned revoke (401).
+            const url = `${anchorUrl}/api/invite/${encodeURIComponent(inv.code)}`;
+            const headers = await buildSignedHeaders('DELETE', url, '', identity.privateKey, identity.publicKey);
+            const res = await fetch(url, { method: 'DELETE', headers });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 // Only the node's own `no_invite` means it is gone: a node older than Revoke answers 404 too, with no code.

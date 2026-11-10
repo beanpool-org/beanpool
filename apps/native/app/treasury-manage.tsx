@@ -950,6 +950,7 @@ export default function TreasuryManageScreen() {
                                     onPress={handleSweep}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Sweep to the Commons')}
+                                    accessibilityState={{ disabled: sweeping || balance <= 0, busy: sweeping }}
                                 >
                                     {sweeping ? <ActivityIndicator color={colors.brand.primary} /> : (
                                         <>

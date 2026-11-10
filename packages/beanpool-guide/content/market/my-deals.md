@@ -3,7 +3,7 @@ slug: my-deals
 title: Your deals
 summary: One place for every trade you are in, every post you have up, and your past trades.
 help: Every trade you are in and every post you have up. A deal waiting on you is at the top.
-related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the-top-bar
+related: a-deal-step-by-step, standing-deals, posting, your-balance, when-a-deal-goes-wrong, the-top-bar
 ---
 
 ## Opening it
@@ -14,14 +14,14 @@ On the global community there are no deals, so **Your deals** shows three exampl
 
 ## Three tabs
 
-- **In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. The number on the tab counts the cards listed underneath.
+- **In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. A standing deal holds nothing, so it is marked **🔁 STANDING** and says **Standing deal · runs by itself**; while it runs well it is not waiting on you, and it adds nothing to the red number. If a period could not be paid, the card of the person paying says **Waiting on you: this period isn't paid yet**, and that does count. The card of the person being paid says **This period isn't paid yet**, and does not count. The number on the tab counts the cards listed underneath.
 - **My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.
-- **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
+- **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person. A standing deal that ended says how: **Stopped by you on 12 Dec · this month unpaid · nothing owed** or **Stopped by** their name **on 12 Dec · …**, or that its Beans could not be paid.
 
-Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days.
+Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal, or stop a standing deal with **Stop…**. A request nobody answers ends by itself after 7 days. See "Standing deals".
 
 ## Reviews
 
-A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars.
+A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars. A standing deal asks for one review, not one for each month.
 
 In the web app the button says **Leave Review**, and only until you have reviewed that trade. To change a review there, open the post.

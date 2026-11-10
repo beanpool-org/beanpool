@@ -102,7 +102,7 @@ describe('the authorisation text (§6)', () => {
         standingId: '6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f',
         listingId: 'post-123',
         payee: 'ab'.repeat(32),
-        beansPerPeriod: 50,
+        beansPerPeriod_c: 5000,
         unit: 'month',
         maxPeriods: null,
         startsAt: '2026-11-09T08:00:00.000Z',
@@ -112,15 +112,15 @@ describe('the authorisation text (§6)', () => {
     it('is ten lines in the order §6 gives, amounts to the cent', () => {
         const text = standingAuthorisationText(auth);
         expect(text).toBe([
-            STANDING_AUTH_VERSION, 'mullum.beanpool.org', auth.standingId, 'post-123', 'ab'.repeat(32), '50.00', 'month', 'open',
+            STANDING_AUTH_VERSION, 'mullum.beanpool.org', auth.standingId, 'post-123', 'ab'.repeat(32), '5000', 'month', 'open',
             '2026-11-09T08:00:00.000Z', 'n0nce-1234abcd',
         ].join('\n'));
-        expect(standingAuthorisationText({ ...auth, beansPerPeriod: 12.5, unit: 'week', maxPeriods: 6 }).split('\n').slice(5, 8))
-            .toEqual(['12.50', 'week', '6']);
+        expect(standingAuthorisationText({ ...auth, beansPerPeriod_c: 1250, unit: 'week', maxPeriods: 6 }).split('\n').slice(5, 8))
+            .toEqual(['1250', 'week', '6']);
     });
 
     it('round-trips: parse(text(a)) is a, and text(parse(t)) is t', () => {
-        for (const a of [auth, { ...auth, maxPeriods: 6 }, { ...auth, unit: 'week' as const, beansPerPeriod: 0.01 }, { ...auth, beansPerPeriod: 999.99 }]) {
+        for (const a of [auth, { ...auth, maxPeriods: 6 }, { ...auth, unit: 'week' as const, beansPerPeriod_c: 1 }, { ...auth, beansPerPeriod_c: 99999 }]) {
             const text = standingAuthorisationText(a);
             const back = parseStandingAuthorisation(text);
             expect(back).toEqual(a);
@@ -138,7 +138,7 @@ describe('the authorisation text (§6)', () => {
             lines.slice(0, 9).join('\n'),                  // a line missing
             [...lines, 'extra'].join('\n'),                // a line added
             text.replace(/\n/g, '\r\n'),
-            swap(0, 'beanpool-standing-v2'),
+            swap(0, 'beanpool-standing-v1'),                // the format before whole hundredths
             swap(1, ''),
             swap(1, 'host with space'),
             swap(1, 'Mullum.beanpool.org'),             // not lower case
@@ -147,11 +147,11 @@ describe('the authorisation text (§6)', () => {
             swap(2, ''),
             swap(4, 'AB'.repeat(32)),                      // upper-case payee
             swap(4, 'ab'.repeat(31)),
-            swap(5, '50'),                                 // not to the cent
-            swap(5, '50.0'),
-            swap(5, '050.00'),
-            swap(5, '-50.00'),
-            swap(5, '0.00'),                               // nothing per period
+            swap(5, '50.00'),                              // Beans to the cent: the v1 form, not whole hundredths
+            swap(5, '5000.0'),
+            swap(5, '05000'),                              // a leading zero
+            swap(5, '-5000'),
+            swap(5, '0'),                                  // nothing per period
             swap(5, '1e3'),
             swap(6, 'year'),
             swap(6, 'Month'),
@@ -174,13 +174,13 @@ describe('the authorisation text (§6)', () => {
         const text = standingAuthorisationText(auth);
         const changes: Partial<StandingAuthorisation>[] = [
             { host: 'byron.beanpool.org' }, { standingId: 'other-id' }, { listingId: 'post-124' }, { payee: 'cd'.repeat(32) },
-            { beansPerPeriod: 50.01 }, { unit: 'week' }, { maxPeriods: 1 }, { startsAt: '2026-11-10T08:00:00.000Z' }, { nonce: 'n0nce-1234abce' },
+            { beansPerPeriod_c: 5001 }, { unit: 'week' }, { maxPeriods: 1 }, { startsAt: '2026-11-10T08:00:00.000Z' }, { nonce: 'n0nce-1234abce' },
         ];
         for (const c of changes) expect(standingAuthorisationText({ ...auth, ...c })).not.toBe(text);
     });
 
     it('will not write a field it could not read back', () => {
-        for (const bad of [{ beansPerPeriod: 0 }, { beansPerPeriod: 12.345 }, { beansPerPeriod: NaN }, { maxPeriods: 0 }, { startsAt: '2026-11-09' }, { payee: 'x' }]) {
+        for (const bad of [{ beansPerPeriod_c: 0 }, { beansPerPeriod_c: 1234.5 }, { beansPerPeriod_c: NaN }, { maxPeriods: 0 }, { startsAt: '2026-11-09' }, { payee: 'x' }]) {
             expect(isStandingAuthorisation({ ...auth, ...bad } as StandingAuthorisation)).toBe(false);
             expect(() => standingAuthorisationText({ ...auth, ...bad } as StandingAuthorisation)).toThrow();
         }
@@ -295,7 +295,7 @@ describe('the panel, the Stop confirm and the live Needs you line (design §3, a
     const tx = (over: Partial<StandingDealRow> = {}): StandingDealRow => ({
         id: 'tx-1', postId: 'post-1', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: 'marty', buyerCallsign: 'Marty',
         sellerPublicKey: 'rob', sellerCallsign: 'Rob', createdAt: START, completedAt: START, standingId: 'sd-1', periodNo: 1, standingPhase: 'paid',
-        standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6, standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: START,
+        standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: 6, standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: START,
         standingShortSince: null, standingStopped: false, ...over,
     });
     const short = (over: Partial<StandingDealRow> = {}) => tx({ standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z', standingNextDueAt: '2026-12-09T09:00:00.000Z', ...over });
@@ -353,16 +353,16 @@ describe('the panel, the Stop confirm and the live Needs you line (design §3, a
             standingNeedsLine(short(), 'rob', NOW, day)!.label,
             standingPanel(short(), 'rob', day)!.status,
             standingStopConfirm(short(), 'rob', day).body,
-            standingLines.duePayee('month', 'Marty', 50, 'Vehicle Storage', '24 Dec'),
-            standingLines.halfwayPayee('Marty', 50, 'Vehicle Storage', 7, '24 Dec'),
-            standingLines.dayBeforePayee('month', 'Marty', 'Vehicle Storage', 50, '24 Dec'),
-            standingLines.coveredPayee('month', 'Marty', 50, 'Vehicle Storage'),
+            standingLines.duePayee('month', 'Marty', 5000, 'Vehicle Storage', '24 Dec'),
+            standingLines.halfwayPayee('Marty', 5000, 'Vehicle Storage', 7, '24 Dec'),
+            standingLines.dayBeforePayee('month', 'Marty', 'Vehicle Storage', 5000, '24 Dec'),
+            standingLines.coveredPayee('month', 'Marty', 5000, 'Vehicle Storage'),
             standingLines.endedShortPayee('month', 'Marty', 'Vehicle Storage', '9 Dec'),
-            standingLines.paidIn('month', 50, 'Vehicle Storage', 'Marty', 3),
+            standingLines.paidIn('month', 5000, 'Vehicle Storage', 'Marty', 3),
         ];
         for (const w of payeeWords) expect(w).not.toMatch(/short|balance|you have|\b30\b/i);
         // Only the payer's own warning ahead names how short they are.
-        expect(standingLines.shortAheadNotice('Vehicle Storage', 50, 'Rob', '9 Dec', 30))
+        expect(standingLines.shortAheadNotice('Vehicle Storage', 5000, 'Rob', '9 Dec', 3000))
             .toBe("Vehicle Storage: 50 Beans go to Rob on 9 Dec and you're 30 short. Earn or receive Beans by then, or stop the standing deal.");
     });
 
@@ -377,17 +377,17 @@ describe('the panel, the Stop confirm and the live Needs you line (design §3, a
 
 describe('the words', () => {
     it('every line is a sentence for both periods, with its numbers in', () => {
-        expect(standingLines.takeUpSummary('month', 'Vehicle Storage', 50, 'Rob')).toBe('Vehicle Storage · 50 Beans a month · from Rob');
-        expect(standingLines.takeUpSummary('week', 'Vehicle Storage', 12.5, 'Rob')).toBe('Vehicle Storage · 12.5 Beans a week · from Rob');
+        expect(standingLines.takeUpSummary('month', 'Vehicle Storage', 5000, 'Rob')).toBe('Vehicle Storage · 50 Beans a month · from Rob');
+        expect(standingLines.takeUpSummary('week', 'Vehicle Storage', 1250, 'Rob')).toBe('Vehicle Storage · 12.50 Beans a week · from Rob');
         expect(standingLines.forPeriods('month', 1)).toBe('For 1 month');
         expect(standingLines.forPeriods('month', 6)).toBe('For 6 months');
-        expect(standingLines.paidNow('month', 50, 'Rob', '9 Nov', '9 Dec'))
+        expect(standingLines.paidNow('month', 5000, 'Rob', '9 Nov', '9 Dec'))
             .toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
-        expect(standingLines.agree(50)).toBe('Agree and pay 50 Beans');
-        expect(standingLines.duePayer('month', 'Vehicle Storage', 50, 'Rob', '24 Dec'))
+        expect(standingLines.agree(5000)).toBe('Agree and pay 50 Beans');
+        expect(standingLines.duePayer('month', 'Vehicle Storage', 5000, 'Rob', '24 Dec'))
             .toBe("Vehicle Storage: this month's 50 Beans couldn't be paid to Rob today. Earn or receive Beans by 24 Dec, or it ends. Rob has been told.");
-        expect(standingLines.halfwayPayer('Vehicle Storage', 50, 7, '24 Dec')).toBe('Vehicle Storage: 50 Beans 7 days overdue. Earn or receive Beans by 24 Dec, or it ends.');
-        expect(standingLines.paidIn('month', 50, 'Vehicle Storage', 'Marty', 3)).toBe('50 Beans for Vehicle Storage came in from Marty · month 3');
+        expect(standingLines.halfwayPayer('Vehicle Storage', 5000, 7, '24 Dec')).toBe('Vehicle Storage: 50 Beans 7 days overdue. Earn or receive Beans by 24 Dec, or it ends.');
+        expect(standingLines.paidIn('month', 5000, 'Vehicle Storage', 'Marty', 3)).toBe('50 Beans for Vehicle Storage came in from Marty · month 3');
         expect(standingLines.removeStops('month', 2)).toBe('This stops 2 standing deals after their current month.');
         expect(standingLines.memo('month', 'Vehicle Storage', 3)).toBe('Standing deal · Vehicle Storage · month 3');
         const all = Object.values(standingLines).map((f) => (f as (...a: any[]) => string)('month', 'A', 1, 'B', 'C')).join(' ');

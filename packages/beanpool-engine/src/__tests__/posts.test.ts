@@ -195,7 +195,7 @@ const POSTS_FIXTURE_DDL = `
         category TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
-        credits REAL NOT NULL,
+        price_c INTEGER NOT NULL DEFAULT 0,
         price_type TEXT DEFAULT 'fixed',
         author_pubkey TEXT NOT NULL REFERENCES members(public_key),
         created_at DATETIME NOT NULL,
@@ -264,7 +264,7 @@ describe('Posts ignore archetypes', () => {
 // can ride along.
 describe('publicBroadcastPost', () => {
     const base = {
-        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 5,
+        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', price_c: 500,
         authorPublicKey: 'a'.repeat(64), authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z',
         updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public',
     } as MarketplacePost;
@@ -422,7 +422,7 @@ describe('The listings, not the people (G9a)', () => {
     });
 
     const member = {
-        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 0, priceType: 'fixed',
+        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'a'.repeat(64), authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z', updatedAt: '2026-09-24T01:00:00.000Z',
         active: true, status: 'pending', repeatable: false, cashAlsoNeeded: false, acceptedBy: 'b'.repeat(64), acceptedByCallsign: 'Bo',
         acceptedAt: '2026-09-24T02:00:00.000Z', pendingTransactionId: 'tx1', lat: -28.53417, lng: 153.49871, photos: ['/api/marketplace/posts/p1/photos/0?v=1'],
@@ -434,7 +434,7 @@ describe('The listings, not the people (G9a)', () => {
     it('guestPost keeps the listing and its area, and names nobody', () => {
         const out = guestPost(member);
         assert.deepStrictEqual(out, {
-            id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 0, priceType: 'fixed',
+            id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', price_c: 0, priceType: 'fixed',
             createdAt: member.createdAt, updatedAt: member.updatedAt, active: true, status: 'pending', repeatable: false, cashAlsoNeeded: false,
             photos: member.photos, originNode: 'node1', reach: 'local', audienceScope: 'public',
             authorPublicKey: HIDDEN_AUTHOR, authorCallsign: '', acceptedByCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0,
@@ -459,9 +459,9 @@ describe('The listings, not the people (G9a)', () => {
     it('guestPost drops a field it does not know, and a removal stays a removal', () => {
         const out = guestPost({ ...member, somethingNew: 'e'.repeat(64) } as MarketplacePost);
         assert.ok(!('somethingNew' in out));
-        const removal = guestPost({ id: 'p2', type: 'offer', category: 'food', title: '', description: '', credits: 0, authorPublicKey: 'a'.repeat(64),
+        const removal = guestPost({ id: 'p2', type: 'offer', category: 'food', title: '', description: '', price_c: 0, authorPublicKey: 'a'.repeat(64),
             authorCallsign: 'Ann', createdAt: member.createdAt, active: false, status: 'cancelled', photos: [] } as MarketplacePost);
-        assert.deepStrictEqual(Object.keys(removal).sort(), ['active', 'authorCallsign', 'authorPublicKey', 'category', 'createdAt', 'credits', 'description', 'id', 'photos', 'status', 'title', 'type']);
+        assert.deepStrictEqual(Object.keys(removal).sort(), ['active', 'authorCallsign', 'authorPublicKey', 'category', 'createdAt', 'description', 'id', 'photos', 'price_c', 'status', 'title', 'type']);
         assert.strictEqual(removal.authorPublicKey, HIDDEN_AUTHOR);
     });
 });

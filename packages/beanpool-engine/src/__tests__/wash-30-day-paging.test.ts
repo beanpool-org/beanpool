@@ -36,7 +36,7 @@ function fileDb(): Database.Database {
     return db;
 }
 
-type Row = { buyer_pubkey: string; seller_pubkey: string; credits: number };
+type Row = { buyer_pubkey: string; seller_pubkey: string; amount_c: number };
 
 /** The 30-day query as it was before the paging: one query (origin/main 48d2b72a, trust.ts). */
 function mainRows(db: Database.Database): Row[] {
@@ -66,7 +66,7 @@ function mainClusters(db: Database.Database): { flaggedClusters: Map<string, num
         adj.get(u)!.add(v);
         adj.get(v)!.add(u);
         const key = u < v ? `${u}|${v}` : `${v}|${u}`;
-        edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+        edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.amount_c);
     }
     const visited = new Set<string>();
     const components: string[][] = [];
@@ -177,8 +177,8 @@ function seedGraph(db: Database.Database, seed: number, size: typeof LARGE = LAR
     const times = Array.from({ length: size.times }, () => iso(Math.floor(rnd() * 29 * day) + 60_000));
     let id = 0;
     const ins = db.prepare('INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, ?, ?)');
-    const trade = (b: string, s: string, credits: number, at: string | null, status = 'completed') =>
-        ins.run(`t${seed}-${(id++).toString(36)}-${Math.floor(rnd() * 1e9).toString(36)}`, b, s, credits, status, at);
+    const trade = (b: string, s: string, amount_c: number, at: string | null, status = 'completed') =>
+        ins.run(`t${seed}-${(id++).toString(36)}-${Math.floor(rnd() * 1e9).toString(36)}`, b, s, amount_c, status, at);
     const addMember = db.prepare('INSERT OR IGNORE INTO members (public_key, joined_at) VALUES (?, ?)');
     db.transaction(() => {
         for (let i = 0; i < n; i++) addMember.run(key(i), iso((rnd() < 0.3 ? 1 + rnd() * 10 : 20 + rnd() * 300) * day));
@@ -236,7 +236,7 @@ const json = (a: Pick<WashAnalysis, 'flaggedClusters' | 'clusterDetails'>) => JS
 async function samePagesAsMain(db: Database.Database, sizes: number[]): Promise<void> {
     for (const size of sizes) {
         const [ref, pages] = await atOneCutoff(db, () => { const r = mainRows(db); return [r, pagesUpTo(db, size, r.length)] as const; });
-        const got = pages.flat().map(({ buyer_pubkey, seller_pubkey, credits }) => ({ buyer_pubkey, seller_pubkey, credits }));
+        const got = pages.flat().map(({ buyer_pubkey, seller_pubkey, amount_c }) => ({ buyer_pubkey, seller_pubkey, amount_c }));
         expect(got.length).toBe(ref.length);
         expect(sameText(JSON.stringify(got), JSON.stringify(ref))).toBe('same');
         // Full pages up to the last.
@@ -286,7 +286,7 @@ describe('wash analysis: the 30-day query in pages (#1908)', { timeout: 60_000 }
         const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
         for (let i = 0; i < 10; i++) ins.run(`z${9 - i}`, `b${i}`, `s${i}`, i, at);
         for (const size of [1, 2, 3, 4, 9, 10, 11]) {
-            const got = pagesUpTo(db, size, 10).flat().map((r) => r.credits);
+            const got = pagesUpTo(db, size, 10).flat().map((r) => r.amount_c);
             expect(got).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         }
         db.close();

@@ -516,6 +516,18 @@ const SIGNED_KNOCK_CORS: ReadonlyMap<string, string> = new Map([
 ]);
 const SIGNED_KNOCK_HEADERS = 'Content-Type, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
+/**
+ * The health read, readable from any origin (cutover W, 1.4.0): a web app asks another community's server for its version here
+ * before it calls it, and calls nothing on a server it can't read (apps/pwa/src/lib/node-version-gate.ts). The answer is public
+ * (PUBLIC_READ_EXACT; it names nobody) and is read with a plain GET that carries no credential, so it is opened for GET and HEAD
+ * alone: `*`, never credentials, no request header. Nothing else on the node is opened by this.
+ */
+export const HEALTH_CORS_PATH = '/api/community/health';
+const HEALTH_CORS_METHODS = 'GET, HEAD';
+function isHealthCorsRead(ctx: { method: string; path: string }): boolean {
+    return ctx.path === HEALTH_CORS_PATH && (ctx.method === 'GET' || ctx.method === 'HEAD' || ctx.method === 'OPTIONS');
+}
+
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
 export { LISTINGS_MEMBERS_ONLY };
 
@@ -1441,6 +1453,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', SIGNED_KNOCK_HEADERS);
                 ctx.set('Access-Control-Allow-Methods', SIGNED_KNOCK_CORS.get(ctx.path)!);
+            } else if (isHealthCorsRead(ctx)) {
+                ctx.set('Access-Control-Allow-Origin', '*');
+                ctx.set('Access-Control-Allow-Methods', HEALTH_CORS_METHODS);
             } else {
                 // The web app's tick on the global community (copy-cors.ts). The Origin decides nothing here and is kept nowhere.
                 const copyMethods = copyCorsMethods(ctx);

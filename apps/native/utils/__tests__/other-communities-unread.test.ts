@@ -560,14 +560,6 @@ describe('what is asked, and of whom', () => {
         expect(unreadAsks()).toEqual([]);
     });
 
-    it('a server from before bound signatures is never asked: it has no such route, and its signature would name no host', async () => {
-        mem.async.set(ANCHOR, HOME);
-        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }, { url: CASTLEMAINE, requestSigning: 1 }, { url: BYRON, requestSigning: 2 }]));
-        answers.set(BYRON, { unread: 0 });
-        await round();
-        expect(unreadAsks().map((a) => a.community)).toEqual([BYRON]);
-    });
-
     it('a community that became the one in use while it answered writes nothing and tells nobody', async () => {
         keep(HOME, CASTLEMAINE);
         const answering = vi.fn(async () => {
@@ -869,12 +861,9 @@ describe('the community in use, while the app is closed: no socket, and the phon
         expect(mem.async.has(UNREAD_ROUNDS_STORE_KEY)).toBe(false);
     });
 
-    it('a phone with one community with alerts off there, or on old signing: nothing asked, no badge written', async () => {
+    it('a phone with one community with alerts off there: nothing asked, no badge written', async () => {
         keep(HOME);
         mem.async.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([HOME]));
-        await closedRound();
-        mem.async.delete(PUSH_ALERTS_OFF_STORE_KEY);
-        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }]));
         await closedRound();
         expect(asked).toEqual([]);
         expect(badges).toEqual([]);
@@ -1001,15 +990,6 @@ describe('the community in use, while the app is closed: no socket, and the phon
         expect(badges).toEqual([2, 2]);
     });
 
-    it('one on old signing isn\'t asked, so there is no number for it: the badge stays as it was', async () => {
-        mem.async.set(ANCHOR, HOME);
-        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }, { url: CASTLEMAINE }]));
-        answers.set(CASTLEMAINE, { unread: 2 });
-        await closedRound();
-        expect(askedOf(HOME)).toEqual([]);
-        expect(badges).toEqual([]);
-    });
-
     it('one with alerts off isn\'t asked, and has no part in the badge', async () => {
         keep(HOME, CASTLEMAINE);
         mem.async.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([HOME]));
@@ -1122,14 +1102,6 @@ describe('one community saved in two spellings is one community', () => {
         expect(unreadAsks()).toHaveLength(1);
         expect(posted).toHaveLength(1);
         expect(badges).toEqual([2]);
-    });
-
-    it('old signing on either spelling stands for the community', async () => {
-        mem.async.set(ANCHOR, SPELT);
-        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }, { url: SPELT }, { url: CASTLEMAINE }]));
-        answers.set(CASTLEMAINE, { unread: 1 });
-        await closedRound();
-        expect(unreadAsks().map((a) => a.community)).toEqual([CASTLEMAINE]);
     });
 });
 

@@ -18,6 +18,7 @@ import {
     standingUnitForListing,
     type StandingDealRow,
     standingRoomOf,
+    standingHistoryLine,
 } from '../standing-deal.js';
 import { BOUND_SIGNATURE_MARKER, ed25519Signer } from '../request-signing.js';
 import { dealStep, listingDealLines } from '../deal-step.js';
@@ -232,3 +233,30 @@ describe("listingDealLines.finished: a standing deal still running is never 'don
         expect(listingDealLines.finished('completed')).toBe('That deal is done.');
     });
 });
+
+describe('standingHistoryLine: the History row of an ended standing deal (amendment §1, §2)', () => {
+    // Month 2 (9 Nov) unpaid; stopped in the grace on 12 Nov, or its grace run out.
+    const ended = (o: Partial<StandingDealRow> = {}) => row({
+        periodNo: 1, standingPhase: 'ended', standingShortSince: '2026-11-09T08:00:00.000Z', standingEndedAt: '2026-11-12T08:00:00.000Z',
+        standingEndedReason: 'stopped', standingStoppedBy: PAYEE, standingStopped: true, ...o,
+    });
+    it('stopped in the grace: by you, or by the other side by name; that period unpaid, nothing owed', () => {
+        expect(standingHistoryLine(ended(), PAYEE, day)).toBe('Stopped by you on 12 Nov · this month unpaid · nothing owed');
+        expect(standingHistoryLine(ended(), PAYER, day)).toBe('Stopped by Rob on 12 Nov · this month unpaid · nothing owed');
+        expect(standingHistoryLine(ended({ standingStoppedBy: PAYER, standingUnit: 'week' }), PAYEE, day)).toBe('Stopped by Marty on 12 Nov · this week unpaid · nothing owed');
+    });
+    it("its grace run out: each side's words, and the payee never hears the payer's balance", () => {
+        const out = ended({ standingEndedReason: 'short', standingStoppedBy: null, standingStopped: false });
+        expect(standingHistoryLine(out, PAYER, day)).toBe("Vehicle Storage ended: this month's Beans couldn't be paid. Nothing more will be taken. Talk to Rob about it.");
+        expect(standingHistoryLine(out, PAYEE, day)).toBe("Marty's Vehicle Storage ended: this month's Beans couldn't be paid. Nothing is owed through the app for the days since 9 Nov.");
+        expect(standingHistoryLine(out, PAYEE, day)).not.toMatch(/short|balance/i);
+    });
+    it('stopped after a paid period, another end, still running, a one-off deal or a stranger: no line', () => {
+        expect(standingHistoryLine(ended({ standingShortSince: null }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingEndedReason: 'count_reached' }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingPhase: 'short' }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended({ standingId: null }), PAYER, day)).toBeNull();
+        expect(standingHistoryLine(ended(), 'c'.repeat(64), day)).toBeNull();
+    });
+});
+

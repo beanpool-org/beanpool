@@ -66,14 +66,16 @@ const short = {
     standingNextDueAt: '2026-11-09T09:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z',
     standingStopped: false,
 };
-vi.mock('../db', () => ({ getPosts: async () => [], getMyPosts: async () => [], getMarketplaceTransactions: async () => [short] }));
+// A test may hand Your deals other rows (the History case below); read at call time.
+let rowsNow: unknown[] | null = null;
+vi.mock('../db', () => ({ getPosts: async () => [], getMyPosts: async () => [], getMarketplaceTransactions: async () => rowsNow ?? [short] }));
 
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); nav.to.length = 0; });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); rowsNow = null; });
 
 const render = async (me: string) => {
     await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: me }, onClose() {}, initialTab: 'pending' }) as any); });
@@ -102,3 +104,24 @@ describe('Your deals, In progress: a short standing deal (the period last settle
         }
     }
 });
+
+describe('Your deals, History: an ended standing deal says how it ended; review once (U2)', () => {
+    const stopped = { ...short, id: 'tx-ended', standingPhase: 'ended', standingEndedAt: '2026-11-12T08:00:00.000Z', standingEndedReason: 'stopped', standingStoppedBy: PAYER, standingStopped: true, ratedByBuyer: true, ratedBySeller: true };
+    const later = { ...short, id: 'tx-m2', periodNo: 2, standingPhase: null, createdAt: '2026-12-09T08:00:00.000Z' };
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: stopped in the grace, in each side's words; a later period offers no review`, async () => {
+            theme.dark = dark;
+            rowsNow = [stopped, later];
+            await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: PAYER }, onClose() {}, initialTab: 'history' }) as any); });
+            for (let i = 0; i < 4; i++) await act(async () => {});
+            const line = host.querySelector('[data-testid="deal-history-tx-ended"]');
+            expect(line?.textContent).toBe('Stopped by you on 12 Nov · this month unpaid · nothing owed');
+            expect(line?.getAttribute('data-lines')).toBeNull();
+            expect(host.textContent).not.toMatch(/Leave Review|Leave a review/i);
+            await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: PAYEE }, onClose() {}, initialTab: 'history' }) as any); });
+            for (let i = 0; i < 4; i++) await act(async () => {});
+            expect(host.querySelector('[data-testid="deal-history-tx-ended"]')?.textContent).toBe('Stopped by Marty on 12 Nov · this month unpaid · nothing owed');
+        });
+    }
+});
+

@@ -8744,6 +8744,10 @@ export interface MarketplaceTransaction {
     standingNextDueAt?: string | null;
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
     standingStopped?: boolean;
 }
 

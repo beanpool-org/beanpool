@@ -15,6 +15,7 @@ export function standingJsonOf(tx: any): string | null {
         phase: tx.standingPhase, beans: tx.standingBeans ?? null, unit: tx.standingUnit ?? null, max: tx.standingMaxPeriods ?? null,
         nextDueAt: tx.standingNextDueAt ?? null, startsAt: tx.standingStartsAt ?? null, shortSince: tx.standingShortSince ?? null,
         stopped: !!tx.standingStopped,
+        endedReason: tx.standingEndedReason ?? null, stoppedBy: tx.standingStoppedBy ?? null, endedAt: tx.standingEndedAt ?? null,
     });
 }
 
@@ -30,6 +31,9 @@ export interface StandingRowFields {
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
     standingStopped?: boolean;
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
 }
 
 export function standingOfRow(r: { standing_id?: string | null; period_no?: number | null; standing?: string | null }): StandingRowFields {
@@ -41,6 +45,7 @@ export function standingOfRow(r: { standing_id?: string | null; period_no?: numb
             Object.assign(out, {
                 standingPhase: s.phase, standingBeans: s.beans, standingUnit: s.unit, standingMaxPeriods: s.max,
                 standingNextDueAt: s.nextDueAt, standingStartsAt: s.startsAt, standingShortSince: s.shortSince, standingStopped: !!s.stopped,
+                standingEndedReason: s.endedReason ?? null, standingStoppedBy: s.stoppedBy ?? null, standingEndedAt: s.endedAt ?? null,
             });
         }
     } catch {}

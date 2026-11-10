@@ -378,6 +378,13 @@ export const standingLines = {
         ? t('{title}: the last month of this standing deal is paid. It ends on {date}.', { title, date })
         : t('{title}: the last week of this standing deal is paid. It ends on {date}.', { title, date })),
     ended: (title: string) => t('The standing deal for {title} has ended. Nothing more will be paid.', { title }),
+    // Your deals' History row of one stopped in the grace (amendment §1)
+    historyStoppedByYou: (unit: StandingPeriodUnit, date: string) => (unit === 'month'
+        ? t('Stopped by you on {date} · this month unpaid · nothing owed', { date })
+        : t('Stopped by you on {date} · this week unpaid · nothing owed', { date })),
+    historyStoppedBy: (unit: StandingPeriodUnit, name: string, date: string) => (unit === 'month'
+        ? t('Stopped by {name} on {date} · this month unpaid · nothing owed', { name, date })
+        : t('Stopped by {name} on {date} · this week unpaid · nothing owed', { name, date })),
     serverAway: (title: string) => t("This community's server was away for longer than a whole period, so the standing deal for {title} has ended and nothing was paid for it. Talk to each other, and take it up again if you both want to.", { title }),
     cantRun: (title: string) => t("The standing deal for {title} can't carry on, so it has ended. Nothing more will be paid.", { title }),
 
@@ -537,6 +544,10 @@ export interface StandingDealRow {
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
     standingStopped?: boolean;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
 }
 
 /**
@@ -634,6 +645,31 @@ export function standingStopConfirm(tx: StandingDealRow, actingAs: string, day: 
         yes: t('Stop it'),
         no: t('Keep it'),
     };
+}
+
+/**
+ * The History line of an ended standing deal, for one of its sides (amendment §1, §2): stopped in the grace says who stopped
+ * it and when, that the period was unpaid and nothing is owed; its grace run out says it ended unpaid, in each side's words
+ * (the payee never hears the payer's balance). Null for any other end, a deal still running, a one-off deal or a stranger.
+ */
+export function standingHistoryLine(tx: StandingDealRow, me: string, day: (iso: string) => string): string | null {
+    if (!tx.standingId || tx.standingPhase !== 'ended' || !me) return null;
+    const payer = tx.buyerPublicKey === me;
+    if (!payer && tx.sellerPublicKey !== me) return null;
+    const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
+    const valid = (iso: string | null | undefined): iso is string => !!iso && Number.isFinite(Date.parse(iso));
+    const payeeName = tx.sellerCallsign || t('A member');
+    const payerName = tx.buyerCallsign || t('A member');
+    if (tx.standingEndedReason === 'stopped' && valid(tx.standingShortSince) && valid(tx.standingEndedAt)) {
+        if (tx.standingStoppedBy === me) return standingLines.historyStoppedByYou(unit, day(tx.standingEndedAt));
+        const name = tx.standingStoppedBy === tx.buyerPublicKey ? payerName : tx.standingStoppedBy === tx.sellerPublicKey ? payeeName : t('A member');
+        return standingLines.historyStoppedBy(unit, name, day(tx.standingEndedAt));
+    }
+    if (tx.standingEndedReason === 'short' && valid(tx.standingShortSince)) {
+        const title = tx.postTitle || t('A standing deal');
+        return payer ? standingLines.endedShortPayer(unit, title, payeeName) : standingLines.endedShortPayee(unit, payerName, title, day(tx.standingShortSince));
+    }
+    return null;
 }
 
 /** One live "Needs you" line for a short standing deal (amendment §2): the payer's step (amber, counted) or the payee's (calm). */

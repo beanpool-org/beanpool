@@ -165,6 +165,25 @@ describe('Your deals: one card per standing deal', () => {
     });
 });
 
+describe('Your deals, History: an ended standing deal says how it ended; review once (U2)', () => {
+    const STOPPED = { periodNo: 1, standingPhase: 'ended' as const, standingShortSince: '2026-11-09T08:00:00.000Z', standingEndedAt: '2026-11-12T08:00:00.000Z', standingEndedReason: 'stopped', standingStoppedBy: PAYEE, standingStopped: true };
+    it('stopped in the grace by the payee: each side reads its line', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYER }} onClose={vi.fn()} posts={[]} initialTab="history"
+            transactions={[row({ id: 'tx-1', ...STOPPED, ratedByBuyer: true })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-history-tx-1').textContent).toBe('Stopped by Rob on 12 Nov · this month unpaid · nothing owed');
+        cleanup();
+        render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[]} initialTab="history"
+            transactions={[row({ id: 'tx-1', ...STOPPED, ratedBySeller: true })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-history-tx-1').textContent).toBe('Stopped by you on 12 Nov · this month unpaid · nothing owed');
+    });
+    it('a later period unrated offers no Leave Review; the first period does', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYER }} onClose={vi.fn()} posts={[]} initialTab="history" onPromptReview={vi.fn()}
+            transactions={[row({ id: 'tx-m2', periodNo: 2, standingPhase: undefined }), row({ id: 'tx-m1', periodNo: 1, standingPhase: undefined })]} onNavigateToPost={vi.fn()} />);
+        expect(within(screen.getByTestId('deal-card-tx-m2')).queryByRole('button', { name: 'Leave Review' })).toBeNull();
+        expect(within(screen.getByTestId('deal-card-tx-m1')).getByRole('button', { name: 'Leave Review' })).toBeTruthy();
+    });
+});
+
 describe('at 320 px with the text at 130 %, in light and in dark', () => {
     const classes = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean);
     const COLOUR = /^(bg|text|border)-(nature|emerald|amber|oat)-/;

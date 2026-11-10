@@ -59,6 +59,10 @@ export interface DealRow {
     standingPhase?: StandingPhase | null;
     /** Either side has tapped Stop: the period already paid runs to its end and nothing more is paid. */
     standingStopped?: boolean;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
 }
 
 /** A row that is the current period of a standing deal still running (any phase but ended). */

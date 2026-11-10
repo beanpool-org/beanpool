@@ -26,13 +26,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         getItem: vi.fn(async (k: string) => disk.get(k) ?? null),
         setItem: vi.fn(async (k: string, v: string) => { disk.set(k, v); }),
         removeItem: vi.fn(async (k: string) => { disk.delete(k); }),
+        multiRemove: vi.fn(async (ks: string[]) => { for (const k of ks) disk.delete(k); }),
     },
 }));
 
 import {
-    claimInFlight, clearPendingOnboarding, forgetOldPendingClaim, getPendingOnboarding, resumePlan, setPendingOnboarding,
+    claimInFlight, clearPendingOnboarding, getPendingOnboarding, resumePlan, setPendingOnboarding,
     type PendingOnboarding,
 } from '../onboarding-state';
+import { forgetRetiredKeys } from '../retired-keys';
 import { memberRedirect } from '../member-landing';
 import { setupRedirect } from '../auth-return';
 import { claimRouteFor, claimRouteFromSystemPath, parseClaimLink } from '../claim-link';
@@ -112,13 +114,13 @@ describe('the QR on a phone with no account: the claim screen, which makes the a
         expect(memberRedirect(['welcome'], KEY)).toBe('/(tabs)');
     });
 
-    it('an older build\'s kept claim, with its one-time code, is taken off at every start and by a wipe', async () => {
+    it('an older build\'s kept claim, with its one-time code, is taken off at every start and by a wipe (CUT3)', async () => {
         disk.set('beanpool_pending_claim', JSON.stringify({ node: NODE, codeId: ID, code: CODE, savedAt: Date.now() }));
-        await forgetOldPendingClaim();
+        await forgetRetiredKeys();
         expect(disk.has('beanpool_pending_claim')).toBe(false);
         const identity = fs.readFileSync(path.resolve(__dirname, '../identity.ts'), 'utf8');
         const wipe = identity.slice(identity.indexOf('export async function wipeIdentity('));
-        expect(wipe.slice(0, wipe.indexOf('wipeIdentityScopedStorage('))).toMatch(/await clearPendingOnboarding\(\);\s*await forgetOldPendingClaim\(\);/);
+        expect(wipe.slice(0, wipe.indexOf('wipeIdentityScopedStorage('))).toMatch(/await clearPendingOnboarding\(\);\s*const \{ forgetRetiredKeys \} = require\('\.\/retired-keys'\);\s*await forgetRetiredKeys\(\);/);
     });
 });
 
@@ -133,7 +135,7 @@ describe('the model is the app', () => {
         expect(at).toBeGreaterThan(0);
         const effect = layout.slice(at, layout.indexOf('}, []);', at));
         expect(effect).toMatch(/getPendingOnboarding\(\)\.then\(\(p\) => \{\s*if \(!mounted\) return;\s*setPendingOnboardingFlag\(wizardHold\(p\)\);/);
-        expect(effect).toContain('void forgetOldPendingClaim();');
+        expect(effect).toContain('void forgetRetiredKeys();');
         expect(effect).toContain('subscribePendingOnboarding(refresh)');
     });
 

@@ -49,7 +49,7 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { applyDelta, closeDB, getDb, getPosts } from '../db';
+import { applyDelta, getDb, getPosts } from '../db';
 import { marketCardPicture } from '../market-card-picture';
 
 const BAKERY = 'b'.repeat(64);
@@ -120,21 +120,7 @@ describe("the phone's Market list draws an enterprise's shop banner from its own
     });
 });
 
-describe('the column on a phone that already holds a copy, and on one rolled back', () => {
-    it("a copy from before the column gains it on open, keeps its rows, and the next sync fills it", async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        // The previous build's table: the same, without the column.
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN carried_banner');
-        await getDb();
-        const cols = sql.prepare('PRAGMA table_info(posts)').all() as { name: string; type: string; dflt_value: unknown }[];
-        const col = cols.find(c => c.name === 'carried_banner');
-        expect(col).toMatchObject({ type: 'TEXT', dflt_value: null });
-        expect((await cached('L1'))?.title).toBe('Listing L1');
-        await applyDelta({ posts: [listing('L1', { authorBannerUrl: BANNER, updatedAt: '2026-10-02T01:00:00.000Z' })] });
-        expect((await cached('L1')).authorBannerUrl).toBe(`${ANCHOR}${BANNER}`);
-    });
-
+describe('the column on a phone rolled back', () => {
     it('a previous build opens the new table: no trigger, index or default names the column, and its writer leaves it empty', async () => {
         const named = sql.prepare("SELECT name FROM sqlite_master WHERE type IN ('trigger', 'index', 'view') AND sql LIKE '%carried_banner%'").all();
         expect(named).toEqual([]);

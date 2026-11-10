@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // The copy's schema number (utils/db.ts COPY_SCHEMA, DESIGN-atomic-beans-fable.md M2): money is whole hundredths of a Bean,
 // so every money column of the phone's copy is an INTEGER `*_c`, as the node's are. A copy made before (user_version 3, its
@@ -81,7 +83,25 @@ function oldCopy(): void {
     sql.prepare("INSERT INTO conversations (id, type, post_id, post_credits) VALUES ('c1', 'dm', NULL, 12.5)").run();
     sql.prepare("INSERT INTO tool_docs (owner, tool, body, updated_at) VALUES (?, 'things', '{\"kept\":true}', '2026-11-01T00:00:00.000Z')").run(ME);
     sql.prepare("INSERT INTO group_chat_epochs (group_id, epoch, record, wrap) VALUES ('g1', 1, 'record', 'wrap')").run();
+    sql.prepare("INSERT INTO group_chat_key_state (group_id, highest, after) VALUES ('g1', 1, 0)").run();
+    sql.prepare("INSERT INTO group_line_verdicts (group_id, k) VALUES ('g1', 'v1')").run();
+    sql.prepare("INSERT INTO group_line_signers (group_id, message_id, signer) VALUES ('g1', 'm1', ?)").run(ANA);
 }
+
+/** The five tables that are not a copy of the node's: never cleared by a schema number, only by the account leaving. */
+const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers'];
+
+/**
+ * Columns that older builds added to an open copy one ALTER TABLE at a time (audit C2), now in the schema itself: a copy
+ * cleared below the number, and a fresh one, both have them.
+ */
+const LATE_COLUMNS: Record<string, string[]> = {
+    members: ['card_fetched_at', 'archetype', 'profile_updated_at'],
+    marketplace_transactions: ['rated_by_buyer', 'rated_by_seller', 'standing_id', 'period_no', 'standing', 'cover_image', 'post_title'],
+    messages: ['edited_at'],
+    conversations: ['listed', 'request', 'post_title', 'post_status', 'post_photo'],
+    posts: ['carried_banner', 'carried_callsign', 'carried_avatar', 'tags', 'free_tags', 'pinned_until', 'pinned_at', 'shown_from', 'lendable', 'event_repeat_skips'],
+};
 
 /** Every column of the cache tables whose name says money. */
 const MONEY_COLUMN = /^(\w*_c|balance|amount|tax_fee|fee|credits|post_credits|earned_credit|goal_amount|current_amount)$/;
@@ -105,20 +125,41 @@ describe("the phone's copy and its schema number (COPY_SCHEMA 4: whole hundredth
                 expect(c.type, `${table}.${c.name}`).toBe('INTEGER');
             }
         }
-        // The account's own stores stay: they are not a copy of the node's.
+        // The account's own stores stay, all five: they are not a copy of the node's.
         expect(sql.prepare('SELECT body FROM tool_docs WHERE owner = ?').get(ME)).toEqual({ body: '{"kept":true}' });
-        expect(count('group_chat_epochs')).toBe(1);
+        for (const table of KEPT_TABLES) expect(count(table), table).toBe(1);
+        // Every column today's build reads is there, made by the schema, not added on open.
+        for (const [table, columns] of Object.entries(LATE_COLUMNS)) {
+            const have = columnsOf(table).map((c) => c.name);
+            for (const column of columns) expect(have, `${table}.${column}`).toContain(column);
+        }
+        for (const index of ['idx_marketplace_transactions_post_id', 'idx_conversations_post_id']) {
+            expect(sql.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").get(index), index).toEqual({ name: index });
+        }
         // The copy is read whole: this community's sync cursors are forgotten.
         expect(removed.flat()).toContain(`pillar_sync_${FILE}_members_last_sync`);
     });
 
-    it('a copy already at the number keeps every row when it opens again', async () => {
+    it('a copy already at the number keeps every row when it opens again, and nothing alters it on the way', async () => {
         sql.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at) VALUES ('L2', 'offer', 'food', 'Bread', '', 4925, ?, '2026-11-02T00:00:00.000Z')").run(ANA);
         removed.length = 0;
         await closeDB();
+        adapter.execAsync.mockClear();
         await getDb();
         expect(userVersion()).toBe(4);
         expect(sql.prepare("SELECT price_c FROM posts WHERE id = 'L2'").get()).toEqual({ price_c: 4925 });
         expect(removed).toEqual([]);
+        // The standing rule: the schema is the whole shape, so opening a copy at the number runs no ALTER TABLE and drops nothing.
+        const ran = adapter.execAsync.mock.calls.map(([q]) => String(q)).join('\n');
+        expect(ran).not.toMatch(/ALTER\s+TABLE/i);
+        expect(ran).not.toMatch(/DROP\s+TABLE/i);
+        for (const table of KEPT_TABLES) expect(count(table), table).toBe(1);
+    });
+
+    it('the source holds to it: no column is added to an open copy, and no one-off pass keyed on a flag runs at open', () => {
+        const src = readFileSync(join(__dirname, '..', 'db.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+        expect(src).not.toMatch(/ADD\s+COLUMN/i);
+        expect(src).not.toMatch(/DROP\s+COLUMN/i);
+        expect(src).not.toMatch(/bp_trust_sync_v3|bp_legacy_post_conv_cleaned_v1/);
     });
 });

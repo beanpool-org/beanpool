@@ -114,7 +114,7 @@ export function isHealthRead(url: string): boolean {
     return signedPathOf(url).replace(/\/+$/, '') === HEALTH_PATH;
 }
 
-type FetchLike = (url: string, init?: any) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
+type FetchLike = (url: string, init?: RequestInit) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
 async function readHealth(origin: string, fetchImpl: FetchLike): Promise<void> {
     const controller = new AbortController();

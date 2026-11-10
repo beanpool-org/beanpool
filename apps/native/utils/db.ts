@@ -327,6 +327,12 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * columns: its cache tables go (CACHE_TABLES, the ones a Force Resync's clearDB drops) and the sync reads it whole again.
  * Nothing in it is read or rewritten on the way: the node holds every row, and the phone reads them again. Identity, the
  * group keys with their verdicts and signers, and the tools' documents are not a copy of the node's and stay.
+ *
+ * The standing rule (the clean-slate cutover, DESIGN-clean-slate-cutover-fable.md §2 C1-C8): the schema in _doInitDB is
+ * the whole shape of a copy at this number, and nothing adds to a copy on open. A change to a cache table's columns or
+ * indexes raises the number, and every older copy is cleared and read again; never an ALTER TABLE on open, never a
+ * one-off pass keyed on a flag. A change to one of the five tables that are not a copy (GROUP_KEY_TABLES_SQL, TOOL_DOCS_TABLE)
+ * cannot be read again from the node: it is its own step, kept one build (a conversion-code row in the log), never this one.
  * 4 (1.4.0): money is whole hundredths of a Bean (DESIGN-atomic-beans-fable.md M2). Every money column is an INTEGER `*_c`,
  * as the node's are, so a copy that held Beans as REAL (`posts.credits`, `accounts.balance`, ...) is dropped, never converted.
  */
@@ -388,7 +394,10 @@ async function _doInitDB() {
             profile_updated_at DATETIME,
             -- Whole hundredths of a Bean, as every money column here (COPY_SCHEMA 4): the node's earnedCredit.
             earned_credit_c INTEGER DEFAULT 0,
-            archetype TEXT
+            archetype TEXT,
+            -- When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
+            -- past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
+            card_fetched_at TEXT
         );
 
         -- 2. Ledger Accounts & Transactions
@@ -550,8 +559,18 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             completed_at DATETIME,
             cover_image TEXT,
-            post_title TEXT
+            post_title TEXT,
+            rated_by_buyer INTEGER DEFAULT 0,
+            rated_by_seller INTEGER DEFAULT 0,
+            -- A period of a standing deal (DESIGN-standing-deals-fable §2.1): which one and its number, and on its current
+            -- period's row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
+            standing_id TEXT,
+            period_no INTEGER,
+            standing TEXT
         );
+        -- The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat names
+        -- it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
+        CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);
 
         -- 5. Messaging & Chat
         CREATE TABLE IF NOT EXISTS conversations (
@@ -565,8 +584,11 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_status TEXT,
             post_photo TEXT,
             post_price_c INTEGER,
-            request TEXT
+            request TEXT,
+            -- 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
+            listed INTEGER
         );
+        CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);
 
         CREATE TABLE IF NOT EXISTS conversation_participants (
             conversation_id TEXT,
@@ -584,7 +606,9 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             type TEXT DEFAULT 'text',
             system_type TEXT,
             metadata TEXT,
-            timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            -- Edit-message window: when the line was last edited (null = never edited).
+            edited_at DATETIME
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
@@ -638,286 +662,7 @@ ${TOOL_DOCS_TABLE}
     try {
         await database.execAsync(schema);
         console.log('[SQLite] Local database initialized physically 1:1 with Server node.');
-        
-        // Add photos column if not exists (for existing simulators)
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN photos TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-        
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN rated_by_buyer INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN rated_by_seller INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        try {
-            // Edit-message window: timestamp of the most recent edit (null = never edited)
-            await database.execAsync(`ALTER TABLE messages ADD COLUMN edited_at DATETIME;`);
-        } catch (e) {}
-        try {
-            await database.execAsync(`ALTER TABLE projects ADD COLUMN photos TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
 
-        // Add missing columns introduced in the State Engine patch
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN updated_at DATETIME;`);
-            console.log('[SQLite] Successfully added updated_at column');
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-        
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN origin_node TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-
-        // Add cover_image to marketplace_transactions
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN cover_image TEXT;`);
-        } catch (e) {}
-
-        // Add post caching columns to conversations table
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_title TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_status TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
-        // 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN listed INTEGER;`); } catch (e) {}
-
-        // Add post caching column to marketplace_transactions table
-        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
-        // A period of a standing deal (DESIGN-standing-deals-fable §2.1): which one and its number, and on its current period's
-        // row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
-        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN standing TEXT;`); } catch (e) {}
-
-        // Add audience scoping columns to posts table
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
-        // Dormant: nothing reads or writes target_archetypes any more (archetypes gate nothing).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
-
-        // Add price_type column if not exists
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed';`);
-        } catch (e) {}
-        // Add repeatable column if not exists
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN repeatable INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        // #108: a listing may also need cash for fuel/consumables. Flag only, no amount.
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        // Transaction Tracking Migrations
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_by TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_by_callsign TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pending_transaction_id TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN completed_at DATETIME;`); } catch (e) {}
-        // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
-        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
-        // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
-        // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
-        // shows its author's face with no card for them. The card's face wins where the phone holds one.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
-        // An enterprise's shop banner as its listing carried it (the node's `authorBannerUrl`, Pictures S6): the Market
-        // card's picture when the listing has none of its own (utils/market-card-picture.ts). A plain column, no default:
-        // a build from before it opens this table and writes past it.
-        // A copy from before the column holds its enterprises' listings without their banner, and the node sends a listing
-        // again only when it changes (since #2508 the photoless listings this serves are the older ones): such a copy is
-        // read whole once (review of #2565 at c05a9e37, blocking 2). Every cursor of the copy goes (syncCursorKeysOf), the
-        // held read and the checkpoint among them, so the read starts at its first page (#1719 B1), as a Force Resync's
-        // does, but nothing held is cleared. The cursors go before the column comes: an open cut off between the two finds
-        // the column still missing and forgets them again. A fresh copy has the column and no cursor to forget.
-        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'carried_banner')) {
-            // A sync cycle already under way read its cursor before this open (Android's background sync after an app
-            // update): a new copy generation makes it store nothing, so it cannot put back the cursor forgotten below
-            // (review of #2565 at f72b4204, as clearDB does).
-            newCopyGeneration();
-            try {
-                const file = dbFileOf.get(database);
-                const { syncCursorKeysOf } = await import('../services/pillar-sync');
-                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
-            } catch (e) {
-                console.warn('[SQLite] Could not forget the sync cursors of a copy from before carried_banner:', e);
-            }
-            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
-            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
-            try {
-                const { requestSync } = require('../services/pillar-sync');
-                requestSync().catch(() => {});
-            } catch (e) {}
-        }
-        // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
-        // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
-        // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
-        // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);`); } catch (e) {}
-        try { await database.execAsync(NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE); } catch (e) {}
-        // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
-        // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
-        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
-        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
-        // Profile sync: track when a profile was last updated for cache-busting
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
-        // The old vouch's "who vouched" column goes (the vouching reset, R0): nothing on this phone reads or writes it any
-        // more, and no index, trigger or view here names it. A build from before adds it back, empty, so a downgrade is safe.
-        try { await database.execAsync(`ALTER TABLE members DROP COLUMN elder_vouched_by;`); } catch (e) {}
-        // Community Working Style / Archetype signature
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN archetype TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_founding_needed INTEGER DEFAULT 1;`); } catch (e) {}
-        // #143 step 4: per-listing reach control for federation
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
-        // Community Polls migrations
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
-        // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
-        // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
-        // polls; NULL where it says nothing). The split by answer travels inside poll_options.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
-        // A member's copy of an event on the global community: its from-line as the node last said (@beanpool/core eventCopyOf).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN shown_from TEXT;`); } catch (e) {}
-        // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5). F2: posts.free_tags,
-        // the member's own tags, the node's JSON list as it stores it (DESIGN-tags-free-entry-fable.md §2). Either one missing, the
-        // copy holds none of them for listings that have not changed since, so the whole copy is read again.
-        const postColumns = (await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).map(c => c.name);
-        const missingTagColumns = ['tags', 'free_tags'].filter(column => !postColumns.includes(column));
-        if (missingTagColumns.length > 0) {
-            newCopyGeneration();
-            try {
-                const file = dbFileOf.get(database);
-                const { syncCursorKeysOf } = await import('../services/pillar-sync');
-                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
-            } catch (e) {
-                console.warn('[SQLite] Could not forget the sync cursors of a copy from before tags:', e);
-            }
-            for (const column of missingTagColumns) {
-                try { await database.execAsync(`ALTER TABLE posts ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`); } catch (e) {}
-            }
-            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
-            try {
-                const { requestSync } = require('../services/pillar-sync');
-                requestSync().catch(() => {});
-            } catch (e) {}
-        }
-        try {
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS poll_votes (
-                    post_id TEXT NOT NULL,
-                    voter_pubkey TEXT NOT NULL,
-                    option_id TEXT NOT NULL,
-                    signature TEXT,
-                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (post_id, voter_pubkey)
-                );
-                CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
-            `);
-        } catch (e) {}
-        // Events migrations (docs/events-on-the-map.md, slice 3)
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_place_name TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_state TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_going_count INTEGER DEFAULT 0;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_interested_count INTEGER DEFAULT 0;`); } catch (e) {}
-        // Event times (DESIGN-event-times amendment 1, item 3): the host's clock, its zone, online. Never the join link.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_local TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_local TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_tz TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_online INTEGER;`); } catch (e) {}
-        // A repeating event's pattern and last date (DESIGN-event-times §8), for the cached card's ↻ caption.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT;`); } catch (e) {}
-        // Lendable offers (S3): whether an Offer is lendable (tool store / lending)
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN lendable INTEGER DEFAULT 0;`); } catch (e) {}
-        // A pin (DESIGN-pinning-fable.md §2; apps/server engine/pins.ts): until when, and when made.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_until TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_at TEXT;`); } catch (e) {}
-        try {
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS event_rsvps (
-                    post_id TEXT NOT NULL,
-                    member_pubkey TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (post_id, member_pubkey)
-                );
-            `);
-        } catch (e) {}
-        // Ratings table migration for legacy setups where Schema wasn't ran
-        try { 
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS ratings (
-                    id TEXT PRIMARY KEY,
-                    target_pubkey TEXT NOT NULL,
-                    rater_pubkey TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    stars INTEGER NOT NULL CHECK(stars BETWEEN 1 AND 5),
-                    comment TEXT,
-                    transaction_id TEXT,
-                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    UNIQUE(rater_pubkey, transaction_id)
-                );
-            `);
-        } catch (e) {}
-        // Another member's reviews as the node last answered (getMemberRatings), for a phone whose schema ran before it.
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);`); } catch (e) {}
-        // The tools' documents (tools/schema.ts), for a phone whose schema ran before them.
-        try { await database.execAsync(TOOL_DOCS_TABLE); } catch (e) {}
-
-        // Force full synchronization once to populate new columns
-        AsyncStorage.getItem('bp_trust_sync_v3').then(async (val) => {
-            if (!val) {
-                console.log('[SQLite] Forcing full sync for unified trust system migration.');
-                await AsyncStorage.setItem('bp_trust_sync_v3', 'true');
-                await AsyncStorage.removeItem('pillar_sync_members_last_sync');
-                try {
-                    const keys = await AsyncStorage.getAllKeys();
-                    const syncKeys = keys.filter(k => k.startsWith('pillar_sync_') && (k.endsWith('_last-sync') || k.endsWith('_members_last_sync')));
-                    for (const k of syncKeys) {
-                        await AsyncStorage.removeItem(k);
-                    }
-                } catch (e) {}
-                // Trigger sync immediately in the background
-                try {
-                    const { requestSync } = require('../services/pillar-sync');
-                    requestSync().catch(() => {});
-                } catch (e) {}
-            }
-        });
-        // Client-side consolidation cleanup: one-time migration to remove legacy un-migrated post-keyed threads
-        try {
-            const postCleanupKey = 'bp_legacy_post_conv_cleaned_v1';
-            const alreadyCleaned = await AsyncStorage.getItem(postCleanupKey);
-            if (!alreadyCleaned) {
-                await database.execAsync(`
-                    DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
-                    DELETE FROM conversation_participants WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
-                    DELETE FROM conversations WHERE post_id IS NOT NULL AND type != 'dm';
-                    UPDATE conversations SET post_id = NULL WHERE type = 'dm' AND post_id IS NOT NULL;
-                `);
-                await AsyncStorage.setItem(postCleanupKey, 'true');
-                console.log('[SQLite] Local legacy post-keyed conversations pruned successfully.');
-            }
-        } catch (cleanupErr) {
-            console.error('[SQLite] Failed to clean up legacy conversations locally:', cleanupErr);
-        }
         // A copy cleared for being below the schema number (above): read it whole now rather than at the next timer.
         if (copyBelowSchema) {
             try {

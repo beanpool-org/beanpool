@@ -854,3 +854,16 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         }
     });
 });
+
+describe("the member's balance on the Ledger is whole hundredths, written as every figure is (M2)", () => {
+    /** The hero's balance as drawn: the figure beside "BEANS" in the header's balance (the bean icon's space trimmed). */
+    const heroBalance = () => spanSaying('BEANS')?.parentElement?.textContent?.replace(/BEANS$/, '').trim() ?? null;
+
+    it.each([
+        [1, '+0.01'], [100, '+1'], [4925, '+49.25'], [-982, '−9.82'], [50000, '+500'], [0, '+0'], [123456, '+1,234.56'],
+    ])('balance_c %i reads %s', async (balance_c, shown) => {
+        ledger.balance = { ...RESIDENT, balance_c, frozen: false, knownFrozen: false };
+        await renderIn('en');
+        expect(heroBalance()).toBe(shown);
+    });
+});

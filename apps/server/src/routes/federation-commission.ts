@@ -183,7 +183,7 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         // 5. THE AMOUNT. Defaults to the listing's own price, which is the normal case — a keeper pressing
         //    "commission" on a card. An explicit amount is accepted for an hourly or negotiated listing, the
         //    same latitude an ordinary purchase has, and is bounded by the allowance either way.
-        const amount = body.amount_c === undefined ? Number(listing.credits) : Number(body.amount_c);
+        const amount = body.amount_c === undefined ? Number(listing.price_c) : Number(body.amount_c);
         if (!Number.isFinite(amount) || amount <= 0) {
             ctx.status = 400;
             ctx.body = { error: 'amount must be a positive number' };

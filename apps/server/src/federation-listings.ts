@@ -47,7 +47,8 @@ export interface RemoteListing {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    /** The price, whole hundredths of a Bean. */
+    price_c: number;
     priceType: string;
     /** The seller. Needed to start a cross-node purchase — it is the `sellerPublicKey` of step 1's route. */
     authorPublicKey: string;
@@ -116,7 +117,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
             category: row.category,
             title: row.title,
             description: row.description,
-            credits: row.credits,
+            price_c: row.price_c,
             priceType: row.price_type ?? 'fixed',
             authorPublicKey: row.author_pubkey,
             authorCallsign: row.author_callsign,
@@ -192,7 +193,7 @@ export function cacheRemoteListings(
                 // compose form's own rule is `Number(credits) < 0` → invalid, so a local member may post at
                 // zero — a gift, or "ask me" — and refusing that from a peer would hold their members to a
                 // stricter rule than ours. A negative price is nonsense in either community.
-                || !Number.isFinite(Number(l.credits)) || Number(l.credits) < 0) {
+                || !Number.isSafeInteger(l.price_c) || l.price_c < 0) {
                 dropped++;
                 continue;
             }
@@ -243,7 +244,7 @@ export function cacheRemoteListings(
                     category,
                     title,
                     description,
-                    Number(l.credits),
+                    l.price_c,
                     typeof l.priceType === 'string' ? l.priceType : 'fixed',
                     l.authorPublicKey,
                     typeof l.createdAt === 'string' ? l.createdAt : new Date(0).toISOString(),

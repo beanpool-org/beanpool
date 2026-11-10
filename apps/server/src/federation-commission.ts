@@ -279,7 +279,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
  * restores it: the commission would spend the Commons on a listing waiting for review. The keeper is never its
  * author (it is a peer's member's), so there is no author exception.
  */
-export function originOfCachedPost(postId: string): { originNode: string; authorPublicKey: string; credits: number; title: string } | null {
+export function originOfCachedPost(postId: string): { originNode: string; authorPublicKey: string; price_c: number; title: string } | null {
     if (!postId) return null;
     const row = db.prepare(`
         SELECT origin_node, author_pubkey, price_c, title
@@ -291,7 +291,7 @@ export function originOfCachedPost(postId: string): { originNode: string; author
     return {
         originNode: row.origin_node,
         authorPublicKey: row.author_pubkey,
-        credits: row.credits,
+        price_c: row.price_c,
         title: row.title,
     };
 }

@@ -37,7 +37,7 @@
  * conservingTransaction. One plain db.transaction; its one read of a balance is the giver's own, for their debt.
  */
 import crypto from 'node:crypto';
-import { word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
+import { formatHundredths, word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey, getBalance, getMemberTrustProfile } from '../state-engine.js';
 import { creditCap } from '@beanpool/engine';
@@ -70,14 +70,16 @@ export const CREDIT_GIFT_WORDS = {
     noticeTitle: word('Part of a credit line, for you'),
 } as const;
 
-const overSetting = (max: number) => tr('You can give up to {max} Beans of your credit line at once here.', { max });
-const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.', { room, amount });
-const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free });
+/** A figure (whole hundredths) in these English words. */
+const B = (c: number) => formatHundredths(c, 'en');
+const overSetting = (max: number) => tr('You can give up to {max} Beans of your credit line at once here.', { max: B(max) });
+const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.', { room: B(room), amount: B(amount) });
+const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free: B(free) });
 const notReceiving = (name: string) => tr('@{name} can’t be given part of a credit line right now.', { name });
-const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap });
+const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap: B(cap) });
 const backToRoot = (name: string) => tr('The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.', { name });
-const partBackToRoot = (name: string, most: number) => tr('Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.', { name, most });
-const noticeBody = (name: string, amount: number) => tr('@{name} gave you {amount} Beans of their credit line. It’s yours for good.', { name, amount });
+const partBackToRoot = (name: string, most: number) => tr('Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.', { name, most: B(most) });
+const noticeBody = (name: string, amount: number) => tr('@{name} gave you {amount} Beans of their credit line. It’s yours for good.', { name, amount: B(amount) });
 
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomBytes(16).toString('hex');

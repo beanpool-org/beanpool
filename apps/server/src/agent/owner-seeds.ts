@@ -28,6 +28,7 @@
  *   the app, never removed here.
  * - Member-written text read back (a group's name) is fenced, as every read's.
  */
+import { assistantBeansOf, hundredthsFromAssistantBeans } from '../money-body.js';
 import { approximateLocation, GROUP_CATEGORIES, GROUP_CATEGORY_LABELS, JOIN_POLICIES, replaceLoneSurrogates } from '@beanpool/core';
 import { db, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
 import { createGroup, createPost, createTreasury, getActingMember } from '../state-engine.js';
@@ -161,8 +162,9 @@ async function createGroupPost(grant: AgentGrant, args: Record<string, unknown>)
     if (args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
     const category = (args.category as string).trim();
     if (!AGENT_POST_CATEGORIES.includes(category)) return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
-    const credits = num(args.beans) ?? 0;
-    if (credits < 0) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more.' };
+    // The assistant gives Beans; the node keeps whole hundredths (money-body.ts): a figure finer than a cent is refused.
+    const credits = args.beans === undefined ? 0 : hundredthsFromAssistantBeans(args.beans);
+    if (credits === null) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more, to the cent.' };
     const groupId = (args.group_id as string).trim().slice(0, 200);
     const tagged = heldTags(args);
     if (!tagged.ok) return tagged;

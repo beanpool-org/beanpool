@@ -54,7 +54,7 @@
 import crypto from 'node:crypto';
 import {
     VOUCH_MAX, VOUCHES_PER_PERSON, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_DEFAULT, MEMBER_GIFT_DEFAULT, VOUCH_PRESETS,
-    isVouchPreset, isOwnerVouchPreset, isBudgetLevel, isMemberGiftSetting, vouchPresetsFor, vouchMaxFor, personVouchMax, word, wordsFor,
+    isVouchPreset, isOwnerVouchPreset, isBudgetLevel, isMemberGiftSetting, vouchPresetsFor, vouchMaxFor, personVouchMax, word, wordsFor, formatHundredths,
 } from '@beanpool/core';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -114,26 +114,28 @@ export const VOUCHER_WORDS = {
     noticeStopped: word('Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.'),
 } as const;
 
-const notEnough = (left: number, amount: number) => tr('You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.', { left, amount });
+/** A figure (whole hundredths) in these English words. */
+const B = (c: number) => formatHundredths(c, 'en');
+const notEnough = (left: number, amount: number) => tr('You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.', { left: B(left), amount: B(amount) });
 const alreadyVouched = (name: string) => tr('You’ve already vouched for @{name}.', { name });
 const threeVouches = (name: string) => tr('@{name} has three vouches.', { name });
 const belowZero = (name: string) => tr('@{name} is below zero: a credit-line gift or a Decision can help.', { name });
 const noVouchYet = (name: string) => tr('You haven’t vouched for @{name} yet, so there is no vouch to raise.', { name });
-const overMax = (name: string, total: number, max: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max, total });
-const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total, max });
+const overMax = (name: string, total: number, max: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max: B(max), total: B(total) });
+const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total: B(total), max: B(max) });
 const alreadyVoucher = (name: string) => tr('@{name} is a voucher already.', { name });
 const notVoucher = (name: string) => tr('@{name} isn’t a voucher.', { name });
 const roleVoucher = (name: string) => tr('@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.', { name });
 const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.', { name });
 const ownerNoLimit = (name: string) => tr('@{name} is an owner: owners vouch with no limit, so there is no budget to set.', { name });
-const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held });
-const overCeiling = () => tr('A voucher has at most {max} Beans in hand, left and held together.', { max: VOUCHER_BUDGET_MAX });
-const openDebt = (amount: number) => tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount });
+const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held: B(held) });
+const overCeiling = () => tr('A voucher has at most {max} Beans in hand, left and held together.', { max: B(VOUCHER_BUDGET_MAX) });
+const openDebt = (amount: number) => tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: B(amount) });
 const raisePaused = (name: string) => tr('@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.', { name });
 const raiseFrozen = (name: string) => tr('@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.', { name });
-const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level, max: VOUCH_MAX });
-const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level, left });
-const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level, left });
+const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level: B(level), max: B(VOUCH_MAX) });
+const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
+const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
 
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomBytes(16).toString('hex');

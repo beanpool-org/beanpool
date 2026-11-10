@@ -4,7 +4,7 @@
  * for it (the old `amount`, 20.5, "2000", 0, a negative) is answered 400 `amount_c_required`, before anything is read or
  * moved, so an app from before whole hundredths is told plainly rather than sending a figure 100 times too small.
  */
-import { isHundredths } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths, parseHundredths } from '@beanpool/core';
 import { word } from '@beanpool/core';
 
 /** The refusal's code, for the apps to recognise (`{ error, code }`). */
@@ -39,4 +39,20 @@ export function optionalHundredthsOf(body: unknown, key: string): { ok: true; va
     const v = body && typeof body === 'object' ? (body as Record<string, unknown>)[key] : undefined;
     if (v === undefined || v === null) return { ok: true, value: v as null | undefined };
     return isHundredths(v) && v >= 0 ? { ok: true, value: v } : { ok: false };
+}
+
+/**
+ * A price an owner's AI assistant gives in Beans (its tools speak Beans, agent/owner-posts.ts): a JSON number, 0 or more,
+ * read as whole hundredths by the same string work a member's typed amount is (core parseHundredths), so 12.5 is 1250 and
+ * a figure finer than a cent (0.1 + 0.2) is refused, never rounded. Null for anything else.
+ */
+export function hundredthsFromAssistantBeans(v: unknown): number | null {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+    const read = parseHundredths(String(v), 'en');
+    return read.ok ? read.value : null;
+}
+
+/** A price as an owner's AI assistant reads it back: Beans, a JSON number (hundredthsAsDecimalText: "49.25" is 49.25). */
+export function assistantBeansOf(c: unknown): number | null {
+    return isHundredths(c) ? Number(hundredthsAsDecimalText(c)) : null;
 }

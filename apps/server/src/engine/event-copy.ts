@@ -120,7 +120,7 @@ export function copyBody<T extends Record<string, any>>(body: T): T {
     const place = { lat: rounded(body.lat), lng: rounded(body.lng) };
     if (body.type === 'event') return { ...body, ...place, eventPlaceName: undefined, eventPrivateNote: undefined, eventLink: undefined, eventHostLetsIn: false };
     if (!isListing(body.type)) return body;
-    const kept: Record<string, any> = { ...body, ...place, credits: 0, priceType: 'fixed' };
+    const kept: Record<string, any> = { ...body, ...place, price_c: 0, priceType: 'fixed' };
     for (const field of NEVER_ON_A_COPY) delete kept[field];
     return kept as T;
 }
@@ -130,7 +130,7 @@ export function copyBody<T extends Record<string, any>>(body: T): T {
  * create's is; `credits` and the rest of a deal never move.
  */
 export function copyUpdates(updates: Record<string, any>): void {
-    for (const field of ['eventPlaceName', 'eventPrivateNote', 'eventLink', 'eventHostLetsIn', 'eventOnline', 'credits', 'priceType', 'audienceScope', ...NEVER_ON_A_COPY]) delete updates[field];
+    for (const field of ['eventPlaceName', 'eventPrivateNote', 'eventLink', 'eventHostLetsIn', 'eventOnline', 'price_c', 'priceType', 'audienceScope', ...NEVER_ON_A_COPY]) delete updates[field];
     if (updates.lat !== undefined) updates.lat = rounded(updates.lat);
     if (updates.lng !== undefined) updates.lng = rounded(updates.lng);
     if (updates.shownPrice !== undefined) updates.shownPrice = storedPrice(updates.shownPrice);

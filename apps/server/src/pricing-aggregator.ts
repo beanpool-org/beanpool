@@ -69,7 +69,7 @@ export function runPricingAggregationCycle(): {
     const parsedPosts = posts.map(p => ({
         id: p.id,
         category: p.category,
-        credits: p.credits,
+        price_c: p.price_c,
         hasPhoto: Boolean(p.has_photo),
         tokens: new Set(tokenize(`${p.title} ${p.description}`)),
         text: `${p.title} ${p.description}`.toLowerCase(),
@@ -111,7 +111,7 @@ export function runPricingAggregationCycle(): {
                 const titleTokenMatch = categoryMatch && nameTokens.some(t => t.length >= 4 && post.tokens.has(t));
 
                 if (post.text.includes(nameLower) || (categoryMatch && matchScore >= 2) || titleTokenMatch) {
-                    matchedPrices.push(post.credits);
+                    matchedPrices.push(post.price_c);
                     if (post.hasPhoto && !latestPhotoUrl) {
                         latestPhotoUrl = `/api/marketplace/posts/${post.id}/photos/0`;
                     }

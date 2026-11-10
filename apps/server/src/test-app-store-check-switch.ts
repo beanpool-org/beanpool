@@ -86,13 +86,13 @@ async function main() {
     __resetAppStoreVersionsForTest();
     const before = outside.length;
     const said: string[] = [];
-    const realWarn = logger.warn.bind(logger);
-    (logger as any).warn = (cat: string, msg: string, ...rest: unknown[]) => { said.push(String(msg)); return (realWarn as any)(cat, msg, ...rest); };
+    const realWarn = logger.warn;
+    logger.warn = (category, message, metadata) => { said.push(String(message)); return realWarn(category, message, metadata); };
     let armed: number[];
     try {
         armed = timersArmedBy(() => initAppStoreVersionChecks());
     } finally {
-        (logger as any).warn = realWarn;
+        logger.warn = realWarn;
     }
     assert(armed.length === 0, `the boot's lookup arms no timer (${armed.length ? `armed ${armed.join(', ')} ms` : 'none'})`);
     // The floor in .env below the built-in one (#3047's deciding review, finding 2): ignored, and the start says so, once.

@@ -73,7 +73,7 @@ import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
-    type ShopCounts, type TourRecord,
+    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -1449,7 +1449,9 @@ function communityCard(c: Ctx): HomeCards['community'] {
  * author): no host on holiday, no paused or winding-up enterprise (second review of #2416), and a copy counted whoever
  * wrote it (engine/event-copy.ts); and where Beans are on the
  * Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so the 1.5% a trade between any two members
- * pays in, or a circulation fee, moves nobody else's Home (its tag) until the pot moves by a Bean.
+ * pays in, or a circulation fee, moves nobody else's Home (its tag) until the pot moves by a Bean. Sent as hundredths
+ * (commonsPot_c) that are always whole Beans: the pot's figure with its hundredths dropped, toward zero, so the card
+ * never says the pot holds more than it does.
  */
 function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCards['community']>, 'joined7d' | 'eventsSoon' | 'commonsPot_c'> {
     const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members
@@ -1462,7 +1464,7 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
                                        AND COALESCE(event_state, '') != 'cancelled'
                                        AND (${UNNAMED_COPY_SQL} OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
                                             AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
-    return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot_c: commonsBalance } : {}) };
+    return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot_c: commonsBalance - (commonsBalance % HUNDREDTHS_PER_BEAN) } : {}) };
 }
 
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────

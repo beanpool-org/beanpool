@@ -33,7 +33,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, WHOLE_CENTS_ERROR, takeVouchResetReport } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, takeVouchResetReport } from './db/db.js';
 import { countsLine } from './db/vouch-reset.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
@@ -42,6 +42,7 @@ import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT } from './money-body.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
@@ -6057,7 +6058,7 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
                         const txn = moveToCommons(
                             enterprisePubkey,
                             excess,
-                            `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
+                            `Surplus swept to Commons above working capital ceiling (${formatHundredths(ceiling, 'en')} Beans)`
                         );
                         db.prepare('UPDATE members SET earned_surplus_c = MAX(0, COALESCE(earned_surplus_c, 0) - ?) WHERE public_key = ?')
                             .run(excess, enterprisePubkey);
@@ -6187,9 +6188,10 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error(word('Only an active member pays the Commons.')), { status: 403 });
     }
-    // Whole hundredths, at least one (the wire's amount_c): a float, a string, 0 or a negative is refused.
+    // Whole hundredths, at least one (the wire's amount_c): a float, a string, 0, a negative or the old `amount` (which
+    // leaves amount_c undefined) is refused as every money body is, 400 amount_c_required (money-body.ts).
     if (!isHundredths(amount) || amount < 1) {
-        throw Object.assign(new Error(WHOLE_CENTS_ERROR), { status: 400 });
+        throw Object.assign(new Error(AMOUNT_C_REQUIRED_TEXT), { status: 400, code: AMOUNT_C_REQUIRED });
     }
     const beans = amount;
     const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);

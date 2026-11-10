@@ -858,6 +858,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them,
+        // refused as the member route refuses it, never listed at 0 (Free).
+        if ('credits' in b) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
@@ -876,6 +879,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them,
+        // refused as the member route refuses it, never listed at 0 (Free).
+        if ('credits' in b) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
@@ -896,6 +902,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them,
+        // refused as the member route refuses it, never listed at 0 (Free).
+        if ('credits' in b) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         // An Offer put in its shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
         const category = b.category || newListingCategory(b.shopId);
         if (!b.title || !category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
@@ -935,6 +944,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them,
+        // refused as the member route refuses it, never listed at 0 (Free).
+        if ('credits' in b) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {

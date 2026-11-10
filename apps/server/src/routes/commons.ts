@@ -39,7 +39,7 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
-import { requirePositiveHundredths } from '../money-body.js';
+import { AMOUNT_C_REQUIRED, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
 import { isHundredths, isPastDeadline, word } from '@beanpool/core';
@@ -65,7 +65,7 @@ router.post('/api/commons/pay', async (ctx) => {
         ctx.body = payToCommons(actor, amount_c, debtId, requestId);
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;
-        ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
+        ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE || e?.code === AMOUNT_C_REQUIRED ? { code: e.code } : {}) };
     }
 });
 

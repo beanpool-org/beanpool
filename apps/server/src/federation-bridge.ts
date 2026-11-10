@@ -26,7 +26,7 @@
 
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
-import { bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
+import { bridgeAccountId, peerFromBridgeAccountId, formatHundredths } from '@beanpool/core';
 import { getConnectorCreditCap, getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import { reservedAgainstPeer } from './federation-settlement-state.js';
 
@@ -162,7 +162,7 @@ export function settlementCapacity(
             cap,
             extended: extended,
             headroom: 0,
-            message: `This community has reached the credit limit set for them (${extended} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
+            message: `This community has reached the credit limit set for them (${formatHundredths(extended, 'en')} of ${formatHundredths(cap, 'en')} Beans). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
         };
     }
 

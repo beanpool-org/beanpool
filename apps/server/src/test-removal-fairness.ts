@@ -32,7 +32,7 @@
  *     stopped before it closed) can't pause them again for 90 days, by the route or through a report, and nothing is
  *     written; another admin can; a removal the community passed and an admin halted in its grace window doesn't count;
  *     after 90 days it lifts; with votes off it doesn't apply.
- *  7. The upgrade: a decisions table from before gains the eight columns, every row kept.
+ *  7. (The upgrade of a decisions table from before 1.2.32 went with the 1.4.0 gate: db/schema-gate.ts.)
  *  8. A reply that harms someone is taken down (the deciding review of #2585): an owner or admin takes it down with a public
  *     reason; never a moderator, a member, a short reason, a vote with no reply, nor twice. Its words are gone from every
  *     read: Decide's list and the vote itself (to a voter, the member it names, and the member), a member's open app, Home,
@@ -56,8 +56,6 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, reportKind } from '@beanpool/core';
 
@@ -172,8 +170,7 @@ async function main() {
     const de = await import('./decisions-engine.js');
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { db, addRemovalCaseColumns, REMOVAL_CASE_COLUMNS } = await import('./db/db.js');
-    const { createTableText } = await import('./db/table-rules.js');
+    const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
@@ -662,28 +659,6 @@ async function main() {
     }
     fresh();
     await admin(`/api/local/admin/users/${hal.pubKeyHex}/status`, adaSession, { status: 'active' });
-
-    // ── 7. The upgrade ──────────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n7. The upgrade');
-    const schemaSql = fs.readFileSync(new URL('./db/schema.sql', import.meta.url), 'utf8');
-    const newColumns = new Set(REMOVAL_CASE_COLUMNS.map(([c]) => c));
-    const olderTable = createTableText(schemaSql, 'decisions')!.split('\n')
-        .filter(l => !newColumns.has(l.trim().split(/\s+/)[0]) && !l.trim().startsWith('--')).join('\n');
-    const older = new Database(':memory:');
-    older.pragma('foreign_keys = OFF'); // as db.ts runs it
-    older.exec(olderTable);
-    older.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, closes_at)
-        VALUES ('old-1', 'SYSTEM', 'Remove Old?', 'An admin paused Old.', 'member', 'remove_member', 'pk-old', '{"rule":2}', '1m1v', 'open', '2026-11-01T00:00:00.000Z')`).run();
-    const hadBefore = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
-    const added = addRemovalCaseColumns(older);
-    const hasAfter = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
-    const oldRow = older.prepare('SELECT * FROM decisions WHERE id = ?').get('old-1') as any;
-    assert(!hadBefore.some(c => newColumns.has(c)) && added === newColumns.size && [...newColumns].every(c => hasAfter.includes(c)),
-        `a table from before gains the ${newColumns.size} columns (${added} added)`);
-    assert(oldRow?.title === 'Remove Old?' && oldRow.status === 'open' && oldRow.subject_reply === null && oldRow.case_hidden_at === null && oldRow.reply_hidden_at === null,
-        'its rows are kept, NULL in each');
-    assert(addRemovalCaseColumns(older) === 0, 'a second boot adds nothing');
-    older.close();
 
     // ── 8. A reply taken down ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n8. A reply that harms someone is taken down, with a public reason');

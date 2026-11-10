@@ -33,8 +33,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, takeVouchResetReport } from './db/db.js';
-import { countsLine } from './db/vouch-reset.js';
+import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -739,29 +738,10 @@ const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
-/**
- * The vouching reset's one system_logs line and the owners' alert (db/vouch-reset.ts, R0), when this boot reset anything:
- * the counts it read before writing, and the rows it changed. Numbers only. Never throws: a boot that reset is a boot.
- */
-function reportVouchResetAtBoot(): void {
-    const r = takeVouchResetReport();
-    if (!r) return;
-    try {
-        const line = `Vouching reset: old vouching is off on this node. Counted first: ${countsLine(r.counts)}. `
-            + `${r.membersReset} member row(s) turned off, ${r.invitesDeleted} unused invite(s) that promised a vouch deleted, `
-            + `and the four vouch columns dropped.`;
-        logger.info('SYS', line, { ...r.counts, membersReset: r.membersReset, invitesDeleted: r.invitesDeleted });
-        void import('./services/alerts.js').then((alerts) => alerts.raiseOnce('reset.vouching', line)).catch(() => { });
-    } catch (e) {
-        console.error('[Boot] Could not log the vouching reset:', e);
-    }
-}
-
 export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
-    reportVouchResetAtBoot();
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);

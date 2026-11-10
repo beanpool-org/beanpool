@@ -3,18 +3,16 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
-import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
-import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
-import { addDecisionScope } from './decision-scope-migration.js';
-import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, formatHundredths, isHundredths, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
-import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { avatarUrlOf, formatHundredths, isHundredths, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
+import { registerGeoFunctions, installNameFold, foldName, projectRowName, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
-import { resetVouching, type VouchResetReport } from './vouch-reset.js';
 import { runHundredthsStep, hundredthsStepLogLine } from './hundredths-step.js';
+import { readSchemaGate, writeSchemaStamp } from './schema-gate.js';
+import { getVersion } from '../version.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from '../engine/photo-upload-budget.js';
@@ -40,52 +38,11 @@ export const db: Database.Database = new Database(DB_PATH);
 // and this is the one connection that runs the listing; the read-only handles opened on backups and snapshots never do.
 registerGeoFunctions(db);
 // `name_fold`, the one rule by which two member names are the same name, and the TEMP triggers that write callsign_fold
-// from it (names.ts in the engine); a database from before the column gets them in migrateCallsignFold.
+// from it (names.ts in the engine), on this connection: TEMP, never in the file, so no writer here can forget the fold
+// and an older image or the sqlite3 shell never meets a function it doesn't have (#1956).
 installNameFold(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
-
-/**
- * Names in any alphabet (#1956). `callsign_fold` is `foldName(callsign)` (the engine's names.ts), the one rule by which two
- * names are the same name. The lower(callsign) index above folds A–Z only, so "Олег" typed as stored matched nothing.
- *
- * Two TEMP triggers write it, on INSERT and on any UPDATE OF callsign (an upsert included), on each connection that
- * installs them (the engine's installNameFold: this one, and the two command-line tools that write members), so no writer
- * there can forget it: a standby's import and a key move are inserts like any other. TEMP, never in the file: a stored
- * trigger calling `name_fold` made the previous image crash at boot after a rollback, and the sqlite3 shell unable to add
- * a member (deciding review of #1956, B1), so the ones an earlier build of this PR stored are dropped here. A handle
- * without them (an older image, the shell) writes members as before, leaving the fold NULL or stale; every boot re-folds
- * each row whose fold differs, which repairs those, carries a change of the rule to every row, and fills a node from
- * before this column. That UPDATE names no column of members_touch_updated_at, so it stamps nothing and sends nothing to
- * a standby (each server makes its own; replication-manifest.ts). Reads bind foldName(x) from JS, never name_fold(?).
- *
- * The index is NOT unique, on purpose. A node may already hold two members whose names fold the same ("Олег" and
- * "олег", both allowed before this): both are kept, neither is renamed, boot goes on, and one line per such name tells
- * the operator. A unique index would fail to build there, and on a standby it would refuse the copy of that pair.
- * isCallsignAvailable (engine/members.ts) refuses a new one at registration and at a member's rename, and better-sqlite3
- * runs them one at a time. The other writers of a name take the same rule: a project's row at its create and at each title
- * edit (the engine's projectRowName), and a visitor's row, whose name from a peer is kept only while free (engine/members.ts
- * writeVisitorRow) (review of #1956, N3). A standby's import writes its main server's names as they are.
- */
-export function migrateCallsignFold(conn: Database.Database): void {
-    try {
-        const has = conn.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'callsign_fold'`).get();
-        if (!has) conn.prepare(`ALTER TABLE members ADD COLUMN callsign_fold TEXT`).run();
-        conn.exec(`DROP TRIGGER IF EXISTS main.members_callsign_fold_insert; DROP TRIGGER IF EXISTS main.members_callsign_fold_rename;`);
-        installNameFold(conn);
-        conn.prepare(`UPDATE members SET callsign_fold = name_fold(callsign) WHERE callsign_fold IS NOT name_fold(callsign)`).run();
-        conn.prepare(`CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned')`).run();
-        const clashes = conn.prepare(`SELECT json_group_array(callsign) AS names, count(*) AS n FROM members
-            WHERE status NOT IN ('migrated', 'pruned') AND callsign_fold IS NOT NULL
-            GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
-        for (const c of clashes) {
-            const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
-            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, the web restore lists each of them and restores the one chosen; the phone restores the one with a sign-in copy, and refuses when both have one; their 12 words still work.`);
-        }
-    } catch (e) {
-        console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);
-    }
-}
 
 let postCommitDepth = 0;
 const postCommitBatchOver: (() => void)[] = [];
@@ -315,48 +272,6 @@ export function deletePlainRows(table: string, where: string, ...args: unknown[]
 }
 
 /**
- * event_reminders_sent keyed on the date too (DESIGN-event-times §8): a repeating event reminds its regulars once per date,
- * where the old key (post, member, offset) let the first week's mark block every later week's. SQLite cannot change a
- * table's key in place, so a table of the old shape is rebuilt, before the schema.sql exec (which then finds it as it
- * writes it). Each old mark is for the date its event has now, so nothing already sent is sent again. Its touch triggers
- * go with the old table; stampPlainTables makes them again after the exec. Foreign keys are off on this database, and
- * `legacy_alter_table` is on for the rename, as repackGroups has them. Once rebuilt, every later boot finds the column and
- * does nothing.
- */
-function rekeyReminderMarksByOccurrence(): void {
-    const cols = db.prepare(`SELECT name FROM pragma_table_info('event_reminders_sent')`).all() as { name: string }[];
-    if (cols.length === 0 || cols.some((c) => c.name === 'occurrence_at')) return;
-    const hasUpdatedAt = cols.some((c) => c.name === 'updated_at');
-    db.pragma('legacy_alter_table = ON');
-    try {
-        db.transaction(() => {
-            db.exec(`
-                DROP TABLE IF EXISTS event_reminders_sent_by_date;
-                CREATE TABLE event_reminders_sent_by_date (
-                    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-                    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                    offset_min INTEGER NOT NULL,
-                    occurrence_at TEXT NOT NULL DEFAULT '',
-                    sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (post_id, member_pubkey, offset_min, occurrence_at)
-                );
-                INSERT INTO event_reminders_sent_by_date (post_id, member_pubkey, offset_min, occurrence_at, sent_at, updated_at)
-                    SELECT s.post_id, s.member_pubkey, s.offset_min,
-                           COALESCE((SELECT p.event_start_at FROM posts p WHERE p.id = s.post_id), ''),
-                           s.sent_at, ${hasUpdatedAt ? 's.updated_at' : 'NULL'}
-                      FROM event_reminders_sent s;
-                DROP TABLE event_reminders_sent;
-                ALTER TABLE event_reminders_sent_by_date RENAME TO event_reminders_sent;
-            `);
-        })();
-    } finally {
-        db.pragma('legacy_alter_table = OFF');
-    }
-    console.log('[DB] event_reminders_sent is keyed on the date too (repeating events)');
-}
-
-/**
  * A person's row with no record of joining (members.is_visitor, markExistingVisitors). Every way in writes one: an
  * invite and an offline ticket write the inviter's key into `invited_by` and the code into `invite_code` (and use the
  * code, `invite_codes.used_by`), the open door `open:<provider>` and an `open_joins` row, the genesis member `genesis`,
@@ -473,103 +388,6 @@ export function markExistingVisitors(): void {
     }
 }
 
-/** node_config: members.board_standing_changed_at has been filled on the rows this node held when it came in. */
-const BOARD_STANDING_FILLED = 'migration_board_standing_v1';
-
-/**
- * Fills members.board_standing_changed_at once, on the rows a node holds when it gains the column (node_config
- * `migration_board_standing_v1`, written in the same transaction, so a crash leaves it to run again). The Market delta
- * reads it where it read updated_at before (engine posts.ts getPosts), and the phones already hold cursors, so the first
- * delta after the upgrade has to carry every author a phone still has to hear about:
- *   - A member off the board now (on holiday, or an enterprise paused, winding up or wound up): the upgrade's time, so
- *     every phone's next delta carries their listings, as paused, whatever its cursor. That includes a phone that synced
- *     past the switch on a node from before the delta read the author's row at all (#1238), which holds them live.
- *     It tells a reader nothing the sync read doesn't already say: that those listings are off the board.
- *   - Everyone else: nothing (NULL), so no delta carries them until their standing next changes. Filling their
- *     updated_at instead would publish, for good, when each one's row last changed before the upgrade (a bio, a
- *     contact, a moderator's mute), readable by bisecting `updatedAfter`: exactly what this column exists to stop, and
- *     on a node from before #1238 (both live communities) never exposed until then (#1250's review, 4115438316). On such
- *     a node no phone ever masked anyone, so there is nothing to undo. The one cost: a phone that synced against a #1238
- *     build and holds a member masked who came back on the board before the upgrade keeps them masked until one of
- *     their listings next changes (only the test node ran #1238).
- * A fresh install fills nothing and writes the marker. A standby fills its own copy the same way (a whole copy of its
- * main server's then brings the main server's value, engine/sync.ts's member import).
- */
-function backfillBoardStanding(): void {
-    try {
-        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(BOARD_STANDING_FILLED)) return;
-        db.transaction(() => {
-            const filled = db.prepare(`
-                UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                WHERE board_standing_changed_at IS NULL
-                  AND (public_key IN (${ON_HOLIDAY_SQL})
-                    OR public_key IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL})))
-            `).run().changes;
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(BOARD_STANDING_FILLED);
-            if (filled > 0) console.log(`[DB] Board standing filled on ${filled} member row(s)`);
-        })();
-    } catch (e) {
-        // Nothing is filled and the marker isn't written, so the next boot tries again. Until then the delta carries no
-        // author for their standing, and their listings reach a phone only when they change themselves.
-        console.error('[DB] ❌ Could not fill board standing:', e);
-    }
-}
-
-/**
- * The board leaves a paused account's listings out ('disabled' in engine posts.ts ENTERPRISE_ON_BOARD_SQL, removal by vote
- * S1), and two objects in the file hold that rule's own expression, which CREATE … IF NOT EXISTS keeps as a node has them:
- * idx_members_off_board, from which the area set reads its off-board authors only while the two expressions match, and
- * members_touch_board_standing, which moves a member's board standing when the rule's answer for them changes. Before the
- * schema exec, each in its older shape is dropped, keyed on its own text as posts_au's replacement is, and the exec makes
- * it again; every later boot finds the new one and does nothing. An older image booted back on the data keeps both (its
- * own CREATE … IF NOT EXISTS is a no-op): its board's answers are the same, its area set reads them without the index,
- * and the trigger stamps a standing on a pause it doesn't read, which costs a delta that carries those listings as they
- * are.
- */
-function replaceOffBoardShapes(): void {
-    for (const [type, name] of [['index', 'idx_members_off_board'], ['trigger', 'members_touch_board_standing']] as const) {
-        try {
-            const sql = (db.prepare('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?').get(type, name) as { sql: string | null } | undefined)?.sql;
-            if (sql && !sql.includes("'disabled'")) {
-                db.prepare(`DROP ${type === 'index' ? 'INDEX' : 'TRIGGER'} ${name}`).run();
-                console.log(`[DB] Replacing ${name}: a paused account's listings leave the board`);
-            }
-        } catch (e) {
-            console.error(`[DB] ❌ Could not replace ${name}:`, e);
-        }
-    }
-}
-
-/** node_config: the accounts paused when this node gained the board's pause rule have had their standing stamped. */
-const PAUSED_STANDING_FILLED = 'migration_board_standing_paused_v1';
-
-/**
- * Stamps members.board_standing_changed_at once, on every account 'disabled' when a node gains the board's pause rule
- * (replaceOffBoardShapes; node_config `migration_board_standing_paused_v1`, written in the same transaction, so a crash
- * leaves it to run again). Their listings stayed on the board until now and the phones hold them live: stamped, every
- * phone's next delta carries them as paused, whatever its cursor, as backfillBoardStanding did for the authors off the
- * board when the column came in. Every one of them, whatever its standing says already: a phone's cursor is past an older
- * stamp. updated_at doesn't move (the column isn't in members_touch_updated_at's list, nor is this in the trigger's
- * columns), so nothing else about those rows is published. A fresh install stamps nothing and writes the marker; a
- * standby stamps its own copy, as backfillBoardStanding's does.
- */
-function fillPausedBoardStanding(): void {
-    try {
-        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(PAUSED_STANDING_FILLED)) return;
-        db.transaction(() => {
-            const filled = db.prepare(`
-                UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'disabled'
-            `).run().changes;
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(PAUSED_STANDING_FILLED);
-            if (filled > 0) console.log(`[DB] Board standing stamped on ${filled} paused member row(s)`);
-        })();
-    } catch (e) {
-        // Nothing is stamped and the marker isn't written, so the next boot tries again. Until then a phone's delta carries
-        // those listings only when they change themselves.
-        console.error('[DB] ❌ Could not stamp paused members\' board standing:', e);
-    }
-}
-
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
 export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
@@ -607,39 +425,6 @@ function bringMembersToSchemaRules(schemaSql: string): void {
     } catch (e) {
         // Nothing is changed and the marker isn't written, so the next boot tries again. A standby leaves such a value out.
         console.error('[DB] ❌ Could not bring members rows into the schema\'s rules:', e);
-    }
-}
-
-/** node_config: the lines already here have their old conversation ids indexed (indexOldConversationIds). */
-const MESSAGE_OLD_CONVERSATION_IDS = 'migration_message_old_conversation_ids_v1';
-
-/**
- * Fills message_old_conversation_ids (schema.sql) from the lines already here, once: the first boot with the table
- * (node_config `migration_message_old_conversation_ids_v1`, written in the same transaction). From then on its triggers
- * keep it. On a standby too: the table is each server's own and never copied, and a `migration_*` marker is per-server,
- * so a standby fills its own from the lines it holds. Reads the metadata exactly as the triggers do. A failure writes
- * no marker, and the next boot tries again; until then an old id of a folded DM that only such a line names isn't
- * followed, and a send to it is answered as one to an id nobody has.
- */
-function indexOldConversationIds(): void {
-    try {
-        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(MESSAGE_OLD_CONVERSATION_IDS)) return;
-        db.transaction(() => {
-            const n = db.prepare(`
-                INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
-                SELECT json_extract(m.metadata, '$.originalConversationId'), m.id FROM messages m
-                 WHERE instr(m.metadata, 'originalConversationId') > 0
-                   AND CASE WHEN json_valid(m.metadata) THEN json_type(m.metadata, '$.originalConversationId') END = 'text'
-                UNION ALL
-                SELECT j.value, m.id
-                  FROM messages m, json_each(CASE WHEN json_valid(m.metadata) THEN m.metadata END, '$.originalConversationIds') j
-                 WHERE instr(m.metadata, 'originalConversationId') > 0 AND j.type = 'text' AND typeof(j.key) = 'integer'
-            `).run().changes;
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(MESSAGE_OLD_CONVERSATION_IDS);
-            if (n > 0) console.log(`[DB] Indexed ${n} old conversation id(s) named by chat lines`);
-        })();
-    } catch (e) {
-        console.error('[DB] ❌ Could not index the old conversation ids chat lines name:', e);
     }
 }
 
@@ -1011,1249 +796,96 @@ function repackGroups(): void {
     }
 }
 
-// Function to initialize schema
-/** Rebuilds names_access_log when its CHECK lacks 'copy_restored', keeping every row; true when it rebuilt. Idempotent. */
-export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
-    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='names_access_log'").get() as { sql?: string } | undefined;
-    if (!row?.sql || row.sql.includes('copy_restored')) return false;
-    d.transaction(() => {
-        d.exec(`
-            DROP TABLE IF EXISTS names_access_log_migration;
-            CREATE TABLE names_access_log_migration (
-                id              TEXT PRIMARY KEY,
-                actor_pubkey    TEXT NOT NULL,
-                action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
-                                                                'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings',
-                                                                'copy_restored')),
-                entry_id        TEXT,
-                subject_pubkey  TEXT,
-                at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            );
-            INSERT INTO names_access_log_migration (id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at)
-                SELECT id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at FROM names_access_log;
-            DROP TABLE names_access_log;
-            ALTER TABLE names_access_log_migration RENAME TO names_access_log;
-            CREATE INDEX IF NOT EXISTS idx_names_access_log_at ON names_access_log(at);
-        `);
-    })();
-    return true;
+/**
+ * The file refused at open (db/schema-gate.ts): one line, and the process stops, before anything has written to it.
+ */
+function refuseToOpen(line: string): never {
+    console.error(line);
+    process.exit(1);
 }
 
 /**
- * Rebuilds confirmations when its CHECK lacks 'member' (the member's own step-back, engine/names-list.ts stepBack), adding
- * `stepped_back_owing`, keeping every row with its stamp; true when it rebuilt. Idempotent. Its two live-row indexes and
- * its watermark go with the old table, and schema.sql and stampPlainTables make them again, so this runs before them.
- * An older image reads the rebuilt table as it is: none of its statements needs the new column to be absent.
+ * The gate alone, for the node's first step (index.ts main), before any boot step that may log: the logger writes its lines
+ * to system_logs, and a refused file must be left exactly as it was. initSchema asks the gate again for its own callers.
  */
-export function rebuildConfirmationsRevokeCheck(d: Database.Database): boolean {
-    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='confirmations'").get() as { sql?: string } | undefined;
-    if (!row?.sql || row.sql.includes("'member'")) return false;
-    d.transaction(() => {
-        d.exec(`
-            DROP TABLE IF EXISTS confirmations_migration;
-            CREATE TABLE confirmations_migration (
-                id             TEXT PRIMARY KEY,
-                member_pubkey  TEXT NOT NULL,
-                entry_id       TEXT NOT NULL,
-                confirmed_by   TEXT NOT NULL,
-                confirmed_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                needs_second   INTEGER NOT NULL DEFAULT 0 CHECK (needs_second IN (0, 1)),
-                seconded_by    TEXT,
-                seconded_at    DATETIME,
-                revoked_by     TEXT,
-                revoked_at     DATETIME,
-                revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted', 'member')),
-                stepped_back_owing INTEGER NOT NULL DEFAULT 0 CHECK (stepped_back_owing IN (0, 1)),
-                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            );
-            INSERT INTO confirmations_migration (id, member_pubkey, entry_id, confirmed_by, confirmed_at, needs_second, seconded_by, seconded_at,
-                                                 revoked_by, revoked_at, revoke_reason, updated_at)
-                SELECT id, member_pubkey, entry_id, confirmed_by, confirmed_at, needs_second, seconded_by, seconded_at,
-                       revoked_by, revoked_at, revoke_reason, updated_at FROM confirmations;
-            DROP TABLE confirmations;
-            ALTER TABLE confirmations_migration RENAME TO confirmations;
-        `);
-    })();
-    return true;
+export function refuseUnopenableDatabase(): void {
+    const gate = readSchemaGate(db);
+    if (gate.kind === 'refused') refuseToOpen(gate.line);
 }
 
 /**
- * Rebuilds health_access_log when its CHECK lacks 'stranded_escrows_read' (a table #1599 made, or one from before the
- * stranded escrows had a look of their own), keeping every row, with its `detail` where it had one, and adding the
- * `detail` column the trade looks write; true when it rebuilt. Idempotent.
+ * The boot's schema work, at every start (state-engine.ts initStateEngine). The gate first (db/schema-gate.ts): a file this
+ * release may not open is refused before anything writes. Then the schema steps born since 1.2.36, schema.sql, and the
+ * passes every boot runs. The stamp is written last, once all of it has run, so `schema_release` names the release whose
+ * steps ran on this file in full.
  */
-export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
-    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='health_access_log'").get() as { sql?: string } | undefined;
-    if (!row?.sql || row.sql.includes('stranded_escrows_read')) return false;
-    const hadDetail = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).some(c => c.name === 'detail');
-    const detail = hadDetail ? 'detail' : 'NULL';
-    d.transaction(() => {
-        d.exec(`
-            DROP TABLE IF EXISTS health_access_log_migration;
-            CREATE TABLE health_access_log_migration (
-                id             TEXT PRIMARY KEY,
-                actor_pubkey   TEXT NOT NULL,
-                action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
-                                                               'disputes_listed', 'dispute_opened', 'alerts_read',
-                                                               'stranded_escrows_read')),
-                subject_pubkey TEXT,
-                detail         TEXT,
-                at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            );
-            INSERT INTO health_access_log_migration (id, actor_pubkey, action, subject_pubkey, detail, at, updated_at)
-                SELECT id, actor_pubkey, action, subject_pubkey, ${detail}, at, updated_at FROM health_access_log;
-            DROP TABLE health_access_log;
-            ALTER TABLE health_access_log_migration RENAME TO health_access_log;
-        `);
-    })();
-    return true;
-}
-
-/**
- * Rebuilds system_logs when its CHECK lacks the 'AGENT' category (an AI assistant's calls, agent/mcp-route.ts), keeping
- * every row and its id; true when it rebuilt. Idempotent. The table is bounded (logger.ts LOG_KEEP_ROWS), so the copy is small.
- */
-export function rebuildSystemLogsCheck(d: Database.Database): boolean {
-    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='system_logs'").get() as { sql?: string } | undefined;
-    if (!row?.sql || row.sql.includes("'AGENT'")) return false;
-    d.transaction(() => {
-        d.exec(`
-            DROP TABLE IF EXISTS system_logs_migration;
-            CREATE TABLE system_logs_migration (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
-                category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
-                message TEXT NOT NULL,
-                metadata TEXT
-            );
-            INSERT INTO system_logs_migration (id, timestamp, level, category, message, metadata)
-                SELECT id, timestamp, level, category, message, metadata FROM system_logs;
-            DROP TABLE system_logs;
-            ALTER TABLE system_logs_migration RENAME TO system_logs;
-            CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp DESC);
-            CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
-        `);
-    })();
-    return true;
-}
-
-/**
- * Rebuilds member_tool_state when its CHECK on `body` is the 64 KB of before, not the 128 KB any tool may now name
- * (engine/tool-state.ts TOOL_STATE_CEILING_BYTES: the Tool shed's, Marty, 23 Oct 2026), keeping every row and its stamp;
- * true when it rebuilt. Idempotent. Its replication watermark (a plain table's: idx_member_tool_state_updated_at and the
- * two triggers that stamp updated_at) is dropped with the old table and made again by schema.sql and stampPlainTables,
- * so this must run before them in initSchema, as it does (test-tool-state-check-migration.ts checks the boot leaves all
- * three and a write still stamped). Foreign keys are off on this database, so nothing is checked or cascaded while the
- * table is briefly missing. Each tool's own bound stays the engine's.
- */
-export function rebuildToolStateBodyCheck(d: Database.Database): boolean {
-    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='member_tool_state'").get() as { sql?: string } | undefined;
-    if (!row?.sql || row.sql.includes('<= 131072)')) return false;
-    d.transaction(() => {
-        d.exec(`
-            DROP TABLE IF EXISTS member_tool_state_migration;
-            CREATE TABLE member_tool_state_migration (
-                public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
-                body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
-                updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                PRIMARY KEY (public_key, tool)
-            );
-            INSERT INTO member_tool_state_migration (public_key, tool, body, updated_at)
-                SELECT public_key, tool, body, updated_at FROM member_tool_state;
-            DROP TABLE member_tool_state;
-            ALTER TABLE member_tool_state_migration RENAME TO member_tool_state;
-        `);
-    })();
-    return true;
-}
-
-/**
- * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
- * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
- * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
- */
-export function addHealthAccessLogToken(d: Database.Database): boolean {
-    const cols = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).map(c => c.name);
-    if (!cols.length) return false;
-    const missing = ['token_id', 'token_name'].filter(c => !cols.includes(c));
-    if (!missing.length) return false;
-    d.transaction(() => { for (const c of missing) d.exec(`ALTER TABLE health_access_log ADD COLUMN ${c} TEXT`); })();
-    return true;
-}
-
-/**
- * Adds agent_takedowns' `by_author` (MCP-MODERATION S2: a call that named its posts by `author_of`, engine/agent-takedowns.ts) to a
- * table from before it: ALTER TABLE ADD COLUMN, every row kept as it was and 0, which is what each was (by ids or by reports). No
- * rebuild for a new value of `via`: its CHECK stays, and an older server reading a new row reads 'ids'. Nothing on a table that has
- * it, or none (schema.sql makes it with the column); true when it added. Idempotent.
- */
-export function addTakedownByAuthor(d: Database.Database): boolean {
-    const cols = (d.prepare('PRAGMA table_info(agent_takedowns)').all() as { name: string }[]).map(c => c.name);
-    if (!cols.length || cols.includes('by_author')) return false;
-    d.exec('ALTER TABLE agent_takedowns ADD COLUMN by_author INTEGER NOT NULL DEFAULT 0 CHECK (by_author IN (0, 1))');
-    return true;
-}
-
-/**
- * A member's one active poll was also a UNIQUE index on posts(author_pubkey) for active polls. Owners and admins may now
- * have as many as the owners' "Owner and admin limit" (Marty, 31 Oct; engine/owner-admin-limit.ts), so the number is
- * engine/posts.ts assertActivePollRoom alone (createPost's and resumePost's) and the index, under the SAME name, is
- * a plain one: an older image booted back on this data runs `CREATE UNIQUE INDEX IF NOT EXISTS` with that name, finds it,
- * and so never fails its schema on an owner's second open poll. At every boot, before the schema.sql exec, which makes
- * the plain one on a fresh install (no posts table here yet: nothing to do). Returns whether it replaced a unique one.
- */
-export function makeActivePollIndexPlain(d: Database.Database = db): boolean {
-    if (!d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'posts'`).get()) return false;
-    const idx = d.prepare(`SELECT "unique" AS u FROM pragma_index_list('posts') WHERE name = 'idx_posts_author_active_poll'`).get() as { u: number } | undefined;
-    const wasUnique = idx?.u === 1;
-    d.transaction(() => {
-        if (wasUnique) d.exec(`DROP INDEX idx_posts_author_active_poll`);
-        d.exec(`CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
-    })();
-    return wasUnique;
-}
-
-/**
- * A shop picks one of the Market's categories (Marty, 25 Oct 2026). On a node made before, the shops table's `kind`
- * becomes `category` (schema.sql: RENAME COLUMN keeps its place and its CHECK, which then names `category`, as a fresh
- * install has it), and every shop moves to the category its kind became (@beanpool/core SHOP_CATEGORY_KINDS): a kind
- * whose id is a category's (tools, food, care, energy, animals, labour) stays as it is, the others move, and a value that
- * is none of the fourteen becomes no category, as a shop with none is. Both in one transaction, at every boot: once moved,
- * no row holds a value that is no category, so the UPDATE finds nothing and nothing is stamped again. A moved row is
- * stamped by its table's touch trigger (stampPlainTables), so a delta carries it to the standbys; a standby renames and
- * moves its own copy the same way at its boot, so its import writes the column its main server sends. Before the
- * schema.sql exec, which makes the table with the column on a database from before shops (no table here: nothing to do).
- * An older image booted back on the data reads no kind (its shops show none) and refuses to change one.
- */
-function moveShopKindsToCategories(): void {
-    try {
-        const columns = (db.prepare(`SELECT name FROM pragma_table_info('shops')`).all() as { name: string }[]).map((c) => c.name);
-        if (columns.length === 0) return;
-        const moves = (Object.entries(SHOP_CATEGORY_KINDS) as Array<[string, { kinds: readonly string[] }]>)
-            .flatMap(([category, row]) => row.kinds.filter((kind) => kind !== category).map((kind) => [kind, category]));
-        db.transaction(() => {
-            if (columns.includes('kind') && !columns.includes('category')) {
-                db.exec('ALTER TABLE shops RENAME COLUMN kind TO category');
-                console.log('[DB] Shops: the kind column is now category, one of the Market\'s categories');
-            }
-            const moved = db.prepare(`
-                UPDATE shops SET category = CASE category ${moves.map(() => 'WHEN ? THEN ?').join(' ')} ELSE NULL END
-                WHERE category IS NOT NULL AND category NOT IN (${SHOP_CATEGORIES.map(() => '?').join(', ')})
-            `).run(...moves.flat(), ...SHOP_CATEGORIES).changes;
-            if (moved > 0) console.log(`[DB] Shops: ${moved} moved from a kind to its category`);
-        })();
-    } catch (e) {
-        // Nothing is renamed or moved, and the next boot tries again. Until then a change to a shop's category is refused
-        // (no such column) and every shop reads as in none.
-        console.error('[DB] ❌ Could not move shops from kinds to categories:', e);
-    }
-}
-
-/**
- * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
- * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down; and for slice S6, an
- * owner's decision on a vote too few members could vote on.
- */
-export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
-    ['subject_reply', 'TEXT'],
-    ['subject_replied_at', 'DATETIME'],
-    ['case_hidden_at', 'DATETIME'],
-    ['case_hidden_by', 'TEXT'],
-    ['case_hidden_reason', 'TEXT'],
-    ['reply_hidden_at', 'DATETIME'],
-    ['reply_hidden_by', 'TEXT'],
-    ['reply_hidden_reason', 'TEXT'],
-    // Removal by vote S6: an owner decided a vote too few members could vote on (decisions-engine.ts ownerDecideTooFew).
-    ['owner_decided_at', 'DATETIME'],
-    ['owner_decided_by', 'TEXT'],
-    ['owner_decided_reason', 'TEXT'],
-    ['owner_decision_carried_at', 'DATETIME'],
-];
-
-/**
- * Adds REMOVAL_CASE_COLUMNS to a `decisions` table from before them (initSchema, every boot): each one it lacks, NULL on
- * every row, and every row kept as it was. Returns how many it added; 0 once they are all there. An older image booted
- * back on the table reads past them (it names its columns), and a standby's copy writes only the columns it has
- * (engine/plain-tables.ts).
- */
-export function addRemovalCaseColumns(targetDb: Database.Database): number {
-    const has = new Set((targetDb.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name));
-    const missing = REMOVAL_CASE_COLUMNS.filter(([column]) => !has.has(column));
-    targetDb.transaction(() => {
-        for (const [column, type] of missing) targetDb.exec(`ALTER TABLE decisions ADD COLUMN ${column} ${type}`);
-    })();
-    return missing.length;
-}
-
-/** What this boot's vouching reset did (db/vouch-reset.ts), for the log line and the owners' alert after the boot. */
-let vouchResetReport: VouchResetReport | null = null;
-
-/** The vouching reset's report, once: null when this boot reset nothing (a fresh install, or one already reset). */
-export function takeVouchResetReport(): VouchResetReport | null {
-    const r = vouchResetReport;
-    vouchResetReport = null;
-    return r;
-}
-
 export function initSchema() {
+    const gate = readSchemaGate(db);
+    if (gate.kind === 'refused') refuseToOpen(gate.line);
+    const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+    // A fresh install: schema.sql and the stamp in one transaction, so a first boot stopped part way leaves no half-made
+    // file, which the gate would refuse. Everything below then runs as on any later boot, and finds nothing to do.
+    if (gate.kind === 'fresh') db.transaction(() => { db.exec(schemaSql); writeSchemaStamp(db, getVersion()); })();
+
+    // ── The schema steps born since 1.2.36 ────────────────────────────────────────────────────────────────────────────
+    // CONVERSION CODE (schema steps), log row CUT2, remove in 1.4.1, once every kept node has started 1.4.0. The gate opens
+    // a file last started on 1.2.36 or later (castlemaine's release, the oldest kept node's); these bring one from 1.2.36 or
+    // 1.2.37 to this release's shape, and do nothing on a file that has it. Before the schema.sql exec, which indexes some
+    // of these columns: CREATE INDEX on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds
+    // every column schema.sql names to that). On a fresh install each ALTER finds its column and does nothing.
+    //
     // Money is whole hundredths in INTEGER *_c columns (db/hundredths-step.ts): a database from before has its old money
     // dropped (never converted) FIRST, before anything below touches a money table. A failure changed nothing and stops
     // the boot: this code cannot run against the old columns.
     const hundredths = runHundredthsStep(db);
     if (hundredths.ran) console.log(hundredthsStepLogLine(hundredths));
-    const userVersion = db.pragma('user_version', { simple: true }) as number;
-    if (userVersion < 3) {
-        console.log("🧨 Nuking messages and conversations for Version 3 Typed Messaging overhaul...");
-        db.exec(`
-            DROP TABLE IF EXISTS messages;
-            DROP TABLE IF EXISTS conversation_participants;
-            DROP TABLE IF EXISTS conversations;
-        `);
-        db.pragma('user_version = 3');
-    }
+    // Born in 1.2.37: what became of the voucher budget a names-bound invite promised (engine/vouchers.ts landInviteVoucher).
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN voucher_outcome TEXT`).run(); } catch { }
+    // A period of a standing deal (schema.sql standing_deals; engine/standing-deals.ts), which schema.sql indexes.
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT REFERENCES standing_deals(id)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER`).run(); } catch { }
+    // The find hash a restore by sign-in finds a copy by (engine/recovery-find.ts), which schema.sql indexes. NULL on every
+    // existing copy until its member's first restore heals it.
+    try { db.prepare(`ALTER TABLE recovery_shares ADD COLUMN sso_find_hash TEXT`).run(); } catch { }
+    // Where a request to join came from (shared-listing door A3, engine/peek-tickets.ts peekProvenance).
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_post_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_sharer_pubkey TEXT`).run(); } catch { }
+    // How many asked to join from each link shared outside (the sharer's Shared outside row).
+    try { db.prepare(`ALTER TABLE peek_tickets ADD COLUMN asked INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)`).run(); } catch { }
+    // The bell (engine/push-notices.ts): when the member took a notice off it.
+    try { db.prepare(`ALTER TABLE push_notices ADD COLUMN seen_at INTEGER`).run(); } catch { }
+    // Born after 1.2.37: the member's "Show who invited me to other members" (state-engine.ts getTrustProfileForViewer), a new
+    // column with its default, 1 (shown), which is what every member reads today; nothing is rewritten.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN inviter_shown INTEGER DEFAULT 1`).run(); } catch { }
+    // members_touch_updated_at lists inviter_shown and the hundredths columns: dropped, so the exec makes it in this release's
+    // shape (CREATE TRIGGER IF NOT EXISTS keeps a 1.2.36 one, which names the money columns the hundredths step dropped).
+    db.exec('DROP TRIGGER IF EXISTS members_touch_updated_at');
+    // ── The end of the CUT2 steps ─────────────────────────────────────────────────────────────────────────────────────
 
-    const ratingsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='ratings'").get() as any;
-    if (ratingsSql && ratingsSql.sql.includes('marketplace_transactions_old')) {
-        console.log("🧨 Fixing corrupted ratings table schema...");
-        db.exec("ALTER TABLE ratings RENAME TO ratings_corrupted;");
-    }
-
-    // Ensure all tables have updated_at columns so schema.sql triggers/indexes can compile successfully
-    try { db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // Hard credit freeze: forced 0 floor when set by admin. Also added before schema.sql for the trigger whitelist.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN credit_frozen INTEGER DEFAULT 0`).run(); } catch { }
-    // Community treasury + operator capability. Added BEFORE schema.sql exec so the re-created
-    // members_touch_updated_at trigger (which now whitelists them) compiles on already-live DBs.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN is_treasury INTEGER DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN can_operate INTEGER DEFAULT 0`).run(); } catch { }
-    // The credit committee (engine/vouchers.ts), before schema.sql for the trigger's list, as can_operate.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN credit_committee INTEGER DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // ── Images out of the database (storage design §7) ─────────────────────────────────────────
-    //
-    // The rows that used to carry base64 learn to point at the image store instead. Adding the columns is
-    // an ALTER; making the old column optional is not — SQLite cannot drop a NOT NULL — so the two tables
-    // are rebuilt, once, on nodes whose table still declares it. `CREATE TABLE IF NOT EXISTS` in schema.sql
-    // is a no-op on an existing table, so a live node would otherwise keep NOT NULL forever and the
-    // evacuation job would have nothing it could null.
-    //
-    // The rebuild copies every column across by name, so it survives whatever else has been ALTERed on in
-    // front of it, and runs inside a transaction: interrupted, nothing happened.
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN storage_key TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN sha256 TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN bytes INTEGER`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN mime TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
-    // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
-    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
-    // The language a phone's pushes are written in (state-engine.ts registerPushToken); NULL, English, on rows from before:
-    // each phone names it again at its next start.
-    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN lang TEXT`).run(); } catch { }
-    // Push tokens locked at rest (services/push-token-seal.ts): the tables from before, each token in the clear, go aside
-    // for the boot to lock (a main server) or drop (a standby), and schema.sql makes the new ones.
+    // Older conversion passes not yet removed: each finds nothing to do on a file the gate opens (every kept node ran it;
+    // MEASURE-conversion-code.md M2), and goes in its own removal (the split-off of #N1 lists them). Push tokens stored in
+    // the clear go aside for the boot to lock or drop (services/push-token-seal.ts, A25); members' and groups' photos out
+    // of their rows (A42).
     try {
         movePlainPushTablesAside();
     } catch (e) {
         console.error('[DB] ❌ Could not move the push tokens stored in the clear aside; the next boot tries again:', e);
     }
-    try {
-        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
-        if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
-            db.transaction(() => {
-                db.prepare(`
-                    CREATE TABLE post_photos_imgstore_new (
-                        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-                        photo_data TEXT,
-                        order_num INTEGER NOT NULL,
-                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        storage_key TEXT,
-                        sha256 TEXT,
-                        bytes INTEGER,
-                        mime TEXT,
-                        PRIMARY KEY (post_id, order_num)
-                    )
-                `).run();
-                db.prepare(`
-                    INSERT INTO post_photos_imgstore_new
-                        (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
-                    SELECT post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime
-                      FROM post_photos
-                `).run();
-                db.prepare(`DROP TABLE post_photos`).run();
-                db.prepare(`ALTER TABLE post_photos_imgstore_new RENAME TO post_photos`).run();
-                db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run();
-            })();
-            console.log('[DB] post_photos.photo_data is now optional — the image store holds the bytes.');
-        }
-    } catch (e) {
-        // A node that cannot be rebuilt keeps working exactly as before: every row stays inline, the
-        // evacuation job finds nothing it may null, and nothing is lost. Loud, because the saving is not
-        // happening on this node and an operator should know why.
-        console.error('[DB] ⚠️  Could not make post_photos.photo_data optional; photos stay in the database:', e);
-    }
-    try {
-        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_attachments'").get() as any)?.sql as string | undefined;
-        if (ddl && /\bdata\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
-            db.transaction(() => {
-                db.prepare(`
-                    CREATE TABLE message_attachments_imgstore_new (
-                        message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-                        data TEXT,
-                        nonce TEXT NOT NULL,
-                        mime TEXT,
-                        created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        storage_key TEXT
-                    )
-                `).run();
-                db.prepare(`
-                    INSERT INTO message_attachments_imgstore_new
-                        (message_id, data, nonce, mime, created_at, storage_key)
-                    SELECT message_id, data, nonce, mime, created_at, storage_key
-                      FROM message_attachments
-                `).run();
-                db.prepare(`DROP TABLE message_attachments`).run();
-                db.prepare(`ALTER TABLE message_attachments_imgstore_new RENAME TO message_attachments`).run();
-            })();
-            console.log('[DB] message_attachments.data is now optional — the image store holds the ciphertext.');
-        }
-    } catch (e) {
-        console.error('[DB] ⚠️  Could not make message_attachments.data optional; attachments stay in the database:', e);
-    }
-    // A chat photo's object by reference, for a standby (gap G4): its stored ciphertext's sha256 and size, and the plain
-    // table's watermark (stampPlainTables makes its triggers; a main server stamps the rows from before). After the rebuild
-    // above, which copies the older columns alone.
-    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN sha256 TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN bytes INTEGER`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN updated_at DATETIME`).run(); } catch { }
-
-    try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // Phase 2 delta backup — the remaining mutable tables gain their watermark
-    // column here, BEFORE schema.sql exec, so the messages/friends/abuse_reports/
-    // conversation_participants touch triggers below can reference updated_at at
-    // compile time on already-live DBs. SQLite forbids a non-constant DEFAULT on
-    // ALTER ADD COLUMN, so these come in NULL on existing rows (backfilled after
-    // schema.sql) and NULL on new inserts (stamped by the AFTER INSERT triggers).
-    try { db.prepare(`ALTER TABLE messages ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE friends ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // "Who has added me as a friend?", keyed on the viewer on every member-list and profile read (schema.sql has it
-    // too). A fresh install has no friends table yet here, so this throws and schema.sql creates the index.
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_friends_friend_pubkey ON friends(friend_pubkey)`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // Moderation status. MUST be before the schema.sql exec below: schema.sql declares
-    // idx_abuse_reports_status_created ON abuse_reports(status, ...), and on a node whose
-    // abuse_reports table predates this column the exec hits that index, fails, and the node does
-    // not boot. Adding the column afterwards is too late — the exec has already thrown.
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
-    // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
-    // or trigger naming it compiles on already-live DBs.
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN suspended_member INTEGER`).run(); } catch { }
-    // A report can name one message of a locked group chat and carry its key (engine/group-chat-report.ts). Before
-    // schema.sql like its neighbours; NULL on every existing row, none of which names a message.
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_message_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN disclosure TEXT`).run(); } catch { }
-    // The message request a report's reporter received (engine/request-limits.ts). Before schema.sql, which indexes it.
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_conversation_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_wording TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
-    // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
-    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN updated_at TEXT`).run(); } catch { }
-    // The door's label for joins from one address within a day (engine/open-join.ts, engine/auto-moderation.ts). NULL on
-    // every existing row: each of those members is a circle of their own.
-    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN join_cohort TEXT`).run(); } catch { }
-    // A removed newcomer's address hash kept 7 days (engine/door-signal.ts noteRemovedNewcomer). Local, never copied.
-    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN ip_kept_until TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-
-    // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
-    //
-    // These MUST come BEFORE the schema.sql exec below, exactly like the trigger-referenced member columns
-    // above (review finding — this was a hard boot failure). schema.sql defines
-    // `idx_settlements_reserved_until` over `settlements(reserved_until)`, and on a node that already
-    // created `settlements` from step 3a the `CREATE TABLE IF NOT EXISTS` no-ops against the OLD shape —
-    // so the index then references a column that does not exist, SQLite aborts the whole `db.exec` with
-    // "no such column", and the node fails to boot. Adding the columns first makes the index compile.
-    //
-    //   seller_pubkey   — inbound: who we pay when the receipt lands
-    //   fee_c           — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal (schema.sql)
-    //   reserved_until  — inbound: when the cap reservation lapses (indexed by schema.sql)
-    //   receipt_payload — outbound: the exact signed receipt object, so a retry replays identical bytes
-    //
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
-
-    // #127: columns that schema.sql OBJECTS reference, so they have to exist before the exec.
-    //
-    // Same failure as the settlements block above, found by auditing for the class rather than waiting for
-    // the next report. `db.exec()` runs the whole file as one unit, and one failing statement aborts all of
-    // it — so the node will not start. `CREATE TABLE IF NOT EXISTS` no-ops against an existing table, so only
-    // nodes that ALREADY HAVE DATA are affected: every deployed node, and no test suite, because they all
-    // start from an empty data dir.
-    //
-    // ONE of these was the actual boot failure. Measured, not assumed — each reference kind was probed
-    // against a legacy `posts` table:
-    //
-    //   posts.updated_at        → INDEX idx_posts_updated_at        FATAL: "no such column: updated_at"
-    //   posts.search_keywords   → TRIGGERS posts_ai / ad / au       boots fine (FTS5 mirror, body reference)
-    //   members.earned_credit_c → TRIGGER members_touch_updated_at  boots fine, and later FIRES correctly
-    //   members.profile_updated_at → same trigger                   boots fine
-    //
-    // Indexes resolve their columns at CREATE time; triggers resolve theirs when they fire. Only the index
-    // breaks. The other three are hoisted anyway: trigger tolerance is an implementation detail of the SQLite
-    // build we ship rather than a documented guarantee, and "if schema.sql names it, add it before the exec"
-    // is a cheaper rule to keep than an exception list.
-    //
-    // test-schema-upgrade-fresh-shape.ts enforces this statically for EVERY late-added column — separating the fatal
-    // index case from the defensive trigger one — so a column added below the exec fails in CI rather than on
-    // somebody's node.
-    try {
-        db.prepare(`ALTER TABLE posts ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE posts SET updated_at = created_at WHERE updated_at IS NULL`).run();
-    } catch { }
-    // FTS5 search: the posts_ai/ad/au triggers mirror this into posts_fts.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
-    // The money columns (earned_credit_c, earned_surplus_c, working_capital_ceiling_c, goal_amount_c, paused_floor_snapshot_c)
-    // are added to an older table by db/hundredths-step.ts, at the top of this function.
-    // Profile sync: profile mutation timestamp for cache-busting.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
-    // Community Working Style / Archetype signature
-    try { db.prepare(`ALTER TABLE members ADD COLUMN archetype TEXT`).run(); } catch { }
-    // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN purpose TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN deadline_at DATETIME DEFAULT NULL`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN lifecycle TEXT DEFAULT 'ongoing'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN paused INTEGER DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE projects ADD COLUMN migrated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE projects ADD COLUMN enterprise_pubkey TEXT`).run(); } catch { }
-    // When a keeper first left the project (noteKeeperLeftProject): its maker's cancel asks it (mayCancelProject).
-    try { db.prepare(`ALTER TABLE projects ADD COLUMN keeper_left_at DATETIME`).run(); } catch { }
-
-    // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
-    // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
-    // CREATE TRIGGER IF NOT EXISTS is a no-op against an existing trigger.
-    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
-
-    // #143 step 4: per-listing reach. Existing rows take 'local', which is the point — nobody who posted
-    // before federation existed agreed to their listing travelling.
-    //
-    // MUST BE HERE, BEFORE the schema.sql exec below, because schema.sql defines idx_posts_reach over these
-    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade-fresh-shape caught
-    // exactly that when these two lines sat with the other posts migrations further down — the suite exists
-    // for this failure and earned its keep.
-    //
-    // NO CHECK CONSTRAINT on the migrated column, unlike the fresh-schema definition: SQLite cannot add one
-    // via ALTER TABLE, and rebuilding `posts` to acquire it would be a table copy on every live node for a
-    // constraint the write paths already enforce. Fresh databases get it; upgraded ones rely on
-    // `normaliseReach` at the boundary, which is where a bad value would come from anyway.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN reach TEXT NOT NULL DEFAULT 'local'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN reach_peers TEXT`).run(); } catch { }
-
-    // Audience scoping on posts (docs/the-commons.md §9, Item 10)
-    // Additive and idempotent migration: every existing post defaults to 'public'.
-    //
-    // ORPHANED ROWS NOTE: SQLite does NOT enforce REFERENCES ... ON DELETE CASCADE added via
-    // ALTER TABLE ADD COLUMN on upgraded nodes (the clause is parsed by SQLite but ignored).
-    // If a group is deleted on an upgraded node without compensation, group-scoped posts would
-    // retain a dangling target_group_id, rendering them orphaned and invisible to everyone.
-    // We enforce this cascade explicitly via the posts_cleanup_on_group_delete trigger defined
-    // in schema.sql and ensured below.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN audience_scope TEXT NOT NULL DEFAULT 'public'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN assigned_to TEXT REFERENCES members(public_key)`).run(); } catch { }
-    // Dormant: nothing reads or writes target_archetypes (archetypes gate nothing, docs/the-commons.md).
-    // Kept because dropping a column means rebuilding posts on every node.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT`).run(); } catch { }
-    try { db.prepare(`UPDATE posts SET audience_scope = 'public' WHERE audience_scope IS NULL`).run(); } catch { }
-
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN project_id TEXT REFERENCES projects(id)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE)`).run(); } catch { }
-
-    // ---------------------------------------------------------------------------------
-    // EVERY `ALTER TABLE ... ADD COLUMN` LIVES ABOVE THE schema.sql EXEC. DO NOT ADD ONE BELOW IT.
-    //
-    // schema.sql may define an index, view or trigger over any of these columns. CREATE INDEX
-    // against a missing column is a hard error, not a no-op — so an ALTER that runs after the
-    // exec cannot save a database that the exec has already refused to open. The node does not
-    // start, and the only symptom is `no such column: <x>` at boot.
-    //
-    // This has now happened twice: #127 (posts.updated_at, posts.search_keywords,
-    // members.earned_credit_c, members.profile_updated_at) and #172 (abuse_reports.status).
-    // Both times the fix was to move the one offending column. test-schema-alter-ordering.ts
-    // enforces the rule for all of them instead, and will fail the build if a new ALTER
-    // appears below this point or names a column that schema.sql does not also declare.
-    //
-    // On a FRESH database these ALTERs fail into their empty catch (the table does not exist
-    // yet) and schema.sql creates each column as part of the CREATE TABLE. That is why the
-    // schema.sql declaration is mandatory, not merely tidy.
-    // ---------------------------------------------------------------------------------
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN hours REAL`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
-    // The vouch an invite carries and the voucher budget a names-bound invite promises (engine/vouchers.ts): whole
-    // hundredths, vouch_amount_c and voucher_level_c, added to an older table by db/hundredths-step.ts.
-    // What became of the promised budget (engine/vouchers.ts landInviteVoucher).
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN voucher_outcome TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
-    try {
-        db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE members SET updated_at = COALESCE(profile_updated_at, last_active_at, joined_at) WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE marketplace_transactions SET updated_at = COALESCE(completed_at, created_at) WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL`).run();
-    } catch { }
-
-    // Step 7: recovery share replication audit column
-    try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    // The find hash a restore by sign-in finds a copy by (engine/recovery-find.ts). Before schema.sql, which indexes it.
-    // NULL on every existing copy until its member's first restore heals it.
-    try { db.prepare(`ALTER TABLE recovery_shares ADD COLUMN sso_find_hash TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC)`).run(); } catch { }
-
-    // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
-    // A poll's ballot: 0 anonymous (every poll made before the choice existed), 1 an open vote (schema.sql).
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
-    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
-    // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
-    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
-    // An open vote's typed Other (schema.sql, which also makes its table of answers).
-    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN other_answer_id TEXT`).run(); } catch { }
-    try { if (makeActivePollIndexPlain()) console.log('[DB] The one-active-poll index is a plain one now (owners and admins may have more)'); } catch (e) { console.warn('[DB] Could not make the active-poll index plain:', (e as Error)?.message || e); }
-
-    // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_end_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_place_name TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
-    // "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row reads as off.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_host_lets_in INTEGER`).run(); } catch { }
-    // Event times (DESIGN-event-times §2): the host's clock and its zone beside the instant, and online events. NULL on
-    // every non-event row, and on an event from before them until it is next edited.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_local TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_end_local TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_tz TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_online INTEGER`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_link TEXT`).run(); } catch { }
-    // Repeating events (DESIGN-event-times §8): the rule, its last date and its cancelled dates. NULL on every row: no
-    // event repeats until its host says so.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT`).run(); } catch { }
-    // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
-    // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
-    // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,
-    // nothing removed by a moderator, nobody muted.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN hidden_by_reports_at TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN removed_by_moderator_at TEXT`).run(); } catch { }
-    // Lendable Offers (schema.sql; DESIGN-shops-and-tools-fable.md §12 S3). 0 and NULL on every existing row: nothing is
-    // lent until its author says so.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN lendable INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_max_days INTEGER`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_terms TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN replacement_value TEXT`).run(); } catch { }
-    // The shop a listing is in (schema.sql; DESIGN-shops-and-tools-fable.md §12 S1). Before the schema.sql exec, which
-    // indexes it (idx_posts_shop). NULL on every existing row: nothing is in a shop until its author puts it there.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN shop_id TEXT REFERENCES shops(id)`).run(); } catch { }
-    // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
-    // existing row: nothing is featured until its author or a keeper says so.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
-    // A pin (schema.sql; DESIGN-pinning-fable.md §4). Before the schema.sql exec, whose index and trigger read them. NULL on
-    // every existing row: nothing is pinned until an owner or admin says so.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_until TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_at TEXT`).run(); } catch { }
-    // What made a post when that was not its author's own app (schema.sql posts.created_via): 'assistant:<grant id>' for an
-    // owner's AI assistant. NULL on every existing row: none was made that way.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN created_via TEXT`).run(); } catch { }
-    // Its tags (schema.sql; DESIGN-owner-seeding-tags-fable.md §4.5). '' on every existing row: nothing is tagged until its
-    // author tags it. Their words reach search_keywords through state-engine's once-only keywordsWithTagsOnce.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
-    // The tags its author typed (schema.sql; DESIGN-tags-free-entry-fable.md §2). '' on every existing row, so no boot pass
-    // and no row rewritten. An older image booted on this file names its columns in every INSERT, and the default applies.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
-    // A member's copy of an event from their own community (schema.sql; engine/event-copy.ts). NULL on every existing row.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_host TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_post_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_price TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_takes_questions INTEGER`).run(); } catch { }
-    // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
-    // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
-    // shops has no table to alter, and the schema.sql exec makes it with the column.
-    try { db.prepare(`ALTER TABLE shops ADD COLUMN photo_ref TEXT`).run(); } catch { }
-    // idx_shops_owner_opened (schema.sql) leads on the same column and replaces it. A plain index: an older image booted
-    // back on the data makes its own again, and this drops it at the next boot.
-    try { db.prepare(`DROP INDEX IF EXISTS idx_shops_owner`).run(); } catch { }
-    // A shop's kind becomes one of the Market's categories, once (moveShopKindsToCategories).
-    moveShopKindsToCategories();
-    try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
-    // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
-    // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN area_updated_at TEXT`).run(); } catch { }
-    // A visitor's row (engine isVisitorKey). Before the schema.sql exec, whose members_touch_updated_at (dropped below, so
-    // the exec recreates it) lists it. 0 on every existing row; the node marks its visitors once, after the exec
-    // (markExistingVisitors), when every table that rule reads exists.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN is_visitor INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    // When the key's owner deleted the account (state-engine.ts isDeletedByOwner). Before the schema.sql exec, whose
-    // members_touch_updated_at (dropped below, so the exec recreates it) lists it. NULL on every existing row.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN deleted_by_owner_at TEXT`).run(); } catch { }
-    // The member's "Show who invited me to other members" (state-engine.ts getTrustProfileForViewer). Before the schema.sql
-    // exec, whose members_touch_updated_at (dropped below, so the exec recreates it) lists it. A new column with its
-    // default: 1 (shown) on every existing row, which is what every member reads today; nothing is rewritten.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN inviter_shown INTEGER DEFAULT 1`).run(); } catch { }
-    // When what decides whether the board shows a member's listings last changed (the Market delta reads it, engine
-    // posts.ts). Before the schema.sql exec, which indexes it and whose members_touch_board_standing sets it. Filled
-    // once after the exec (backfillBoardStanding), when member_preferences exists.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN board_standing_changed_at TEXT`).run(); } catch { }
-    // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
-    // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
-    // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape
-    // is not the failure we want to discover at boot. NULL on every existing row means "my default
-    // applies", which is exactly the behaviour a node that upgrades into this should have.
-    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
-    // The date an RSVP is for (DESIGN-event-times §8). Before the schema.sql exec, which indexes it. NULL on every existing
-    // row: an RSVP from before it is for the date its event has (engine/event-series-roll.ts RSVP_IS_CURRENT).
-    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN occurrence_at DATETIME`).run(); } catch { }
-    rekeyReminderMarksByOccurrence();
-    // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
-    // matters only on an event whose host lets people in, and no existing event is one.
-    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_by TEXT`).run(); } catch { }
-
-    // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_by TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_by TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
-    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
-
-    // Enterprise keeper answers (A, G, M): a lead installed automatically (community removal of the old lead, or
-    // the old lead stepping down) is marked, which opens succession at once; succession gets a deadline, a
-    // closing reason (rejected / expired / lead returned) and a yes-or-no vote.
-    try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN auto_promoted_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN deadline_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN closed_reason TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN choice TEXT NOT NULL DEFAULT 'yes' CHECK (choice IN ('yes', 'no'))`).run(); } catch { }
-
-    // Enterprise location (docs/the-commons.md §2.2, Slice 6)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN lat REAL CHECK (lat IS NULL OR (lat >= -90 AND lat <= 90))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN lng REAL CHECK (lng IS NULL OR (lng >= -180 AND lng <= 180))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN location_auth_signer TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN auth_signer TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN location_updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
-
-    // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
-    const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
-    if (hasNodeRoles) {
-        const nrColumns = (db.prepare("PRAGMA table_info(node_roles)").all() as any[]).map(c => c.name);
-        if (!nrColumns.includes('session_epoch')) {
-            db.prepare(`ALTER TABLE node_roles ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`).run();
-        }
-        if (!nrColumns.includes('break_glass_hash')) {
-            db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_hash TEXT`).run();
-        }
-    }
-
-    // node_roles: ensure check constraint allows 'moderator'
-    try {
-        const nrSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='node_roles'").get() as any;
-        if (nrSql?.sql && !nrSql.sql.includes('moderator')) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS node_roles_migration;
-                    CREATE TABLE node_roles_migration (
-                        member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
-                        role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
-                        granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        granted_by       TEXT,
-                        session_epoch    INTEGER NOT NULL DEFAULT 0,
-                        break_glass_hash TEXT
-                    );
-                    INSERT INTO node_roles_migration (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
-                        SELECT member_pubkey, role, granted_at, granted_by,
-                               COALESCE(session_epoch, 0), break_glass_hash FROM node_roles;
-                    DROP TABLE node_roles;
-                    ALTER TABLE node_roles_migration RENAME TO node_roles;
-                    CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
-                `);
-            })();
-            console.log('[DB] ✅ Migrated node_roles CHECK constraint to allow moderator');
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
-    }
-
-    // node_roles: when, and from which kind of session, each owner's break-glass code was last made (#1531). After the
-    // rebuild above, which copies only the columns it knows. Existing rows keep NULL in both (Settings: "made before
-    // this was recorded"); a fresh install gets them from schema.sql, and the ALTER fails harmlessly with no table yet.
-    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_at TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_by TEXT`).run(); } catch { }
-
-    // group_members: the status CHECK gains 'removed', so a convenor's removal is kept as a record instead of a
-    // deleted row that an open group's Join button re-creates. A CHECK cannot be altered in place, so the table
-    // is rebuilt. BEFORE the schema.sql exec on purpose: dropping the table drops its touch trigger and indexes,
-    // and the exec below re-creates them against the new table.
-    try {
-        const gmSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='group_members'").get() as any;
-        if (gmSql?.sql && !gmSql.sql.includes("'removed'")) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS group_members_migration;
-                    CREATE TABLE group_members_migration (
-                        group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-                        member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                        role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('convenor', 'member', 'observer')),
-                        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited', 'removed')),
-                        joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        invited_by TEXT REFERENCES members(public_key),
-                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        PRIMARY KEY (group_id, member_pubkey)
-                    );
-                    INSERT INTO group_members_migration (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at)
-                        SELECT group_id, member_pubkey, role, status, joined_at, invited_by, updated_at FROM group_members;
-                    DROP TABLE group_members;
-                    ALTER TABLE group_members_migration RENAME TO group_members;
-                `);
-            })();
-            console.log("[DB] ✅ Migrated group_members CHECK constraint to allow 'removed'");
-        }
-    } catch (err: any) {
-        console.error("[DB] ❌ Failed to migrate group_members for the 'removed' status:", err?.message || err);
-    }
-
-    // decision_electors: the status CHECK gains a removal jury's 'stood_aside' and 'silent' (engine/removal-jury.ts,
-    // DESIGN-removal-jury-fable.md §4). Rebuilt as group_members is above, BEFORE the schema.sql exec, which re-creates
-    // its index against the new table; stampPlainTables re-creates its touch trigger at the end of the boot.
-    try {
-        const deSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='decision_electors'").get() as any;
-        if (deSql?.sql && !deSql.sql.includes("'stood_aside'")) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS decision_electors_migration;
-                    CREATE TABLE decision_electors_migration (
-                        decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
-                        member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                        role_at_open  TEXT NOT NULL,
-                        status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
-                        created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        PRIMARY KEY (decision_id, member_pubkey)
-                    );
-                    INSERT INTO decision_electors_migration (decision_id, member_pubkey, role_at_open, status, created_at, updated_at)
-                        SELECT decision_id, member_pubkey, role_at_open, status, created_at, updated_at FROM decision_electors;
-                    DROP TABLE decision_electors;
-                    ALTER TABLE decision_electors_migration RENAME TO decision_electors;
-                `);
-            })();
-            console.log("[DB] ✅ Migrated decision_electors CHECK constraint to allow a removal jury's 'stood_aside' and 'silent'");
-        }
-    } catch (err: any) {
-        console.error("[DB] ❌ Failed to migrate decision_electors for a removal jury's statuses:", err?.message || err);
-    }
-    // decision_electors.answered_at and reminded_at: a removal juror's Serve and the last reminder sent (slice J2b). Plain
-    // ADD COLUMNs, after the rebuild above (which makes the table as J1 had it) and before the schema.sql exec.
-    try { db.prepare('ALTER TABLE decision_electors ADD COLUMN answered_at DATETIME').run(); } catch { }
-    try { db.prepare('ALTER TABLE decision_electors ADD COLUMN reminded_at DATETIME').run(); } catch { }
-
-    // groups.lead_pubkey: the group's LEAD convenor (2026-09-23). A plain ADD COLUMN, on purpose — a fourth value
-    // in group_members.role would mean rebuilding that table for its CHECK constraint. Before the schema.sql exec
-    // so anything the exec re-creates already sees the column. The backfill is further down, behind a marker.
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN lead_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
-
-    // group_members.role_since: when a row took the role it holds, so a vote on a silent lead counts only convenors
-    // appointed before the lead went quiet (2026-09-28). After the 'removed' rebuild above, which lists its columns.
-    // No backfill: the reader takes joined_at for a row that has none.
-    try { db.prepare(`ALTER TABLE group_members ADD COLUMN role_since DATETIME`).run(); } catch { }
-
-    // group_key_wraps: its key gains the wrapper and it gains rejected_at (group chats step 2b, DESIGN-group-chat-epochs-
-    // over-time-fable.md §1): a recipient refuses a wrap that does not open, the row stays flagged, and another member's
-    // wrap fills the slot. A key cannot be altered in place, so a table from step 2 is rebuilt, every row kept as it was,
-    // before the schema.sql exec, which makes its indexes again (stampPlainTables its triggers).
-    try {
-        const wrapsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'group_key_wraps'").get() as { sql: string } | undefined)?.sql;
-        if (wrapsSql && !wrapsSql.includes('rejected_at')) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS group_key_wraps_migration;
-                    CREATE TABLE group_key_wraps_migration (
-                        group_id TEXT NOT NULL, epoch INTEGER NOT NULL, recipient_pubkey TEXT NOT NULL, wrapper_pubkey TEXT NOT NULL,
-                        eph_pub TEXT NOT NULL, nonce TEXT NOT NULL, wrapped TEXT NOT NULL, sig TEXT, created_at TEXT NOT NULL,
-                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), rejected_at TEXT,
-                        PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)
-                    );
-                    INSERT INTO group_key_wraps_migration (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
-                        SELECT group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at FROM group_key_wraps;
-                    DROP TABLE group_key_wraps;
-                    ALTER TABLE group_key_wraps_migration RENAME TO group_key_wraps;
-                `);
-            })();
-            console.log('[DB] ✅ Migrated group_key_wraps: a refused wrap is kept beside the one that replaces it');
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate group_key_wraps:', err?.message || err);
-    }
-
-    // group_members.from_epoch: the first epoch of the group's chat a membership holds keys from, by number (group chats
-    // step 2b; engine/group-keys.ts). Once, with the column: every active row gets the epoch the old stored_at rule gave
-    // it, or the next one when that gave none. A group with no epoch, which is every group on a node from before the
-    // chat's keys, starts at 1. No row is stamped: the touch trigger is dropped here and schema.sql makes it again.
-    try {
-        db.transaction(() => {
-            db.prepare(`ALTER TABLE group_members ADD COLUMN from_epoch INTEGER`).run();
-            db.exec('DROP TRIGGER IF EXISTS group_members_touch_updated_at');
-            const hasEpochs = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'group_key_epochs'").get();
-            db.prepare(hasEpochs
-                ? `UPDATE group_members SET from_epoch = COALESCE(
-                       (SELECT MIN(e.epoch) FROM group_key_epochs e WHERE e.group_id = group_members.group_id AND e.stored_at >= group_members.joined_at),
-                       (SELECT MAX(e.epoch) + 1 FROM group_key_epochs e WHERE e.group_id = group_members.group_id),
-                       1)
-                   WHERE status = 'active'`
-                : `UPDATE group_members SET from_epoch = 1 WHERE status = 'active'`).run();
-        })();
-    } catch { /* the column is there already, or no table yet (schema.sql makes it with the column) */ }
-
-    // invalidated_keys: a completed re-key's succession statement, signed by the new key (group chats,
-    // DESIGN-group-chat-line-display-fable.md §5). NULL on every row from before: a re-key nobody has attested yet.
-    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_sig TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_at TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_stored_at TEXT`).run(); } catch { }
-
-    // Escrow dispute arbitration (§5 item 2, §6 correction 2)
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_by TEXT`).run(); } catch { }
-    // A period of a standing deal (schema.sql standing_deals; engine/standing-deals.ts).
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT REFERENCES standing_deals(id)`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER`).run(); } catch { }
-
-    // activity_feed: ensure check constraint allows 'dispute_resolved'
-    try {
-        const afSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_feed'").get() as any;
-        if (afSql?.sql && !afSql.sql.includes('dispute_resolved')) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS activity_feed_migration;
-                    CREATE TABLE activity_feed_migration (
-                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                        event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created', 'dispute_resolved')),
-                        actor_pubkey  TEXT NOT NULL,
-                        target_pubkey TEXT,
-                        metadata      TEXT,
-                        created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                    );
-                    INSERT INTO activity_feed_migration (id, event_type, actor_pubkey, target_pubkey, metadata, created_at)
-                        SELECT id, event_type, actor_pubkey, target_pubkey, metadata, created_at FROM activity_feed;
-                    INSERT OR REPLACE INTO sqlite_sequence (name, seq)
-                        SELECT 'activity_feed_migration', seq FROM sqlite_sequence WHERE name = 'activity_feed';
-                    DROP TABLE activity_feed;
-                    ALTER TABLE activity_feed_migration RENAME TO activity_feed;
-                    CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
-                    CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
-                `);
-            })();
-            console.log('[DB] ✅ Migrated activity_feed CHECK constraint to allow dispute_resolved');
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
-    }
-
-    // names_access_log: ensure its CHECK allows 'copy_restored' (a table #1411 made has the old CHECK; the locked copy's
-    // restore writes that line). Before schema.sql, which makes its index; the watermark triggers come after, as for any table.
-    try {
-        if (rebuildNamesAccessLogCheck(db)) console.log('[DB] ✅ Migrated names_access_log CHECK constraint to allow copy_restored');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
-    }
-    // confirmations: its CHECK allows the member's own step-back, and it has `stepped_back_owing`. Before schema.sql, which
-    // makes its two live-row indexes; the watermark triggers come after, as for any table.
-    try {
-        if (rebuildConfirmationsRevokeCheck(db)) console.log("[DB] ✅ Migrated confirmations for a member's own step-back");
-    } catch (err: any) {
-        console.error("[DB] ❌ Failed to migrate confirmations for a member's own step-back:", err?.message || err);
-    }
-    // The live consents went with the rule on what the admins can see (scratch/fable-design/DESIGN-balance-rule-fable.md §5).
-    // An older image makes the table again, empty, and so lists nobody; known_consent_log stays as the record (Q-C).
-    try {
-        db.exec('DROP TABLE IF EXISTS known_consents');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to drop known_consents:', err?.message || err);
-    }
-    // health_access_log: its CHECK allows the looks at disputes and alerts, and it has `detail` (a table #1599 made has
-    // neither). Before schema.sql, as names_access_log above; the watermark triggers come after.
-    try {
-        if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
-    }
-    // system_logs: its CHECK allows the AI assistants' category (a table from before has the old CHECK, so their lines
-    // would fail to write). Before schema.sql, as the access logs above.
-    try {
-        if (rebuildSystemLogsCheck(db)) console.log("[DB] ✅ Migrated system_logs CHECK constraint to allow the AI assistants' AGENT category");
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
-    }
-    // member_tool_state: its CHECK lets in 128 KB, the most a tool may name (a table from before has 64 KB, so the Tool
-    // shed's bigger copy would fail to write). Before schema.sql, as the logs above, and before stampPlainTables, which
-    // makes its watermark index and triggers again after the rebuild drops them.
-    try {
-        if (rebuildToolStateBodyCheck(db)) console.log('[DB] ✅ Migrated member_tool_state CHECK constraint to let in 128 KB copies');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate member_tool_state for 128 KB copies:', err?.message || err);
-    }
-    try {
-        if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to add the token to health_access_log:', err?.message || err);
-    }
-    try {
-        if (addTakedownByAuthor(db)) console.log('[DB] ✅ Migrated agent_takedowns to say which calls named a post\'s author');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to add by_author to agent_takedowns:', err?.message || err);
-    }
-
-    // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):
-    // each one's `updated_at` is its watermark. schema.sql declares it with its default for a new table; a table from
-    // before it gets the column here, NULL on every row, stamped after the exec by stampPlainTables. decisions,
-    // decision_votes and recovery_releases have always had it.
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE suspended_node_roles ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE deferred_wage_claims ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE federation_links ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // The member’s status before a re-key code suspended them, so a cancelled code puts it back (member-wizards cancelRekeyCode).
-    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
-    // Wrong numbers typed on a code's phones (engine/rekey-redeem.ts bindRekeyByMatch): the third stops the code.
-    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN wrong_matches INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    // A re-key or a bring-back (engine/bring-back.ts): every code made before it was a re-key.
-    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'rekey'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE enterprise_keeper_changes ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // Whose account a recovery release is of (review 4122266731): filled for the rows here by fillReleaseOwners.
-    try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN owner_pubkey TEXT`).run(); } catch { }
-    // Members' devices and conveniences replicate to a standby as plain tables too (design G4), the same way.
-    // pricing_guide_items has always had it.
-    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE push_token_leaves ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE chat_mutes ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE thread_read_cursors ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE event_reminders_sent ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE activity_feed ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE pricing_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // A deep-link shortener's table nothing ever read or wrote (design G4, day zero).
-    try { db.prepare(`DROP TABLE IF EXISTS invite_links`).run(); } catch { }
-
-    // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
-    // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
-    // it here and let schema.sql create the guarded one. Keyed on the trigger's own text, so this only ever
-    // drops the old shape: once replaced, every later boot finds the guard and does nothing.
-    try {
-        const au = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_au'`).get() as { sql: string } | undefined;
-        if (au && !/WHEN\s+OLD\.title\s+IS\s+NOT\s+NEW\.title/i.test(au.sql)) {
-            db.prepare(`DROP TRIGGER posts_au`).run();
-            console.log('[DB] Replacing posts_au with the guarded FTS trigger');
-        }
-    } catch (e) {
-        console.error('[DB] ❌ Could not replace posts_au:', e);
-    }
-    replaceOffBoardShapes();
-
-    // Members' photos out of their rows (schema.sql member_photos): the reference first, before the exec, whose members
-    // trigger names it; then each photo moved, with members_touch_updated_at still dropped above, so no row is stamped.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_ref TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
     moveMemberPhotosOutOfRows();
-
-    // Groups' own pictures out of their rows (schema.sql group_pictures, #1486), the same way: the reference first, then
-    // each picture moved with groups_touch_updated_at dropped (schema.sql makes it again), so no group is stamped.
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_ref TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS groups_touch_updated_at`).run(); } catch { }
     moveGroupPicturesOutOfRows();
 
-    // The vouching reset (R0, db/vouch-reset.ts): here, with members_touch_updated_at dropped above (so no row is stamped)
-    // and before schema.sql, which makes it again without the old names. It counts first and throws, writing nothing,
-    // when someone with a vouch owes more than the line they keep without it or a Decision could still give or take away
-    // vouching: the boot stops there, and the previous release boots the data untouched. Otherwise one transaction turns
-    // every switch and vouch off, deletes the unused invites that promised a vouch, and drops the four columns.
-    vouchResetReport = resetVouching(db, (where) => {
-        // A main server's deletes carry tombstones to its standbys (deletePlainRows); a standby's copy is its main
-        // server's, which deletes them there. A database from before the tombstones table has none to write.
-        const tombstones = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tombstones'`).get();
-        return getNodeRole() !== 'backup' && tombstones
-            ? deletePlainRows('invite_codes', where)
-            : db.prepare(`DELETE FROM invite_codes WHERE ${where}`).run().changes;
-    });
-
-    const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
-    // Verified channels (#1830): the badge carries the account the platform named. Badges set before
-    // these columns proved nothing and are cleared at boot by clearUnprovenOauthBadges (state-engine.ts).
-    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN platform_account_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
-    // The listing promise in the mirrored directory (mothership A2, engine/directory-cache.ts). No table yet on a database
-    // from before G5: schema.sql makes it with them.
-    // The place circle (engine/place-circles.ts): the flag on a watch, and what makes a group a circle. Plain ADD COLUMNs.
-    try { db.prepare(`ALTER TABLE place_watches ADD COLUMN would_help INTEGER NOT NULL DEFAULT 0 CHECK (would_help IN (0, 1))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN kind TEXT CHECK (kind IS NULL OR kind = 'circle')`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN place_cell TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_done_at TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_community_key TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starter TEXT REFERENCES members(public_key)`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starting_at TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN promise TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))`).run(); } catch { }
-    // A request of their own the person a withdrawn message request was for made while its opener blocked them
-    // (engine/dm-requests.ts reachedOutRow). No table yet on a database from before message requests: schema.sql makes it.
-    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
-    // Their cancel of that request of their own (engine/dm-requests.ts cancelReachOut).
-    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reach_out_withdrawn_at TEXT`).run(); } catch { }
-    // The bell (engine/push-notices.ts): when the member took a notice off it. No table yet on a database from before
-    // push notices: schema.sql makes it with the column.
-    try { db.prepare(`ALTER TABLE push_notices ADD COLUMN seen_at INTEGER`).run(); } catch { }
-    // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
-    try {
-        const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;
-        if (jrSql && !jrSql.includes("'cancelled'")) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS join_requests_migration;
-                    CREATE TABLE join_requests_migration (
-                        id TEXT PRIMARY KEY,
-                        pubkey TEXT NOT NULL,
-                        callsign TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        avatar TEXT,
-                        from_node TEXT,
-                        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
-                        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        decided_by TEXT,
-                        invite_code TEXT UNIQUE,
-                        decided_at TEXT,
-                        ip_hash TEXT,
-                        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        CHECK ((status = 'pending') = (decided_at IS NULL)),
-                        CHECK ((status = 'approved') = (invite_code IS NOT NULL))
-                    );
-                    INSERT INTO join_requests_migration SELECT * FROM join_requests;
-                    DROP TABLE join_requests;
-                    ALTER TABLE join_requests_migration RENAME TO join_requests;
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_join_requests_one_open ON join_requests(pubkey) WHERE status = 'pending';
-                    CREATE INDEX IF NOT EXISTS idx_join_requests_pubkey ON join_requests(pubkey, created_at);
-                    CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status, created_at);
-                    CREATE INDEX IF NOT EXISTS idx_join_requests_ip ON join_requests(ip_hash, created_at) WHERE ip_hash IS NOT NULL;
-                    CREATE INDEX IF NOT EXISTS idx_join_requests_updated_at ON join_requests(updated_at);
-                `);
-            })();
-            console.log("[DB] ✅ Migrated join_requests CHECK constraint to allow 'cancelled'");
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate join_requests table for cancelled status:', err?.message || err);
-    }
-    // Where a request to join came from (shared-listing door A3, engine/peek-tickets.ts peekProvenance), after the
-    // migration above, which copies the table's thirteen columns as they were. No table yet on a database from before
-    // requests to join: schema.sql makes it with these.
-    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_post_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_sharer_pubkey TEXT`).run(); } catch { }
-    // How many asked to join from each link shared outside (the sharer's Shared outside row).
-    try { db.prepare(`ALTER TABLE peek_tickets ADD COLUMN asked INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)`).run(); } catch { }
     db.exec(schemaSql);
 
-    // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).
-    // Counts only, local to this node; rebuilt once on a node whose table still declares the old list, rows kept.
-    try {
-        const saSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='signature_audiences'").get() as any)?.sql as string | undefined;
-        if (saSql && !saSql.includes("'lost'")) {
-            db.transaction(() => {
-                db.exec(`
-                    DROP TABLE IF EXISTS signature_audiences_migration;
-                    CREATE TABLE signature_audiences_migration (
-                        day      TEXT NOT NULL,
-                        kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app', 'lost')),
-                        address  TEXT NOT NULL,
-                        people   INTEGER NOT NULL DEFAULT 0,
-                        PRIMARY KEY (day, kind, address)
-                    );
-                    INSERT INTO signature_audiences_migration (day, kind, address, people)
-                        SELECT day, kind, address, people FROM signature_audiences;
-                    DROP TABLE signature_audiences;
-                    ALTER TABLE signature_audiences_migration RENAME TO signature_audiences;
-                `);
-            })();
-            console.log('[DB] ✅ Migrated signature_audiences CHECK constraint to allow lost');
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to migrate signature_audiences for lost:', err?.message || err);
-    }
-
-    // A succession proposal opened before deadlines existed gets the same 14 days from when it opened.
-    try {
-        db.prepare(`UPDATE enterprise_succession_proposals
-                    SET deadline_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '+14 days')
-                    WHERE deadline_at IS NULL`).run();
-    } catch { }
-
-    // One-time posts_fts rebuild, for whatever the unguarded posts_au left behind. A rebuild recomputes the
-    // whole external-content index from `posts`, so it repairs any drift and is idempotent — the marker only
-    // saves doing it on every boot. user_version moves to 4 AFTER the rebuild succeeds, so a crash in between
-    // just means it runs again next boot. Fresh installs pass through here too, on an empty index.
-    if ((db.pragma('user_version', { simple: true }) as number) < 4) {
-        try {
-            const started = Date.now();
-            db.exec(`INSERT INTO posts_fts(posts_fts) VALUES('rebuild')`);
-            db.pragma('user_version = 4');
-            console.log(`[DB] Rebuilt posts_fts (${Date.now() - started}ms)`);
-        } catch (e) {
-            // Search is degraded, not the node: keep booting, and try again next boot (user_version unchanged).
-            console.error('[DB] ❌ posts_fts rebuild failed:', e);
-        }
-    }
-
-
-    // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
-    // created_at is when the row is written, not the enterprise's joined_at: the delta backup exporter cursors
-    // conversations on created_at, so a back-dated row would never reach a replica (#837 review).
-    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);`); } catch { }
+    // The passes still run at every boot after the exec, each its own guard. markExistingVisitors and
+    // bringMembersToSchemaRules write their node_config marker on a fresh install and find it on every kept node (A32,
+    // A35); the enterprise threads (A19) wait on the read of the create paths; the break-glass hashes (A29) find none
+    // in the old form. Each goes in its own removal.
+    markExistingVisitors();
+    bringMembersToSchemaRules(schemaSql);
+    // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6). created_at is when the row is written, not the
+    // enterprise's joined_at: the delta backup exporter cursors conversations on created_at, so a back-dated row would never
+    // reach a replica (#837 review).
     try {
         db.prepare(`
             INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
@@ -2262,246 +894,13 @@ export function initSchema() {
             WHERE is_treasury = 1
         `).run();
     } catch { }
-
-    if (ratingsSql && ratingsSql.sql.includes('marketplace_transactions_old')) {
-        try {
-            console.log("📦 Restoring ratings data...");
-            const cols = (db.prepare('PRAGMA table_info(ratings_corrupted)').all() as any[]).map(c => c.name).join(', ');
-            db.exec(`INSERT INTO ratings (${cols}) SELECT ${cols} FROM ratings_corrupted;`);
-            db.exec(`DROP TABLE ratings_corrupted;`);
-            console.log("✅ Ratings table fixed.");
-        } catch (err: any) {
-            console.error("❌ Ratings fix failed:", err.message);
-        }
-    }
-
-    markExistingVisitors();
-    backfillBoardStanding();
-    fillPausedBoardStanding();
-    bringMembersToSchemaRules(schemaSql);
-    indexOldConversationIds();
-
-    // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
-    // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only
-    // from unverified body fields, so most members have NULL here — on deploy every long-standing lead
-    // would be instantly eligible, and in a two-keeper enterprise the other keeper could take the lead at
-    // once. Stamp the NULLs with this migration's run time so every lead gets a full 30 days of verified
-    // activity recording first. Runs once (node_config marker), so a later boot extends nobody.
-    try {
-        const alreadyBackfilled = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_backfill_last_active_at_v1'").get();
-        if (!alreadyBackfilled) {
-            db.transaction(() => {
-                db.prepare(`UPDATE members SET last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE last_active_at IS NULL`).run();
-                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_backfill_last_active_at_v1', '1')").run();
-            })();
-        }
-    } catch { }
-
-    // Every existing group gets its lead convenor (2026-09-23). The rule, and the ONLY thing this touches:
-    //   groups.lead_pubkey, where it is NULL — the creator while they are an active convenor of the group,
-    //   otherwise the longest-serving active convenor (joined_at ascending, member_pubkey to break a tie so two
-    //   nodes reach the same answer). A group with no active convenor keeps a NULL lead and gains one the moment
-    //   it has a convenor again, because the read path falls back to this same rule.
-    // No membership row, no role and no other column is written. Gated by a marker so it runs strictly once: a
-    // later boot must never hand the lead back to a creator the group has since replaced through hand-over, the
-    // silence vote or a Decision.
-    try {
-        const alreadyBackfilled = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_group_lead_pubkey_v1'").get();
-        if (!alreadyBackfilled) {
-            db.transaction(() => {
-                // Two branches, not one ORDER BY that prefers the creator: SQLite resolves a subquery's ORDER BY
-                // against that subquery's own FROM clause, where groups.created_by is not visible. Same shape as
-                // leadPubkeySql in @beanpool/engine, which the read path falls back to.
-                const res = db.prepare(`
-                    UPDATE groups SET lead_pubkey = COALESCE(
-                        (SELECT gmc.member_pubkey FROM group_members gmc
-                          WHERE gmc.group_id = groups.id AND gmc.member_pubkey = groups.created_by
-                            AND gmc.role = 'convenor' AND gmc.status = 'active'),
-                        (SELECT gmf.member_pubkey FROM group_members gmf
-                          WHERE gmf.group_id = groups.id AND gmf.role = 'convenor' AND gmf.status = 'active'
-                          ORDER BY gmf.joined_at ASC, gmf.member_pubkey ASC
-                          LIMIT 1)
-                    )
-                    WHERE lead_pubkey IS NULL
-                      AND EXISTS (
-                        SELECT 1 FROM group_members gm
-                        WHERE gm.group_id = groups.id AND gm.role = 'convenor' AND gm.status = 'active'
-                      )
-                `).run();
-                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_group_lead_pubkey_v1', '1')").run();
-                if (res.changes > 0) console.log(`[DB] ✅ Gave ${res.changes} group(s) a lead convenor`);
-            })();
-        }
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to backfill groups.lead_pubkey:', err?.message || err);
-    }
-
-    // PR #839 Blocker A: a wound-up enterprise never keeps its map location. finaliseWindUp now clears it, but
-    // an enterprise wound up before that fix still holds the coordinates a keeper may have set on their own
-    // house. Clear them. Idempotent without a marker: it matches only completed rows that still have
-    // coordinates, so a later boot (or a row that arrives from an older peer) is handled the same way.
-    // updated_at is set explicitly so delta sync carries the clear even if the touch trigger is absent.
-    try {
-        db.prepare(`
-            UPDATE members
-            SET lat = NULL, lng = NULL,
-                location_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-            WHERE is_treasury = 1 AND status = 'completed' AND (lat IS NOT NULL OR lng IS NOT NULL)
-        `).run();
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to clear locations of wound-up enterprises:', err?.message || err);
-    }
-
-    // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
-    try {
-        db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();
-    } catch { }
-
-    // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
-    // posts.updated_at, posts.search_keywords, members.earned_credit_c and members.profile_updated_at used to
-    // be added HERE. They moved above the exec (#127) because schema.sql objects depend on them.
-    //
-    // Protocol v1: Admin Genesis Invites — store invite tier type
-    // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
-    // the app never touches the money, so it must not imply a figure it holds or settles.
-    // Rule 4's per-member aggregate exposure read would otherwise full-scan `settlements`.
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
-    // Reservation expiry runs every recovery cycle; without this it scans every reserved row.
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until) WHERE direction = 'inbound' AND state = 'reserved'`).run(); } catch { }
-    // Both settlement indexes are recreated rather than left as-is: CREATE INDEX IF NOT EXISTS keeps an
-    // older narrower definition on an already-live DB, so the DROP is what actually applies the change.
-    //   peer:        equality columns (peer_id, direction) before the IN range on state
-    //   unfinalised: created_at, matching the ORDER BY, so recovery avoids a temp sort
-    try {
-        db.prepare(`DROP INDEX IF EXISTS idx_settlements_peer`).run();
-        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, direction, state)`).run();
-    } catch { }
-    try {
-        db.prepare(`DROP INDEX IF EXISTS idx_settlements_unfinalised`).run();
-        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at) WHERE state IN ('escrowed', 'reserved', 'committed', 'held')`).run();
-    } catch { }
-    // Moderation status column moved ABOVE the schema.sql exec — see the note there. The index
-    // stays: it is idempotent, and it covers a node that somehow reached this point without it.
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC)`).run(); } catch { }
-    // Marketplace hygiene: track when a lingering escrow deal was last nudged
-    // Edit-message window: timestamp of the most recent edit (null = never edited)
-    // Perf: Add index to conversation_participants
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key)`).run(); } catch { }
-    // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at)`).run(); } catch { }
-    // Perf: Add index to messages for author_pubkey
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_messages_author_pubkey ON messages(author_pubkey)`).run(); } catch { }
-
-    // Dropped, not replaced. `idx_creator_channels_syndicate(syndicate_to_node, category)` led on a
-    // two-valued column and matched no query that ships: the only read of syndicate_to_node is
-    // listPublicChannels, whose selective term is owner_pubkey and which uses
-    // idx_creator_channels_owner. Every insert, update and tombstone-scrub paid to maintain it —
-    // and a delete writes three times. Phase 2's feed query can add one led by the column it
-    // actually filters on, once that query exists to be measured.
-    try { db.prepare(`DROP INDEX IF EXISTS idx_creator_channels_syndicate`).run(); } catch { }
-
-    // Phase 2 delta sync: add updated_at columns + indexes to mutable tables that
-    // didn't previously track row-level mutation timestamps. Backfill from the
-    // most recent existing timestamp so cursor scans don't miss pre-migration rows.
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at)`).run(); } catch { }
-    try { db.prepare(`UPDATE open_joins SET updated_at = joined_at WHERE updated_at IS NULL`).run(); } catch { }
-
-    // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' and 'pruned'
-    // members (they left — their name is reclaimable). Guarded on purpose: if a node
-    // still has duplicate callsigns the index BUILD fails, and we must NOT crash
-    // startup over it. We log loudly instead — the app-level check in updateProfile
-    // still enforces new renames; the admin de-dupes and the index builds next boot.
-    // Fresh nodes start empty, so it builds cleanly and enforces at the DB level too.
-    //
-    // The DROP is a migration: nodes built before 'pruned' was reclaimable carry the
-    // narrower `status != 'migrated'` predicate, and CREATE ... IF NOT EXISTS would
-    // silently keep it — leaving the DB rejecting renames that isCallsignAvailable()
-    // has already allowed (a raw SQLITE_CONSTRAINT surfacing as a 500). Dropping is
-    // safe: the new predicate indexes a strict SUBSET of the old one's rows, so any
-    // node whose old index built cleanly will build this one cleanly too.
-    try {
-        db.prepare(`DROP INDEX IF EXISTS idx_members_callsign_unique`).run();
-        db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status NOT IN ('migrated', 'pruned')`).run();
-    } catch (e) {
-        console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
-    }
-    migrateCallsignFold(db);
-
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
-
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status)`).run(); } catch { }
-
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
-
-
-    // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
-    // Seed each row's updated_at from the best existing timestamp so a first delta
-    // pull after this migration doesn't have to full-reconcile them. COALESCE falls
-    // back to now() only if every source column is NULL (shouldn't happen, but keeps
-    // the watermark non-NULL so the row stays visible to `WHERE updated_at > :since`).
-    // Idempotent: WHERE updated_at IS NULL means re-running is a no-op. The indexes +
-    // touch triggers themselves come from schema.sql (already exec'd above).
-    try { db.prepare(`UPDATE messages SET updated_at = COALESCE(edited_at, timestamp, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
-    try { db.prepare(`UPDATE friends SET updated_at = COALESCE(added_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
-    try { db.prepare(`UPDATE abuse_reports SET updated_at = COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
-    try { db.prepare(`UPDATE conversation_participants SET updated_at = COALESCE(last_read_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
-
-    // The role was briefly labelled 'steward', which collided with the Steward TRUST TIER
-    // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
-    // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
-    try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
-    try {
-        ripOutLegacyVoting(db);
-    } catch (err) {
-        console.error('[DB] ⚠️ Could not remove retired voting data:', err);
-    }
-    // A scope on a Decision (community or one enterprise), and one open Decision per member author per scope; the node's
-    // own votes (author SYSTEM: a pause's vote on removing the member, a "Keep this suspension?" from before) are exempt.
-    try {
-        if (addDecisionScope(db, schemaSql) === 'rebuilt') console.log('[DB] ✅ Migrated decisions to carry a scope');
-    } catch (err: any) {
-        console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
-    }
-    try {
-        if (addRemovalCaseColumns(db) > 0) console.log("[DB] ✅ Decisions carry a member's reply, a hidden case and a hidden reply");
-    } catch (err: any) {
-        console.error("[DB] ❌ Failed to give decisions the member's reply, a hidden case and a hidden reply:", err?.message || err);
-    }
-    try {
-        db.exec(`
-            DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;
-            CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
-            AFTER DELETE ON groups
-            FOR EACH ROW
-            BEGIN
-                UPDATE posts SET target_group_id = NULL,
-                       active = 0, status = 'cancelled',
-                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                WHERE target_group_id = OLD.id;
-            END;
-        `);
-    } catch { }
-
-    seedTreasuryOperatorsFromLegacyFlag();
     upgradeBreakGlassHashesAtBoot();
     seedPricingGuideOnMainServer();
 
-    try {
-        migrateProjectsAndCommonsToEnterprises(db);
-    } catch (err) {
-        console.error('[DB] ⚠️ Could not run unify projects migration:', err);
-    }
-
-    // Last: a rebuild above (deferred_wage_claims' unique index, ripOutLegacyVoting's decisions) drops a table's triggers.
+    // Last: the plain tables' watermark triggers, made again at every boot, then the rule's start and the stamp.
     stampPlainTables();
-    markLinkTreasuries();
-    fillReleaseOwners();
     stampBalanceRuleFrom();
+    writeSchemaStamp(db, getVersion());
 }
 
 /**
@@ -2551,8 +950,8 @@ function seedPricingGuideOnMainServer(): void {
  * What initSchema runs only on a main server, run now: for a standby a take-over made the main server in this process, after
  * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
  * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
- * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
- * treasuries' markers, the recovery releases' owners and the rule's start. Nothing on a standby. Never throws.
+ * schema rules, the break-glass hashes of suspended members, the pricing guide and the rule's start. Nothing on a standby.
+ * Never throws.
  */
 export function runMainServerSchemaPasses(): void {
     if (getNodeRole() === 'backup') return;
@@ -2564,66 +963,16 @@ export function runMainServerSchemaPasses(): void {
     }
     upgradeBreakGlassHashesAtBoot();
     seedPricingGuideOnMainServer();
-    for (const t of PLAIN_TABLES) stampUnstampedRows(t);
-    markLinkTreasuries();
-    fillReleaseOwners();
     stampBalanceRuleFrom();
-}
-
-/** A plain table's rows the ALTER left with no stamp, stamped now, on a main server only (stampPlainTables). */
-function stampUnstampedRows(t: (typeof PLAIN_TABLES)[number]): void {
-    if (getNodeRole() === 'backup') return;
-    try {
-        db.prepare(`UPDATE ${t.table} SET ${t.watermark} = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${t.watermark} IS NULL`).run();
-    } catch (e) {
-        console.error(`[DB] ❌ Could not stamp ${t.table}'s unstamped rows:`, e);
-    }
-}
-
-/**
- * A recovery release made before its row named its owner (recovery_releases.owner_pubkey) gets the owner from its
- * session, where the session is on this server; on a main server only (a standby's rows are its main server's, and its
- * import alone writes them). The touch trigger stamps each row filled, so the next copy carries the owner to the standbys.
- * Idempotent: a row that names its owner, or whose session isn't here, is left alone.
- */
-function fillReleaseOwners(): void {
-    if (getNodeRole() === 'backup') return;
-    try {
-        const filled = db.prepare(`UPDATE recovery_releases
-                                   SET owner_pubkey = (SELECT c.owner_pubkey FROM recovery_collections c WHERE c.id = recovery_releases.collection_id)
-                                   WHERE owner_pubkey IS NULL AND collection_id IN (SELECT id FROM recovery_collections)`).run().changes;
-        if (filled > 0) console.log(`[DB] ${filled} recovery release(s) now name their owner`);
-    } catch (e) {
-        console.error("[DB] ❌ Could not fill the recovery releases' owners:", e);
-    }
-}
-
-/**
- * Every link's treasury carries its peer's marker (federation_link_treasuries, which ensureFederationLink writes when it
- * makes one): a link made before the marker gets it here, from its link row, on a main server only (a standby's rows are
- * its main server's, and its import alone writes them). Every link row this server holds was made by
- * ensureFederationLink, so each names a treasury made for its peer. Idempotent: a treasury already marked is left alone.
- */
-function markLinkTreasuries(): void {
-    if (getNodeRole() === 'backup') return;
-    try {
-        const marked = db.prepare(`INSERT OR IGNORE INTO federation_link_treasuries (treasury_pubkey, peer_id)
-                                   SELECT treasury_pubkey, peer_id FROM federation_links`).run().changes;
-        if (marked > 0) console.log(`[DB] Marked ${marked} link treasur${marked === 1 ? 'y' : 'ies'} with its peer`);
-    } catch (e) {
-        console.error('[DB] ❌ Could not mark the link treasuries with their peers:', e);
-    }
 }
 
 /**
  * The watermark of every plain table (engine/replication-manifest.ts PLAIN_TABLES, design G3): a delta finds each write
- * by it, so every write moves it. For each table, at every boot and after every rebuild above, the #878 drop-and-recreate
- * pattern: its two triggers are dropped and made again from here, so the ones in force are always these (CREATE TRIGGER
- * IF NOT EXISTS would keep an older shape). An insert that leaves the stamp NULL (a table whose column came from the
- * ALTER above, which has no default) is stamped; an update that leaves it as it was is stamped, as the Phase 2 triggers
- * do (schema.sql). A standby's import sets both aside while it writes its main server's rows, stamps and all
- * (engine/sync.ts IMPORT_KEEPS_STAMPS). A row left NULL by the ALTER is stamped now, on a main server only: a standby's
- * rows are its main server's, and its import alone writes them.
+ * by it, so every write moves it. For each table, at every boot, the #878 drop-and-recreate pattern: its two triggers are
+ * dropped and made again from here, so the ones in force are always these (CREATE TRIGGER IF NOT EXISTS would keep an
+ * older shape). An insert that leaves the stamp NULL is stamped; an update that leaves it as it was is stamped, as the
+ * Phase 2 triggers do (schema.sql). A standby's import sets both aside while it writes its main server's rows, stamps and
+ * all (engine/sync.ts IMPORT_KEEPS_STAMPS).
  */
 function stampPlainTables(): void {
     const now = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -2631,7 +980,6 @@ function stampPlainTables(): void {
         const { table, watermark } = t;
         const { insert, touch } = plainTableTriggers(t);
         try {
-            if (getNodeRole() !== 'backup') db.prepare(`UPDATE ${table} SET ${watermark} = ${now} WHERE ${watermark} IS NULL`).run();
             db.exec(`
                 CREATE INDEX IF NOT EXISTS idx_${table}_${watermark} ON ${table}(${watermark});
                 DROP TRIGGER IF EXISTS ${insert};
@@ -2658,47 +1006,6 @@ function stampPlainTables(): void {
     }
 }
 
-export { migrateProjectsAndCommonsToEnterprises };
-
-/**
- * #106 treasury keepership — seed the join table from the legacy node-wide flag.
- *
- * Before `treasury_operators` existed, `members.can_operate = 1` granted authority over EVERY
- * treasury on the node. Existing keepers must not silently lose access on upgrade, and we cannot
- * know which enterprise each of them was actually meant to run — so we **over-grant** (a row per
- * existing treasury) and let the admin prune. That is deliberately the safe direction: briefly-broad
- * access beats locking a community out of its own enterprises on a deploy.
- *
- * Guarded on the table being EMPTY rather than on individual rows: once an admin has pruned,
- * re-running must not resurrect what they removed.
- *
- * @returns how many rows were written (0 when it was a no-op)
- */
-export function seedTreasuryOperatorsFromLegacyFlag(): number {
-    try {
-        const already = db.prepare(`SELECT COUNT(*) AS c FROM treasury_operators`).get() as any;
-        if (already?.c) return 0;
-
-        const legacy = db.prepare(`SELECT public_key FROM members WHERE can_operate = 1`).all() as any[];
-        const treasuries = db.prepare(`SELECT public_key FROM members WHERE is_treasury = 1`).all() as any[];
-        if (!legacy.length || !treasuries.length) return 0;
-
-        const ins = db.prepare(
-            `INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-             VALUES (?, ?, 'keeper', 'migration:can_operate')`
-        );
-        db.transaction(() => {
-            for (const t of treasuries) for (const m of legacy) ins.run(t.public_key, m.public_key);
-        })();
-
-        const written = legacy.length * treasuries.length;
-        console.log(`🏛️  Treasury keepership migrated: ${legacy.length} keeper(s) × ${treasuries.length} enterprise(s) = ${written} binding(s). Prune per-enterprise in Settings.`);
-        return written;
-    } catch (e) {
-        console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
-        return 0;
-    }
-}
 
 // ==========================================
 // CROWDFUNDING PROJECTS

@@ -112,13 +112,12 @@ CREATE TABLE IF NOT EXISTS members (
     -- banner was set, replaced or taken down, which its listings carry (engine/shops.ts enterpriseBannerMoved; Pictures
     -- S6): the same kind of timing, about an enterprise, never a member. NULL: never changed since this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
-    -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
-    -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
+    -- statement, so delta sync carries it to a standby; listed, the touch trigger would restamp a standby's copied row.
     board_standing_changed_at TEXT,
     -- foldName(callsign) (engine names.ts), the one rule by which two names are the same name (#1956): what every name
-    -- lookup and name check compares, through idx_members_callsign_fold (db.ts migrateCallsignFold, which also adds it to
-    -- an older table). Written by per-connection TEMP triggers, never stored ones, and re-folded at every boot. Not
-    -- copied to a standby (each server makes its own) and not in members_touch_updated_at's list.
+    -- lookup and name check compares, through idx_members_callsign_fold (below). Written by per-connection TEMP triggers
+    -- (the engine's installNameFold), never stored ones. Not copied to a standby (each server makes its own) and not in
+    -- members_touch_updated_at's list.
     callsign_fold TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
@@ -144,6 +143,13 @@ CREATE INDEX IF NOT EXISTS idx_members_joined_at ON members(joined_at);
 CREATE INDEX IF NOT EXISTS idx_members_profile_updated_at ON members(profile_updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
+-- One name per member, A–Z in any case, among the members who hold one ('migrated' and 'pruned' left, so their name is
+-- free again). The app checks first (engine/members.ts isCallsignAvailable); this is the database's own word.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status NOT IN ('migrated', 'pruned');
+-- Names in any alphabet (#1956): every name lookup and name check compares callsign_fold, through this. NOT unique, on
+-- purpose: two members may already hold names that fold the same ("Олег" and "олег"), and both are kept;
+-- isCallsignAvailable refuses a new one at registration and at a rename.
+CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned');
 -- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
 -- pricing_reports travel to a standby (engine/replication-manifest.ts MEMBERS_OWN, MEMBERS_REPORTS) reads them on every
 -- page and hash slice of a copy, and without it walks every member's row, inline photo and all (at 6,000 members with
@@ -430,8 +436,8 @@ CREATE TABLE IF NOT EXISTS poll_answers (
     words_removed INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (post_id, id)
 ) WITHOUT ROWID;
--- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
--- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
+-- A plain index, under the name the unique one had: how many active polls an author may have is engine/posts.ts
+-- createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
 CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
 
 -- Event RSVPs (docs/events-on-the-map.md §2.1). "Not going" is a delete, not a third value, and travels
@@ -2661,8 +2667,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     scope_id             TEXT,
     -- A vote on removing a member (removal by vote, Amendment A): the member's own reply to its case (points 2), and a case
     -- an admin hid as shown to be false, kept as a halt is (point 4); a reply an admin took down, kept the same way, its
-    -- words gone (decisions-engine.ts adminHideReply). NULL on every other Decision. db.ts adds them to a table from before
-    -- (REMOVAL_CASE_COLUMNS).
+    -- words gone (decisions-engine.ts adminHideReply). NULL on every other Decision.
     subject_reply        TEXT,
     subject_replied_at   DATETIME,
     case_hidden_at       DATETIME,
@@ -2673,7 +2678,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     reply_hidden_reason  TEXT,
     -- A pause's own vote too few members could vote on, which an owner decided (removal by vote S6, design §5 point 3):
     -- when, which owner, the public reason, and when the tick carried it out as the vote closed (decisions-engine.ts
-    -- ownerDecideTooFew). NULL on every other Decision. db.ts adds them to a table from before (REMOVAL_CASE_COLUMNS).
+    -- ownerDecideTooFew). NULL on every other Decision.
     owner_decided_at          DATETIME,
     owner_decided_by          TEXT,
     owner_decided_reason      TEXT,
@@ -2687,9 +2692,12 @@ CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
--- One open Decision per member author per scope (idx_decisions_member_author_open) is made in db.ts after the scope columns
--- exist on an older table (decision-scope-migration.ts). The node itself (SYSTEM) is exempt.
 CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
+-- One open Decision per member author per scope; the node itself (SYSTEM) is exempt (a pause's vote on removing the
+-- member, a "Keep this suspension?").
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open
+    ON decisions(author_pubkey, scope_kind, COALESCE(scope_id, '')) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
+CREATE INDEX IF NOT EXISTS idx_decisions_scope ON decisions(scope_kind, scope_id, status);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,

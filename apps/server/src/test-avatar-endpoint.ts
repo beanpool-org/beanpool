@@ -706,8 +706,7 @@ async function main() {
     // --- 7.4 Such a string, given as an avatar anyway, reads as "no avatar".
     //
     // Rows damaged before updateProfile refused to store one must degrade to initials, not to a
-    // blank ring. The photo's one writer stores no such value (the member has none), and the boot's
-    // move of photos out of the members rows leaves one out the same way (db.ts moveMemberPhotosOutOfRows).
+    // blank ring. The photo's one writer stores no such value (the member has none).
     const pkDamaged = 'f'.repeat(64);
     db.prepare("DELETE FROM members WHERE public_key = ?").run(pkDamaged);
     db.prepare(`

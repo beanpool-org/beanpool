@@ -2784,8 +2784,7 @@ CREATE TABLE IF NOT EXISTS groups (
     description TEXT,
     -- The group's own picture is in group_pictures (#1486), as a member's photo is in member_photos: this row keeps only
     -- its reference (@beanpool/core avatarRefOf: its version, or a shipped picture's name), which its URL is made from,
-    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture). db.ts
-    -- moveGroupPicturesOutOfRows moved the pictures out of the old `avatar_url` column.
+    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture).
     avatar_ref TEXT,
     avatar_bytes INTEGER,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),

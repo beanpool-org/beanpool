@@ -200,4 +200,19 @@ describe("the web chat: a standing deal's rows never show Release, Cancel or Hol
         await new Promise(r => setTimeout(r, 50));
         expect(screen.queryByText(/Action Needed/)).toBeNull();
     });
+
+    it("a standing deal's record line (due, covered, ended, stopped) shows the node's own sentence, marked 🔁", async () => {
+        mockTxs = [period('sd-m1', 1, { ratedByBuyer: true })];
+        mockConversations = [{ ...dm, lastSysType: 'STANDING_DEAL' } as any];
+        mockMessagesByConv = { 'conv-1': [{
+            id: 'sl1', conversationId: 'conv-1', authorPubkey: 'SYSTEM', ciphertext: "Vehicle Storage: this month's 50 Beans have gone to Bob.", nonce: '',
+            type: 'system', systemType: 'STANDING_DEAL' as any, timestamp: '2026-11-12T08:00:00.000Z',
+            metadata: JSON.stringify({ postId: 'post-storage', standingId: 'sd-1', text: "Vehicle Storage: this month's 50 Beans have gone to Bob." }),
+        }] };
+        render(<MessagesPage identity={me} />);
+        fireEvent.click(await screen.findByText('Bob'));
+        const line = await screen.findByText(/this month's 50 Beans have gone to Bob/);
+        expect(line.closest('div')?.textContent).toContain('🔁');
+        expect(holdButtons()).toEqual([]);
+    });
 });

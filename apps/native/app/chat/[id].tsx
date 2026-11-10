@@ -1189,6 +1189,11 @@ function ChatScreen({ id }: { id: string }) {
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
         }
+        if (item.systemType === 'STANDING_DEAL') {
+            // A standing deal's record line (due, covered, ended, stopped in the grace): the node's own sentence as its text.
+            iconName = 'repeat';
+            iconColor = colors.brand.primary;
+        }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
             iconColor = colors.feedback.danger.fg;

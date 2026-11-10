@@ -1313,7 +1313,9 @@ export enum SystemMessageType {
     ESCROW_RELEASED = 'ESCROW_RELEASED',
     ESCROW_CANCELLED = 'ESCROW_CANCELLED',
     DISPUTE_OPENED = 'DISPUTE_OPENED',
-    REVIEW_LEFT = 'REVIEW_LEFT'
+    REVIEW_LEFT = 'REVIEW_LEFT',
+    /** A standing deal's record line (due, covered, ended, stopped in the grace): its words are the node's own sentence. */
+    STANDING_DEAL = 'STANDING_DEAL'
 }
 
 export interface SystemMessageMetadata {

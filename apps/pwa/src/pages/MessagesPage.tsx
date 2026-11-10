@@ -2593,6 +2593,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
                             if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
                             if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
+                            // A standing deal's record line: the node's own sentence (due, covered, ended, stopped).
+                            if (msg.systemType === 'STANDING_DEAL') icon = '🔁';
 
                             return (
                                 <div key={msg.id} style={{

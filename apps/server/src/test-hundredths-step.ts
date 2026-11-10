@@ -86,7 +86,7 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
     db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES ('post1', 'offer', 'other', 'Old', 'Old', 'm1')`).run();
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES ('mt1', 'post1', 'a', 'm1', 'completed')`).run();
     db.prepare(`INSERT INTO accounts (public_key, last_demurrage_epoch) VALUES ('m1', 0), ('m2', 0), ('COMMONS_POOL', 0)`).run();
-    db.prepare(`INSERT INTO node_config (key, value) VALUES ('known_floor', '1000'), ('credit_cap', '3000'), ('voucher_budget', '500'), ('member_gift', '50'), ('ledger_audit_baseline', '12.3456')`).run();
+    db.prepare(`INSERT INTO node_config (key, value) VALUES ('known_floor', '1000'), ('credit_cap', '3000'), ('voucher_budget', '500'), ('member_gift', '50'), ('ledger_audit_baseline', '12.3456'), ('commons_projects', '[{"id":"p1","title":"Old","status":"proposed","requestedAmount":50}]')`).run();
     db.prepare(`INSERT INTO money_requests (payer_pubkey, request_id, route, fingerprint, answer, created_at) VALUES ('m1', 'r1', 'pay', 'f', '{"amount":49.25}', datetime('now'))`).run();
     // Old figures in words: an exception that was only its amount, a frozen one, two log lines, and a copy's home price.
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES ('m2', 'Frozen', datetime('now'), 'genesis', 'Y', 'active')`).run();

@@ -13,9 +13,9 @@
  * in-memory ledger is reloaded from the rows, exactly as a node booting on that database would.
  *
  * Verifies:
- *   Part 1: holes at -5 and -10 with the Commons already in deficit at -11.68 (the test node today). Without
+ *   Part 1: holes at -5 and -10 with the Commons already in deficit at -1168 (the test node today). Without
  *           confirmation each is refused with the Commons before and after, touching nothing. With it: both land
- *           at exactly 0, in memory and on disk; the Commons drops by exactly 15 to -26.68; SUM(balances) does not
+ *           at exactly 0, in memory and on disk; the Commons drops by exactly 15 to -2668; SUM(balances) does not
  *           move; one Commons row per write-off, carrying the memo (write-off, reason, admin, trade id) and the
  *           admin on auth_signer; the audit reads clean. A restart then runs the hygiene sweep, which treats an
  *           exactly-0 escrow as settled and removes it; the audit stays clean, the deficit survives the restart,
@@ -72,8 +72,6 @@ function assert(cond: boolean, msg: string): void {
 
 const PW = 'EscrowWriteOff123!';
 const REASON = 'Legacy refund from an unfunded escrow (pre-#1099)';
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
-const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
 function sumBalances(): number {
     return (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s as number;
@@ -84,7 +82,7 @@ function ledgerState(): string {
     const rows = db.prepare(`SELECT public_key, balance_c FROM accounts ORDER BY public_key`).all();
     const txCount = (db.prepare(`SELECT COUNT(*) AS c FROM transactions`).get() as any).c;
     const memory = (db.prepare(`SELECT public_key FROM accounts WHERE public_key LIKE 'escrow_%' ORDER BY public_key`).all() as any[])
-        .map(r => [r.public_key, ledger.getAccount(r.public_key).balance]);
+        .map(r => [r.public_key, ledger.getAccount(r.public_key).balance_c]);
     return JSON.stringify({ rows, txCount, memory, commons: getCommonsBalanceExact() });
 }
 
@@ -143,18 +141,18 @@ function seedEscrow(balance: number, counterparty: string, tradeStatus: string |
 function setCommonsTo(target: number, funder: string, sink: string): void {
     const now = getCommonsBalanceExact();
     if (target > now) {
-        const need = r4(target - now);
+        const need = target - now;
         transfer('genesis', funder, need, 'seed the Commons funder', 'direct', true);
         assert(Boolean(moveToCommons(funder, need, 'fund the Commons for the test', { allowMemberDebit: true })), `Commons funded by ${need}`);
     } else if (target < now) {
-        assert(Boolean(payFromCommons(sink, r4(now - target), 'drive the Commons into deficit for the test', { allowDeficit: true })), `Commons drawn by ${r4(now - target)}`);
+        assert(Boolean(payFromCommons(sink, now - target, 'drive the Commons into deficit for the test', { allowDeficit: true })), `Commons drawn by ${now - target}`);
     }
-    assert(near(getCommonsBalanceExact(), target), `the Commons reads ${target} (${getCommonsBalanceExact()})`);
+    assert(getCommonsBalanceExact() === target, `the Commons reads ${target} (${getCommonsBalanceExact()})`);
 }
 
 function escrowRow(escrowId: string): number | null {
     const row = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowId) as any;
-    return row ? row.balance : null;
+    return row ? row.balance_c : null;
 }
 
 function commonsRows(escrowId: string): any[] {
@@ -192,39 +190,40 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     // Part 1: the test node's two holes, with the Commons already in deficit
     // ─────────────────────────────────────────────────────────────────────────────
-    console.log('\n── Part 1: -5 and -10 written off, the Commons at -11.68 ──');
-    setCommonsTo(-11.68, funder, debtor);
-    const five = seedEscrow(-5, buyer1, 'cancelled', seller);
-    const ten = seedEscrow(-10, buyer2, 'cancelled', seller);
+    console.log('\n── Part 1: -5 and -10 written off, the Commons at -1168 ──');
+    setCommonsTo(-1168, funder, debtor);
+    const five = seedEscrow(-500, buyer1, 'cancelled', seller);
+    const ten = seedEscrow(-1000, buyer2, 'cancelled', seller);
     const sumBefore = sumBalances();
 
     const auditBefore = runLedgerAudit();
     assert(auditBefore.strandedEscrows === 2 && !auditBefore.ok, `the audit sees 2 stranded escrows (${auditBefore.strandedEscrows})`);
-    assert(Math.abs(auditBefore.drift) < 0.0001, `with no drift (${auditBefore.drift}) — the holes were paid out, not minted from nowhere`);
+    assert(auditBefore.drift === 0, `with no drift (${auditBefore.drift}) — the holes were paid out, not minted from nowhere`);
 
     const list = listStrandedEscrows();
     assert(list.escrows.length === 2, `the list shows both (${list.escrows.length})`);
-    assert(list.commonsBalance === -11.68, `the list shows the Commons now (${list.commonsBalance})`);
+    assert(list.commonsBalance_c === -1168, `the list shows the Commons now (${list.commonsBalance_c})`);
     const tenRow = list.escrows.find(e => e.escrowId === ten.escrowId)!;
     const fiveRow = list.escrows.find(e => e.escrowId === five.escrowId)!;
     assert(list.escrows[0].escrowId === ten.escrowId, 'the deepest hole is listed first');
-    assert(tenRow.balance === -10 && tenRow.tradeId === ten.tradeId && tenRow.trade?.status === 'cancelled'
+    assert(tenRow.balance_c === -1000 && tenRow.tradeId === ten.tradeId && tenRow.trade?.status === 'cancelled'
         && tenRow.trade?.createdAt === '2026-05-14T09:30:00.000Z', 'each row carries its balance and its trade id, status and date');
     assert(tenRow.transactionCount === 1 && tenRow.lastTransaction?.memo === 'Escrow refund for removed post',
         'and the one refund that dug the hole');
-    assert(tenRow.writeOff.eligible && tenRow.writeOff.commonsAfter === -21.68 && tenRow.writeOff.wouldDeficit,
-        `-10 alone would leave the Commons at -21.68 (${tenRow.writeOff.commonsAfter})`);
-    assert(fiveRow.writeOff.eligible && fiveRow.writeOff.commonsAfter === -16.68, `-5 alone would leave it at -16.68 (${fiveRow.writeOff.commonsAfter})`);
-    assert(list.commonsAfterAll === -26.68 && list.eligibleCount === 2, `both would leave it at -26.68 (${list.commonsAfterAll})`);
+    assert(tenRow.writeOff.eligible && tenRow.writeOff.commonsAfter_c === -2168 && tenRow.writeOff.wouldDeficit,
+        `-10 alone would leave the Commons at -2168 (${tenRow.writeOff.commonsAfter_c})`);
+    assert(fiveRow.writeOff.eligible && fiveRow.writeOff.commonsAfter_c === -1668, `-5 alone would leave it at -1668 (${fiveRow.writeOff.commonsAfter_c})`);
+    assert(list.commonsAfterAll_c === -2668 && list.eligibleCount === 2, `both would leave it at -2668 (${list.commonsAfterAll_c})`);
 
     // Without confirmation: refused with both figures, and nothing moves.
     {
         const before = ledgerState();
         const res = writeOffStrandedEscrow(five.escrowId, 'owner:password', REASON);
         assert(!res.ok && res.status === 409 && res.code === 'deficit_unconfirmed', `unconfirmed deficit refused (${!res.ok && res.code})`);
-        assert(!res.ok && res.commonsBalance === -11.68 && res.commonsAfter === -16.68,
-            `the refusal states the Commons now and after (${!res.ok && res.commonsBalance} → ${!res.ok && res.commonsAfter})`);
-        assert(!res.ok && /-11\.68/.test(res.error) && /-16\.68/.test(res.error), 'and says both in words');
+        assert(!res.ok && res.commonsBalance_c === -1168 && res.commonsAfter_c === -1668,
+            `the refusal states the Commons now and after (${!res.ok && res.commonsBalance_c} → ${!res.ok && res.commonsAfter_c})`);
+        // In words as every figure is written (formatHundredths: two decimals, a true minus).
+        assert(!res.ok && res.error.includes('−11.68') && res.error.includes('−16.68'), `and says both in words (${!res.ok && res.error})`);
         const falsy = writeOffStrandedEscrow(five.escrowId, 'owner:password', REASON, { confirmDeficit: false });
         assert(!falsy.ok && falsy.code === 'deficit_unconfirmed', 'confirmDeficit: false is no confirmation');
         assert(ledgerState() === before, 'the ledger is untouched');
@@ -233,22 +232,22 @@ async function main() {
     // With confirmation.
     const w5 = writeOffStrandedEscrow(five.escrowId, olive.pubKeyHex, REASON, { confirmDeficit: true });
     assert(w5.ok, `-5 written off (${!w5.ok ? w5.error : 'ok'})`);
-    assert(ledger.getAccount(five.escrowId).balance === 0 && escrowRow(five.escrowId) === 0, 'the -5 escrow is at exactly 0, in memory and on disk');
-    assert(near(getCommonsBalanceExact(), -16.68), `the Commons is at -16.68 (${getCommonsBalanceExact()})`);
+    assert(ledger.getAccount(five.escrowId).balance_c === 0 && escrowRow(five.escrowId) === 0, 'the -5 escrow is at exactly 0, in memory and on disk');
+    assert(getCommonsBalanceExact() === -1668, `the Commons is at -1668 (${getCommonsBalanceExact()})`);
     const w10 = writeOffStrandedEscrow(ten.escrowId, 'owner:password', REASON, { confirmDeficit: true });
     assert(w10.ok, `-10 written off (${!w10.ok ? w10.error : 'ok'})`);
-    assert(ledger.getAccount(ten.escrowId).balance === 0 && escrowRow(ten.escrowId) === 0, 'the -10 escrow is at exactly 0, in memory and on disk');
+    assert(ledger.getAccount(ten.escrowId).balance_c === 0 && escrowRow(ten.escrowId) === 0, 'the -10 escrow is at exactly 0, in memory and on disk');
 
-    assert(near(getCommonsBalanceExact(), -26.68), `the Commons dropped by exactly 15, to -26.68 (${getCommonsBalanceExact()})`);
-    const commonsRow = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'`).get() as any).balance;
-    assert(near(commonsRow, -26.68), `and its persisted row agrees (${commonsRow})`);
-    assert(near(sumBalances(), sumBefore), `SUM(balances) is unchanged (${sumBefore} → ${sumBalances()})`);
+    assert(getCommonsBalanceExact() === -2668, `the Commons dropped by exactly 15, to -2668 (${getCommonsBalanceExact()})`);
+    const commonsRow = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'`).get() as any).balance_c;
+    assert(commonsRow === -2668, `and its persisted row agrees (${commonsRow})`);
+    assert(sumBalances() === sumBefore, `SUM(balances) is unchanged (${sumBefore} → ${sumBalances()})`);
 
-    for (const [hole, amount, signer, name] of [[five, 5, olive.pubKeyHex, 'Olive'], [ten, 10, 'owner:password', 'a community admin']] as const) {
+    for (const [hole, amount, signer, name] of [[five, 500, olive.pubKeyHex, 'Olive'], [ten, 1000, 'owner:password', 'a community admin']] as const) {
         const rows = commonsRows(hole.escrowId);
         assert(rows.length === 1, `one Commons row for the ${amount} write-off (${rows.length})`);
         const r = rows[0];
-        assert(r.amount === amount && r.tax_fee === 0, `for exactly ${amount} Beans, no fee`);
+        assert(r.amount_c === amount && r.fee_c === 0, `for exactly ${amount} hundredths, no fee`);
         assert(r.memo.includes('Stranded escrow written off from the Commons') && r.memo.includes(hole.tradeId)
             && r.memo.includes(REASON) && r.memo.includes(`by ${name}`), `the memo names the write-off, trade, reason and admin: "${r.memo}"`);
         assert(r.auth_signer === signer, `auth_signer records the admin (${r.auth_signer})`);
@@ -257,7 +256,7 @@ async function main() {
 
     const auditAfter = runLedgerAudit();
     assert(auditAfter.strandedEscrows === 0, `the audit's stranded count is 0 (${auditAfter.strandedEscrows})`);
-    assert(Math.abs(auditAfter.drift) < 0.0001 && auditAfter.ok, `and it reads clean (drift ${auditAfter.drift})`);
+    assert(auditAfter.drift === 0 && auditAfter.ok, `and it reads clean (drift ${auditAfter.drift})`);
     assert(listStrandedEscrows().escrows.length === 0, 'the list is empty');
 
     // Written off once, never twice.
@@ -272,9 +271,9 @@ async function main() {
     // A restart: the hygiene sweep treats an exactly-0 escrow as settled and removes it.
     initStateEngine();
     assert(escrowRow(five.escrowId) === null && escrowRow(ten.escrowId) === null, 'the boot sweep removed both zeroed escrows');
-    assert(near(getCommonsBalanceExact(), -26.68), `the deficit survived the restart (${getCommonsBalanceExact()})`);
+    assert(getCommonsBalanceExact() === -2668, `the deficit survived the restart (${getCommonsBalanceExact()})`);
     const auditRestart = runLedgerAudit();
-    assert(auditRestart.ok && auditRestart.strandedEscrows === 0 && Math.abs(auditRestart.drift) < 0.0001, 'the audit still reads clean after the restart');
+    assert(auditRestart.ok && auditRestart.strandedEscrows === 0 && auditRestart.drift === 0, 'the audit still reads clean after the restart');
     {
         const before = ledgerState();
         const gone = writeOffStrandedEscrow(ten.escrowId, 'owner:password', REASON, { confirmDeficit: true });
@@ -286,40 +285,39 @@ async function main() {
     // Part 2: a funded Commons needs no confirmation
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 2: the Commons can cover it ──');
-    setCommonsTo(20, funder, debtor);
+    setCommonsTo(2000, funder, debtor);
     {
-        const hole = seedEscrow(-7.5, buyer1, 'cancelled', seller);
+        const hole = seedEscrow(-750, buyer1, 'cancelled', seller);
         const sum = sumBalances();
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
-        assert(res.ok && res.commonsBefore === 20 && res.commonsAfter === 12.5, `written off with no confirmation (${res.ok ? `${res.commonsBefore} → ${res.commonsAfter}` : res.error})`);
-        assert(ledger.getAccount(hole.escrowId).balance === 0 && escrowRow(hole.escrowId) === 0 && near(sumBalances(), sum), 'at exactly 0, sum unchanged');
+        assert(res.ok && res.commonsBefore_c === 2000 && res.commonsAfter_c === 1250, `written off with no confirmation (${res.ok ? `${res.commonsBefore_c} → ${res.commonsAfter_c}` : res.error})`);
+        assert(ledger.getAccount(hole.escrowId).balance_c === 0 && escrowRow(hole.escrowId) === 0 && sumBalances() === sum, 'at exactly 0, sum unchanged');
     }
     {
         // Exactly what the Commons holds, to the last bit, so "covers it exactly" is tested rather than float noise.
         const exact = getCommonsBalanceExact();
         const hole = seedEscrow(-exact, buyer2, null, seller); // a legacy escrow whose trade row is gone
         const listed = listStrandedEscrows().escrows.find(e => e.escrowId === hole.escrowId);
-        assert(!!listed && listed.trade === null && listed.writeOff.eligible && listed.writeOff.commonsAfter === 0 && !listed.writeOff.wouldDeficit,
+        assert(!!listed && listed.trade === null && listed.writeOff.eligible && listed.writeOff.commonsAfter_c === 0 && !listed.writeOff.wouldDeficit,
             'an escrow with no trade row is listed, eligible, and would leave the Commons at exactly 0');
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
         assert(res.ok && getCommonsBalanceExact() === 0, `a Commons that covers the hole exactly needs no confirmation, and ends at 0 (${res.ok ? getCommonsBalanceExact() : res.error})`);
     }
     {
-        // Short by less than a cent. The figures sent are rounded to the cent, so they read 5 now and 0 after, yet
-        // the Commons would end below 0: a deficit, which needs the confirmation. The manager decides on
-        // `wouldDeficit` and on the refusal, never on the rounded `commonsAfter`, so both must say so here.
-        setCommonsTo(4.9973, funder, debtor);
-        const hole = seedEscrow(-5, buyer1, 'cancelled', seller);
+        // Short by one hundredth: the Commons would end at -1, a deficit, which needs the confirmation. Every figure is
+        // exact now (no rounding to the cent), so the list, the refusal and the result all say -1.
+        setCommonsTo(499, funder, debtor);
+        const hole = seedEscrow(-500, buyer1, 'cancelled', seller);
         const listed = listStrandedEscrows().escrows.find(e => e.escrowId === hole.escrowId);
-        assert(!!listed && listed.writeOff.eligible && listed.writeOff.commonsAfter === 0 && listed.writeOff.wouldDeficit,
-            `the list flags the deficit though its rounded figure reads 0 (${listed?.writeOff.commonsAfter}, wouldDeficit ${listed?.writeOff.wouldDeficit})`);
+        assert(!!listed && listed.writeOff.eligible && listed.writeOff.commonsAfter_c === -1 && listed.writeOff.wouldDeficit,
+            `the list flags the deficit, one hundredth below 0 (${listed?.writeOff.commonsAfter_c}, wouldDeficit ${listed?.writeOff.wouldDeficit})`);
         const before = ledgerState();
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
-        assert(!res.ok && res.code === 'deficit_unconfirmed' && res.commonsBalance === 5 && res.commonsAfter === 0,
-            `a sub-cent deficit still needs the confirmation (${!res.ok ? `${res.code}: ${res.commonsBalance} → ${res.commonsAfter}` : 'written off'})`);
+        assert(!res.ok && res.code === 'deficit_unconfirmed' && res.commonsBalance_c === 499 && res.commonsAfter_c === -1,
+            `a deficit of one hundredth still needs the confirmation (${!res.ok ? `${res.code}: ${res.commonsBalance_c} → ${res.commonsAfter_c}` : 'written off'})`);
         assert(ledgerState() === before, 'the ledger is untouched');
         const confirmed = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON, { confirmDeficit: true });
-        assert(confirmed.ok && ledger.getAccount(hole.escrowId).balance === 0 && near(getCommonsBalanceExact(), 4.9973 - 5),
+        assert(confirmed.ok && ledger.getAccount(hole.escrowId).balance_c === 0 && getCommonsBalanceExact() === -1,
             `with it, written off to 0, the Commons just under 0 (${confirmed.ok ? getCommonsBalanceExact() : confirmed.error})`);
     }
     assert(runLedgerAudit().ok, 'the audit reads clean');
@@ -328,15 +326,16 @@ async function main() {
     // Part 3: refusals, each leaving the ledger untouched
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 3: refusals ──');
-    setCommonsTo(100, funder, debtor);
-    const pending = seedEscrow(-3, buyer1, 'pending', seller);
-    const requested = seedEscrow(-3, buyer1, 'requested', seller);
-    const positive = seedEscrow(4, buyer2, 'completed', seller);
+    setCommonsTo(10000, funder, debtor);
+    const pending = seedEscrow(-300, buyer1, 'pending', seller);
+    const requested = seedEscrow(-300, buyer1, 'requested', seller);
+    const positive = seedEscrow(400, buyer2, 'completed', seller);
     const zero = seedEscrow(0, buyer2, 'cancelled', seller);
-    const dust = seedEscrow(-5e-7, buyer2, 'cancelled', seller);
-    const hole = seedEscrow(-6, buyer1, 'cancelled', seller);
+    // Not whole hundredths: a balance no move makes (a hand edit, a row from before hundredths).
+    const dust = seedEscrow(-0.5, buyer2, 'cancelled', seller);
+    const hole = seedEscrow(-600, buyer1, 'cancelled', seller);
     const positiveListed = listStrandedEscrows().escrows.find(e => e.escrowId === positive.escrowId);
-    assert(!!positiveListed && !positiveListed.writeOff.eligible && positiveListed.writeOff.commonsAfter === null,
+    assert(!!positiveListed && !positiveListed.writeOff.eligible && positiveListed.writeOff.commonsAfter_c === null,
         'a positive stranded escrow is listed (the audit counts it) but not eligible');
     assert(!listStrandedEscrows().escrows.some(e => e.escrowId === pending.escrowId || e.escrowId === requested.escrowId),
         'escrows of open trades are not listed as stranded');
@@ -346,7 +345,7 @@ async function main() {
         { label: 'a requested trade', id: requested.escrowId, status: 409, code: 'trade_open' },
         { label: 'a positive balance', id: positive.escrowId, status: 409, code: 'positive_balance' },
         { label: 'a zero balance', id: zero.escrowId, status: 409, code: 'nothing_to_write_off' },
-        { label: 'a dust balance', id: dust.escrowId, status: 409, code: 'nothing_to_write_off' },
+        { label: 'a balance that is not whole hundredths', id: dust.escrowId, status: 409, code: 'not_whole_hundredths' },
         { label: 'a member account', id: buyer1, status: 400, code: 'not_escrow' },
         { label: 'the Commons itself', id: 'COMMONS_POOL', status: 400, code: 'not_escrow' },
         { label: 'a project account', id: 'project_abc', status: 400, code: 'not_escrow' },
@@ -379,12 +378,12 @@ async function main() {
     }
     // Memory and disk disagreeing: paying |memory| would land the row elsewhere than 0, so it is refused.
     {
-        db.prepare(`UPDATE accounts SET balance_c = -6.5 WHERE public_key = ?`).run(hole.escrowId);
+        db.prepare(`UPDATE accounts SET balance_c = -650 WHERE public_key = ?`).run(hole.escrowId);
         const before = ledgerState();
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
         assert(!res.ok && res.status === 409 && res.code === 'ledger_mismatch', `memory and disk disagreeing: refused (${!res.ok && res.code})`);
         assert(ledgerState() === before, 'the ledger is untouched');
-        db.prepare(`UPDATE accounts SET balance_c = -6 WHERE public_key = ?`).run(hole.escrowId);
+        db.prepare(`UPDATE accounts SET balance_c = -600 WHERE public_key = ?`).run(hole.escrowId);
     }
     // Control characters in a reason are flattened before they reach the memo.
     {
@@ -394,8 +393,14 @@ async function main() {
         // eslint-disable-next-line no-control-regex
         assert(!/[\x00-\x1F\x7F]/.test(memo) && memo.includes('Legacy hole FAKE LOG LINE'), `with them flattened: "${memo}"`);
     }
+    // The balance that was not whole hundredths is mended by hand, as the operator manual says: its row, its counterparty's
+    // half-hundredth and its refund row put back, so no balance blocks a move and the audit can read clean again.
+    db.prepare(`UPDATE accounts SET balance_c = 0 WHERE public_key = ?`).run(dust.escrowId);
+    db.prepare(`UPDATE accounts SET balance_c = balance_c - 0.5 WHERE public_key = ?`).run(buyer2);
+    db.prepare(`DELETE FROM transactions WHERE from_pubkey = ?`).run(dust.escrowId);
+    reconcileLedgerFromDb();
     // The positive one is the member's to settle, not the Commons': it pays back out through the ledger like any escrow.
-    assert(Boolean(transfer(positive.escrowId, buyer2, 4, 'Escrow refund (test cleanup)', 'escrow', true)), 'the positive escrow is settled back to its buyer');
+    assert(Boolean(transfer(positive.escrowId, buyer2, 400, 'Escrow refund (test cleanup)', 'escrow', true)), 'the positive escrow is settled back to its buyer');
     assert(runLedgerAudit().ok, 'the audit reads clean after Part 3');
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -441,9 +446,9 @@ async function main() {
     }
 
     try {
-        setCommonsTo(-11.68, funder, debtor);
-        const h1 = seedEscrow(-5, buyer1, 'cancelled', seller);
-        const h2 = seedEscrow(-10, buyer2, 'cancelled', seller);
+        setCommonsTo(-1168, funder, debtor);
+        const h1 = seedEscrow(-500, buyer1, 'cancelled', seller);
+        const h2 = seedEscrow(-1000, buyer2, 'cancelled', seller);
         const writeOffPath = (id: string) => `/api/local/admin/stranded-escrows/${encodeURIComponent(id)}/write-off`;
         // Step 7c: with the node's 2FA off the password alone opens no admin route (checked below); from then on 2FA is on
         // and the password goes with a fresh code.
@@ -464,8 +469,8 @@ async function main() {
         assert(listed.status === 200 && listed.body.success === true, `list with the password: 200 (${listed.status})`);
         const listedIds = (listed.body.escrows ?? []).map((e: any) => e.escrowId).sort();
         assert(JSON.stringify(listedIds) === JSON.stringify([h1.escrowId, h2.escrowId].sort()) && listed.body.eligibleCount === 2
-            && listed.body.commonsBalance === -11.68 && listed.body.commonsAfterAll === -26.68,
-            `it lists both holes and the Commons now and after all (${listedIds.length}, ${listed.body.commonsBalance} → ${listed.body.commonsAfterAll})`);
+            && listed.body.commonsBalance_c === -1168 && listed.body.commonsAfterAll_c === -2668,
+            `it lists both holes and the Commons now and after all (${listedIds.length}, ${listed.body.commonsBalance_c} → ${listed.body.commonsAfterAll_c})`);
         const listAdmin = await call('GET', '/api/local/admin/stranded-escrows', { 'x-admin-session': keySession(ada) });
         assert(listAdmin.status === 200, `an admin may read the list, as they may run the audit (${listAdmin.status})`);
 
@@ -487,8 +492,8 @@ async function main() {
         // The deficit refusal over HTTP carries both figures; "true" as a string is not a confirmation.
         const unconfirmed = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON });
         assert(unconfirmed.status === 409 && unconfirmed.body.code === 'deficit_unconfirmed'
-            && unconfirmed.body.commonsBalance === -11.68 && unconfirmed.body.commonsAfter === -16.68,
-            `unconfirmed deficit: 409 with the Commons now and after (${unconfirmed.status} ${unconfirmed.body.commonsBalance} → ${unconfirmed.body.commonsAfter})`);
+            && unconfirmed.body.commonsBalance_c === -1168 && unconfirmed.body.commonsAfter_c === -1668,
+            `unconfirmed deficit: 409 with the Commons now and after (${unconfirmed.status} ${unconfirmed.body.commonsBalance_c} → ${unconfirmed.body.commonsAfter_c})`);
         const stringly = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON, confirmDeficit: 'true' });
         assert(stringly.status === 409 && stringly.body.code === 'deficit_unconfirmed', `confirmDeficit: "true" is not a confirmation (${stringly.status})`);
         const noReason = await call('POST', writeOffPath(h1.escrowId), asPassword(), { confirmDeficit: true });
@@ -498,13 +503,13 @@ async function main() {
         // An owner's key session works, and is the recorded admin.
         const byOwner = await call('POST', writeOffPath(h1.escrowId), { 'x-admin-session': keySession(olive) },
             { reason: REASON, confirmDeficit: true, actor: ada.pubKeyHex });
-        assert(byOwner.status === 200 && byOwner.body.success === true && byOwner.body.amount === 5 && byOwner.body.commonsAfter === -16.68,
+        assert(byOwner.status === 200 && byOwner.body.success === true && byOwner.body.amount_c === 500 && byOwner.body.commonsAfter_c === -1668,
             `an owner key session writes off -5 (${byOwner.status} ${JSON.stringify(byOwner.body).slice(0, 120)})`);
         assert(commonsRows(h1.escrowId)[0]?.auth_signer === olive.pubKeyHex, 'recorded against the owner, not the actor in the body');
 
         // The password works too, and is recorded as the password.
         const byPassword = await call('POST', writeOffPath(h2.escrowId), asPassword(), { reason: REASON, confirmDeficit: true, actor: olive.pubKeyHex });
-        assert(byPassword.status === 200 && byPassword.body.amount === 10 && byPassword.body.commonsAfter === -26.68,
+        assert(byPassword.status === 200 && byPassword.body.amount_c === 1000 && byPassword.body.commonsAfter_c === -2668,
             `the password writes off -10 (${byPassword.status} ${JSON.stringify(byPassword.body).slice(0, 120)})`);
         assert(commonsRows(h2.escrowId)[0]?.auth_signer === 'owner:password', 'recorded as the password, whatever the body says');
 
@@ -515,7 +520,7 @@ async function main() {
         assert(logged.length === 2, `the admin log has one entry per write-off (${logged.length})`);
         const meta = JSON.parse(logged[1].metadata || '{}');
         const metaOwner = JSON.parse(logged[0].metadata || '{}');
-        assert(meta.escrowId === h2.escrowId && meta.transactionId && meta.actor === 'owner:password' && meta.commonsAfter === -26.68,
+        assert(meta.escrowId === h2.escrowId && meta.transactionId && meta.actor === 'owner:password' && meta.commonsAfter_c === -2668,
             'each carrying the escrow, the ledger row, the admin and the Commons after');
         assert(metaOwner.actor === olive.pubKeyHex.substring(0, 12), `a key session is logged by its short key, which the redactor leaves readable (${metaOwner.actor})`);
 

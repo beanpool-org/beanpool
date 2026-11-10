@@ -56,7 +56,7 @@ import { db } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { TRANSACTION_FEE_RATE, periodEnd, periodStart, standingAuthorisationText, standingGraceEndsAt, type StandingPeriodUnit } from '@beanpool/core';
+import { feeOf, periodEnd, periodStart, standingAuthorisationText, standingGraceEndsAt, type StandingPeriodUnit } from '@beanpool/core';
 const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
@@ -73,8 +73,13 @@ let HOST = '';
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; etag?: string | null };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths, so `same` is plain equality.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
+const same = (a: number, b: number) => a === b;
 
 function makeMember(name: string, beans: number, opts: { treasury?: boolean } = {}): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -83,9 +88,9 @@ function makeMember(name: string, beans: number, opts: { treasury?: boolean } = 
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active', ?)`).run(id.pk, name, opts.treasury ? 1 : 0);
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     // Every buyer has listed an Offer of their own (the contribution rule).
-    createPost('offer', 'general', `${name}'s jam`, 'A jar of plum jam', 5, 'fixed', id.pk);
+    createPost('offer', 'general', `${name}'s jam`, 'A jar of plum jam', 500, 'fixed', id.pk);
     return id;
 }
 
@@ -118,7 +123,7 @@ function authorise(signer: Id, o: AuthOpts & { bare?: boolean }): { id: string; 
     const id = o.id ?? crypto.randomUUID();
     const startsAt = o.startsAt ?? new Date(Date.now()).toISOString();
     const payload = standingAuthorisationText({
-        host: o.host ?? HOST, standingId: id, listingId: o.postId, payee: o.payee, beansPerPeriod: o.beans, unit: o.unit, maxPeriods: o.max, startsAt,
+        host: o.host ?? HOST, standingId: id, listingId: o.postId, payee: o.payee, beansPerPeriod_c: hc(o.beans), unit: o.unit, maxPeriods: o.max, startsAt,
         nonce: o.nonce ?? crypto.randomBytes(12).toString('hex'),
     });
     const bytes = o.bare ? Buffer.from(payload, 'utf-8') : Buffer.concat([Buffer.from([0xff]), Buffer.from(payload, 'utf-8')]);
@@ -128,18 +133,18 @@ function authorise(signer: Id, o: AuthOpts & { bare?: boolean }): { id: string; 
 
 const standingRow = (id: string) => db.prepare('SELECT * FROM standing_deals WHERE id = ?').get(id) as any;
 const periodRows = (id: string) => db.prepare('SELECT * FROM marketplace_transactions WHERE standing_id = ? ORDER BY period_no').all(id) as any[];
-const bal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
+const bal = (pk: string) => beansOf((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0);
 const escrowsOf = (id: string) => (db.prepare(`SELECT COUNT(*) AS n FROM accounts WHERE public_key IN (SELECT 'escrow_' || id FROM marketplace_transactions WHERE standing_id = ?)`).get(id) as { n: number }).n;
 const keptKinds = (pk: string, standingId: string) => (db.prepare(`SELECT data FROM moderation_notices WHERE recipient = ? ORDER BY created_at, rowid`).all(pk) as { data: string }[])
     .map(r => { try { return JSON.parse(r.data); } catch { return {}; } }).filter(d => d.standing === standingId).map(d => d.kind as string);
 const chatLines = (text: string) => (db.prepare(`SELECT ciphertext FROM messages WHERE system_type = 'STANDING_DEAL' AND ciphertext LIKE ?`).all(`%${text}%`) as { ciphertext: string }[]).map(r => r.ciphertext);
 function nodeTotal(): number {
     const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
-    return r2(accounts + getCommonsBalanceExact());
+    return accounts + getCommonsBalanceExact();
 }
 function assertConserved(step: string): void {
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.drift) < 0.0001 && Math.abs(nodeTotal()) < 0.0001, `${step}: the Beans are conserved (audit ${audit.ok ? 'ok' : 'FAILED'}, drift ${audit.drift}, total ${nodeTotal()})`);
+    assert(audit.ok && audit.drift === 0 && nodeTotal() === 0, `${step}: the Beans are conserved (audit ${audit.ok ? 'ok' : 'FAILED'}, drift ${audit.drift}, total ${nodeTotal()})`);
 }
 
 /** Every push the standing deals send, from the tick and the hook: to whom, what it says, its kind. */
@@ -155,11 +160,11 @@ const pushesTo = (pk: string, about: string) => pushes.filter(p => p.to === pk &
 /** The hook's clock, pinned per section (the periods run in the suite's future). */
 let hookNow = Date.now();
 const tick = (now: number, wrap?: (h: any) => any) => (se as any).runStandingDeals(now, (h: any) => watch(wrap ? wrap(h) : h)) as { paid: number; short: number; ended: number };
-const payeeShare = (beans: number) => beans * (1 - TRANSACTION_FEE_RATE);
-/** A payee's share, to the half cent (the fee on 35 Beans is 0.525). */
-const nearPaid = (got: number, beans: number) => Math.abs(got - payeeShare(beans)) < 0.006;
+/** A payee's share: the period less its fee, truncated once (core feeOf: the fee on 35 Beans is 52 hundredths). */
+const payeeShare = (beans: number) => beansOf(hc(beans) - feeOf(hc(beans)));
+const nearPaid = (got: number, beans: number) => got === payeeShare(beans);
 /** Beans from the genesis account to a member: a credit through transfer(), as any payment to them is, so the hook runs. */
-const credit = (who: Id, beans: number) => assert(!!transfer('genesis', who.pk, beans, `Beans for ${who.name}`, 'direct', true), `${who.name} receives ${beans} Beans`);
+const credit = (who: Id, beans: number) => assert(!!transfer('genesis', who.pk, hc(beans), `Beans for ${who.name}`, 'direct', true), `${who.name} receives ${beans} Beans`);
 
 async function main(): Promise<void> {
     console.log('\nStanding deals: each period paid at its start, nothing held\n');
@@ -175,13 +180,13 @@ async function main(): Promise<void> {
     const marty = makeMember('Marty', 400);
     const rob = makeMember('Rob', 0);
     const ana = makeMember('Ana', 300);
-    const storage = createPost('offer', 'services', 'Vehicle Storage', 'A covered space for one car', 50, 'monthly', rob.pk) as any;
+    const storage = createPost('offer', 'services', 'Vehicle Storage', 'A covered space for one car', 5000, 'monthly', rob.pk) as any;
 
     // Short, the way a member is: their admins froze their credit line (the manager's Freeze), and their own Beans are fewer
     // than a period.
     const drain = (who: Id, keep: number) => {
-        const out = r2(bal(who.pk) - keep);
-        if (out > 0) assert(!!transfer(who.pk, ana.pk, out, 'sent away for the test', 'direct', true), `${who.name} sends ${out} away`);
+        const out = (bal(who.pk) - keep);
+        if (out > 0) assert(!!transfer(who.pk, ana.pk, hc(out), 'sent away for the test', 'direct', true), `${who.name} sends ${out} away`);
         adminSetCreditFrozen(who.pk, true);
         return out;
     };
@@ -200,13 +205,13 @@ async function main(): Promise<void> {
     assert(!!sd1 && sd1.phase === 'paid' && sd1.periods_done === 1 && sd1.current_tx_id === p1[0]?.id && sd1.next_due_at === periodEnd(a1.startsAt, 'month', 1)
         && sd1.auth_payload === a1.payload && sd1.auth_signer === marty.pk && !('held_back_reason' in sd1),
         `the standing row: paid, one period done, the next due at the month's end (${JSON.stringify(sd1)?.slice(0, 200)})`);
-    assert(p1.length === 1 && p1[0].status === 'completed' && p1[0].completed_at === p1[0].created_at && near(p1[0].credits, 50) && p1[0].hours === null,
-        `period 1 is one finished deal row (${p1.map(r => `${r.status}:${r.credits}`).join(' ')})`);
-    assert(near(martyBefore - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore1, 50) && Math.abs(getCommonsBalanceExact() - commonsBefore1 - 50 * TRANSACTION_FEE_RATE) < 0.006,
-        `Marty − 50, Rob + ${r2(bal(rob.pk) - robBefore1)} (50 less 1.5%), the Commons the fee`);
+    assert(p1.length === 1 && p1[0].status === 'completed' && p1[0].completed_at === p1[0].created_at && same(beansOf(p1[0].amount_c), 50) && p1[0].hours === null,
+        `period 1 is one finished deal row (${p1.map(r => `${r.status}:${beansOf(r.amount_c)}`).join(' ')})`);
+    assert(same(martyBefore - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore1, 50) && getCommonsBalanceExact() - commonsBefore1 === feeOf(hc(50)),
+        `Marty − 50, Rob + ${(bal(rob.pk) - robBefore1)} (50 less 1.5%), the Commons the fee`);
     assert(escrowsOf(a1.id) === 0, 'nothing is held in trust: no escrow account for the period');
     const payRows = db.prepare(`SELECT from_pubkey, to_pubkey, amount_c, fee_c, auth_signer, auth_payload FROM transactions WHERE auth_payload LIKE ?`).all(`standing:${a1.id}:%`) as any[];
-    assert(payRows.length === 1 && payRows[0].from_pubkey === marty.pk && payRows[0].to_pubkey === rob.pk && near(payRows[0].amount, 50) && payRows[0].tax_fee > 0
+    assert(payRows.length === 1 && payRows[0].from_pubkey === marty.pk && payRows[0].to_pubkey === rob.pk && same(beansOf(payRows[0].amount_c), 50) && payRows[0].fee_c > 0
         && payRows[0].auth_signer === marty.pk && payRows[0].auth_payload === `standing:${a1.id}:1`,
         `ONE ledger row, payer to payee, the fee taken, naming the signer and standing:<id>:1 (${JSON.stringify(payRows)})`);
     const listingNow = db.prepare('SELECT status, pending_transaction_id FROM posts WHERE id = ?').get(storage.id) as any;
@@ -214,9 +219,9 @@ async function main(): Promise<void> {
     assertConserved('after the accept');
 
     // A monthly listing taken without `standing` is today's deal.
-    const bikeRack = createPost('offer', 'services', 'Bike Rack Space', 'Indoors', 10, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const bikeRack = createPost('offer', 'services', 'Bike Rack Space', 'Indoors', 1000, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
     const plain = await post(ana, '/api/marketplace/posts/accept', { postId: bikeRack.id, buyerPublicKey: ana.pk, hours: 3 });
-    assert(plain.status === 200 && near(plain.body?.transaction?.credits, 30) && !plain.body?.transaction?.standingId && plain.body?.transaction?.status === 'pending',
+    assert(plain.status === 200 && same(beansOf(plain.body?.transaction?.amount_c), 30) && !plain.body?.transaction?.standingId && plain.body?.transaction?.status === 'pending',
         `without standing a per-month listing keeps today's behaviour: 3 months, 30 Beans held, no standing deal (${show(plain)})`);
     await post(ana, '/api/marketplace/transactions/cancel', { transactionId: plain.body?.transaction?.id, cancellerPublicKey: ana.pk });
     const again = await post(marty, '/api/marketplace/posts/accept', { postId: storage.id, buyerPublicKey: marty.pk, standing: authorise(marty, { postId: storage.id, payee: rob.pk, beans: 50, unit: 'month', max: null }).standing });
@@ -230,7 +235,7 @@ async function main(): Promise<void> {
     const rel = await post(marty, '/api/marketplace/transactions/complete', { transactionId: p1[0].id, confirmerPublicKey: marty.pk });
     const can = await post(marty, '/api/marketplace/transactions/cancel', { transactionId: p1[0].id, cancellerPublicKey: marty.pk });
     assert((rel.status === 400 || rel.body?.alreadyCompleted === true) && rel.body?.code !== 'standing_runs_itself' && can.status >= 400
-        && near(bal(rob.pk), robBefore2) && near(bal(marty.pk), martyBefore2),
+        && same(bal(rob.pk), robBefore2) && same(bal(marty.pk), martyBefore2),
         `Release and Cancel on a standing row move nothing: nothing is held (${show(rel)}; ${show(can)})`);
     const holdBack = await post(marty, `/api/marketplace/standing/${a1.id}/hold-back`, {});
     assert(holdBack.status === 404 || holdBack.status === 405, `Hold back is gone: no such door (${show(holdBack)})`);
@@ -238,8 +243,8 @@ async function main(): Promise<void> {
     runMarketplaceHygiene();
     assert((db.prepare('SELECT last_reminded_at FROM marketplace_transactions WHERE id = ?').get(p1[0].id) as any).last_reminded_at == null, 'the hygiene nudges nobody: nothing is held');
     db.prepare(`UPDATE marketplace_transactions SET created_at = completed_at WHERE id = ?`).run(p1[0].id);
-    const repriced = await post(rob, '/api/marketplace/posts/update', { id: storage.id, postId: storage.id, authorPublicKey: rob.pk, credits: 60 });
-    assert(repriced.status === 200 && near((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(storage.id) as any).credits, 60),
+    const repriced = await post(rob, '/api/marketplace/posts/update', { id: storage.id, postId: storage.id, authorPublicKey: rob.pk, price_c: 6000 });
+    assert(repriced.status === 200 && same((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(storage.id) as any).price_c, 6000),
         `the author can change the price while it runs (${show(repriced)})`);
     let payerHoliday = '';
     try { setHolidayMode(marty.pk, true); } catch (e: any) { payerHoliday = e?.message ?? ''; }
@@ -260,16 +265,16 @@ async function main(): Promise<void> {
     const t3 = tick(end1 + 60_000);
     const rows3 = periodRows(a1.id);
     const sd3 = standingRow(a1.id);
-    assert(t3.paid === 1 && rows3.length === 2 && rows3[1].period_no === 2 && rows3[1].status === 'completed' && near(rows3[1].credits, 50),
-        `one tick pays month 2, at the 50 the payer signed for, not the new price (${JSON.stringify(t3)}, ${rows3.map(r => `${r.period_no}:${r.status}:${r.credits}`).join(' ')})`);
-    assert(near(martyBefore3 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore3, 50), `Marty − 50, Rob + ${r2(bal(rob.pk) - robBefore3)}`);
+    assert(t3.paid === 1 && rows3.length === 2 && rows3[1].period_no === 2 && rows3[1].status === 'completed' && same(beansOf(rows3[1].amount_c), 50),
+        `one tick pays month 2, at the 50 the payer signed for, not the new price (${JSON.stringify(t3)}, ${rows3.map(r => `${r.period_no}:${r.status}:${beansOf(r.amount_c)}`).join(' ')})`);
+    assert(same(martyBefore3 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore3, 50), `Marty − 50, Rob + ${(bal(rob.pk) - robBefore3)}`);
     assert(sd3.phase === 'paid' && sd3.periods_done === 2 && sd3.current_tx_id === rows3[1].id && sd3.next_due_at === periodEnd(a1.startsAt, 'month', 2),
         `paid, two periods done, the next due at the start of month 3 (${sd3.next_due_at})`);
     const own3 = pushes.slice(pushesBefore3);
     assert(own3.length === 1 && own3[0].to === rob.pk && own3[0].body === '50 Beans for Vehicle Storage came in from Marty · month 2' && own3[0].kind === 'trade.update',
         `on time: the payee's push says what came in; the payer gets none (${JSON.stringify(own3)})`);
     const t3b = tick(end1 + 120_000);
-    assert(t3b.paid === 0 && periodRows(a1.id).length === 2 && near(martyBefore3 - bal(marty.pk), 50), `a second tick moves nothing (${JSON.stringify(t3b)})`);
+    assert(t3b.paid === 0 && periodRows(a1.id).length === 2 && same(martyBefore3 - bal(marty.pk), 50), `a second tick moves nothing (${JSON.stringify(t3b)})`);
     const back3 = tick(end1 - DAY);
     assert(back3.paid === 0 && periodRows(a1.id).length === 2, 'a clock that goes back pays nothing');
     const listing3 = db.prepare('SELECT status, pending_transaction_id FROM posts WHERE id = ?').get(storage.id) as any;
@@ -285,11 +290,11 @@ async function main(): Promise<void> {
     const martyBefore4 = bal(marty.pk);
     const c1 = tick(end2 + 1000, crashPay);
     const sd4 = standingRow(a1.id);
-    assert(c1.paid === 0 && sd4.phase === 'paid' && sd4.periods_done === 2 && periodRows(a1.id).length === 2 && near(bal(rob.pk), robBefore4) && near(bal(marty.pk), martyBefore4),
+    assert(c1.paid === 0 && sd4.phase === 'paid' && sd4.periods_done === 2 && periodRows(a1.id).length === 2 && same(bal(rob.pk), robBefore4) && same(bal(marty.pk), martyBefore4),
         `a crash in the payment keeps nothing: both balances as they were, no row, still two done (${JSON.stringify(c1)})`);
     assertConserved('after a crash in the payment');
     const c2 = tick(end2 + 2000);
-    assert(c2.paid === 1 && periodRows(a1.id).length === 3 && standingRow(a1.id).periods_done === 3 && near(martyBefore4 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore4, 50),
+    assert(c2.paid === 1 && periodRows(a1.id).length === 3 && standingRow(a1.id).periods_done === 3 && same(martyBefore4 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore4, 50),
         `the retry pays month 3 once (${JSON.stringify(c2)})`);
     let unique = false;
     try {
@@ -337,7 +342,7 @@ async function main(): Promise<void> {
     const covered = standingRow(a1.id);
     assert(covered.phase === 'paid' && covered.periods_done === 4 && covered.short_since === null && covered.next_due_at === periodEnd(a1.startsAt, 'month', 4) && periodRows(a1.id).length === 4,
         `the credit pays month 4 at once, with no tick, the whole period, the dates unchanged (${covered.phase}, ${covered.next_due_at})`);
-    assert(near(martyBefore5 + 40 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore5, 50), `Marty − 50 of the 40 that came in and his 20; Rob + ${r2(bal(rob.pk) - robBefore5)}`);
+    assert(same(martyBefore5 + 40 - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore5, 50), `Marty − 50 of the 40 that came in and his 20; Rob + ${(bal(rob.pk) - robBefore5)}`);
     assert(keptKinds(marty.pk, a1.id).includes('standing_covered') && keptKinds(rob.pk, a1.id).includes('standing_covered')
         && pushesTo(marty.pk, 'Vehicle Storage').some(p => p.body === "Vehicle Storage: this month's 50 Beans have gone to Rob.")
         && pushesTo(rob.pk, 'Vehicle Storage').some(p => p.body === "Marty's 50 Beans for this month of Vehicle Storage came in."), 'both are told it is covered, a push and a bell row each');
@@ -352,8 +357,8 @@ async function main(): Promise<void> {
     const ada = makeMember('Ada', 100);
     const bea = makeMember('Bea', 100);
     const cy = makeMember('Cy', 0);
-    const ropes = createPost('offer', 'services', 'Rope Shed', 'Ropes', 40, 'monthly', bea.pk, undefined, undefined, undefined, true) as any;
-    const kilns = createPost('offer', 'services', 'Kiln Time', 'Kilns', 40, 'monthly', cy.pk, undefined, undefined, undefined, true) as any;
+    const ropes = createPost('offer', 'services', 'Rope Shed', 'Ropes', 4000, 'monthly', bea.pk, undefined, undefined, undefined, true) as any;
+    const kilns = createPost('offer', 'services', 'Kiln Time', 'Kilns', 4000, 'monthly', cy.pk, undefined, undefined, undefined, true) as any;
     const aA = authorise(ada, { postId: ropes.id, payee: bea.pk, beans: 40, unit: 'month', max: null });
     const aB = authorise(bea, { postId: kilns.id, payee: cy.pk, beans: 40, unit: 'month', max: null });
     assert((await post(ada, '/api/marketplace/posts/accept', { postId: ropes.id, buyerPublicKey: ada.pk, standing: aA.standing })).status === 200
@@ -367,14 +372,14 @@ async function main(): Promise<void> {
     const cyBefore = bal(cy.pk);
     credit(ada, 40);
     assert(standingRow(aA.id).phase === 'paid' && standingRow(aB.id).phase === 'paid' && periodRows(aA.id).length === 2 && periodRows(aB.id).length === 2
-        && nearPaid(bal(cy.pk) - cyBefore, 40), `Beans to A pay B, and B's own hook pays C: each once (${standingRow(aA.id).phase}, ${standingRow(aB.id).phase}, Cy + ${r2(bal(cy.pk) - cyBefore)})`);
+        && nearPaid(bal(cy.pk) - cyBefore, 40), `Beans to A pay B, and B's own hook pays C: each once (${standingRow(aA.id).phase}, ${standingRow(aB.id).phase}, Cy + ${(bal(cy.pk) - cyBefore)})`);
     assert(tick(endChain + 3000).paid === 0, 'and the tick after pays nothing more');
     assertConserved('after the chain');
 
     // ── 6. The grace is over ───────────────────────────────────────────────────────────────────────────────────────────
     console.log('── 6. The grace runs out ──');
     const kai = makeMember('Kai', 30);
-    const garden = createPost('offer', 'services', 'Garden Plot', 'A raised bed', 25, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const garden = createPost('offer', 'services', 'Garden Plot', 'A raised bed', 2500, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
     const a6 = authorise(kai, { postId: garden.id, payee: rob.pk, beans: 25, unit: 'week', max: null });
     assert((await post(kai, '/api/marketplace/posts/accept', { postId: garden.id, buyerPublicKey: kai.pk, standing: a6.standing })).status === 200, 'a weekly standing deal starts');
     drain(kai, 2);
@@ -390,8 +395,8 @@ async function main(): Promise<void> {
     hookNow = grace6;
     credit(kai, 30);
     const ended6 = standingRow(a6.id);
-    assert(ended6.phase === 'ended' && ended6.ended_reason === 'short' && near(bal(kai.pk) - kaiBefore, 30) && near(bal(rob.pk), robBefore6) && periodRows(a6.id).length === 1,
-        `Beans arriving the minute the grace ends pay nothing: it ends, Beans ran short (${ended6.phase}/${ended6.ended_reason}, Kai + ${r2(bal(kai.pk) - kaiBefore)})`);
+    assert(ended6.phase === 'ended' && ended6.ended_reason === 'short' && same(bal(kai.pk) - kaiBefore, 30) && same(bal(rob.pk), robBefore6) && periodRows(a6.id).length === 1,
+        `Beans arriving the minute the grace ends pay nothing: it ends, Beans ran short (${ended6.phase}/${ended6.ended_reason}, Kai + ${(bal(kai.pk) - kaiBefore)})`);
     assert(keptKinds(kai.pk, a6.id).includes('standing_ended') && keptKinds(rob.pk, a6.id).includes('standing_ended') && chatLines('Garden Plot ended').length >= 1,
         'both are told it ended, and the chat records it');
     assert((db.prepare('SELECT status FROM posts WHERE id = ?').get(garden.id) as any).status === 'active', 'its listing is back');
@@ -401,7 +406,7 @@ async function main(): Promise<void> {
     console.log('── 7. Stop now in the grace ──');
     const lou = makeMember('Lou', 30);
     const kim = makeMember('Kimi', 30);
-    const potting = createPost('offer', 'services', 'Potting Bench', 'A bench', 25, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const potting = createPost('offer', 'services', 'Potting Bench', 'A bench', 2500, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
     const a7 = authorise(lou, { postId: potting.id, payee: rob.pk, beans: 25, unit: 'week', max: null });
     const a7b = authorise(kim, { postId: potting.id, payee: rob.pk, beans: 25, unit: 'week', max: null });
     await post(lou, '/api/marketplace/posts/accept', { postId: potting.id, buyerPublicKey: lou.pk, standing: a7.standing });
@@ -420,13 +425,13 @@ async function main(): Promise<void> {
     const payeeStop = await post(rob, `/api/marketplace/standing/${a7.id}/stop`, {});
     const sd7 = standingRow(a7.id);
     assert(payeeStop.status === 200 && sd7.phase === 'ended' && sd7.ended_reason === 'stopped' && sd7.stopped_by === rob.pk && periodRows(a7.id).length === rowsBefore7
-        && near(bal(rob.pk), robBefore7) && near(bal(lou.pk), louBefore), `the payee's Stop now ends it at once: no row, nothing moves (${show(payeeStop)})`);
+        && same(bal(rob.pk), robBefore7) && same(bal(lou.pk), louBefore), `the payee's Stop now ends it at once: no row, nothing moves (${show(payeeStop)})`);
     assert(keptKinds(lou.pk, a7.id).includes('standing_stopped') && !keptKinds(rob.pk, a7.id).includes('standing_stopped'), 'the payer is told; the payee, who tapped it, is not');
     assert(!(await homeNeeds(rob)).some(i => i.label?.includes("Lou's 25 Beans")) && !(await homeNeeds(lou)).some(i => i.label?.includes('Potting Bench')),
         'the Home answer has no standing line for it after, either side');
     const kimBefore = bal(kim.pk);
     const payerStop = await post(kim, `/api/marketplace/standing/${a7b.id}/stop`, {});
-    assert(payerStop.status === 200 && standingRow(a7b.id).phase === 'ended' && standingRow(a7b.id).ended_reason === 'stopped' && near(bal(kim.pk), kimBefore)
+    assert(payerStop.status === 200 && standingRow(a7b.id).phase === 'ended' && standingRow(a7b.id).ended_reason === 'stopped' && same(bal(kim.pk), kimBefore)
         && keptKinds(rob.pk, a7b.id).includes('standing_stopped') && chatLines('Kimi stopped Potting Bench').length >= 1,
         `the payer's Stop now ends it at once too, the payee told, the chat records it (${show(payerStop)})`);
     assert((db.prepare('SELECT status FROM posts WHERE id = ?').get(potting.id) as any).status !== 'cancelled', 'the listing is untouched by a stop');
@@ -444,7 +449,7 @@ async function main(): Promise<void> {
     const cadence = async (unit: StandingPeriodUnit, title: string, payerName: string) => {
         const payer = makeMember(payerName, 60);
         const payee = makeMember(`${payerName}'s host`, 0);
-        const listing = createPost('offer', 'services', title, 'For the cadence', 50, unit === 'month' ? 'monthly' : 'weekly', payee.pk, undefined, undefined, undefined, true) as any;
+        const listing = createPost('offer', 'services', title, 'For the cadence', 5000, unit === 'month' ? 'monthly' : 'weekly', payee.pk, undefined, undefined, undefined, true) as any;
         const a = authorise(payer, { postId: listing.id, payee: payee.pk, beans: 50, unit, max: null });
         assert((await post(payer, '/api/marketplace/posts/accept', { postId: listing.id, buyerPublicKey: payer.pk, standing: a.standing })).status === 200, `${title}: taken up`);
         drain(payer, 2);
@@ -476,7 +481,7 @@ async function main(): Promise<void> {
     const martyBefore9 = bal(marty.pk);
     const t9 = tick(end4 + 1000);
     const afterStop = standingRow(a1.id);
-    assert(t9.ended >= 1 && afterStop.phase === 'ended' && afterStop.ended_reason === 'stopped' && near(bal(marty.pk), martyBefore9) && periodRows(a1.id).length === 4,
+    assert(t9.ended >= 1 && afterStop.phase === 'ended' && afterStop.ended_reason === 'stopped' && same(bal(marty.pk), martyBefore9) && periodRows(a1.id).length === 4,
         `at its end nothing more is paid and it ends (${JSON.stringify(t9)}, ${afterStop.ended_reason})`);
     assert((db.prepare('SELECT status FROM posts WHERE id = ?').get(storage.id) as any).status === 'active', 'the one-off listing is back on the board');
     assertConserved('after the stop');
@@ -484,7 +489,7 @@ async function main(): Promise<void> {
     // ── 10. K periods, and Extend ──────────────────────────────────────────────────────────────────────────────────────
     console.log('── 10. K periods ──');
     const ivy = makeMember('Ivy', 400);
-    const lessons = createPost('offer', 'education', 'Guitar Lessons', 'Weekly lesson', 20, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const lessons = createPost('offer', 'education', 'Guitar Lessons', 'Weekly lesson', 2000, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
     const a10 = authorise(ivy, { postId: lessons.id, payee: rob.pk, beans: 20, unit: 'week', max: 2 });
     assert((await post(ivy, '/api/marketplace/posts/accept', { postId: lessons.id, buyerPublicKey: ivy.pk, standing: a10.standing })).status === 200 && standingRow(a10.id).max_periods === 2, 'for 2 weeks');
     tick(Date.parse(periodEnd(a10.startsAt, 'week', 1)) + 1000);
@@ -507,7 +512,7 @@ async function main(): Promise<void> {
     // ── 11. Forged or mismatched authorisations; a keeper as payee ──────────────────────────────────────────────────────
     console.log('── 11. Forged authorisations ──');
     const zed = makeMember('Zed', 400);
-    const tool = createPost('offer', 'services', 'Tool Shed Access', 'Monthly', 30, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const tool = createPost('offer', 'services', 'Tool Shed Access', 'Monthly', 3000, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
     const good = () => authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null });
     const tryAccept = (standing: unknown) => post(zed, '/api/marketplace/posts/accept', { postId: tool.id, buyerPublicKey: zed.pk, standing });
     const zedBefore = bal(zed.pk);
@@ -520,7 +525,14 @@ async function main(): Promise<void> {
         ['another period', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'week', max: null }).standing],
         ['another community', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null, host: 'elsewhere.example' }).standing],
         ['a start 40 days ahead', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null, startsAt: new Date(Date.now() + 40 * DAY).toISOString() }).standing],
-        ['a text tampered after signing', (() => { const g = good(); (g.standing as any).authorisation.payload = g.payload.replace('30.00', '3.00'); return g.standing; })()],
+        ['a text tampered after signing', (() => {
+            const g = good();
+            // The price line is the integer in hundredths (beanpool-standing-v2): 3000 changed to 300 after the signature.
+            const tampered = g.payload.replace(`\n${hc(30)}\n`, `\n${hc(3)}\n`);
+            assert(tampered !== g.payload, 'setup: the tampered text differs from the signed one');
+            (g.standing as any).authorisation.payload = tampered;
+            return g.standing;
+        })()],
         ['no signature', { authorisation: { payload: good().payload } }],
         ['an id already used', authorise(zed, { postId: tool.id, payee: rob.pk, beans: 30, unit: 'month', max: null, id: a1.id }).standing],
         ['the app says a count the text does not', { ...(good().standing as any), periods: 6 }],
@@ -529,9 +541,9 @@ async function main(): Promise<void> {
         const r = await tryAccept(standing);
         assert(r.status === 400 && r.body?.code === 'standing_auth', `${what}: 400 standing_auth (${show(r)})`);
     }
-    assert(near(bal(zed.pk), zedBefore) && !(db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ?').get(tool.id, zed.pk)),
+    assert(same(bal(zed.pk), zedBefore) && !(db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ?').get(tool.id, zed.pk)),
         'none of them paid anything or wrote a deal');
-    const hourly = createPost('offer', 'services', 'Lawn Mowing', 'Per hour', 15, 'hourly', rob.pk, undefined, undefined, undefined, true) as any;
+    const hourly = createPost('offer', 'services', 'Lawn Mowing', 'Per hour', 1500, 'hourly', rob.pk, undefined, undefined, undefined, true) as any;
     const hr = await post(zed, '/api/marketplace/posts/accept', { postId: hourly.id, buyerPublicKey: zed.pk, standing: authorise(zed, { postId: hourly.id, payee: rob.pk, beans: 15, unit: 'week', max: null }).standing });
     assert(hr.status === 400 && hr.body?.code === 'standing_auth', `an hourly listing makes no standing deal (${show(hr)})`);
     // An enterprise paying a keeper of its own: refused.
@@ -541,7 +553,7 @@ async function main(): Promise<void> {
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(ent.pk, keeper.pk);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(ent.pk, keeper2.pk);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key IN (?, ?)').run(keeper.pk, keeper2.pk);
-    const kimsOffer = createPost('offer', 'services', 'Bookkeeping', 'Monthly books', 40, 'monthly', keeper.pk, undefined, undefined, undefined, true) as any;
+    const kimsOffer = createPost('offer', 'services', 'Bookkeeping', 'Monthly books', 4000, 'monthly', keeper.pk, undefined, undefined, undefined, true) as any;
     const engineAccept = (postId: string, payee: string, beans: number) => {
         const st = authorise(keeper2, { postId, payee, beans, unit: 'month', max: null });
         try {
@@ -570,7 +582,7 @@ async function main(): Promise<void> {
     const tomBefore = bal(tom.pk);
     tick(Date.parse(periodEnd(a12b.startsAt, 'month', 2)) + 1000);
     const late = standingRow(a12b.id);
-    assert(late.phase === 'ended' && late.ended_reason === 'server_away' && periodRows(a12b.id).length === 1 && near(bal(tom.pk), tomBefore),
+    assert(late.phase === 'ended' && late.ended_reason === 'server_away' && periodRows(a12b.id).length === 1 && same(bal(tom.pk), tomBefore),
         `a month already over when its turn comes is never paid: it ends (${late.phase}/${late.ended_reason})`);
     assert(keptKinds(tom.pk, a12b.id).includes('standing_ended') && keptKinds(rob.pk, a12b.id).includes('standing_ended'), 'both are told');
     assertConserved('after late');
@@ -593,26 +605,26 @@ async function main(): Promise<void> {
     console.log('── 14. A Need ──');
     const nan = makeMember('Nan', 400);
     const helper = makeMember('Hal', 0);
-    const care = createPost('need', 'services', 'Weekly Garden Help', 'Two hours each week', 35, 'weekly', nan.pk, undefined, undefined, undefined, true) as any;
+    const care = createPost('need', 'services', 'Weekly Garden Help', 'Two hours each week', 3500, 'weekly', nan.pk, undefined, undefined, undefined, true) as any;
     const asked = await post(helper, '/api/marketplace/posts/request', { postId: care.id, buyerPublicKey: helper.pk, hours: 1 });
     assert(asked.status === 200, `the helper offers to help (${show(asked)})`);
     const a14 = authorise(nan, { postId: care.id, payee: helper.pk, beans: 35, unit: 'week', max: null });
     const nanBefore = bal(nan.pk);
     const approved = await post(nan, '/api/marketplace/transactions/approve', { transactionId: asked.body?.transaction?.id, authorPublicKey: nan.pk, standing: a14.standing });
     assert(approved.status === 200 && approved.body?.transaction?.standingId === a14.id && approved.body?.transaction?.status === 'completed'
-        && near(nanBefore - bal(nan.pk), 35) && nearPaid(bal(helper.pk), 35) && escrowsOf(a14.id) === 0,
-        `the author approves with a signed authorisation: the helper is paid the first week at once (${show(approved)}, Hal ${r2(bal(helper.pk))})`);
+        && same(nanBefore - bal(nan.pk), 35) && nearPaid(bal(helper.pk), 35) && escrowsOf(a14.id) === 0,
+        `the author approves with a signed authorisation: the helper is paid the first week at once (${show(approved)}, Hal ${(bal(helper.pk))})`);
     const halBefore = bal(helper.pk);
     tick(Date.parse(periodEnd(a14.startsAt, 'week', 1)) + 1000);
     assert(nearPaid(bal(helper.pk) - halBefore, 35) && periodRows(a14.id).length === 2 && standingRow(a14.id).phase === 'paid',
-        `at the week's start the helper is paid the next week (${r2(bal(helper.pk) - halBefore)})`);
+        `at the week's start the helper is paid the next week (${(bal(helper.pk) - halBefore)})`);
     assertConserved('after the Need');
 
     // ── 15. The author removes the listing ─────────────────────────────────────────────────────────────────────────────
     console.log('── 15. The author removes the listing ──');
     const yan = makeMember('Yan', 50);
     const zoe = makeMember('Zoe', 300);
-    const desk = createPost('offer', 'services', 'Desk Space', 'A desk by the window', 45, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
+    const desk = createPost('offer', 'services', 'Desk Space', 'A desk by the window', 4500, 'weekly', rob.pk, undefined, undefined, undefined, true) as any;
     const a15 = authorise(yan, { postId: desk.id, payee: rob.pk, beans: 45, unit: 'week', max: null });
     await post(yan, '/api/marketplace/posts/accept', { postId: desk.id, buyerPublicKey: yan.pk, standing: a15.standing });
     drain(yan, 2);
@@ -627,7 +639,7 @@ async function main(): Promise<void> {
         && !keptKinds(rob.pk, a15.id).includes('standing_ended') && !keptKinds(rob.pk, a15b.id).includes('standing_stopped'), 'each payer is told; the author who removed it is not');
     const zoeBefore = bal(zoe.pk);
     tick(Date.parse(periodEnd(a15b.startsAt, 'week', 1)) + 1000);
-    assert(standingRow(a15b.id).phase === 'ended' && standingRow(a15b.id).ended_reason === 'stopped' && near(bal(zoe.pk), zoeBefore), 'at its week\'s end nothing more is paid');
+    assert(standingRow(a15b.id).phase === 'ended' && standingRow(a15b.id).ended_reason === 'stopped' && same(bal(zoe.pk), zoeBefore), 'at its week\'s end nothing more is paid');
     assertConserved('after the removal');
 
     // ── 16. The transactions read and its ETag ───────────────────────────────────────────────────────────────────────
@@ -638,7 +650,7 @@ async function main(): Promise<void> {
     tick(Date.parse(periodEnd(a16.startsAt, 'week', 1)) + 1000);
     const read1 = await call(pia, 'GET', `/api/marketplace/transactions?publicKey=${pia.pk}`);
     const cur = (read1.body as any[])?.find(t => t.standingId === a16.id && t.standingPhase);
-    assert(read1.status === 200 && cur?.standingPhase === 'paid' && cur?.status === 'completed' && cur?.standingUnit === 'week' && near(cur?.standingBeans, 20) && cur?.periodNo === 2
+    assert(read1.status === 200 && cur?.standingPhase === 'paid' && cur?.status === 'completed' && cur?.standingUnit === 'week' && same(beansOf(cur?.standingBeans_c), 20) && cur?.periodNo === 2
         && cur?.standingMaxPeriods === 6 && cur?.standingNextDueAt === periodEnd(a16.startsAt, 'week', 2) && cur?.standingStopped === false,
         `the read carries the standing fields on the current row (${JSON.stringify(cur)?.slice(0, 260)})`);
     assert(cur?.standingEndedReason === undefined && cur?.standingStoppedBy === undefined, 'a running one carries no end');
@@ -656,7 +668,7 @@ async function main(): Promise<void> {
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const quinn = makeMember('Quinn', 300);
     const rae = makeMember('Rae', 0);
-    const baking = createPost('offer', 'food', 'Weekly Bread', 'A loaf a week', 15, 'weekly', rae.pk, undefined, undefined, undefined, true) as any;
+    const baking = createPost('offer', 'food', 'Weekly Bread', 'A loaf a week', 1500, 'weekly', rae.pk, undefined, undefined, undefined, true) as any;
     const a17 = authorise(quinn, { postId: baking.id, payee: rae.pk, beans: 15, unit: 'week', max: null });
     await post(quinn, '/api/marketplace/posts/accept', { postId: baking.id, buyerPublicKey: quinn.pk, standing: a17.standing });
     const raeNew = crypto.generateKeyPairSync('ed25519');
@@ -672,33 +684,33 @@ async function main(): Promise<void> {
     completeRekey(quinn.pk, quinnNewPk, issueRekeyCode(quinn.pk, 'owner:password').code, 'owner:password');
     const quinnBefore = bal(quinnNewPk);
     tick(Date.parse(periodEnd(a17.startsAt, 'week', 2)) + 1000);
-    assert(standingRow(a17.id).payer_pubkey === quinnNewPk && periodRows(a17.id).length === 3 && periodRows(a17.id)[2].buyer_pubkey === quinnNewPk && near(quinnBefore - bal(quinnNewPk), 15),
+    assert(standingRow(a17.id).payer_pubkey === quinnNewPk && periodRows(a17.id).length === 3 && periodRows(a17.id)[2].buyer_pubkey === quinnNewPk && same(quinnBefore - bal(quinnNewPk), 15),
         'the payer re-keys: the next week is paid from the new key');
     assertConserved('after the re-keys');
 
     // ── 18. An enterprise payee ────────────────────────────────────────────────────────────────────────────────────────
     console.log('── 18. An enterprise payee ──');
     const uma = makeMember('Uma', 300);
-    const eggs = createPost('offer', 'food', 'Egg Box', 'A dozen a month', 20, 'monthly', ent.pk, undefined, undefined, undefined, true) as any;
-    const surplusOf = () => Number((db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(ent.pk) as any)?.earned_surplus) || 0;
+    const eggs = createPost('offer', 'food', 'Egg Box', 'A dozen a month', 2000, 'monthly', ent.pk, undefined, undefined, undefined, true) as any;
+    const surplusOf = () => beansOf(Number((db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(ent.pk) as any)?.earned_surplus_c) || 0);
     const surplus0 = surplusOf();
     const a18 = authorise(uma, { postId: eggs.id, payee: ent.pk, beans: 20, unit: 'month', max: null });
-    assert((await post(uma, '/api/marketplace/posts/accept', { postId: eggs.id, buyerPublicKey: uma.pk, standing: a18.standing })).status === 200 && near(surplusOf() - surplus0, 20),
+    assert((await post(uma, '/api/marketplace/posts/accept', { postId: eggs.id, buyerPublicKey: uma.pk, standing: a18.standing })).status === 200 && same(surplusOf() - surplus0, 20),
         `a member takes up an enterprise's Offer: the first month counts toward its earned surplus (${surplusOf() - surplus0})`);
     const surplus1 = surplusOf();
     tick(Date.parse(periodEnd(a18.startsAt, 'month', 1)) + 1000);
-    assert(near(surplusOf() - surplus1, 20) && standingRow(a18.id).periods_done === 2, `the tick's payment counts too, with no signer (${surplusOf() - surplus1})`);
+    assert(same(surplusOf() - surplus1, 20) && standingRow(a18.id).periods_done === 2, `the tick's payment counts too, with no signer (${surplusOf() - surplus1})`);
     assertConserved('after the enterprise payee');
 
     // ── 19. A moderator removes the listing ────────────────────────────────────────────────────────────────────────────
     console.log('── 19. A moderator removes the listing ──');
     const vic = makeMember('Vic', 300);
-    const shed = createPost('offer', 'services', 'Bike Shed', 'A locked shed', 40, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const shed = createPost('offer', 'services', 'Bike Shed', 'A locked shed', 4000, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
     const a19 = authorise(vic, { postId: shed.id, payee: rob.pk, beans: 40, unit: 'month', max: null });
     await post(vic, '/api/marketplace/posts/accept', { postId: shed.id, buyerPublicKey: vic.pk, standing: a19.standing });
     const vicBefore = bal(vic.pk);
     const robBefore19 = bal(rob.pk);
-    assert(se.adminDeletePost(shed.id) && standingRow(a19.id).phase === 'ended' && standingRow(a19.id).ended_reason === 'listing_gone' && near(bal(vic.pk), vicBefore) && near(bal(rob.pk), robBefore19),
+    assert(se.adminDeletePost(shed.id) && standingRow(a19.id).phase === 'ended' && standingRow(a19.id).ended_reason === 'listing_gone' && same(bal(vic.pk), vicBefore) && same(bal(rob.pk), robBefore19),
         `a moderator's removal ends it at once; the month paid stays paid, nothing to refund (${standingRow(a19.id).phase}/${standingRow(a19.id).ended_reason})`);
     assert(keptKinds(vic.pk, a19.id).includes('standing_ended') && keptKinds(rob.pk, a19.id).includes('standing_ended'), 'both are told it ended');
     let vicHoliday = 'ok';
@@ -709,7 +721,7 @@ async function main(): Promise<void> {
 
     // ── 20. The keeper who signed is a keeper no more ──────────────────────────────────────────────────────────────────
     console.log('── 20. The signer is no longer a keeper ──');
-    const windows = createPost('offer', 'services', 'Window Cleaning', 'Once a month', 15, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const windows = createPost('offer', 'services', 'Window Cleaning', 'Once a month', 1500, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
     const e20 = engineAccept(windows.id, rob.pk, 15);
     assert(!!e20.tx, `a keeper signs an enterprise's standing deal on an Offer (${e20.err?.message ?? 'ok'})`);
     const start20 = standingRow(e20.id).starts_at as string;
@@ -727,7 +739,7 @@ async function main(): Promise<void> {
     // ── 21. The Home answer's live lines ───────────────────────────────────────────────────────────────────────────────
     console.log('── 21. The Home answer ──');
     const max = makeMember('Max', 60);
-    const loft = createPost('offer', 'services', 'Loft Storage', 'Dry and dusty', 50, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
+    const loft = createPost('offer', 'services', 'Loft Storage', 'Dry and dusty', 5000, 'monthly', rob.pk, undefined, undefined, undefined, true) as any;
     const a21 = authorise(max, { postId: loft.id, payee: rob.pk, beans: 50, unit: 'month', max: null });
     await post(max, '/api/marketplace/posts/accept', { postId: loft.id, buyerPublicKey: max.pk, standing: a21.standing });
     assert(!(await homeNeeds(max)).some(i => i.label?.includes('Loft Storage')), 'paid: no line');

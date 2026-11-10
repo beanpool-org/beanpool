@@ -27,12 +27,12 @@ import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, completePostTransaction, getCommonsBalanceExact,
-    moveToCommons, conservingTransaction, createTreasury,
+    moveToCommons, conservingTransaction, createTreasury, reconcileLedgerFromDb,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
-import { createDecision, executeDecision, tickDecisions } from './decisions-engine.js';
+import { createDecision, executeDecision, tickDecisions, GRANT_AMOUNT_ERROR } from './decisions-engine.js';
 import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -41,7 +41,8 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { listStrandedEscrows } from './engine/escrow-write-off.js';
-import { db, createCrowdfundProject, pledgeToProject, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, createCrowdfundProject, pledgeToProject } from './db/db.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT } from './money-body.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -58,7 +59,12 @@ const hex = (n: number) => crypto.randomBytes(n).toString('hex');
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
-const r2 = (n: number) => Math.round(n * 100) / 100;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -70,7 +76,7 @@ function makeMember(name: string, beans = 0): Id {
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 const KEY_ID = hex(32);
@@ -107,11 +113,13 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
 const nodeTotalExact = () => (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact();
 const conserved = (before: number, what: string) => {
     const delta = nodeTotalExact() - before;
-    assert(Math.abs(delta) < 1e-9, `conservation: ${what} (Δ ${delta})`);
+    assert(delta === 0, `conservation: ${what} (Δ ${delta} hundredths)`);
 };
-const rowBal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
-const debtOf = (entryId: string) => db.prepare('SELECT * FROM names_debts WHERE entry_id = ? ORDER BY removed_at').get(entryId) as any;
-const debtById = (id: string) => db.prepare('SELECT * FROM names_debts WHERE id = ?').get(id) as any;
+const rowBal = (pk: string) => beansOf((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0);
+/** A debt row with its figures in Beans for the checks (the row holds whole hundredths). */
+const debtView = (row: any) => row && { ...row, amount: beansOf(row.amount_c), repaid: beansOf(row.repaid_c), hardship_held: beansOf(row.hardship_held_c) };
+const debtOf = (entryId: string) => debtView(db.prepare('SELECT * FROM names_debts WHERE entry_id = ? ORDER BY removed_at').get(entryId));
+const debtById = (id: string) => debtView(db.prepare('SELECT * FROM names_debts WHERE id = ?').get(id));
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
 
 async function main(): Promise<void> {
@@ -137,22 +145,22 @@ async function main(): Promise<void> {
         const partner = makeMember(`Partner${proposers}`, 0);
         const at = new Date().toISOString();
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
-                    VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
+                    VALUES (?, ?, ?, ?, 500, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
     const donor = makeMember('Donor', 5000);
-    assert(!!moveToCommons(donor.pk, 4000, 'Seed the pot', { allowMemberDebit: true }), 'setup: the Commons holds 4000');
+    assert(!!moveToCommons(donor.pk, hc(4000), 'Seed the pot', { allowMemberDebit: true }), 'setup: the Commons holds 4000');
 
     // ═══════════════ NEW-1: a hardship grant and a debt being worked off ═══════════════
     console.log('\n── NEW-1 a hardship grant survives the next payment ──');
     const deeEntry = makeEntry();
     const dee = makeMember('Dee');
-    createPost('offer', 'produce', 'Dee mends things', 'Repairs', 20, 'fixed', dee.pk);
+    createPost('offer', 'produce', 'Dee mends things', 'Repairs', hc(20), 'fixed', dee.pk);
     db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)`).run(hex(16), dee.pk, deeEntry, ada.pk);
-    const basket = createPost('offer', 'produce', "Sam's 200-Bean basket", 'Veg', 200, 'fixed', sam.pk)!.id;
+    const basket = createPost('offer', 'produce', "Sam's 200-Bean basket", 'Veg', hc(200), 'fixed', sam.pk)!.id;
     const bought = await call('POST', dee, '/api/marketplace/posts/accept', { postId: basket, buyerPublicKey: dee.pk });
     if (bought.body?.transaction?.id) completePostTransaction(bought.body.transaction.id, dee.pk);
-    assert(r2(rowBal(dee.pk)) === -200, `setup: Dee spends to -200 (${show(bought)})`);
+    assert((rowBal(dee.pk)) === -200, `setup: Dee spends to -200 (${show(bought)})`);
     // A removal proposed before removal by vote S3 (since then only an admin's pause opens one).
     executeDecision(removalProposedFromBefore({ authorPubkey: proposer().pk, title: 'Remove Dee', description: 'Left owing', subject: dee.pk }).id);
     tickDecisions(Date.now() + 8 * DAY);
@@ -164,28 +172,28 @@ async function main(): Promise<void> {
 
     const totalH0 = nodeTotalExact();
     const grant = executeDecision(createDecision({ authorPubkey: proposer().pk, title: 'Help Dee with the rent', description: 'Hardship',
-        touches: 'pool', effect: 'grant_hardship', subject: dee2.pk, params: { amount: 50 } }).id);
-    assert(grant.status === 'executed' && r2(rowBal(dee2.pk)) === 50 && debtOf(deeEntry).repaid === 0, `the hardship grant pays 50 and sweeps nothing (${grant.status}, ${rowBal(dee2.pk)})`);
+        touches: 'pool', effect: 'grant_hardship', subject: dee2.pk, params: { amount_c: hc(50) } }).id);
+    assert(grant.status === 'executed' && (rowBal(dee2.pk)) === 50 && debtOf(deeEntry).repaid === 0, `the hardship grant pays 50 and sweeps nothing (${grant.status}, ${rowBal(dee2.pk)})`);
     assert(debtOf(deeEntry).hardship_held === 50, `the debt records the grant's shield (${debtOf(deeEntry).hardship_held})`);
     conserved(totalH0, 'the grant');
 
     // The review's reproduction: Sam sends Dee 1 Bean. On main 51 was swept and Dee was left with 0.
     const totalH1 = nodeTotalExact();
-    const one = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: dee2.pk, amount: 1, memo: 'thanks for the help' });
-    const swept1 = db.prepare(`SELECT amount_c FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'`).all(dee2.pk) as { amount: number }[];
+    const one = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: dee2.pk, amount_c: hc(1), memo: 'thanks for the help' });
+    const swept1 = db.prepare(`SELECT amount_c FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'`).all(dee2.pk) as { amount_c: number }[];
     assert(one.status === 200, `Sam sends Dee 1 Bean (${show(one)})`);
-    assert(r2(rowBal(dee2.pk)) === 50 && debtOf(deeEntry).repaid === 1, `only the 1 Bean earned is swept: balance 50, repaid 1 (balance ${rowBal(dee2.pk)}, repaid ${debtOf(deeEntry).repaid})`);
-    assert(swept1.length === 1 && swept1[0].amount === 1, `one sweep row of 1 (${JSON.stringify(swept1)})`);
+    assert((rowBal(dee2.pk)) === 50 && debtOf(deeEntry).repaid === 1, `only the 1 Bean earned is swept: balance 50, repaid 1 (balance ${rowBal(dee2.pk)}, repaid ${debtOf(deeEntry).repaid})`);
+    assert(swept1.length === 1 && swept1[0].amount_c === 100, `one sweep row of 1 Bean (${JSON.stringify(swept1)})`);
     conserved(totalH1, 'the send and its sweep');
 
     // Spent and earned back: Dee pledges 30 of the grant, then is paid 10. All 10 go to the debt; the 20 still held stay.
     const totalH2 = nodeTotalExact();
     const tank = 'proj-' + hex(6);
-    createCrowdfundProject(tank, sam.pk, 'Water tank', 'A tank for the hall', [], 100000, null);
-    const spend = await call('POST', dee2, `/api/crowdfund/projects/${tank}/pledge`, { amount: 30 });
-    assert(spend.status === 200 && r2(rowBal(dee2.pk)) === 20, `Dee pledges 30 of the grant (${show(spend)}; balance ${rowBal(dee2.pk)})`);
-    const ten = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: dee2.pk, amount: 10, memo: 'for the fence' });
-    assert(ten.status === 200 && debtOf(deeEntry).repaid === 11 && r2(rowBal(dee2.pk)) === 20,
+    createCrowdfundProject(tank, sam.pk, 'Water tank', 'A tank for the hall', [], hc(100000), null);
+    const spend = await call('POST', dee2, `/api/crowdfund/projects/${tank}/pledge`, { amount_c: hc(30) });
+    assert(spend.status === 200 && (rowBal(dee2.pk)) === 20, `Dee pledges 30 of the grant (${show(spend)}; balance ${rowBal(dee2.pk)})`);
+    const ten = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: dee2.pk, amount_c: hc(10), memo: 'for the fence' });
+    assert(ten.status === 200 && debtOf(deeEntry).repaid === 11 && (rowBal(dee2.pk)) === 20,
         `after spending 30 of it, the next 10 in all go to the debt (repaid ${debtOf(deeEntry).repaid}, balance ${rowBal(dee2.pk)})`);
     assert(debtOf(deeEntry).hardship_held === 20, `the shield shrank to what is left of the grant (${debtOf(deeEntry).hardship_held})`);
     conserved(totalH2, 'the pledge, the payment and its sweep');
@@ -194,30 +202,30 @@ async function main(): Promise<void> {
     // second must not read the grant as spent (it would sweep 5 of it).
     const totalH3 = nodeTotalExact();
     conservingTransaction(() => {
-        transfer(sam.pk, dee2.pk, 5, 'first half', 'direct', true);
-        transfer(sam.pk, dee2.pk, 5, 'second half', 'direct', true);
+        transfer(sam.pk, dee2.pk, hc(5), 'first half', 'direct', true);
+        transfer(sam.pk, dee2.pk, hc(5), 'second half', 'direct', true);
     });
-    assert(debtOf(deeEntry).repaid === 21 && r2(rowBal(dee2.pk)) === 20,
+    assert(debtOf(deeEntry).repaid === 21 && (rowBal(dee2.pk)) === 20,
         `two payments of 5 in one commit sweep 10, the grant's 20 stay (repaid ${debtOf(deeEntry).repaid}, balance ${rowBal(dee2.pk)})`);
     conserved(totalH3, 'two payments in one commit and their sweeps');
     await nextTick();
     // The batch is over: the next payment is read on its own again.
     const totalH4 = nodeTotalExact();
-    transfer(sam.pk, dee2.pk, 4, 'later', 'direct', true);
-    assert(debtOf(deeEntry).repaid === 25 && r2(rowBal(dee2.pk)) === 20, `a later payment of 4 is swept whole (repaid ${debtOf(deeEntry).repaid}, balance ${rowBal(dee2.pk)})`);
+    transfer(sam.pk, dee2.pk, hc(4), 'later', 'direct', true);
+    assert(debtOf(deeEntry).repaid === 25 && (rowBal(dee2.pk)) === 20, `a later payment of 4 is swept whole (repaid ${debtOf(deeEntry).repaid}, balance ${rowBal(dee2.pk)})`);
     conserved(totalH4, 'a later payment and its sweep');
 
     // ═══════════════ Fix round 1: the shield is its work-off's, and only the grant still unspent ═══════════════
     console.log('\n── B1/B2/N2 the shield ends with its work-off and shrinks as the grant is spent ──');
     const grantTo = (who: Id, amount: number) => executeDecision(createDecision({ authorPubkey: proposer().pk, title: `Help ${who.name}`,
-        description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: who.pk, params: { amount } }).id);
+        description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: who.pk, params: { amount_c: hc(amount) } }).id);
     /** A debt of `beans` on a fresh entry: a confirmed member buys from Sam to -beans and deletes their account. */
     const leftDebt = async (name: string, beans: number) => {
         const entry = makeEntry();
         const m = makeMember(name);
-        createPost('offer', 'produce', `${name} mends things`, 'Repairs', 20, 'fixed', m.pk);
+        createPost('offer', 'produce', `${name} mends things`, 'Repairs', hc(20), 'fixed', m.pk);
         db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)`).run(hex(16), m.pk, entry, ada.pk);
-        const post = createPost('offer', 'produce', `Sam's ${beans}-Bean basket`, 'Veg', beans, 'fixed', sam.pk)!.id;
+        const post = createPost('offer', 'produce', `Sam's ${beans}-Bean basket`, 'Veg', hc(beans), 'fixed', sam.pk)!.id;
         const b = await call('POST', m, '/api/marketplace/posts/accept', { postId: post, buyerPublicKey: m.pk });
         if (b.body?.transaction?.id) completePostTransaction(b.body.transaction.id, m.pk);
         const purged = await call('POST', m, '/api/member/purge', { action: 'purge_account' });
@@ -246,8 +254,8 @@ async function main(): Promise<void> {
             `revoking Ivy's work-off ends its shield (${show(rv)}; shield ${afterRevoke.hardship_held})`);
         const jon = makeMember('Jon', 60);
         await workOffBy(debt.id, jon);
-        transfer('genesis', jon.pk, 1, 'one', 'direct', true);
-        assert(debtById(debt.id).repaid === 61 && r2(rowBal(jon.pk)) === 0 && r2(rowBal(ivy.pk)) === 50,
+        transfer('genesis', jon.pk, hc(1), 'one', 'direct', true);
+        assert(debtById(debt.id).repaid === 61 && (rowBal(jon.pk)) === 0 && (rowBal(ivy.pk)) === 50,
             `Jon's next payment sweeps all 61 he holds; Ivy keeps her 50 (repaid ${debtById(debt.id).repaid}, Jon ${rowBal(jon.pk)}, Ivy ${rowBal(ivy.pk)})`);
         conserved(t0, 'a grant, a revoke, another member working the debt off');
     }
@@ -259,9 +267,9 @@ async function main(): Promise<void> {
         await workOffBy(debt.id, ena);
         const t0 = nodeTotalExact();
         grantTo(ena, 50);
-        transfer('genesis', ena.pk, 300, 'a big job', 'direct', true);
+        transfer('genesis', ena.pk, hc(300), 'a big job', 'direct', true);
         const d = debtById(debt.id);
-        assert(d.status === 'settled' && d.repaid === 200 && r2(rowBal(ena.pk)) === 150 && d.hardship_held === 0,
+        assert(d.status === 'settled' && d.repaid === 200 && (rowBal(ena.pk)) === 150 && d.hardship_held === 0,
             `300 earned settles the 200 debt; the grant's 50 stay hers and the settled debt holds no shield (${d.status}, repaid ${d.repaid}, balance ${rowBal(ena.pk)}, shield ${d.hardship_held})`);
         conserved(t0, 'a grant and the payment that settles the debt');
     }
@@ -283,13 +291,13 @@ async function main(): Promise<void> {
         const t0 = nodeTotalExact();
         grantTo(kim, 50);
         assert(debtById(debt.id).hardship_held === 50, `a grant while the work-off waits is shielded (${debtById(debt.id).hardship_held})`);
-        const sp = await call('POST', kim, `/api/crowdfund/projects/${tank}/pledge`, { amount: 50 });
-        transfer('genesis', kim.pk, 40, 'earned in the wait', 'direct', true);
-        assert(sp.status === 200 && r2(rowBal(kim.pk)) === 40 && debtById(debt.id).repaid === 0 && debtById(debt.id).hardship_held === 0,
+        const sp = await call('POST', kim, `/api/crowdfund/projects/${tank}/pledge`, { amount_c: hc(50) });
+        transfer('genesis', kim.pk, hc(40), 'earned in the wait', 'direct', true);
+        assert(sp.status === 200 && (rowBal(kim.pk)) === 40 && debtById(debt.id).repaid === 0 && debtById(debt.id).hardship_held === 0,
             `the grant spent in the wait, 40 earned: nothing swept yet, and no shield left (${show(sp)}; balance ${rowBal(kim.pk)}, repaid ${debtById(debt.id).repaid}, shield ${debtById(debt.id).hardship_held})`);
         const sec = await call('POST', bea, `/api/names/confirmations/${c.id}/second`);
-        transfer('genesis', kim.pk, 1, 'the first payment once live', 'direct', true);
-        assert(sec.status === 200 && debtById(debt.id).repaid === 41 && r2(rowBal(kim.pk)) === 0,
+        transfer('genesis', kim.pk, hc(1), 'the first payment once live', 'direct', true);
+        assert(sec.status === 200 && debtById(debt.id).repaid === 41 && (rowBal(kim.pk)) === 0,
             `once Bea agrees, the next payment sweeps the 40 earned in the wait and the 1 (${show(sec)}; repaid ${debtById(debt.id).repaid}, balance ${rowBal(kim.pk)})`);
         conserved(t0, 'a grant spent in the wait, earnings, the second admin, the sweep');
     }
@@ -303,16 +311,16 @@ async function main(): Promise<void> {
         const c = await workOffBy(debt.id, lou);
         const t0 = nodeTotalExact();
         grantTo(lou, 50);
-        const sp = await call('POST', lou, `/api/crowdfund/projects/${tank}/pledge`, { amount: 30 });
+        const sp = await call('POST', lou, `/api/crowdfund/projects/${tank}/pledge`, { amount_c: hc(30) });
         conservingTransaction(() => {
-            transfer(sam.pk, lou.pk, 5, 'first half', 'direct', true);
-            transfer(sam.pk, lou.pk, 5, 'second half', 'direct', true);
+            transfer(sam.pk, lou.pk, hc(5), 'first half', 'direct', true);
+            transfer(sam.pk, lou.pk, hc(5), 'second half', 'direct', true);
         });
-        assert(sp.status === 200 && r2(rowBal(lou.pk)) === 30 && debtById(debt.id).repaid === 0 && debtById(debt.id).hardship_held === 20,
+        assert(sp.status === 200 && (rowBal(lou.pk)) === 30 && debtById(debt.id).repaid === 0 && debtById(debt.id).hardship_held === 20,
             `two payments in one commit in the wait: the shield is the 20 left of the grant (${show(sp)}; balance ${rowBal(lou.pk)}, shield ${debtById(debt.id).hardship_held})`);
         const sec = await call('POST', bea, `/api/names/confirmations/${c.id}/second`);
-        transfer(sam.pk, lou.pk, 1, 'the first payment once live', 'direct', true);
-        assert(sec.status === 200 && debtById(debt.id).repaid === 11 && r2(rowBal(lou.pk)) === 20,
+        transfer(sam.pk, lou.pk, hc(1), 'the first payment once live', 'direct', true);
+        assert(sec.status === 200 && debtById(debt.id).repaid === 11 && (rowBal(lou.pk)) === 20,
             `once live, the 10 earned in the wait and the 1 go; the 20 left of the grant stay (repaid ${debtById(debt.id).repaid}, balance ${rowBal(lou.pk)})`);
         conserved(t0, 'a grant partly spent in the wait, a two-payment commit, the sweep once live');
     }
@@ -325,104 +333,93 @@ async function main(): Promise<void> {
         const mia = makeMember('Mia');
         const c = await workOffBy(debt.id, mia);
         grantTo(mia, 50);
-        transfer('genesis', mia.pk, 40, 'earned in the wait', 'direct', true);
+        transfer('genesis', mia.pk, hc(40), 'earned in the wait', 'direct', true);
         const sec = await call('POST', bea, `/api/names/confirmations/${c.id}/second`);
         assert(sec.status === 200, `setup: Bea agrees to Mia's work-off (${show(sec)})`);
         const t0 = nodeTotalExact();
-        transfer('genesis', mia.pk, 1, 'payment A', 'direct', true);
-        const afterA = { balance: r2(rowBal(mia.pk)), repaid: debtById(debt.id).repaid };
-        pledgeToProject(crypto.randomUUID(), tank, mia.pk, 30, 'spends 30 of the grant');
-        transfer('genesis', mia.pk, 10, 'payment B', 'direct', true);
+        transfer('genesis', mia.pk, hc(1), 'payment A', 'direct', true);
+        const afterA = { balance: (rowBal(mia.pk)), repaid: debtById(debt.id).repaid };
+        pledgeToProject(crypto.randomUUID(), tank, mia.pk, hc(30), 'spends 30 of the grant');
+        transfer('genesis', mia.pk, hc(10), 'payment B', 'direct', true);
         assert(afterA.balance === 50 && afterA.repaid === 41, `payment A sweeps the 40 earned in the wait and the 1; the grant's 50 stay (${JSON.stringify(afterA)})`);
-        assert(r2(rowBal(mia.pk)) === 20 && debtById(debt.id).repaid === 51,
+        assert((rowBal(mia.pk)) === 20 && debtById(debt.id).repaid === 51,
             `after a pledge of 30, payment B's 10 all go in the same turn (balance ${rowBal(mia.pk)}, repaid ${debtById(debt.id).repaid})`);
         conserved(t0, 'an over-sweep, a pledge and a payment in one turn');
     }
     db.prepare(`UPDATE node_config SET value = 'false' WHERE key = 'names_two_admins'`).run();
 
-    // ═══════════════ LED-05: pledges and sends to the cent ═══════════════
-    console.log('\n── LED-05 pledges and sends to the cent ──');
+    // ═══════════════ LED-05: pledges and sends in whole hundredths ═══════════════
+    console.log('\n── LED-05 pledges and sends in whole hundredths ──');
     const shade = 'proj-' + hex(6);
     const creator = makeMember('Creator');
-    createCrowdfundProject(shade, creator.pk, 'Shade house', 'A shade house for seedlings', [], 100000, null);
+    createCrowdfundProject(shade, creator.pk, 'Shade house', 'A shade house for seedlings', [], hc(100000), null);
     const backer = makeMember('Backer', 10);
     const friend = makeMember('Friend');
     const totalS0 = nodeTotalExact();
-    for (const amt of [0.0001, 1.00000005, 1.005, 5e-324]) {
-        const r = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, { amount: amt });
-        assert(r.status === 400 && r.body?.error === WHOLE_CENTS_ERROR, `a pledge of ${amt} is refused in words (${show(r)})`);
+    // A part of a hundredth, the old `amount` key in Beans, a decimal string, 0 and below: each refused in the node's words.
+    for (const body of [{ amount_c: 0.5 }, { amount_c: 100.000001 }, { amount: 1.25 }, { amount_c: '125' }, { amount_c: 0 }, { amount_c: -100 }, { amount_c: 5e-324 }]) {
+        const r = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, body);
+        assert(r.status === 400 && r.body?.code === AMOUNT_C_REQUIRED && r.body?.error === AMOUNT_C_REQUIRED_TEXT, `a pledge of ${JSON.stringify(body)} is refused in words (${show(r)})`);
     }
-    assert(r2(rowBal(backer.pk)) === 10, `nothing moved for the refused pledges (balance ${rowBal(backer.pk)})`);
-    const noisy = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, { amount: 0.1 + 0.2 });
-    assert(noisy.status === 200, `a pledge of 0.1 + 0.2 (float noise of 30 cents) is taken (${show(noisy)})`);
-    const cents = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, { amount: 1.25 });
-    assert(cents.status === 200, `a pledge of 1.25 is taken (${show(cents)})`);
-    for (const amt of [0.0001, 2.345]) {
-        const r = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: friend.pk, amount: amt, memo: 'sliver' });
-        assert(r.status === 400 && r.body?.error === WHOLE_CENTS_ERROR, `a send of ${amt} is refused in words (${show(r)})`);
+    assert(rowBal(backer.pk) === 10, `nothing moved for the refused pledges (balance ${rowBal(backer.pk)})`);
+    const tiny = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, { amount_c: 30 });
+    assert(tiny.status === 200, `a pledge of 30 hundredths (0.30) is taken (${show(tiny)})`);
+    const cents = await call('POST', backer, `/api/crowdfund/projects/${shade}/pledge`, { amount_c: 125 });
+    assert(cents.status === 200 && rowBal(backer.pk) === 8.45, `a pledge of 125 hundredths (1.25) is taken (${show(cents)}; balance ${rowBal(backer.pk)})`);
+    for (const body of [{ amount_c: 0.5 }, { amount_c: 234.5 }, { amount: 2.35 }]) {
+        const r = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: friend.pk, ...body, memo: 'sliver' });
+        assert(r.status === 400 && r.body?.code === AMOUNT_C_REQUIRED, `a send of ${JSON.stringify(body)} is refused in words (${show(r)})`);
     }
-    const sendCents = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: friend.pk, amount: 2.35, memo: 'to the cent' });
-    assert(sendCents.status === 200, `a send of 2.35 goes (${show(sendCents)})`);
+    const sendCents = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: friend.pk, amount_c: 235, memo: 'to the hundredth' });
+    assert(sendCents.status === 200 && rowBal(friend.pk) === 2.35, `a send of 235 hundredths goes (${show(sendCents)}; friend ${rowBal(friend.pk)})`);
     conserved(totalS0, 'refused and taken pledges and sends');
 
-    // N4: a grant is proposed to the cent; so is a keeper's sweep of an enterprise's surplus to the Commons.
+    // N4: a grant is proposed in whole hundredths; so is a keeper's sweep of an enterprise's surplus to the Commons.
     const totalN4 = nodeTotalExact();
     const lee = makeMember('Lee');
     let refusal = '';
     try {
-        createDecision({ authorPubkey: proposer().pk, title: 'Help Lee', description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: lee.pk, params: { amount: 0.005 } });
+        createDecision({ authorPubkey: proposer().pk, title: 'Help Lee', description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: lee.pk, params: { amount_c: 0.5 } });
     } catch (e: any) { refusal = e.message; }
-    assert(refusal === WHOLE_CENTS_ERROR, `a hardship grant of 0.005 is refused in words when it is proposed (${refusal || 'it was opened'})`);
-    const leeGrant = createDecision({ authorPubkey: proposer().pk, title: 'Help Lee', description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: lee.pk, params: { amount: 12.5 } });
+    assert(refusal === GRANT_AMOUNT_ERROR, `a hardship grant of half a hundredth is refused in words when it is proposed (${refusal || 'it was opened'})`);
+    const leeGrant = createDecision({ authorPubkey: proposer().pk, title: 'Help Lee', description: 'Hardship', touches: 'pool', effect: 'grant_hardship', subject: lee.pk, params: { amount_c: 1250 } });
     assert(!!leeGrant.id, 'a hardship grant of 12.50 is proposed');
-    const { publicKey: farm } = createTreasury('CentFarm', AVATAR, 100);
+    const { publicKey: farm } = createTreasury('CentFarm', AVATAR, hc(100));
     const keeper = makeMember('Keeper');
     db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', 'admin')`).run(farm, keeper.pk);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(keeper.pk);
-    transfer('genesis', farm, 10, 'a sale', 'direct', true);
-    const sliver = await call('POST', keeper, `/api/treasury/${farm}/sweep`, { amount: 1.005 });
-    assert(sliver.status === 400 && sliver.body?.error === WHOLE_CENTS_ERROR && r2(rowBal(farm)) === 10, `a keeper's sweep of 1.005 is refused in words, nothing moved (${show(sliver)})`);
-    const whole = await call('POST', keeper, `/api/treasury/${farm}/sweep`, { amount: 1.25 });
-    assert(whole.status === 200 && r2(rowBal(farm)) === 8.75, `a keeper's sweep of 1.25 goes (${show(whole)}; ${rowBal(farm)})`);
+    transfer('genesis', farm, hc(10), 'a sale', 'direct', true);
+    const sliver = await call('POST', keeper, `/api/treasury/${farm}/sweep`, { amount_c: 100.5 });
+    assert(sliver.status === 400 && sliver.body?.code === AMOUNT_C_REQUIRED && rowBal(farm) === 10, `a keeper's sweep of a part of a hundredth is refused in words, nothing moved (${show(sliver)})`);
+    const whole = await call('POST', keeper, `/api/treasury/${farm}/sweep`, { amount_c: 125 });
+    assert(whole.status === 200 && rowBal(farm) === 8.75, `a keeper's sweep of 125 hundredths goes (${show(whole)}; ${rowBal(farm)})`);
     conserved(totalN4, 'refused and taken grant proposals and sweeps');
 
-    // Round 2: older data. A balance holding a part of a cent (made before the cent rule) locks nothing: its whole cents
-    // are sent, pledged and swept as ever, and the part of a cent stays where it was.
-    const totalOld = nodeTotalExact();
-    const oldSender = makeMember('OldSender');
-    // Past the first-trade gate on sends: a sale of hers, completed.
-    const oldBuyer = makeMember('OldBuyer', 20);
-    createPost('offer', 'produce', 'OldBuyer mends things', 'Repairs', 20, 'fixed', oldBuyer.pk);
-    const jam = createPost('offer', 'produce', "OldSender's jam", 'Jam', 5, 'fixed', oldSender.pk)!.id;
-    const sold = await call('POST', oldBuyer, '/api/marketplace/posts/accept', { postId: jam, buyerPublicKey: oldBuyer.pk });
-    if (sold.body?.transaction?.id) completePostTransaction(sold.body.transaction.id, oldBuyer.pk);
-    assert(rowBal(oldSender.pk) > 0, `setup: OldSender sells her jam (${show(sold)})`);
-    const oldBacker = makeMember('OldBacker');
-    const { publicKey: oldFarm } = createTreasury('OldFarm', AVATAR, 100);
-    db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', 'admin')`).run(oldFarm, keeper.pk);
-    for (const pk of [oldSender.pk, oldBacker.pk, oldFarm]) transfer('genesis', pk, 10.333 - rowBal(pk), 'older data', 'direct', true);
-    assert([oldSender.pk, oldBacker.pk, oldFarm].every(pk => Math.abs(rowBal(pk) - 10.333) < 1e-9), 'setup: a member, a backer and an enterprise each hold 10.333');
-    const oldSend = await call('POST', oldSender, '/api/ledger/transfer', { from: oldSender.pk, to: friend.pk, amount: 10.33, memo: 'all but the sliver' });
-    assert(oldSend.status === 200 && Math.abs(rowBal(oldSender.pk) - 0.003) < 1e-9, `a balance of 10.333 still sends 10.33, the part of a cent left (${show(oldSend)}; ${rowBal(oldSender.pk)})`);
-    const oldPledge = await call('POST', oldBacker, `/api/crowdfund/projects/${shade}/pledge`, { amount: 10.33 });
-    assert(oldPledge.status === 200 && Math.abs(rowBal(oldBacker.pk) - 0.003) < 1e-9, `a balance of 10.333 still pledges 10.33 (${show(oldPledge)}; ${rowBal(oldBacker.pk)})`);
-    const oldSweep = await call('POST', keeper, `/api/treasury/${oldFarm}/sweep`, { amount: 10.33 });
-    assert(oldSweep.status === 200 && Math.abs(rowBal(oldFarm) - 0.003) < 1e-9, `an enterprise holding 10.333 still sweeps 10.33 (${show(oldSweep)}; ${rowBal(oldFarm)})`);
-    conserved(totalOld, 'sends, pledges and sweeps from balances with a part of a cent');
+    // Round 2 (was: older data holding a part of a cent still sends its whole cents). No move makes a part of a hundredth
+    // now; a balance holding one (a hand edit) is broken, and moves nothing until an operator mends it.
+    const broken = makeMember('Broken', 10);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + 0.5 WHERE public_key = ?').run(broken.pk);
+    reconcileLedgerFromDb();
+    const brokenSend = await call('POST', broken, '/api/ledger/transfer', { from: broken.pk, to: friend.pk, amount_c: 100, memo: 'from a broken balance' });
+    assert(brokenSend.status !== 200 && rowBal(friend.pk) === 2.35, `a balance that is not whole hundredths sends nothing (${show(brokenSend)})`);
+    const brokenAudit = runLedgerAudit();
+    assert(!brokenAudit.ok && brokenAudit.badBalances >= 1, `and the audit names it (${JSON.stringify(brokenAudit).slice(0, 160)})`);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - 0.5 WHERE public_key = ?').run(broken.pk);
+    reconcileLedgerFromDb();
 
-    // ═══════════════ NEW-3: a goal pledged in full in whole cents ═══════════════
-    console.log('\n── NEW-3 a goal pledged in full in cents is funded ──');
+    // ═══════════════ NEW-3: a goal pledged in full in hundredths ═══════════════
+    console.log('\n── NEW-3 a goal pledged in full in hundredths is funded ──');
     const seeds = 'proj-' + hex(6);
-    createCrowdfundProject(seeds, creator.pk, 'Seed library', 'Seeds', [], 1, null);
+    createCrowdfundProject(seeds, creator.pk, 'Seed library', 'Seeds', [], hc(1), null);
     const backer4 = makeMember('Backer4', 10);
     const totalG0 = nodeTotalExact();
-    for (const amt of [0.7, 0.1, 0.1, 0.1]) {
-        const r = await call('POST', backer4, `/api/crowdfund/projects/${seeds}/pledge`, { amount: amt });
-        assert(r.status === 200, `pledge ${amt} (${show(r)})`);
+    for (const amt of [70, 10, 10, 10]) {
+        const r = await call('POST', backer4, `/api/crowdfund/projects/${seeds}/pledge`, { amount_c: amt });
+        assert(r.status === 200, `pledge ${amt} hundredths (${show(r)})`);
     }
     const p = db.prepare('SELECT status, current_amount_c FROM projects WHERE id = ?').get(seeds) as any;
-    assert(p.status === 'FUNDED', `a goal of 1 pledged as 0.70 + 0.10 + 0.10 + 0.10 is funded (${p.status}, ${p.current_amount})`);
-    assert(Math.abs(rowBal(`escrow_${seeds}`)) < 1e-9, `its escrow swept to the project (${rowBal(`escrow_${seeds}`)})`);
+    assert(p.status === 'FUNDED', `a goal of 1 pledged as 0.70 + 0.10 + 0.10 + 0.10 is funded (${p.status}, ${p.current_amount_c})`);
+    assert(rowBal(`escrow_${seeds}`) === 0, `its escrow swept to the project (${rowBal(`escrow_${seeds}`)})`);
     conserved(totalG0, 'the pledges and the sweep at the goal');
 
     // ═══════════════ NEW-2: the audit and an open crowdfund ═══════════════

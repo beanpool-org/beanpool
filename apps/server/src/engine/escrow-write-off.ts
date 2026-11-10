@@ -24,7 +24,7 @@
 // inside it is treated as a possible conservation breach (rollback plus a full resync of memory to rows). All of
 // this is synchronous, so nothing can run between the guards and the payment on Node's one thread.
 
-import { ESCROW_FLOOR, formatHundredths, isEscrowAccount, ESCROW_ACCOUNT_PREFIX } from '@beanpool/core';
+import { ESCROW_FLOOR, formatHundredths, isEscrowAccount, isHundredths, ESCROW_ACCOUNT_PREFIX } from '@beanpool/core';
 import { escrowNotHeldOpenSql } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
@@ -69,7 +69,7 @@ export interface StrandedEscrowList {
 
 export type WriteOffCode =
     | 'reason_required' | 'reason_too_long' | 'not_owner' | 'standby' | 'not_escrow' | 'already_written_off' | 'not_found'
-    | 'trade_open' | 'positive_balance' | 'nothing_to_write_off' | 'ledger_mismatch' | 'deficit_unconfirmed';
+    | 'trade_open' | 'positive_balance' | 'nothing_to_write_off' | 'not_whole_hundredths' | 'ledger_mismatch' | 'deficit_unconfirmed';
 
 export type WriteOffResult =
     | {
@@ -114,6 +114,11 @@ function tradeIdOf(escrowId: string): string {
 function balanceRefusal(balance: number, tradeStatus: string | null): { code: WriteOffCode; error: string } | null {
     if (tradeStatus && OPEN_TRADE_STATUSES.includes(tradeStatus)) {
         return { code: 'trade_open', error: `This escrow belongs to a trade that is still ${tradeStatus} — it is not stranded` };
+    }
+    // A balance that is not whole hundredths came from no move this code makes (a hand edit, a row from before hundredths):
+    // the audit names it, an operator mends it, and the Commons never pays part of a hundredth.
+    if (!isHundredths(balance)) {
+        return { code: 'not_whole_hundredths', error: 'This escrow\'s balance is not a whole number of hundredths of a Bean. Mend it first (operator manual, "A balance that isn\'t a number")' };
     }
     if (balance > 0) {
         return {

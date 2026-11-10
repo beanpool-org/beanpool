@@ -11,7 +11,8 @@
  *  - every other table keeps its rows, and its money columns are replaced by the `*_c` ones at their defaults: balances
  *    0, listing and deal prices 0 (Free), goals, ceilings, vouches and known-floor exceptions none, backing 0;
  *  - money_requests (a payment's stored answer, replayed to a retry) is emptied, and the money settings in node_config
- *    (known floor, credit cap, voucher budget, member gift, the audit baseline) go back to their defaults;
+ *    (known floor, credit cap, voucher budget, member gift, the audit baseline) go back to their defaults, and the Commons
+ *    projects list (each a request for Beans by its old figure) is emptied;
  *  - what holds an old figure as words is cleared too (OLD_FIGURE_WORDS): a known-floor exception that was only its amount
  *    (a frozen one stays frozen), the known-floor log (its old and new values are Beans), and a copy's home price
  *    (posts.shown_price, '20 fixed'), which would otherwise read as hundredths. A copy then says no price until its
@@ -78,7 +79,7 @@ export const OLD_FIGURE_WORDS: ReadonlyArray<{ table: string; what: string; sql:
 ];
 
 /** The node_config money settings that go back to their defaults (each read as whole hundredths from here on). */
-export const MONEY_SETTINGS: readonly string[] = ['known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'ledger_audit_baseline', 'ledger_audit_rebaseline_note'];
+export const MONEY_SETTINGS: readonly string[] = ['known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'commons_projects'];
 
 /** What the step dropped, for its one log line and the upgrade test. */
 export interface HundredthsStepReport {

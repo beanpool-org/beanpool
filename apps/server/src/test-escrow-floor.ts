@@ -37,7 +37,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
-import { ESCROW_FLOOR } from '@beanpool/core';
+import { ESCROW_FLOOR, feeOf } from '@beanpool/core';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { completePostTransaction as completePostTransactionEngine } from './engine/escrow.js';
@@ -76,30 +76,29 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 function nodeTotal(): number {
     const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
-    return r4(accounts + getCommonsBalanceExact());
+    return accounts + getCommonsBalanceExact();
 }
 
 function assertConservation(step: string): void {
     const audit = runLedgerAudit();
     assert(audit.ok, `[${step}] ledger audit ok`);
-    assert(Math.abs(audit.drift) < 0.0001, `[${step}] no drift (${audit.drift})`);
-    assert(Math.abs(nodeTotal()) < 0.0001, `[${step}] node sums to zero (${nodeTotal()})`);
+    assert(audit.drift === 0, `[${step}] no drift (${audit.drift})`);
+    assert(nodeTotal() === 0, `[${step}] node sums to zero (${nodeTotal()})`);
 }
 
 /** No escrow account anywhere on the node may sit below the floor. The invariant, checked globally. */
 function assertNoNegativeEscrows(step: string): void {
     const rows = db.prepare(
         `SELECT public_key, balance_c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance_c < ?`
-    ).all(ESCROW_FLOOR) as { public_key: string; balance: number }[];
+    ).all(ESCROW_FLOOR) as { public_key: string; balance_c: number }[];
     assert(rows.length === 0,
-        `[${step}] no escrow account is below zero${rows.length ? ` (${rows.map(r => `${r.public_key}=${r.balance}`).join(', ')})` : ''}`);
+        `[${step}] no escrow account is below zero${rows.length ? ` (${rows.map(r => `${r.public_key}=${r.balance_c}`).join(', ')})` : ''}`);
     for (const pk of listEscrowAccounts()) {
-        assert(ledger.getAccount(pk).balance >= ESCROW_FLOOR,
-            `[${step}] in-memory ${pk.slice(0, 20)} is not below zero (${ledger.getAccount(pk).balance})`);
+        assert(ledger.getAccount(pk).balance_c >= ESCROW_FLOOR,
+            `[${step}] in-memory ${pk.slice(0, 20)} is not below zero (${ledger.getAccount(pk).balance_c})`);
     }
 }
 
@@ -117,12 +116,12 @@ function makeMember(callsign: string, initialBalance = 0): string {
     ledger.initializeGenesisAccount(pk);
     if (initialBalance > 0) transfer('genesis', pk, initialBalance, `seed ${callsign}`, 'direct', true);
     // An offer apiece, so the contribution gate lets these members trade.
-    createPost('offer', 'general', `${callsign} service`, 'Help', 5, 'fixed', pk, undefined, undefined, undefined, true);
+    createPost('offer', 'general', `${callsign} service`, 'Help', 500, 'fixed', pk, undefined, undefined, undefined, true);
     return pk;
 }
 
 function escrowBalance(txId: string): number {
-    return ledger.getAccount(`escrow_${txId}`).balance;
+    return ledger.getAccount(`escrow_${txId}`).balance_c;
 }
 
 async function main() {
@@ -135,31 +134,31 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 1: a debit beyond the balance is refused ──');
     {
-        const holder = makeMember('FloorHolder', 100);
+        const holder = makeMember('FloorHolder', 10000);
         const escrowId = `escrow_${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(escrowId);
-        assert(Boolean(transfer(holder, escrowId, 10, 'fund the test escrow', 'escrow', true)), 'escrow funded with 10');
-        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 10, 'escrow holds 10');
+        assert(Boolean(transfer(holder, escrowId, 1000, 'fund the test escrow', 'escrow', true)), 'escrow funded with 10');
+        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 1000, 'escrow holds 10');
 
         // (a) The core ledger refuses even when the caller explicitly hands it an unbounded floor. This is
         //     the belt-and-braces half: no caller can re-open the hole by passing its own floor.
-        assert(ledger.transfer(escrowId, holder, 25, -Infinity) === false,
+        assert(ledger.transfer(escrowId, holder, 2500, -Infinity).ok === false,
             'core ledger.transfer refuses a 25 debit from a 10 escrow even with floorOverride=-Infinity');
-        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 10, 'the refused core debit moved nothing');
+        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 1000, 'the refused core debit moved nothing');
 
         // (b) The server's transfer() answers null rather than driving the escrow negative.
-        const overdraw = transfer(escrowId, holder, 25, 'overdraw the escrow', 'escrow', true);
+        const overdraw = transfer(escrowId, holder, 2500, 'overdraw the escrow', 'escrow', true);
         assert(overdraw === null, 'transfer() returns null for a 25 debit from a 10 escrow');
-        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 10, 'the refused transfer moved nothing');
+        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 1000, 'the refused transfer moved nothing');
 
         // (c) moveToCommons is the other way value leaves an escrow (#104 moves the cross-node fee this
         //     way), and it was unbounded for the same reason.
-        assert(moveToCommons(escrowId, 25, 'overdraw the escrow to the Commons') === null,
+        assert(moveToCommons(escrowId, 2500, 'overdraw the escrow to the Commons') === null,
             'moveToCommons() returns null for a 25 debit from a 10 escrow');
-        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 10, 'the refused moveToCommons moved nothing');
+        assert(escrowBalance(escrowId.slice('escrow_'.length)) === 1000, 'the refused moveToCommons moved nothing');
 
         // (d) Draining exactly what is held still works — the floor bounds the debit, it does not block it.
-        assert(Boolean(transfer(escrowId, holder, 10, 'drain the escrow', 'escrow', true)),
+        assert(Boolean(transfer(escrowId, holder, 1000, 'drain the escrow', 'escrow', true)),
             'a debit of exactly the balance succeeds');
         assert(escrowBalance(escrowId.slice('escrow_'.length)) === 0, 'escrow closes to exactly 0');
 
@@ -172,9 +171,9 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 2: removing a post whose escrow was never funded ──');
     {
-        const seller = makeMember('GhostSeller', 50);
-        const buyer = makeMember('GhostBuyer', 50);
-        const offer = createPost('offer', 'goods', 'Ghost listing', 'Never escrowed', 15, 'fixed', seller,
+        const seller = makeMember('GhostSeller', 5000);
+        const buyer = makeMember('GhostBuyer', 5000);
+        const offer = createPost('offer', 'goods', 'Ghost listing', 'Never escrowed', 1500, 'fixed', seller,
             undefined, undefined, undefined, false)!;
 
         // The measured shape: a pending trade row with NO hold ever paid into its escrow. This is what the
@@ -182,11 +181,11 @@ async function main() {
         // escrow_<tx_id> wallet key and were never in one.
         const ghostTradeId = crypto.randomUUID();
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
-                    VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 15);
+                    VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 1500);
         db.prepare(`UPDATE posts SET status='pending', accepted_by=?, pending_transaction_id=? WHERE id=?`)
             .run(buyer, ghostTradeId, offer.id);
 
-        const buyerBefore = getBalance(buyer).balance;
+        const buyerBefore = getBalance(buyer).balance_c;
         const totalBefore = nodeTotal();
         const shortfalls: any[] = [];
 
@@ -194,16 +193,16 @@ async function main() {
         assert(ok, 'the post is still removed — a short escrow does not block moderation');
 
         assert(escrowBalance(ghostTradeId) === 0, 'the unfunded escrow is still 0, never negative');
-        assert(getBalance(buyer).balance === buyerBefore,
-            `the buyer receives nothing that was never held (${buyerBefore} → ${getBalance(buyer).balance})`);
+        assert(getBalance(buyer).balance_c === buyerBefore,
+            `the buyer receives nothing that was never held (${buyerBefore} → ${getBalance(buyer).balance_c})`);
         assert(shortfalls.length === 1, 'exactly one shortfall is reported');
         assert(shortfalls[0].transactionId === ghostTradeId, 'the shortfall names the trade id');
-        assert(shortfalls[0].owed === 15 && shortfalls[0].refunded === 0,
+        assert(shortfalls[0].owed === 1500 && shortfalls[0].refunded === 0,
             `the shortfall says 15 owed, 0 refunded (got ${shortfalls[0].owed}/${shortfalls[0].refunded})`);
         assert(shortfalls[0].buyerPubkey === buyer, 'the shortfall names the buyer who went short');
         const tradeRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ghostTradeId) as any;
         assert(tradeRow.status === 'cancelled', 'the trade is cancelled');
-        assert(Math.abs(nodeTotal() - totalBefore) < 0.0001,
+        assert(nodeTotal() === totalBefore,
             `SUM(balances) including the Commons is unchanged (${totalBefore} → ${nodeTotal()})`);
 
         assertNoNegativeEscrows('part2');
@@ -215,28 +214,28 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 3: a partly funded escrow ──');
     {
-        const seller = makeMember('PartSeller', 50);
-        const buyer = makeMember('PartBuyer', 50);
-        const offer = createPost('offer', 'goods', 'Half-held listing', 'Partly escrowed', 30, 'fixed', seller,
+        const seller = makeMember('PartSeller', 5000);
+        const buyer = makeMember('PartBuyer', 5000);
+        const offer = createPost('offer', 'goods', 'Half-held listing', 'Partly escrowed', 3000, 'fixed', seller,
             undefined, undefined, undefined, false)!;
 
         // A real hold of 30, then a trade row claiming the same escrow is worth 50. Nothing on a healthy
         // node writes that, which is the point: if the rows and the ledger ever disagree, the LEDGER wins.
         const deal = acceptPost(offer.id, buyer);
-        assert(escrowBalance(deal.id) === 30, 'escrow holds the real 30');
-        db.prepare('UPDATE marketplace_transactions SET amount_c = 50 WHERE id = ?').run(deal.id);
+        assert(escrowBalance(deal.id) === 3000, 'escrow holds the real 30');
+        db.prepare('UPDATE marketplace_transactions SET amount_c = 5000 WHERE id = ?').run(deal.id);
 
-        const buyerBefore = getBalance(buyer).balance;
+        const buyerBefore = getBalance(buyer).balance_c;
         const totalBefore = nodeTotal();
         const shortfalls: any[] = [];
 
         assert(adminDeletePost(offer.id, { onRefundShortfall: s => shortfalls.push(s) }), 'the post is removed');
         assert(escrowBalance(deal.id) === 0, 'the escrow drained to exactly 0, not to -20');
-        assert(Math.abs(getBalance(buyer).balance - (buyerBefore + 30)) < 0.0001,
-            `the buyer got back the 30 that was held, not the 50 the row claimed (${getBalance(buyer).balance - buyerBefore})`);
-        assert(shortfalls.length === 1 && shortfalls[0].owed === 50 && shortfalls[0].refunded === 30,
+        assert(getBalance(buyer).balance_c === buyerBefore + 3000,
+            `the buyer got back the 30 that was held, not the 50 the row claimed (${getBalance(buyer).balance_c - buyerBefore})`);
+        assert(shortfalls.length === 1 && shortfalls[0].owed === 5000 && shortfalls[0].refunded === 3000,
             'the 20 shortfall is reported with the trade id');
-        assert(Math.abs(nodeTotal() - totalBefore) < 0.0001, 'node total unchanged');
+        assert(nodeTotal() === totalBefore, 'node total unchanged');
 
         assertNoNegativeEscrows('part3');
         assertConservation('part3');
@@ -247,15 +246,15 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 4: a failed top-up aborts the release ──');
     {
-        const seller = makeMember('HourSeller', 50);
-        const buyer = makeMember('HourBuyer', 200);
-        const offer = createPost('offer', 'work', 'Hourly help', 'Per hour', 10, 'hourly', seller,
+        const seller = makeMember('HourSeller', 5000);
+        const buyer = makeMember('HourBuyer', 20000);
+        const offer = createPost('offer', 'work', 'Hourly help', 'Per hour', 1000, 'hourly', seller,
             undefined, undefined, undefined, false)!;
         const deal = acceptPost(offer.id, buyer, 1);
-        assert(escrowBalance(deal.id) === 10, 'escrow holds the 1-hour base of 10');
+        assert(escrowBalance(deal.id) === 1000, 'escrow holds the 1-hour base of 10');
 
-        const sellerBefore = getBalance(seller).balance;
-        const buyerBefore = getBalance(buyer).balance;
+        const sellerBefore = getBalance(seller).balance_c;
+        const buyerBefore = getBalance(buyer).balance_c;
         const totalBefore = nodeTotal();
         const escrowAccount = `escrow_${deal.id}`;
 
@@ -277,14 +276,14 @@ async function main() {
         }
         assert(threw, 'the release did not complete');
         assert(topUpAttempts === 1, 'the top-up was attempted exactly once');
-        assert(Math.abs(getBalance(seller).balance - sellerBefore) < 0.0001,
+        assert(getBalance(seller).balance_c === sellerBefore,
             'the seller receives nothing — no payout out of an escrow that was never topped up');
-        assert(Math.abs(getBalance(buyer).balance - buyerBefore) < 0.0001, 'the buyer is not charged');
-        assert(escrowBalance(deal.id) === 10, 'the escrow still holds exactly its base 10');
+        assert(getBalance(buyer).balance_c === buyerBefore, 'the buyer is not charged');
+        assert(escrowBalance(deal.id) === 1000, 'the escrow still holds exactly its base 10');
         const row = db.prepare('SELECT status, amount_c FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
         assert(row.status === 'pending', 'the trade is still pending — the status update unwound too');
-        assert(row.credits === 10, 'the trade still says 10, not the topped-up 30');
-        assert(Math.abs(nodeTotal() - totalBefore) < 0.0001, 'the ledger is unchanged');
+        assert(row.amount_c === 1000, 'the trade still says 10, not the topped-up 30');
+        assert(nodeTotal() === totalBefore, 'the ledger is unchanged');
 
         assertNoNegativeEscrows('part4');
         assertConservation('part4');
@@ -304,43 +303,47 @@ async function main() {
     {
         // (a) Release with the 1.5% community fee. The fee comes off the RECIPIENT's side, so the escrow is
         //     debited exactly what it holds — the floor must not turn that into a refusal.
-        const s1 = makeMember('FeeSeller', 50);
-        const b1 = makeMember('FeeBuyer', 200);
-        const o1 = createPost('offer', 'goods', 'Fee deal', 'Fixed price', 40, 'fixed', s1, undefined, undefined, undefined, false)!;
+        const s1 = makeMember('FeeSeller', 5000);
+        const b1 = makeMember('FeeBuyer', 20000);
+        const o1 = createPost('offer', 'goods', 'Fee deal', 'Fixed price', 4000, 'fixed', s1, undefined, undefined, undefined, false)!;
         const d1 = acceptPost(o1.id, b1);
-        assert(escrowBalance(d1.id) === 40, 'escrow holds 40');
+        assert(escrowBalance(d1.id) === 4000, 'escrow holds 40');
         assert(Boolean(completePostTransaction(d1.id, b1)), 'release succeeds with the fee charged');
         assert(escrowBalance(d1.id) === 0, 'release drains the escrow to exactly 0');
         assertNoNegativeEscrows('part5-release');
         assertConservation('part5-release');
 
         // (b) Cancel refund.
-        const s2 = makeMember('CancelSeller', 50);
-        const b2 = makeMember('CancelBuyer', 200);
-        const o2 = createPost('offer', 'goods', 'Cancelled deal', 'Fixed price', 25, 'fixed', s2, undefined, undefined, undefined, false)!;
+        const s2 = makeMember('CancelSeller', 5000);
+        const b2 = makeMember('CancelBuyer', 20000);
+        const o2 = createPost('offer', 'goods', 'Cancelled deal', 'Fixed price', 2500, 'fixed', s2, undefined, undefined, undefined, false)!;
         const d2 = acceptPost(o2.id, b2);
         assert(Boolean(cancelPostTransaction(d2.id, b2)), 'cancel succeeds');
         assert(escrowBalance(d2.id) === 0, 'cancel drains the escrow to exactly 0');
         assertNoNegativeEscrows('part5-cancel');
         assertConservation('part5-cancel');
 
-        // (c) A dispute SPLIT on an amount that is not a round number of cents. The old arithmetic rounded
-        //     both halves to 2dp independently: at 12.345 that gave 6.17 + 6.18 = 12.35, half a cent more
-        //     than the escrow held. Under the floor the second leg would now be refused and a working
-        //     arbitration would throw, so the shares are computed as a rounded half plus the exact
-        //     remainder. Nothing is minted and nothing is stranded.
-        const s3 = makeMember('SplitSeller', 50);
-        const b3 = makeMember('SplitBuyer', 200);
-        const o3 = createPost('offer', 'goods', 'Odd-cent deal', 'Fixed price', 12.345, 'fixed', s3, undefined, undefined, undefined, false)!;
+        // (c) A dispute SPLIT on an odd number of hundredths. The old arithmetic rounded both halves to 2dp
+        //     independently (at 12.345, 6.17 + 6.18 = 12.35, half a cent more than the escrow held). In whole
+        //     hundredths the split is core halves(): the first share truncated, the second the rest, so 12.35
+        //     Beans (1,235) pays 617 and 618, exactly what was held. Nothing is minted and nothing is stranded.
+        const s3 = makeMember('SplitSeller', 5000);
+        const b3 = makeMember('SplitBuyer', 20000);
+        const o3 = createPost('offer', 'goods', 'Odd-cent deal', 'Fixed price', 1235, 'fixed', s3, undefined, undefined, undefined, false)!;
         const d3 = acceptPost(o3.id, b3);
-        assert(Math.abs(escrowBalance(d3.id) - 12.345) < 1e-9, 'escrow holds 12.345');
-        const b3Before = getBalance(b3).balance;
-        const s3Before = getBalance(s3).balance;
+        assert(escrowBalance(d3.id) === 1235, 'escrow holds 12.35');
+        const b3Before = getBalance(b3).balance_c;
+        const s3Before = getBalance(s3).balance_c;
+        const potBefore = getCommonsBalanceExact();
         resolveEscrowDispute(d3.id, 'split', 'admin_pubkey_split_test');
-        assert(Math.abs(escrowBalance(d3.id)) < 1e-6, `the split drains the escrow to zero (${escrowBalance(d3.id)})`);
-        const paidOut = r4((getBalance(b3).balance - b3Before) + (getBalance(s3).balance - s3Before));
-        assert(paidOut <= 12.345 + 1e-9,
-            `the two halves together never exceed the 12.345 that was held (paid out ${paidOut})`);
+        assert(escrowBalance(d3.id) === 0, `the split drains the escrow to exactly zero (${escrowBalance(d3.id)})`);
+        const toBuyer = getBalance(b3).balance_c - b3Before;
+        const toSeller = getBalance(s3).balance_c - s3Before;
+        const toPot = getCommonsBalanceExact() - potBefore;
+        // The seller's half is a sale: it pays the 1.5% fee, truncated (feeOf(618) = 9), and the fee goes to the Commons.
+        assert(toBuyer === 617 && toSeller === 618 - feeOf(618) && toPot === feeOf(618),
+            `the buyer gets the truncated half, the seller the rest less its fee (${toBuyer} + ${toSeller} + fee ${toPot})`);
+        assert(toBuyer + toSeller + toPot === 1235, `together exactly the 12.35 that was held (${toBuyer + toSeller + toPot})`);
         assertNoNegativeEscrows('part5-split');
         assertConservation('part5-split');
     }
@@ -353,23 +356,23 @@ async function main() {
         // Parts 2 and 3 go through adminDeletePost. A moderator working a report goes through
         // actionReport instead, and that path used to drop the shortfall on the floor: the engine still
         // capped the refund, but the only trace was a console.warn and the moderator saw a plain success.
-        const seller = makeMember('ReportSeller', 50);
-        const buyer = makeMember('ReportBuyer', 50);
-        const reporter = makeMember('Reporter', 50);
-        const offer = createPost('offer', 'goods', 'Reported listing', 'Never escrowed', 12, 'fixed', seller,
+        const seller = makeMember('ReportSeller', 5000);
+        const buyer = makeMember('ReportBuyer', 5000);
+        const reporter = makeMember('Reporter', 5000);
+        const offer = createPost('offer', 'goods', 'Reported listing', 'Never escrowed', 1200, 'fixed', seller,
             undefined, undefined, undefined, false)!;
 
         // Same measured shape as Part 2: a pending trade row with no hold ever paid into its escrow.
         const ghostTradeId = crypto.randomUUID();
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
-                    VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 12);
+                    VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 1200);
         db.prepare(`UPDATE posts SET status='pending', accepted_by=?, pending_transaction_id=? WHERE id=?`)
             .run(buyer, ghostTradeId, offer.id);
 
         const report = submitReport(reporter, seller, 'Not as described', offer.id)!;
         assert(Boolean(report), 'the listing is reported');
 
-        const buyerBefore = getBalance(buyer).balance;
+        const buyerBefore = getBalance(buyer).balance_c;
         const totalBefore = nodeTotal();
         const shortfalls: any[] = [];
 
@@ -378,36 +381,36 @@ async function main() {
 
         assert(shortfalls.length === 1, 'the report flow reports the shortfall to its caller, not just the log');
         assert(shortfalls[0].transactionId === ghostTradeId, 'the shortfall names the trade id');
-        assert(shortfalls[0].owed === 12 && shortfalls[0].refunded === 0,
+        assert(shortfalls[0].owed === 1200 && shortfalls[0].refunded === 0,
             `the shortfall says 12 owed, 0 refunded (got ${shortfalls[0].owed}/${shortfalls[0].refunded})`);
         assert(shortfalls[0].buyerPubkey === buyer, 'the shortfall names the buyer who went short');
 
         assert(escrowBalance(ghostTradeId) === 0, 'the unfunded escrow is still 0, never negative');
-        assert(getBalance(buyer).balance === buyerBefore,
-            `the buyer receives nothing that was never held (${buyerBefore} → ${getBalance(buyer).balance})`);
+        assert(getBalance(buyer).balance_c === buyerBefore,
+            `the buyer receives nothing that was never held (${buyerBefore} → ${getBalance(buyer).balance_c})`);
         const tradeRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ghostTradeId) as any;
         assert(tradeRow.status === 'cancelled', 'the trade is cancelled');
         const reportRow = db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(report.id) as any;
         assert(reportRow.status === 'actioned', 'the report is marked actioned — a short escrow does not block moderation');
-        assert(Math.abs(nodeTotal() - totalBefore) < 0.0001,
+        assert(nodeTotal() === totalBefore,
             `SUM(balances) including the Commons is unchanged (${totalBefore} → ${nodeTotal()})`);
 
         // A healthy trade through the same flow reports nothing: the callback is not just always firing.
-        const seller2 = makeMember('ReportSeller2', 50);
-        const buyer2 = makeMember('ReportBuyer2', 50);
-        const offer2 = createPost('offer', 'goods', 'Properly held listing', 'Escrowed', 8, 'fixed', seller2,
+        const seller2 = makeMember('ReportSeller2', 5000);
+        const buyer2 = makeMember('ReportBuyer2', 5000);
+        const offer2 = createPost('offer', 'goods', 'Properly held listing', 'Escrowed', 800, 'fixed', seller2,
             undefined, undefined, undefined, false)!;
         const deal2 = acceptPost(offer2.id, buyer2);
-        assert(escrowBalance(deal2.id) === 8, 'the second escrow really holds 8');
-        const buyer2Before = getBalance(buyer2).balance;
+        assert(escrowBalance(deal2.id) === 800, 'the second escrow really holds 8');
+        const buyer2Before = getBalance(buyer2).balance_c;
         const report2 = submitReport(reporter, seller2, 'Also not as described', offer2.id)!;
         const clean: any[] = [];
         assert(actionReport(report2.id, true, false, false, { onRefundShortfall: s => clean.push(s) }),
             'the second report is actioned');
         assert(clean.length === 0, 'a fully funded escrow reports no shortfall');
         assert(escrowBalance(deal2.id) === 0, 'the funded escrow drained to exactly 0');
-        assert(Math.abs(getBalance(buyer2).balance - (buyer2Before + 8)) < 0.0001,
-            `the buyer got the whole 8 back (${getBalance(buyer2).balance - buyer2Before})`);
+        assert(getBalance(buyer2).balance_c === buyer2Before + 800,
+            `the buyer got the whole 8 back (${getBalance(buyer2).balance_c - buyer2Before})`);
 
         assertNoNegativeEscrows('part6');
         assertConservation('part6');

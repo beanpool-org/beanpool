@@ -44,6 +44,8 @@ vi.mock('expo-file-system/legacy', () => ({
     writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
+// The identity lives in the secure store, never in the copy. Only loadIdentity is here: any other identity call the clear made
+// (a wipe, a removal) would throw, so "the clear leaves the identity alone" is checked, not assumed.
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ publicKey: 'me'.padEnd(64, '0'), privateKey: '11'.repeat(32), callsign: 'Me' })) }));
 vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
@@ -54,6 +56,9 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => 
 import { closeDB, getDb, getPosts, getBalance } from '../db';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { GROUP_KEY_TABLES_SQL } from '../group-chat-store';
+
+// Nothing here reaches a network: getBalance's own read of the node finds the phone offline.
+(globalThis as any).fetch = vi.fn(async () => { throw new TypeError('offline'); });
 
 const ME = 'me'.padEnd(64, '0');
 const ANA = 'a'.repeat(64);
@@ -138,6 +143,8 @@ describe("the phone's copy and its schema number (COPY_SCHEMA 4: whole hundredth
         }
         // The copy is read whole: this community's sync cursors are forgotten.
         expect(removed.flat()).toContain(`pillar_sync_${FILE}_members_last_sync`);
+        // And only the cursors: no identity key of the phone's is forgotten with them.
+        expect(removed.flat().filter((k) => !k.startsWith(`pillar_sync_${FILE}`))).toEqual([]);
     });
 
     it('a copy already at the number keeps every row when it opens again, and nothing alters it on the way', async () => {

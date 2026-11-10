@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global process, console, document, getComputedStyle, localStorage */
+/* global process, console, document, getComputedStyle, localStorage, Response */
 /**
  * The Ledger's doors to deals on the phone (deals S6, DESIGN-deals-fable.md §2.2, §5), at the floor (memory
  * product-audience-small-screens: 320dp wide, the phone's text at 1.3×), in the light and the dark scheme: the app's own
@@ -45,13 +45,26 @@ const STUBS = {
         import React from 'react';
         import * as RNW from 'react-native-web';
         export * from 'react-native-web';
-        const scaled = (style) => {
+        const scaled = (style, shrink = 1) => {
             const f = RNW.StyleSheet.flatten(style) || {};
-            const o = { ...f, fontSize: (f.fontSize ?? 14) * ${SCALE} };
-            if (typeof f.lineHeight === 'number') o.lineHeight = f.lineHeight * ${SCALE};
+            const o = { ...f, fontSize: (f.fontSize ?? 14) * ${SCALE} * shrink };
+            if (typeof f.lineHeight === 'number') o.lineHeight = f.lineHeight * ${SCALE} * shrink;
             return o;
         };
-        export const Text = React.forwardRef((p, ref) => React.createElement(RNW.Text, { ...p, ref, style: scaled(p.style) }));
+        // One line with adjustsFontSizeToFit (CurrencyDisplay's figure) shrinks its text until it fits, as the phone does;
+        // react-native-web ignores the prop. How far it shrank is on the element (data-shrunk) and in the run's output.
+        export const Text = React.forwardRef((p, ref) => {
+            const own = React.useRef(null);
+            const [shrink, setShrink] = React.useState(1);
+            const fits = p.adjustsFontSizeToFit && p.numberOfLines === 1;
+            React.useLayoutEffect(() => {
+                const el = own.current;
+                if (!fits || !el || !(el.scrollWidth > el.clientWidth + 1) || shrink < 0.3) return;
+                setShrink((s) => s * (el.clientWidth / el.scrollWidth) * 0.98);
+            });
+            const both = (node) => { own.current = node; if (typeof ref === 'function') ref(node); else if (ref) ref.current = node; };
+            return React.createElement(RNW.Text, { ...p, ref: both, style: scaled(p.style, shrink), ...(fits && shrink < 1 ? { dataSet: { shrunk: shrink.toFixed(2) } } : {}) });
+        });
         export const TextInput = React.forwardRef((p, ref) => React.createElement(RNW.TextInput, { ...p, ref, style: scaled(p.style) }));
         export const Platform = { ...RNW.Platform, OS: 'android', select: (o) => o.android ?? o.default };
         export default { ...RNW, Text, TextInput, Platform };
@@ -67,8 +80,9 @@ const STUBS = {
     `,
     'react-native-keyboard-controller': `
         import React from 'react';
-        import { View } from 'react-native-web';
+        import { View, ScrollView } from 'react-native-web';
         export const KeyboardAvoidingView = ({ children, style }) => React.createElement(View, { style }, children);
+        export const KeyboardAwareScrollView = React.forwardRef((p, ref) => React.createElement(ScrollView, { ...p, ref }));
     `,
     '@expo/vector-icons': `
         import React from 'react';
@@ -102,6 +116,9 @@ const STUBS = {
         export const sendTransfer = async () => ({});
         export const getPledgeHistory = async () => [];
         export const getEscrowTotal = async () => globalThis.__escrow;
+        export const refreshBalanceFromServer = async () => null;
+        // GET /api/credit/gift: no tab here (the Credit line tab is ledger-credit-gift-320.mjs's).
+        export const signedGet = async () => new Response(JSON.stringify({ offered: false, max: 0, room: 0, canGive: 0, why: null }), { status: 200 });
         export const signedRequest = async () => ({});
     `,
 };
@@ -132,20 +149,22 @@ globalThis.__pushed = [];
 const LISTING = '123e4567-e89b-12d3-a456-426614174000';
 const DAY = Date.UTC(2026, 9, 3, 12);
 const base = { projectWallet: false, timestamp: '03/10/2026', at: DAY };
+// db.ts getBalance's answer: every figure whole hundredths of a Bean (the *_c fields); the header holds a wide balance (1,234.56).
 globalThis.__balance = {
-    balance: 85, floor: -200, usableFloor: -200, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 0,
-    tier: { name: 'Resident', emoji: '🏠' }, tierCredit: 200, earnedCredit: 150, qualifiedValue: 300, avgRating: 4.5, reviewCount: 3, commons: 12.5,
-    trustStats: { uniquePartners: 4 },
+    balance_c: 123456, floor_c: -20000, usableFloor_c: -20000, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false,
+    knownGrant_c: 0, roomHeld_c: 0, tier: { name: 'Resident', emoji: '🏠' }, tierCredit_c: 20000, earnedCredit_c: 15000, grantedCredit_c: 0,
+    qualifiedValue_c: 30000, avgRating: 4.5, reviewCount: 3, commons_c: 1250, trustStats: { uniquePartners: 4 },
 };
 const held = q.get('held') !== '0';
-globalThis.__escrow = held ? 45 : 0;
+// db.ts getEscrowTotal and getTransactions: the copy's amount_c, whole hundredths.
+globalThis.__escrow = held ? 5000 : 0;
 globalThis.__rows = held ? [
-    { ...base, id: 'h1', type: 'debit', amount: 45, peer: 'Held in Trust: Sourdough baking course (to Damo)', peerPubkey: 'escrow_deal-1', memo: 'Held in trust for offer ' + LISTING,
+    { ...base, id: 'h1', type: 'debit', amount_c: 4500, peer: 'Held in Trust: Sourdough baking course (to Damo)', peerPubkey: 'escrow_deal-1', memo: 'Held in trust for offer ' + LISTING,
         held: { title: 'Sourdough baking course', counterparty: 'Damo', toCounterparty: true, dealId: 'deal-1', postId: LISTING } },
-    { ...base, id: 'h2', type: 'debit', amount: 5, peer: 'Held in Trust', peerPubkey: 'escrow_unknown', memo: '', held: { title: null, counterparty: null, toCounterparty: false } },
-    { ...base, id: 'p1', type: 'credit', amount: 40, peer: 'Mia', peerPubkey: 'mia-key', memo: 'Paid for ' + LISTING + ' thanks', held: null },
+    { ...base, id: 'h2', type: 'debit', amount_c: 500, peer: 'Held in Trust', peerPubkey: 'escrow_unknown', memo: '', held: { title: null, counterparty: null, toCounterparty: false } },
+    { ...base, id: 'p1', type: 'credit', amount_c: 4000, peer: 'Mia', peerPubkey: 'mia-key', memo: 'Paid for ' + LISTING + ' thanks', held: null },
 ] : [
-    { ...base, id: 'p1', type: 'credit', amount: 40, peer: 'Mia', peerPubkey: 'mia-key', memo: 'Fresh eggs', held: null },
+    { ...base, id: 'p1', type: 'credit', amount_c: 4925, peer: 'Mia', peerPubkey: 'mia-key', memo: 'Fresh eggs', held: null },
 ];
 createRoot(document.getElementById('root')).render(<View style={{ minHeight: '100vh', backgroundColor: colors.surface.app }}><LedgerScreen /></View>);
 `);
@@ -257,8 +276,9 @@ try {
             }
             door('ledger-in-escrow', 'the HELD IN TRUST total', total);
             door('ledger-held-row', 'a Held in Trust row with a deal', heldRow);
-            return out;
-        }, { WIDTH, total, heldRow });
+            const shrunk = [...document.querySelectorAll('[data-shrunk]')].map((el) => '"' + el.textContent.trim() + '" at ' + el.dataset.shrunk + '× (' + getComputedStyle(el).fontSize + ')');
+            return { out, shrunk };
+        }, { WIDTH, total, heldRow }).then(({ out, shrunk }) => { for (const s of shrunk) console.log(`  ${label}: shrunk to fit, as adjustsFontSizeToFit does on the phone: ${s}`); return out; });
         for (const p of found) problems.push(`${label}: ${p}`);
         if (SHOTS) {
             fs.mkdirSync(SHOTS, { recursive: true });

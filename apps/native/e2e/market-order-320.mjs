@@ -268,9 +268,10 @@ const ahead = (min) => new Date(Date.now() + min * MIN).toISOString();
 const placeClock = (iso) => new Date(iso).toLocaleString('sv-SE', { timeZone: 'Australia/Sydney' }).slice(0, 16).replace(' ', 'T');
 window.__crossStart = ahead(60 * 28);
 window.__onlineStart = ahead(60 * 27);
+// A row of the phone's copy (db.ts posts): its price is price_c, whole hundredths of a Bean.
 const post = (id, title, extra = {}) => ({
     id, title, type: 'offer', status: 'active', category: 'food', author_pubkey: 'k-' + id, author_callsign: 'Neighbour', author_energy_cycled: 0,
-    credits: 5, price_type: 'fixed', photos: '[]', lat: -28.6, lng: 153.5, description: '', created_at: ago(5), ...extra,
+    price_c: 500, price_type: 'fixed', photos: '[]', lat: -28.6, lng: 153.5, description: '', created_at: ago(5), ...extra,
 });
 const c = q.get('case');
 globalThis.__storage = {};
@@ -287,7 +288,7 @@ if (c === 'local') {
             created_at: ago(60 * 24 * 20), pinned_until: ahead(60 * 48), pinned_at: ago(30), author_callsign: 'Byron Markets',
             event_start_at: ahead(60 * 50), event_end_at: ahead(60 * 55), event_state: 'scheduled', event_place_name: 'Railway Park, Jonson Street',
             myRsvp: 'going', event_going_count: 12, event_interested_count: 5 })] : []),
-        post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
+        post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana', price_c: 123456 }), // a wide price: 1,234.56
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
         // C1: a poll the member answered, in the compact view a row with its answer ✓ (its answers are on its page).
         ...(${JSON.stringify(VIEW)} === 'compact' ? [
@@ -316,7 +317,7 @@ if (c === 'local') {
     const rows = [
         post('a', 'Lemons, a bucket', { created_at: ago(8), author_callsign: 'Sam' }),
         post('b', 'Lift to Lismore Thursday', { type: 'need', category: 'transport', created_at: ago(20), author_callsign: 'Mo' }),
-        post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
+        post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana', price_c: 123456 }), // a wide price: 1,234.56
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
     ];
     globalThis.__posts = rows;
@@ -331,31 +332,31 @@ if (c === 'local') {
         [nearbyAreaKeyOf(URL)]: JSON.stringify({ key: 'my-own-member-key', area: { lat: -28.65, lng: 153.55 }, checkedAt: Date.now(), whole: false }),
     };
     globalThis.__posts = [
-        post('g1', 'Sourdough starter', { created_at: ago(10), lat: -28.58, lng: 153.5, author_callsign: 'Lee', credits: 0 }),
+        post('g1', 'Sourdough starter', { created_at: ago(10), lat: -28.58, lng: 153.5, author_callsign: 'Lee', price_c: 0 }),
         post('g2', 'Mutual credit 101, online', { type: 'event', category: 'events', created_at: ago(60 * 24 * 12), lat: null, lng: null, author_callsign: 'Ana',
             author_pubkey: 'my-own-member-key',
-            event_start_at: ahead(60 * 20), event_end_at: ahead(60 * 22), event_state: 'scheduled', credits: 0 }),
+            event_start_at: ahead(60 * 20), event_end_at: ahead(60 * 22), event_state: 'scheduled', price_c: 0 }),
         post('g6', 'Byron Bay Farmers Market — Weekly Thursday', { type: 'event', category: 'events', created_at: ago(60 * 3), lat: -28.66, lng: 153.6,
             author_callsign: 'Byron Markets', event_start_at: ahead(60 * 30), event_end_at: ahead(60 * 34), event_state: 'scheduled',
-            event_place_name: 'Butler Street Reserve', myRsvp: 'going', credits: 0 }),
+            event_place_name: 'Butler Street Reserve', myRsvp: 'going', price_c: 0 }),
         // The when rows (#2885): an event that ends the next day, and a Byron event (NSW clock) read in the browser's other zone.
         ...(${JSON.stringify(VIEW)} === 'grid' ? [
             post('g7', 'Seed swap weekend', { type: 'event', category: 'events', created_at: ago(60 * 4), lat: -28.55, lng: 153.5,
                 author_callsign: 'Seed Library', event_start_at: ahead(60 * 26), event_end_at: ahead(60 * 50), event_state: 'scheduled',
-                event_place_name: 'Mullumbimby Hall', credits: 0 }),
+                event_place_name: 'Mullumbimby Hall', price_c: 0 }),
             post('g8', 'Byron Bay Twilight Market', { type: 'event', category: 'events', created_at: ago(60 * 6), lat: -28.64, lng: 153.61,
                 author_callsign: 'Byron Markets', event_start_at: window.__crossStart, event_end_at: ahead(60 * 32), event_state: 'scheduled',
                 event_start_local: placeClock(window.__crossStart), event_end_local: placeClock(ahead(60 * 32)), event_tz: 'Australia/Sydney',
-                event_place_name: 'Railway Park', credits: 0 }),
+                event_place_name: 'Railway Park', price_c: 0 }),
             // DESIGN-grid-event-rows call 2: a member's copy of a Mullumbimby event, as global's cached column holds it.
             post('g9', 'Mullum Music Night', { type: 'event', category: 'events', created_at: ago(60 * 2), lat: -28.55, lng: 153.5,
                 author_callsign: 'Mullum Arts', event_start_at: ahead(60 * 40), event_end_at: ahead(60 * 43), event_state: 'scheduled',
-                event_place_name: 'Civic Hall', credits: 0,
+                event_place_name: 'Civic Hall', price_c: 0,
                 shown_from: JSON.stringify({ host: 'mullum.example', postId: 'ev-music', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask' }) }),
         ] : []),
-        post('g3', 'Proofread a grant', { type: 'need', category: 'education', created_at: ago(60 * 5), lat: -27.47, lng: 153.03, author_callsign: 'Kai', credits: 0 }),
-        post('g4', 'Surplus pumpkins', { created_at: ago(60 * 26), lat: -28.2, lng: 153.4, author_callsign: 'Pat', credits: 0 }),
-        post('g5', 'Melbourne bike (beyond 250 km)', { created_at: ago(30), lat: -37.81, lng: 144.96, author_callsign: 'Far', credits: 0 }),
+        post('g3', 'Proofread a grant', { type: 'need', category: 'education', created_at: ago(60 * 5), lat: -27.47, lng: 153.03, author_callsign: 'Kai', price_c: 0 }),
+        post('g4', 'Surplus pumpkins', { created_at: ago(60 * 26), lat: -28.2, lng: 153.4, author_callsign: 'Pat', price_c: 0 }),
+        post('g5', 'Melbourne bike (beyond 250 km)', { created_at: ago(30), lat: -37.81, lng: 144.96, author_callsign: 'Far', price_c: 0 }),
     ];
 }
 createRoot(document.getElementById('root')).render(
@@ -369,7 +370,7 @@ const outfile = path.join(work, 'bundle.js');
 await build({
     entryPoints: [entry], bundle: true, outfile, format: 'iife', platform: 'browser', jsx: 'automatic', logLevel: 'error',
     plugins: [plugin],
-    loader: { '.png': 'dataurl', '.jpg': 'dataurl', '.ttf': 'dataurl', '.json': 'json' },
+    loader: { '.png': 'dataurl', '.jpg': 'dataurl', '.webp': 'dataurl', '.ttf': 'dataurl', '.json': 'json' },
     resolveExtensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.js', '.json'],
     alias: { 'react-native-svg': 'react-native-svg-web' },
     banner: { js: 'var process = { env: {}, platform: "web" };' },

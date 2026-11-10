@@ -6,7 +6,7 @@
  * scheme: the app's own Ledger (app/(tabs)/ledger.tsx) and its own utils/credit-gift.ts, through react-native-web in
  * headless Chromium, as e2e/ledger-doors-320.mjs draws the Wallet (its stand-ins, copied).
  *
- * What is drawn: Send open on the Credit line tab with Mia picked and 50 typed (the node offers up to 100); the same with
+ * What is drawn: Send open on the Credit line tab with Mia picked and 50 typed (the node offers up to 100; every figure it sends is hundredths); the same with
  * the node's refusal shown; and a member holding no Beans, whose Send opens on the Credit line tab.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a tab under 44dp
@@ -104,7 +104,8 @@ const STUBS = {
         export const signedGet = async () => new Response(JSON.stringify(globalThis.__offer), { status: 200 });
         export const signedRequest = async (path, body) => {
             if (path === '/api/credit/gift' && globalThis.__refuse) throw new Error(globalThis.__refuse);
-            return { amount: body?.amount, room: 50, canGive: 50 };
+            // The node's answer (engine/credit-gift.ts giveCreditLine): every figure whole hundredths, the gift's own amount_c echoed.
+            return { memberPubkey: body?.memberPubkey, amount: body?.amount_c, pieces: 1, room: 5000, canGive: 5000 };
         };
     `,
 };
@@ -131,12 +132,14 @@ const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const colors = scheme === 'dark' ? darkColors : lightColors;
 globalThis.__theme = { theme: scheme, colors };
+// db.ts getBalance's answer: every figure whole hundredths of a Bean (the *_c fields), a wide balance (1,234.56) to hold.
 globalThis.__balance = {
-    balance: q.get('beans') === '0' ? 0 : 85, floor: -153, usableFloor: -153, liveOffers: 1, activated: true, frozen: false, creditFrozen: false,
-    knownFrozen: false, knownGrant: 0, roomHeld: 150, tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 3, earnedCredit: 3, qualifiedValue: 10,
-    avgRating: 5, reviewCount: 0, commons: 12.5, trustStats: { uniquePartners: 1 },
+    balance_c: q.get('beans') === '0' ? 0 : 123456, floor_c: -15300, usableFloor_c: -15300, liveOffers: 1, activated: true, frozen: false, creditFrozen: false,
+    knownFrozen: false, knownGrant_c: 0, roomHeld_c: 15000, tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 300, earnedCredit_c: 300,
+    grantedCredit_c: 0, qualifiedValue_c: 1000, avgRating: 5, reviewCount: 0, commons_c: 1250, trustStats: { uniquePartners: 1 },
 };
-globalThis.__offer = { offered: true, max: 100, room: 150, canGive: 100, why: null };
+// GET /api/credit/gift (engine/credit-gift.ts creditGiftOffer): max, room and canGive keep their names and are hundredths.
+globalThis.__offer = { offered: true, max: 10000, room: 15000, canGive: 10000, why: null };
 globalThis.__refuse = null;
 createRoot(document.getElementById('root')).render(<View style={{ minHeight: '100vh', backgroundColor: colors.surface.app }}><LedgerScreen /></View>);
 `);

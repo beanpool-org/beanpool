@@ -467,13 +467,16 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
     await family('community, preferences', 'You may only read your own preferences', 'GET', ann, `/api/members/preferences?publicKey=${owner.pk}`);
 
     // The engine's refusals through a route (state-engine.ts): a sentence, and one with a value in it.
-    await family('the Commons, an amount not to the cent', 'The amount is a number of Beans above 0, to the cent.', 'POST', ann, '/api/commons/pay', { amount: 0.001 });
-    await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount: 5 });
+    // An amount is whole hundredths of a Bean, `amount_c` (money-body.ts): one finer than a cent is the one refusal every money
+    // body gets, in its words (amount_c_required); 5 Beans is 500.
+    await family('the Commons, an amount not to the cent', 'The amount must be a whole number of hundredths of a Bean above 0. Update the app and try again.',
+        'POST', ann, '/api/commons/pay', { amount_c: 0.1 });
+    await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount_c: 500 });
 
     // Enterprises, the community's Decisions and a group's votes (routes/treasury.ts, decisions-engine.ts).
     await family('enterprises, a read of what is none', 'Not a treasury', 'GET', ann, `/api/enterprise/${bob.pk}`);
     await family("the community's Decisions, standing to propose", 'You can propose a Decision once you have completed a trade',
-        'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount: 5 } });
+        'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount_c: 500 } });
     const tools = se.createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: ann.pk });
     // The names list, creator channels and the open join door (routes/names-list.ts, engine/creator-channels.ts, routes/open-join.ts).
     await family('the names list, to a member who is no admin', 'Only the community’s owners and admins can open the names list.', 'GET', ann, '/api/names/state');
@@ -497,7 +500,7 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
         { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
     await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     // Asking for one (a Need, a loan) that is gone or no longer active: the same code, from requestPost and its route.
-    const shears = createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
+    const shears = createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 500, 'fixed', bob.pk);
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(shears.id);
     const askGone = await call('POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     const askPaused = await call('POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });

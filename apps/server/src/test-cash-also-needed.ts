@@ -76,9 +76,10 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** A listing's price is whole hundredths on the wire (`price_c`): 20 Beans is 2000. */
 const post = (title: string, cashAlsoNeeded: boolean) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
+    price_c: 2000, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
 });
 
 async function main() {

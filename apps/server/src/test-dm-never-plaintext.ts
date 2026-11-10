@@ -237,12 +237,14 @@ async function main(): Promise<void> {
     assert(eventLine.status === 201 && rowOf(eventLine.body?.message?.id)?.nonce === 'plaintext-v1',
         `an event chat line is stored readable, as the event chat says (got ${eventLine.status} ${JSON.stringify(eventLine.body?.error ?? '')})`);
 
-    const { publicKey: bakery } = createTreasury('Bakery', AVATAR, 300, { leadKeeperPubkey: ana.pk });
+    // A credit line of 300 Beans: whole hundredths.
+    const { publicKey: bakery } = createTreasury('Bakery', AVATAR, 30000, { leadKeeperPubkey: ana.pk });
     const threadLine = await call('POST', ben, `/api/enterprise/${bakery}/thread/message`, { text: 'bread on Fridays?' });
     assert(threadLine.status === 201 && rowOf(threadLine.body?.message?.id)?.nonce === 'plaintext-v1',
         `an enterprise discussion line is stored readable, as the thread says (got ${threadLine.status} ${JSON.stringify(threadLine.body?.error ?? '')})`);
 
-    injectSystemMessage(listing.id, 'ESCROW_FUNDED', { amount: 5 } as any, ana.pk, ben.pk);
+    // The deal's figure as the node holds it: whole hundredths (5 Beans), in words as formatHundredths writes it.
+    injectSystemMessage(listing.id, 'ESCROW_FUNDED', { amount_c: 500 } as any, ana.pk, ben.pk);
     const notice = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND type = 'system' ORDER BY timestamp DESC LIMIT 1").get(dmId) as any;
     assert(notice?.ciphertext === '5 Beans placed in escrow.' && notice?.nonce === '00000',
         `the node still writes its deal notice into the pair's DM, readable (got ${JSON.stringify(notice?.ciphertext)})`);

@@ -248,9 +248,10 @@ async function main() {
     assert(!!item, 'setup: the pricing guide has its babysitting item');
     const insertPriced = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'care', ?, 'Babysitting for the edge suite', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, 'active')`);
-    insertPriced.run('gec-price-1', 'Babysitting evenings', 20, alice.pubKeyHex);
-    insertPriced.run('gec-price-2', 'Babysitting weekends', 22, alice.pubKeyHex);
-    insertPriced.run('gec-price-3', 'Babysitting after school', 24, alice.pubKeyHex);
+    // Prices of 20, 22 and 24 Beans, as the node keeps them: whole hundredths (the guide reads price_c / 100).
+    insertPriced.run('gec-price-1', 'Babysitting evenings', 2000, alice.pubKeyHex);
+    insertPriced.run('gec-price-2', 'Babysitting weekends', 2200, alice.pubKeyHex);
+    insertPriced.run('gec-price-3', 'Babysitting after school', 2400, alice.pubKeyHex);
     let before = changes();
     decayTick();
     assert(changes() === before, `Beans off: the demurrage tick writes nothing (${changes() - before} rows changed)`);

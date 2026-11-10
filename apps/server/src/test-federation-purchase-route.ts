@@ -41,26 +41,31 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-const r4 = (n: number): number => Math.round(n * 10000) / 10000;
+/**
+ * The story's Beans as the node's whole hundredths: balances, credit, the connector's cap and a purchase's `amount_c` (the
+ * route reads it as money-body.ts does). Balances and the node's total are read exactly: no rounding.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 const bal = (pk: string): number =>
-    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0;
 
 /** Every account row except the COMMONS_POOL shadow, plus the live global. A refusal must not move it. */
 const nodeTotal = (): number => {
     const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
-    return r4(s + getCommonsBalanceExact());
+    return s + getCommonsBalanceExact();
 };
 
+/** `balance`: Beans. */
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url, is_visitor)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?)`)
+        .run(pk, callsign, hc(500), homeNodeUrl ?? null, isVisitor ? 1 : 0);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+        .run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
@@ -109,13 +114,13 @@ async function main() {
     const PEER_URL = 'https://byron.beanpool.org';
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'Byron', PEER_URL);
-    setConnectorCreditCap(PEER_ADDR, 5_000);
+    setConnectorCreditCap(PEER_ADDR, hc(5_000));
     pinMainServerForTests(`/dns4/backup.beanpool.org/tcp/4001/p2p/${MIRROR}`);
     // A PASSIVE peer — a trading partner we do not dial. Exactly one side of a healthy pair is Passive, so
     // this is the ordinary case, not an edge case, and it must be able to BUY as well as sell.
     const PASSIVE_URL = 'https://sleepy.beanpool.org';
     addConnector(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${PASSIVE}`, 'peer', 'Sleepy', PASSIVE_URL, /* enabled */ false);
-    setConnectorCreditCap(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${PASSIVE}`, 5_000);
+    setConnectorCreditCap(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${PASSIVE}`, hc(5_000));
     // BLOCKED is the control for "stop trading with them" — the one Passive was being misused as.
     const BLOCKED_URL = 'https://shunned.beanpool.org';
     addConnector(`/dns4/shunned.beanpool.org/tcp/4001/p2p/${BLOCKED}`, 'blocked', 'Shunned', BLOCKED_URL);
@@ -134,7 +139,7 @@ async function main() {
     const localVisitor = makeMember('Local Visitor', 30, undefined, true);
     const baseline = nodeTotal();
     const buyerBefore = bal(buyer);
-    const good = { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount: 25 };
+    const good = { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount_c: hc(25) };
 
     if (!flag) {
         // ── The kill switch, which is the state every node ships in ──────────────────────────────
@@ -146,10 +151,10 @@ async function main() {
 
         // The gate must not be bypassable by a malformed request finding a different code path first.
         for (const [name, body] of Object.entries({
-            'no seller': { nodeUrl: PEER_URL, amount: 25 },
-            'bad amount': { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount: -5 },
-            'unknown peer': { nodeUrl: 'https://nowhere.example', sellerPublicKey: stranger(), amount: 25 },
-            'no actor': { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount: 25 },
+            'no seller': { nodeUrl: PEER_URL, amount_c: hc(25) },
+            'bad amount': { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount_c: -hc(5) },
+            'unknown peer': { nodeUrl: 'https://nowhere.example', sellerPublicKey: stranger(), amount_c: hc(25) },
+            'no actor': { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount_c: hc(25) },
         })) {
             const res = await buy(name === 'no actor' ? undefined : buyer, body as any);
             assert(res.status === 503 && res.body?.code === SETTLEMENT_REFUSED_CODE,
@@ -174,7 +179,7 @@ async function main() {
     assert(ghost.status === 403, `a signer who is not a member of this community is refused (${ghost.status})`);
 
     const localVisiting = await buy(localVisitor, good);
-    assert(localVisiting.status === ghost.status && localVisiting.body?.error === ghost.body?.error && bal(localVisitor) === 30,
+    assert(localVisiting.status === ghost.status && localVisiting.body?.error === ghost.body?.error && bal(localVisitor) === hc(30),
         `a visitor's row made here, holding Beans, is refused as a key with no row is (${localVisiting.status}: `
         + `${localVisiting.body?.error}) — a visitor trades with nobody, and a purchase abroad would escrow its Beans`);
 
@@ -184,13 +189,18 @@ async function main() {
         + 'node charging them is the #102 bug in a new place');
 
     // ── Shape of the trade ───────────────────────────────────────────────────────────────────────
-    const noSeller = await buy(buyer, { nodeUrl: PEER_URL, amount: 25 });
+    const noSeller = await buy(buyer, { nodeUrl: PEER_URL, amount_c: hc(25) });
     assert(noSeller.status === 400, `a purchase with no seller is refused (${noSeller.status})`);
 
-    for (const amount of [0, -5, 'lots', NaN, Infinity, null]) {
-        const res = await buy(buyer, { ...good, amount });
-        assert(res.status === 400, `amount ${String(amount)} is refused (${res.status})`);
+    // Whole hundredths above 0 or nothing (money-body.ts): a float and a numeric string are refused as the rest are, and so
+    // is the old key, `amount`.
+    for (const amount_c of [0, -hc(5), 'lots', NaN, Infinity, null, hc(25) + 0.5, String(hc(25))]) {
+        const res = await buy(buyer, { ...good, amount_c });
+        assert(res.status === 400, `amount_c ${JSON.stringify(amount_c) ?? String(amount_c)} is refused (${res.status})`);
     }
+    const { amount_c: _whole, ...oldKey } = good;
+    const oldAmount = await buy(buyer, { ...oldKey, amount: 25 });
+    assert(oldAmount.status === 400, `a body with the old amount (25) and no amount_c is refused (${oldAmount.status})`);
 
     for (const synthetic of ['COMMONS_POOL', 'SYSTEM', 'escrow_abc', 'bridge_byron', 'project_1', 'treasury_x']) {
         const res = await buy(buyer, { ...good, sellerPublicKey: synthetic });
@@ -213,7 +223,7 @@ async function main() {
         `a node that is not a configured connector is refused (${unknownPeer.status}) — the client names a `
         + 'community, but which credit line that maps to is ours to decide');
 
-    const noPeerNamed = await buy(buyer, { sellerPublicKey: stranger(), amount: 25 });
+    const noPeerNamed = await buy(buyer, { sellerPublicKey: stranger(), amount_c: hc(25) });
     assert(noPeerNamed.status === 404, `naming no peer at all is refused (${noPeerNamed.status})`);
 
     // The main server this node copies (its pin, data/standby-main.json) is no link at all (case 19 D4): never a trading
@@ -252,7 +262,7 @@ async function main() {
         `a valid purchase gets all the way to the transport (${reached.status}: ${reached.body?.error}) — no `
         + 'libp2p in this process, so completing one is slice step 2, on two live nodes');
 
-    const viaAddress = await buy(buyer, { peerAddress: PEER_ADDR, sellerPublicKey: stranger(), amount: 25 });
+    const viaAddress = await buy(buyer, { peerAddress: PEER_ADDR, sellerPublicKey: stranger(), amount_c: hc(25) });
     assert(viaAddress.status === 503 && /peer-to-peer transport/i.test(viaAddress.body?.error ?? ''),
         'and a peer named by multiaddr resolves the same way as one named by node URL');
 

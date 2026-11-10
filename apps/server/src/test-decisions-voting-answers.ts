@@ -137,23 +137,31 @@ const DAY = 24 * HOUR;
  * A member. By default they joined 60 days ago and have NO recorded activity (last_active_at NULL), so they
  * count toward no turnout until a test gives them some.
  */
+/**
+ * The story's Beans as the node's whole hundredths: a trade's amount, earned credit, a grant's amount_c, a row's amount.
+ * Voice credits stay a count of Beans of value traded (decisions-engine getVoiceCredits: the value over 100), so 16 is 16.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** `opts.earnedCredit`: Beans. */
 function makeMember(callsign: string, opts: { joinedAt?: string; lastActiveAt?: string | null; earnedCredit?: number; frozen?: boolean; status?: string } = {}): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`
         INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, earned_credit_c, last_active_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(pk, callsign, opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active',
-        opts.frozen ? 1 : 0, opts.earnedCredit ?? 100, opts.lastActiveAt ?? null);
+        opts.frozen ? 1 : 0, hc(opts.earnedCredit ?? 100), opts.lastActiveAt ?? null);
     db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
     return pk;
 }
 
-function completedTrade(buyer: string, seller: string, credits: number, at = new Date()): void {
+/** `beans`: the trade's amount in Beans, kept as whole hundredths. */
+function completedTrade(buyer: string, seller: string, beans: number, at = new Date()): void {
     const iso = at.toISOString();
     db.prepare(`
         INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
-    `).run('mt-' + crypto.randomUUID(), 'post-' + crypto.randomUUID(), buyer, seller, credits, iso, iso);
+    `).run('mt-' + crypto.randomUUID(), 'post-' + crypto.randomUUID(), buyer, seller, hc(beans), iso, iso);
 }
 
 function markActive(pk: string, at = new Date()): void {
@@ -230,8 +238,8 @@ async function run() {
     // The proposers' standing is a trade; the earned_credit badge makeMember gives everyone is none (badges unlock nothing).
     completedTrade(proposerA, proposerB, 5);
 
-    const poolA = createDecision({ authorPubkey: proposerA, title: 'Grant A', description: 'Seed money for the eggs', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount: 10 } });
-    const poolB = createDecision({ authorPubkey: proposerB, title: 'Grant B', description: 'Feed for the winter', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount: 10 } });
+    const poolA = createDecision({ authorPubkey: proposerA, title: 'Grant A', description: 'Seed money for the eggs', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount_c: hc(10) } });
+    const poolB = createDecision({ authorPubkey: proposerB, title: 'Grant B', description: 'Feed for the winter', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount_c: hc(10) } });
 
     const noTradeVote = castDecisionVote(poolA.id, noTrader, true, 1);
     assert(!noTradeVote.success && noTradeVote.error === 'Voting on community money opens after your first completed trade.',
@@ -244,7 +252,7 @@ async function run() {
     assert(noTradeMemberVote.success, 'the same member still votes one-member-one-vote on member Decisions');
 
     const qtv = engine.qualifiedTradeValue(db, trader);
-    assert(qtv === 16, `trader's qualified trade value is 16 (got ${qtv})`);
+    assert(qtv === hc(16), `trader's qualified trade value is 16 (got ${qtv} hundredths)`);
     const onA = castDecisionVote(poolA.id, trader, true, 4);
     const onB = castDecisionVote(poolB.id, trader, true, 4);
     assert(onA.success && onA.creditsUsed === 16, '4 votes (16 credits) on the first pool Decision');
@@ -376,18 +384,19 @@ async function run() {
     const restoredTrader = makeMember('RestoredTrader', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
     completedTrade(restoredTrader, signedOnly[0], 5, new Date(kNow - 3 * DAY));
     const restoredPoster = makeMember('RestoredPoster');
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at) VALUES (?, 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?, ?)`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at) VALUES (?, 'offer', 'food', 'Eggs', 'Fresh eggs', 500, ?, ?)`)
         .run('post-' + crypto.randomUUID(), restoredPoster, new Date(kNow - 3 * DAY).toISOString());
     assert(getActiveMembersCount30d() === 12, `a stale last_active_at is backed by the trade and post records a backup carries (got ${getActiveMembersCount30d()})`);
     // The node writes the daily circulation fee as a ledger row FROM the member (engine/audit.ts), unsigned by
     // them. A member whose only recent row is that fee did nothing and is not active.
     const demurrageOnly = makeMember('DemurrageOnly');
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 0.05, 0, 'Circulation fee_c (demurrage, 1d)', ?)`)
+    // A day's charge of 0.05 Beans: whole hundredths, and the memo the node writes (engine/audit.ts).
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 5, 0, 'Circulation fee (demurrage, 1d)', ?)`)
         .run(`demurrage_${demurrageOnly.slice(0, 16)}_1_2`, demurrageOnly, new Date(kNow - DAY).toISOString());
     assert(getActiveMembersCount30d() === 12, `a member whose only ledger row is the node's circulation fee is not active (got ${getActiveMembersCount30d()})`);
     // A payment the member signed (auth_signer = them) is activity even with a stale last_active_at.
     const signedSender = makeMember('SignedSender', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer) VALUES (?, ?, ?, 2, 0, 'Thanks for the eggs', ?, ?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer) VALUES (?, ?, ?, 200, 0, 'Thanks for the eggs', ?, ?)`)
         .run('tx-' + crypto.randomUUID(), signedSender, signedOnly[0], new Date(kNow - DAY).toISOString(), signedSender);
     assert(getActiveMembersCount30d() === 13, `a payment the member signed counts (got ${getActiveMembersCount30d()})`);
     db.prepare('DELETE FROM transactions WHERE from_pubkey = ?').run(signedSender);

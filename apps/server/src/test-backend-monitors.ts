@@ -17,14 +17,18 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
+/** The story's Beans as the node's whole hundredths: balances, floors, transfers and the metrics (total negative balance). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 let seq = 0;
+/** `balance`: whole hundredths. */
 function seedMember(pk: string, balance = 0, joinedAtDaysAgo = 0) {
     const joinedAt = new Date(Date.now() - joinedAtDaysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(pk, pk.slice(0, 8), joinedAt);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
 }
 
-// A direct peer-to-peer transfer (gift) to establish transaction timestamps
+// A direct peer-to-peer transfer (gift) to establish transaction timestamps. `amount`: whole hundredths.
 function tx(from: string, to: string, amount: number, daysAgo = 0) {
     const ts = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
@@ -47,8 +51,8 @@ async function main() {
         // Seed some accounts with negative balances
         const user1 = 'metricA-' + Date.now();
         const user2 = 'metricB-' + Date.now();
-        seedMember(user1, -100, 20); // 20 days old, balance -100
-        seedMember(user2, -50, 20);  // 20 days old, balance -50
+        seedMember(user1, -hc(100), 20); // 20 days old, balance -100
+        seedMember(user2, -hc(50), 20);  // 20 days old, balance -50
         reconcileLedgerFromDb();
 
         // Give them some floor so their balances are valid credit uses
@@ -57,11 +61,11 @@ async function main() {
 
         // Run the audit
         const metrics1 = runWashSybilMetricsAudit()!;
-        assert(metrics1.totalNegative === 150, `Total negative balance metric computed: 150 (got ${metrics1.totalNegative})`);
+        assert(metrics1.totalNegative === hc(150), `Total negative balance metric computed: 150 (got ${metrics1.totalNegative} hundredths)`);
         assert(metrics1.accountsNearFloor === 0, `No accounts near floor yet (got ${metrics1.accountsNearFloor})`);
 
         // Move user1 closer to their floor (-195, floor is -200)
-        db.prepare("UPDATE accounts SET balance_c = -195 WHERE public_key = ?").run(user1);
+        db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(-hc(195), user1);
         reconcileLedgerFromDb();
         const metrics2 = runWashSybilMetricsAudit()!;
         assert(metrics2.accountsNearFloor === 1, `1 account near floor detected (got ${metrics2.accountsNearFloor})`);
@@ -73,7 +77,7 @@ async function main() {
         assert(metrics2.delinquentCount === 1, `1 delinquent account detected (got ${metrics2.delinquentCount})`);
 
         // Perform a recent transaction for user1 (makes them active, not dormant)
-        tx(user1, user2, 5, 0); // 0 days ago (recent)
+        tx(user1, user2, hc(5), 0); // 0 days ago (recent)
         const metrics3 = runWashSybilMetricsAudit()!;
         assert(metrics3.delinquentCount === 0, `0 delinquent accounts after recent transaction (got ${metrics3.delinquentCount})`);
 
@@ -99,15 +103,15 @@ async function main() {
 
         // Let's test the Aggregate Credit Spike alert.
         // We need a previous metric from system_metrics table created at <datetime('now', '-23 hours')
-        // Let's manually insert a yesterday metric with total_negative_balance = 100
+        // Let's manually insert a yesterday metric with total_negative_balance = 100 (Beans: the metric is whole hundredths)
         const yesterday = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
         db.prepare("INSERT INTO system_metrics (timestamp, metric_key, metric_value) VALUES (?, ?, ?)")
-            .run(yesterday, 'total_negative_balance', 100);
+            .run(yesterday, 'total_negative_balance', hc(100));
 
         // Current metrics should be around 150 + 195 + 50... wait, let's see.
         // Let's force-insert the current metric to be 1000 (growth: (1000-100)/100 = 900% growth, absolute 900 beans >= 500)
         db.prepare("INSERT INTO system_metrics (timestamp, metric_key, metric_value) VALUES (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?)")
-            .run('total_negative_balance', 1000);
+            .run('total_negative_balance', hc(1000));
 
         const health2 = getCommunityHealth();
         const spikeFlag = health2.flags.find(f => f.type === 'aggregate_spike' && f.description.includes('Aggregate credit spike'));
@@ -118,7 +122,7 @@ async function main() {
         // In one go it held a 20,000-member node for 20 s (the global load test, 2026-10-11). Sliced, it gives the event
         // loop a turn between slices; with sliceMs 0 a turn after every step, and every active member is at least one
         // step. The turns are counted, not timed, so a slow CI machine cannot fail it.
-        for (let i = 0; i < 20; i++) seedMember(`slice${i}-${Date.now()}`, i % 3 === 0 ? -5 : 10, 30 + i);
+        for (let i = 0; i < 20; i++) seedMember(`slice${i}-${Date.now()}`, i % 3 === 0 ? -hc(5) : hc(10), 30 + i);
         reconcileLedgerFromDb();
         const activeCount = (db.prepare("SELECT COUNT(*) AS n FROM members WHERE status = 'active'").get() as { n: number }).n;
         const oneGo = runWashSybilMetricsAudit()!;

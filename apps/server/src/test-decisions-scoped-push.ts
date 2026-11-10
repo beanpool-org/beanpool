@@ -34,20 +34,24 @@ function assert(cond: boolean, msg: string): void {
 
 const DAY = 86400_000;
 
+/** The story's Beans as the node's whole hundredths (balances, credit and a pay-out's amount_c). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 function makeMember(callsign: string): string {
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`)
-        .run(pk, callsign, new Date(Date.now() - 30 * DAY).toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)').run(pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', ?)`)
+        .run(pk, callsign, new Date(Date.now() - 30 * DAY).toISOString(), hc(100));
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(pk, hc(50));
     return pk;
 }
 
+/** `balance`: Beans. */
 function makeEnterprise(name: string, keepers: string[], balance: number): string {
     const ent = crypto.randomBytes(32).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, lifecycle, paused, purpose)
                 VALUES (?, ?, ?, 'active', 1, 0, 0, 'ongoing', 0, 'A test enterprise')`)
         .run(ent, name, new Date(Date.now() - 20 * DAY).toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(ent, balance);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(ent, hc(balance));
     keepers.forEach((k, i) => {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, ?, ?)')
             .run(ent, k, i === 0 ? 'lead' : 'keeper', new Date(Date.now() - (10 - i) * DAY).toISOString());
@@ -81,7 +85,7 @@ async function main(): Promise<void> {
     calls = [];
     const pay = createScopedDecision({
         scopeKind: 'enterprise', scopeId: bakery, authorPubkey: ann, title: 'Pay StrangerSecretname for the oven',
-        description: 'StrangerSecretname fixed the oven door.', effect: 'pay_out', params: { to: stranger, amount: 40, memo: 'Oven door' },
+        description: 'StrangerSecretname fixed the oven door.', effect: 'pay_out', params: { to: stranger, amount_c: hc(40), memo: 'Oven door' },
     } as any, spy);
     assert(getDecision(pay.id)?.status === 'open', 'the vote opened');
     assert(calls.length === 1, `one push batch for the vote (${calls.length})`);
@@ -140,7 +144,7 @@ async function main(): Promise<void> {
     calls = [];
     createScopedDecision({
         scopeKind: 'enterprise', scopeId: mill, authorPubkey: mo, title: 'Pay StrangerSecretname for the sacks',
-        description: 'StrangerSecretname carried the sacks.', effect: 'pay_out', params: { to: stranger, amount: 5 },
+        description: 'StrangerSecretname carried the sacks.', effect: 'pay_out', params: { to: stranger, amount_c: hc(5) },
     } as any, spy);
     assert(calls.length === 1 && told(calls[0]).join() === [mia, mel].sort().join(),
         `Mia (muted another chat) and Mel (her mute ran out) are told; Max, who muted the Mill's chat, isn't (told ${told(calls[0]).length})`);

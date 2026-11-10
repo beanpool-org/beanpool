@@ -139,7 +139,7 @@ function oldMember(name: string, daysAgo: number, owner: Id): Id {
 }
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** Kept posts from two days ago, out of every window. */
 function keptPosts(id: Id, count: number): void {
     for (let i = 0; i < count; i++) {

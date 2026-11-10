@@ -104,7 +104,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
 
 async function offer(author: Id, title: string, extra: Record<string, unknown> = {}): Promise<Res> {
     return call('POST', author, '/api/marketplace/posts', {
-        type: 'offer', category: 'general', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: author.pk,
+        type: 'offer', category: 'general', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: author.pk,
         lat: -28.55, lng: 153.5, photos: [TEST_PHOTO], ...extra,
     });
 }
@@ -440,7 +440,7 @@ async function main(): Promise<void> {
         `the listings offered to a peer carry them, none on a listing without (${JSON.stringify(offLaptop?.freeTags)})`);
     const remoteAuthor = newId('Remy').pk;
     const remote = (id: string, title: string, freeTags?: unknown, tags?: unknown) => ({
-        id, type: 'offer', category: 'general', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
+        id, type: 'offer', category: 'general', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
         authorCallsign: 'Remy', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         ...(freeTags !== undefined ? { freeTags } : {}), ...(tags !== undefined ? { tags } : {}),
     });

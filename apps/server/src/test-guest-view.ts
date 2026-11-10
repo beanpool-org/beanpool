@@ -390,10 +390,11 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET paused_by = ?, wind_up_initiated_by = ? WHERE public_key = ?').run(alice.pk, bob.pk, enterprise);
     // Bob backs it. A pledge is ledger history, which keeps the money switches on (node-profile lockToLedger), so only
     // where they are on already: the global node as it ships stays as it ships.
-    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-sentinel', ?, ?, 5)").run(bob.pk, enterprise);
+    // Every figure whole hundredths (a pledge of 5 Beans, a goal of 100, a project asking 50).
+    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-sentinel', ?, ?, 500)").run(bob.pk, enterprise);
     const crowdfund = newId().pk;
-    createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
-    const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 50)!;
+    createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 10000, null);
+    const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 5000)!;
 
     // Posts spread over the world for the precision checks (§7): the antimeridian and both poles among them, and a
     // few sharing one area. Each with a place worked out to 7 decimals.
@@ -1099,7 +1100,7 @@ async function main(): Promise<void> {
             ['mt-pruned-done', trade.id, pruned.pk, alice.pk, 'completed'],       // it bought from Alice
         ]) {
             db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
-                        VALUES (?, ?, ?, ?, 1, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
+                        VALUES (?, ?, ?, ?, 100, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
         }
         const tradeStatuses = () => (db.prepare("SELECT id, status FROM marketplace_transactions WHERE id LIKE 'mt-pruned-%' ORDER BY id").all() as { id: string; status: string }[])
             .map(r => `${r.id}=${r.status}`).join(' ');
@@ -1185,7 +1186,9 @@ async function main(): Promise<void> {
         const BAIT: Record<string, unknown> = {
             targetPubkey: alice.pk, friendPubkey: alice.pk, memberPubkey: alice.pk, toPubkey: alice.pk, to: alice.pk, candidate: alice.pk,
             id: offer.id, postId: offer.id, groupId: club.id, conversationId: 'conv-sentinel', messageId: 'msg-sentinel', decisionId: 'dec-sentinel',
-            projectId: crowdfund, treasury: enterprise, channelId: 'chan-sentinel', itemId: 'item_sentinel', amount: 1,
+            // A money figure as every money route takes one: whole hundredths, `amount_c` (1 Bean), so a write gets past the
+            // body check to the data it could hand back.
+            projectId: crowdfund, treasury: enterprise, channelId: 'chan-sentinel', itemId: 'item_sentinel', amount_c: 100,
         };
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
@@ -1252,12 +1255,12 @@ async function main(): Promise<void> {
             'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
             // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most under How this
             // community works (the exception an owner's or an admin's, the dial an owner's).
-            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
-            'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor: 5000, cap: 5000 }, join: 'members' } },
+            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount_c: 500000 },
+            'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor_c: 500000, cap_c: 500000 }, join: 'members' } },
             // Advice to the owners about a Core setting (an owner's or an admin's): past the shape checks, it would leave a log line.
             'POST /api/local/admin/community-shape/advice': { setting: 'beans', advice: 'Sentinel advice' },
             // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
-            'POST /api/commons/pay': { amount: 1 },
+            'POST /api/commons/pay': { amount_c: 100 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
             'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
             // The Community health panel: the owner's two lines.
@@ -1268,7 +1271,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/directory/promise': { reports: true, notice: true, closingOn: null },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
-                params: { to: alice.pk, amount: 1 } },
+                params: { to: alice.pk, amount_c: 100 } },
             'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
             // A removal juror's answer to their seat (slice J2b): past the body check to who may answer.
             'POST /api/commons/decisions/:id/jury/answer': { answer: 'step_aside' },
@@ -1304,7 +1307,7 @@ async function main(): Promise<void> {
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
             'POST /api/crowdfund/projects/delete', 'POST /api/crowdfund/projects/update',
             'GET /api/directory/info',
-            'POST /api/enterprise', 'GET /api/enterprise/:treasury', 'DELETE /api/enterprise/:treasury/backing_c',
+            'POST /api/enterprise', 'GET /api/enterprise/:treasury', 'DELETE /api/enterprise/:treasury/backing',
             'POST /api/enterprise/:treasury/backing', 'POST /api/enterprise/:treasury/backing/release',
             'POST /api/enterprise/:treasury/keepers/:pubkey/remove', 'POST /api/enterprise/:treasury/keepers/changes/:changeId/object',
             'POST /api/enterprise/:treasury/keepers/request', 'GET /api/enterprise/:treasury/keepers/requests',
@@ -1503,7 +1506,7 @@ async function main(): Promise<void> {
             // One of a shop's Offers on its shelf (routes/shops.ts), and an enterprise's face by a keeper (routes/treasury.ts, E2).
             'PUT /api/marketplace/posts/:id/feature', 'PUT /api/treasury/:treasury/profile', 'PUT /api/enterprise/:treasury/profile',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
-            'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing_c',
+            'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
             'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
             'POST /api/treasury/:treasury/keepers/changes/:changeId/object', 'POST /api/treasury/:treasury/keepers/request',
@@ -1906,7 +1909,7 @@ async function main(): Promise<void> {
                     `${who}: ${p} is for members, refused members_only naming the global community (${r.status} ${r.text.slice(0, 80)})`);
             }
             const pot = await call('GET', id, '/api/commons/balance');
-            assert(pot.status === 200 && typeof pot.body?.balance === 'number', `${who}: the Commons pot, a total, stays public (${pot.status})`);
+            assert(pot.status === 200 && Number.isSafeInteger(pot.body?.balance_c), `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
             assert(face.status === 404 && face.headers.get('content-type') !== 'image/png', `${who}: a face asked by a member's key alone is refused, 404 (${face.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');

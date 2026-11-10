@@ -284,7 +284,7 @@ async function main(): Promise<void> {
         assert((await sent(sam, sealed(sam, accepted, acceptedLine.conversationId, 'Great, see you at nine'))).status === 200, 'and go on in an accepted chat');
         const toFriend = await opened(sam, friend);
         assert(toFriend.status === 200 && (await sent(sam, sealed(sam, friend, toFriend.body.conversation.id, 'Thanks for adding me'))).status === 200, 'and write to someone who added them');
-        const posted = await call('POST', sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'A limited member\'s offer', description: 'Still allowed', credits: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
+        const posted = await call('POST', sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'A limited member\'s offer', description: 'Still allowed', price_c: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
         assert(posted.status === 200, `and post (${show(posted)})`);
     }
 

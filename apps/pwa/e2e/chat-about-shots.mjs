@@ -42,12 +42,12 @@ const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();
 const VIEWPORTS = [{ w: 320, h: 568, scale: 1.3 }, { w: 1280, h: 800, scale: 1 }];
 
 // The listings the thread is about, as the node answers a lookup by id. 'post-gone' has no answer: gone, or hidden from this reader.
-const LADDER = { id: 'post-ladder', type: 'need', title: 'An extension ladder, six metres, for the gutters on the back shed', credits: 4, priceType: 'hourly', status: 'active' };
-const EGGS = { id: 'post-eggs', type: 'offer', title: 'Fresh eggs', credits: 6, priceType: 'fixed', status: 'active' };
-const GONE = { id: 'post-gone', type: 'offer', title: 'Wheelbarrow, one wheel, a little rusty', credits: 2, priceType: 'fixed', status: 'active' };
+const LADDER = { id: 'post-ladder', type: 'need', title: 'An extension ladder, six metres, for the gutters on the back shed', price_c: 400, priceType: 'hourly', status: 'active' };
+const EGGS = { id: 'post-eggs', type: 'offer', title: 'Fresh eggs', price_c: 600, priceType: 'fixed', status: 'active' };
+const GONE = { id: 'post-gone', type: 'offer', title: 'Wheelbarrow, one wheel, a little rusty', price_c: 200, priceType: 'fixed', status: 'active' };
 const LISTINGS = [LADDER, EGGS];
 // The chip waiting in the composer: a title long enough to fold at 320 px.
-const CHIP_POST = { id: 'post-honey', type: 'offer', title: 'Honey from the hives behind the school, in jars you bring back', credits: 12, priceType: 'fixed', status: 'active' };
+const CHIP_POST = { id: 'post-honey', type: 'offer', title: 'Honey from the hives behind the school, in jars you bring back', price_c: 1200, priceType: 'fixed', status: 'active' };
 
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, logLevel: 'error' });
 await server.listen();

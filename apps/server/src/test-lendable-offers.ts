@@ -83,7 +83,11 @@ function assert(cond: unknown, msg: string): void {
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const EPOCH_NOW = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
 const DAY_MS = 24 * 60 * 60 * 1000;
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), prices and balances alike. `hc` turns a
+ * Beans figure into hundredths. A 1.5% fee is truncated once and the half-hundredth stays with the one paid: 15 → 0.22.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 let BASE = '';
 
 type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
@@ -103,8 +107,8 @@ function makeMember(callsign: string, beans: number, oddJobs = true): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
-    if (oddJobs) createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${callsign}`, 'direct', true);
+    if (oddJobs) createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', hc(5), 'fixed', id.pk, undefined, undefined, undefined, true);
     registerPushToken(id.pk, `ExponentPushToken[lend-${callsign}-${id.pk.slice(0, 6)}]`, 'android');
     return id;
 }
@@ -150,18 +154,18 @@ async function adminPost(urlPath: string, body: unknown) {
     return { status: res.status, body: json };
 }
 
-/** A balance as the ledger holds it (getBalance answers it rounded to the cent, for showing). */
-const bal = (pk: string): number => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number }).balance);
-const commons = (): number => r4(getCommonsBalanceExact());
+/** A balance as the ledger holds it: whole hundredths. */
+const bal = (pk: string): number => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number }).balance_c;
+const commons = (): number => getCommonsBalanceExact();
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 type PostRow = {
     status: string; active: number; lendable: number; repeatable: number; lend_max_days: number | null; lend_terms: string | null;
     replacement_value: string | null; typeof_value: string | null; accepted_by: string | null; accepted_at: string | null;
-    pending_transaction_id: string | null; price_type: string; credits: number;
+    pending_transaction_id: string | null; price_type: string; price_c: number;
 };
 const postRow = (id: string) => db.prepare(`SELECT status, active, lendable, repeatable, lend_max_days, lend_terms, replacement_value,
     typeof(replacement_value) AS typeof_value, accepted_by, accepted_at, pending_transaction_id, price_type, price_c FROM posts WHERE id = ?`).get(id) as PostRow;
-const txRow = (id: string) => db.prepare('SELECT status, amount_c, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: number; hours: number | null };
+const txRow = (id: string) => db.prepare('SELECT status, amount_c, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; amount_c: number; hours: number | null };
 const postsTitled = (title: string): number => (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE title = ?').get(title) as { n: number }).n;
 const backOnBoard = (id: string): boolean => {
     const p = postRow(id);
@@ -171,7 +175,7 @@ const backOnBoard = (id: string): boolean => {
 /** The conservation check after a money step: no drift, nothing stranded, every balance a finite number. */
 function ledgerAddsUp(step: string): void {
     const a = runLedgerAudit();
-    assert(a.ok && Math.abs(a.drift) < 0.0001 && a.strandedEscrows === 0 && a.badBalances === 0,
+    assert(a.ok && a.drift === 0 && a.strandedEscrows === 0 && a.badBalances === 0,
         `the ledger adds up after ${step} (drift ${a.drift}, stranded ${a.strandedEscrows}, not a number ${a.badBalances})`);
 }
 
@@ -201,7 +205,7 @@ async function main(): Promise<void> {
     ledgerAddsUp('the members are seeded');
 
     const offer = (who: Id, body: Record<string, unknown>) => signed('/api/marketplace/posts', who, {
-        type: 'offer', category: 'tools', description: '', credits: 0, authorPublicKey: who.pk, photos: TEST_PHOTOS, ...body,
+        type: 'offer', category: 'tools', description: '', price_c: 0, authorPublicKey: who.pk, photos: TEST_PHOTOS, ...body,
     });
     const edit = (who: Id, id: string, body: Record<string, unknown>) => signed('/api/marketplace/posts/update', who, { id, authorPublicKey: who.pk, ...body });
     const ask = (who: Id, postId: string, hours?: number) => signed('/api/marketplace/posts/request', who, { postId, buyerPublicKey: who.pk, ...(hours !== undefined ? { hours } : {}) });
@@ -227,7 +231,7 @@ async function main(): Promise<void> {
         `a lendable Offer is made with its terms, and is repeatable too (${brief(made)})`);
     const d0 = postRow(drill);
     assert(d0.lendable === 1 && d0.repeatable === 1 && d0.lend_max_days === 7 && d0.lend_terms === 'Clean it. Back within a week.'
-        && d0.replacement_value === '$120' && d0.typeof_value === 'text' && d0.price_type === 'fixed' && d0.credits === 0,
+        && d0.replacement_value === '$120' && d0.typeof_value === 'text' && d0.price_type === 'fixed' && d0.price_c === 0,
         `it is stored as such: Free, one fee, the terms trimmed, the value as words (${JSON.stringify(d0)})`);
 
     const numbered = await offer(dave, { title: 'Numbered drill', lendable: true, replacementValue: 412345678 });
@@ -247,7 +251,7 @@ async function main(): Promise<void> {
         `41 characters is refused (${brief(long)})`);
     const fits = await offer(dave, { title: 'Pressure washer', lendable: true, replacementValue: forty });
     const like = await offer(dave, { title: 'Hedge trimmer', lendable: true, replacementValue: 'like for like' });
-    const price = await offer(dave, { title: 'Ladder', lendable: true, replacementValue: '120', credits: 10 });
+    const price = await offer(dave, { title: 'Ladder', lendable: true, replacementValue: '120', price_c: hc(10) });
     assert(fits.status === 200 && postRow(fits.body.post.id).replacement_value === forty
         && like.status === 200 && postRow(like.body.post.id).replacement_value === 'like for like'
         && price.status === 200 && postRow(price.body.post.id).replacement_value === '120' && postRow(price.body.post.id).typeof_value === 'text'
@@ -266,7 +270,7 @@ async function main(): Promise<void> {
         const r = await offer(dave, { title: 'Bad flag', lendable: flag });
         assert(r.status === 400 && r.body?.error === LENDABLE_NOT_A_FLAG && postsTitled('Bad flag') === 0, `lendable ${JSON.stringify(flag)} is refused (${brief(r)})`);
     }
-    const need = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a drill', description: 'Anyone?', credits: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS, lendable: true });
+    const need = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a drill', description: 'Anyone?', price_c: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS, lendable: true });
     assert(need.status === 400 && need.body?.error === LEND_OFFERS_ONLY && postsTitled('Need a drill') === 0, `a Need can't be lent (${brief(need)})`);
     // An event is built from the whole body (routes/event-post.ts), so it gets the same refusals, not its lend fields dropped.
     const event = (title: string, body: Record<string, unknown>) => signed('/api/marketplace/posts', dave, {
@@ -282,22 +286,22 @@ async function main(): Promise<void> {
     assert(eventPlain.status === 200 && postRow(eventPlain.body.post.id).lendable === 0 && !('lendable' in eventPlain.body.post),
         `the same event with no lend fields is made, and isn't lent (${brief(eventPlain)})`);
     for (const pt of ['hourly', 'monthly']) {
-        const r = await offer(dave, { title: `Lent ${pt}`, lendable: true, credits: 2, priceType: pt });
+        const r = await offer(dave, { title: `Lent ${pt}`, lendable: true, price_c: hc(2), priceType: pt });
         assert(r.status === 400 && r.body?.error === LEND_PRICE_TYPE_REFUSED && postsTitled(`Lent ${pt}`) === 0, `a loan priced ${pt} is refused (${brief(r)})`);
     }
-    const trailerMade = await offer(dave, { title: 'Bike trailer', lendable: true, credits: 5, priceType: 'daily', lendMaxDays: 7 });
-    const weeklyMade = await offer(dave, { title: 'Camping tent', lendable: true, credits: 7, priceType: 'weekly', lendMaxDays: 7 });
+    const trailerMade = await offer(dave, { title: 'Bike trailer', lendable: true, price_c: hc(5), priceType: 'daily', lendMaxDays: 7 });
+    const weeklyMade = await offer(dave, { title: 'Camping tent', lendable: true, price_c: hc(7), priceType: 'weekly', lendMaxDays: 7 });
     const trailer = trailerMade.body?.post?.id as string;
     const tent = weeklyMade.body?.post?.id as string;
     assert(trailerMade.status === 200 && postRow(trailer).price_type === 'daily' && weeklyMade.status === 200 && postRow(tent).price_type === 'weekly',
         `a loan's fee may be per day or per week (${brief(trailerMade)} / ${brief(weeklyMade)})`);
-    const plainMade = await offer(dave, { title: 'Firewood', credits: 3, replacementValue: '$5', lendTerms: 'Dry', lendMaxDays: 3 });
+    const plainMade = await offer(dave, { title: 'Firewood', price_c: hc(3), replacementValue: '$5', lendTerms: 'Dry', lendMaxDays: 3 });
     const firewood = plainMade.body?.post?.id as string;
     const pw = postRow(firewood);
     assert(plainMade.status === 200 && pw.lendable === 0 && pw.repeatable === 0 && pw.lend_max_days === null && pw.lend_terms === null && pw.replacement_value === null
         && !('lendable' in plainMade.body.post) && !('replacementValue' in plainMade.body.post),
         'a listing that isn\'t lent keeps no terms, and reads as it always did');
-    const plainHourly = await offer(dave, { title: 'Garden help', credits: 3, priceType: 'daily' });
+    const plainHourly = await offer(dave, { title: 'Garden help', price_c: hc(3), priceType: 'daily' });
     assert(plainHourly.status === 200 && postRow(plainHourly.body.post.id).price_type === 'fixed',
         'a listing that isn\'t lent is still made one fee or by the hour, as before');
 
@@ -308,7 +312,7 @@ async function main(): Promise<void> {
     assert(lendList.status === 200 && lendIds.has(drill) && lendIds.has(trailer) && !lendIds.has(firewood)
         && (lendList.body as any[]).every(p => p.lendable === true && p.type === 'offer'),
         `lendable=1 lists lendable Offers only (${lendList.status}, ${lendIds.size})`);
-    const eveLends = await offer(eve, { title: 'Eve\'s ladder', lendable: true, credits: 2 });
+    const eveLends = await offer(eve, { title: 'Eve\'s ladder', lendable: true, price_c: hc(2) });
     const eveLadder = eveLends.body?.post?.id as string;
     const shop = await signedGet(`/api/marketplace/posts?author=${dave.pk}&lendable=1`, alice);
     assert(shop.status === 200 && (shop.body as any[]).length > 0 && (shop.body as any[]).every(p => p.authorPublicKey === dave.pk && p.lendable === true)
@@ -322,7 +326,7 @@ async function main(): Promise<void> {
     console.log('\n— 3. A Free loan');
     const before3 = { dave: bal(dave.pk), alice: bal(alice.pk), commons: commons() };
     const asked = await ask(alice, drill, 3);
-    assert(asked.status === 200 && asked.body.transaction.credits === 0 && txRow(asked.body.transaction.id).hours === 3,
+    assert(asked.status === 200 && asked.body.transaction.amount_c === 0 && txRow(asked.body.transaction.id).hours === 3,
         `Alice asks to borrow the drill for 3 days: a deal of 0 Beans that keeps its days (${brief(asked)})`);
     const freeTx = asked.body.transaction.id as string;
     const agreed = await agree(dave, freeTx);
@@ -356,31 +360,32 @@ async function main(): Promise<void> {
     console.log('\n— 4. Fees');
     let b4 = { dave: bal(dave.pk), bob: bal(bob.pk), commons: commons() };
     const perDay = await ask(bob, trailer, 3);
-    assert(perDay.status === 200 && perDay.body.transaction.credits === 15 && txRow(perDay.body.transaction.id).hours === 3,
+    assert(perDay.status === 200 && perDay.body.transaction.amount_c === hc(15) && txRow(perDay.body.transaction.id).hours === 3,
         `5 Beans a day × 3 days is 15 Beans (${brief(perDay)})`);
     const perDayTx = perDay.body.transaction.id as string;
     await agree(dave, perDayTx);
-    assert(bal(bob.pk) === r4(b4.bob - 15) && postRow(trailer).status === 'pending', 'agreed: the 15 Beans are held and the trailer is out');
+    assert(bal(bob.pk) === b4.bob - hc(15) && postRow(trailer).status === 'pending', 'agreed: the 15 Beans are held and the trailer is out');
     ledgerAddsUp('a fee held');
     const paid = await returned(bob, perDayTx);
-    assert(paid.status === 200 && bal(bob.pk) === r4(b4.bob - 15) && bal(dave.pk) === r4(b4.dave + 15 - 0.225) && commons() === r4(b4.commons + 0.225)
+    // 1.5% of 15 is 0.225: truncated once, the Commons takes 0.22 and the half-hundredth stays with Dave (14.78).
+    assert(paid.status === 200 && bal(bob.pk) === b4.bob - hc(15) && bal(dave.pk) === b4.dave + hc(15) - hc(0.22) && commons() === b4.commons + hc(0.22)
         && backOnBoard(trailer),
-        `returned: Dave is paid 15 Beans less 1.5% (0.225) to the Commons, and the trailer is back (Bob ${r4(bal(bob.pk) - b4.bob)}, Dave ${r4(bal(dave.pk) - b4.dave)}, Commons ${r4(commons() - b4.commons)}, ${postRow(trailer).status})`);
+        `returned: Dave is paid 15 Beans less 1.5% (0.225, truncated to 0.22) to the Commons, and the trailer is back (Bob ${bal(bob.pk) - b4.bob}, Dave ${bal(dave.pk) - b4.dave}, Commons ${commons() - b4.commons} hundredths, ${postRow(trailer).status})`);
     ledgerAddsUp('a fee per day paid');
     b4 = { dave: bal(dave.pk), bob: bal(bob.pk), commons: commons() };
     const early = await lend(dave, bob, trailer, 3);
     const earlyDone = await returned(bob, early, 2);
-    assert(earlyDone.status === 200 && txRow(early).credits === 10 && bal(bob.pk) === r4(b4.bob - 10) && bal(dave.pk) === r4(b4.dave + 10 - 0.15)
+    assert(earlyDone.status === 200 && txRow(early).amount_c === hc(10) && bal(bob.pk) === b4.bob - hc(10) && bal(dave.pk) === b4.dave + hc(10) - hc(0.15)
         && backOnBoard(trailer),
         `a fee per day is paid for the days the borrower confirms: back after 2 of 3, 10 Beans (${brief(earlyDone)})`);
     ledgerAddsUp('a fee per day for fewer days');
     b4 = { dave: bal(dave.pk), bob: bal(bob.pk), commons: commons() };
     const oneFee = await lend(dave, cy, ladder, 3);
-    assert(txRow(oneFee).credits === 10 && txRow(oneFee).hours === 3, 'one fee of 10 Beans for a 3-day loan holds 10 and keeps the days');
-    const cyBefore = bal(cy.pk) + 10;
+    assert(txRow(oneFee).amount_c === hc(10) && txRow(oneFee).hours === 3, 'one fee of 10 Beans for a 3-day loan holds 10 and keeps the days');
+    const cyBefore = bal(cy.pk) + hc(10);
     const oneFeeDone = await returned(cy, oneFee, 0.5);
-    assert(oneFeeDone.status === 200 && txRow(oneFee).credits === 10 && bal(cy.pk) === r4(cyBefore - 10) && bal(dave.pk) === r4(b4.dave + 10 - 0.15)
-        && commons() === r4(b4.commons + 0.15) && backOnBoard(ladder),
+    assert(oneFeeDone.status === 200 && txRow(oneFee).amount_c === hc(10) && bal(cy.pk) === cyBefore - hc(10) && bal(dave.pk) === b4.dave + hc(10) - hc(0.15)
+        && commons() === b4.commons + hc(0.15) && backOnBoard(ladder),
         `one fee pays what it holds whatever days are confirmed (half a day confirmed, still 10 Beans) (${brief(oneFeeDone)})`);
     ledgerAddsUp('one fee paid');
 
@@ -428,7 +433,7 @@ async function main(): Promise<void> {
         && txRow(loserAsk.body.transaction.id).status === 'rejected' && openDeals === 1 && postRow(ladder).accepted_by === winner,
         `Dave says yes to Bob and Cy at once: one gets the ladder, the other's request was closed by the first yes (${raced.map(brief).join(' / ')})`);
     const loserPk = winner === bob.pk ? cy.pk : bob.pk;
-    assert(bal(winner!) === r4((winner === bob.pk ? r5.bob : r5.cy) - 10) && bal(loserPk) === (loserPk === bob.pk ? r5.bob : r5.cy),
+    assert(bal(winner!) === (winner === bob.pk ? r5.bob : r5.cy) - hc(10) && bal(loserPk) === (loserPk === bob.pk ? r5.bob : r5.cy),
         'only the winner\'s 10 Beans are held');
     ledgerAddsUp('a race for one lendable');
     await callOff(winner === bob.pk ? bob : cy, winners[0].body.transaction.id);
@@ -447,7 +452,7 @@ async function main(): Promise<void> {
     assert(tooLongTake.status === 409 && tooLongTake.body?.code === LEND_ASK_FIRST_CODE,
         `taken in one step, it is refused before its days are read: a loan is asked for (${brief(tooLongTake)})`);
     assert(tooShort.status === 400 && tooShort.body?.error === LOAN_TOO_SHORT_ERROR, `half a day is refused (${brief(tooShort)})`);
-    assert(weeks.status === 400 && weeks.body?.error === loanTooLongError(7) && oneWeek.status === 200 && oneWeek.body.transaction.credits === 7,
+    assert(weeks.status === 400 && weeks.body?.error === loanTooLongError(7) && oneWeek.status === 200 && oneWeek.body.transaction.amount_c === hc(7),
         `2 weeks of a tent lent for up to 7 days is refused; 1 week is 7 Beans (${brief(weeks)} / ${brief(oneWeek)})`);
     assert(noDays.status === 200 && txRow(noDays.body.transaction.id).hours === null,
         'one fee asked for with no days (an app that predates lending) is a loan with no due date');
@@ -503,7 +508,7 @@ async function main(): Promise<void> {
         // 400, as the edit route answers a price held by an open deal.
         assert(r.status === 400 && r.body?.error === LEND_TERMS_FROZEN, `while it is out, ${JSON.stringify(change)} is refused (${brief(r)})`);
     }
-    const priceHeld = await edit(dave, drill, { credits: 4 });
+    const priceHeld = await edit(dave, drill, { price_c: hc(4) });
     const sameBack = await edit(dave, drill, { title: 'Cordless drill (18V)', replacementValue: '$120', lendMaxDays: 7, lendable: true });
     assert(priceHeld.status === 400 && priceHeld.body?.error === PRICE_FROZEN_ERROR && sameBack.status === 200 && postRow(drill).replacement_value === '$120',
         `its price holds as before; the same terms sent back, with a new title, go through (${brief(priceHeld)} / ${brief(sameBack)})`);
@@ -524,7 +529,7 @@ async function main(): Promise<void> {
     const restart = await edit(dave, drill, { lendable: true, replacementValue: '$120', lendMaxDays: 7 });
     assert(restart.status === 200 && postRow(drill).lendable === 1 && postRow(drill).repeatable === 1 && postRow(drill).replacement_value === '$120',
         `and on again (${brief(restart)})`);
-    const needMade = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a hand', description: 'Moving day', credits: 2, authorPublicKey: dave.pk, photos: TEST_PHOTOS });
+    const needMade = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a hand', description: 'Moving day', price_c: hc(2), authorPublicKey: dave.pk, photos: TEST_PHOTOS });
     const needLend = await edit(dave, needMade.body?.post?.id, { lendable: true });
     assert(needMade.status === 200 && needLend.status === 400 && needLend.body?.error === LEND_OFFERS_ONLY, `a Need can't be made lendable by an edit (${brief(needLend)})`);
 
@@ -552,7 +557,7 @@ async function main(): Promise<void> {
     // ── 10. An app that predates lending ─────────────────────────────────────────────────────────────────────────────
     console.log('\n— 10. An app that predates lending');
     const shape = await byId(alice, wheelbarrow);
-    assert(shape?.type === 'offer' && shape.status === 'active' && shape.repeatable === true && shape.priceType === 'fixed' && typeof shape.credits === 'number',
+    assert(shape?.type === 'offer' && shape.status === 'active' && shape.repeatable === true && shape.priceType === 'fixed' && typeof shape.price_c === 'number',
         'it reads as an ordinary Offer, one that comes back after each deal (RECURRING)');
     const oldAsk = await ask(cy, wheelbarrow);
     const oldTx = oldAsk.body?.transaction?.id as string;
@@ -560,7 +565,7 @@ async function main(): Promise<void> {
     const outOld = await byId(dave, wheelbarrow);
     assert(oldAsk.status === 200 && oldYes.status === 200 && outOld?.status === 'pending' && !('lendBackAround' in outOld),
         'borrowed with no days, it is out with no due date');
-    const oldEdit = await edit(dave, wheelbarrow, { type: 'offer', category: 'tools', title: 'Wheelbarrow', description: 'Steel', credits: 0, price_type: 'fixed', repeatable: false });
+    const oldEdit = await edit(dave, wheelbarrow, { type: 'offer', category: 'tools', title: 'Wheelbarrow', description: 'Steel', price_c: 0, price_type: 'fixed', repeatable: false });
     assert(oldEdit.status === 200 && postRow(wheelbarrow).lendable === 1 && postRow(wheelbarrow).repeatable === 1,
         `an edit without the lend fields leaves it lent, whatever it says of repeatable (${brief(oldEdit)})`);
     await returned(cy, oldTx);
@@ -613,26 +618,26 @@ async function main(): Promise<void> {
     // ── 13. The offer covenant ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 13. The offer covenant');
     const fen = makeMember('Fen', 0, false);
-    db.prepare('UPDATE members SET earned_credit_c = 100 WHERE public_key = ?').run(fen.pk); // a granted line of 100, metered by the offer bands
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(100), fen.pk); // a granted line of 100, metered by the offer bands
     const fenLadder = (await offer(fen, { title: 'Step ladder', lendable: true })).body?.post?.id as string;
     const listed = getBalance(fen.pk);
-    assert(postRow(fenLadder)?.lendable === 1 && listed.liveOffers === 1 && listed.usableFloor === -100 && hasLiveOffer(fen.pk),
-        `Fen's only Offer is a Free ladder to lend: one live Offer, a credit line of 100 (${JSON.stringify({ live: listed.liveOffers, usable: listed.usableFloor })})`);
+    assert(postRow(fenLadder)?.lendable === 1 && listed.liveOffers === 1 && listed.usableFloor_c === hc(-100) && hasLiveOffer(fen.pk),
+        `Fen's only Offer is a Free ladder to lend: one live Offer, a credit line of 100 (${JSON.stringify({ live: listed.liveOffers, usable: listed.usableFloor_c })})`);
     const fenLoan = await lend(fen, cy, fenLadder);
     const lent = getBalance(fen.pk);
-    assert(postRow(fenLadder).status === 'pending' && postRow(fenLadder).accepted_by === cy.pk && lent.liveOffers === 1 && lent.usableFloor === -100 && hasLiveOffer(fen.pk),
-        `Cy borrows the ladder (asked, and Fen says yes): it is out, and still Fen's live Offer, so Fen keeps the line (${JSON.stringify({ live: lent.liveOffers, usable: lent.usableFloor })})`);
-    const hedge = (await offer(alice, { title: 'Hedge trimming', credits: 5 })).body?.post?.id as string;
+    assert(postRow(fenLadder).status === 'pending' && postRow(fenLadder).accepted_by === cy.pk && lent.liveOffers === 1 && lent.usableFloor_c === hc(-100) && hasLiveOffer(fen.pk),
+        `Cy borrows the ladder (asked, and Fen says yes): it is out, and still Fen's live Offer, so Fen keeps the line (${JSON.stringify({ live: lent.liveOffers, usable: lent.usableFloor_c })})`);
+    const hedge = (await offer(alice, { title: 'Hedge trimming', price_c: hc(5) })).body?.post?.id as string;
     const spent = await take(fen, hedge);
-    assert(spent.status === 200 && bal(fen.pk) === -5,
-        `while it is out, Fen spends within the line: 5 Beans held for Alice's hedge trimming (${brief(spent)}; balance ${bal(fen.pk)})`);
+    assert(spent.status === 200 && bal(fen.pk) === hc(-5),
+        `while it is out, Fen spends within the line: 5 Beans held for Alice's hedge trimming (${brief(spent)}; balance ${bal(fen.pk)} hundredths)`);
     ledgerAddsUp('a lender spending on credit while their only Offer is out');
     const fenBack = await returned(cy, fenLoan);
     assert(fenBack.status === 200 && backOnBoard(fenLadder) && getBalance(fen.pk).liveOffers === 1,
         `Cy returns it: back on the board, still one live Offer (${brief(fenBack)})`);
     await callOff(fen, spent.body?.transaction?.id);
     const bobLive = getBalance(bob.pk).liveOffers;
-    const bike = (await offer(bob, { title: 'Old bike', credits: 2 })).body?.post?.id as string;
+    const bike = (await offer(bob, { title: 'Old bike', price_c: hc(2) })).body?.post?.id as string;
     const bikeListed = getBalance(bob.pk).liveOffers;
     const bikeTaken = await take(cy, bike);
     assert(bikeListed === bobLive + 1 && bikeTaken.status === 200 && postRow(bike).status === 'pending' && getBalance(bob.pk).liveOffers === bobLive,
@@ -646,8 +651,8 @@ async function main(): Promise<void> {
     const hal = makeMember('Hal', 100);
     const ivy = makeMember('Ivy', 100);      // blocked by Gil
     const saw = (await offer(gil, { title: 'Hand saw', lendable: true })).body?.post?.id as string;
-    const poleSaw = (await offer(gil, { title: 'Pole saw', lendable: true, credits: 8 })).body?.post?.id as string;
-    const mower = (await offer(gil, { title: 'Lawn mower', lendable: true, credits: 6, priceType: 'daily', lendMaxDays: 5 })).body?.post?.id as string;
+    const poleSaw = (await offer(gil, { title: 'Pole saw', lendable: true, price_c: hc(8) })).body?.post?.id as string;
+    const mower = (await offer(gil, { title: 'Lawn mower', lendable: true, price_c: hc(6), priceType: 'daily', lendMaxDays: 5 })).body?.post?.id as string;
     const dealsOn = (postId: string): number => (db.prepare('SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ?').get(postId) as { n: number }).n;
     const escrows = (): number => (db.prepare("SELECT COUNT(*) AS n FROM accounts WHERE public_key LIKE 'escrow_%'").get() as { n: number }).n;
     const askFirst = (r: { status: number; body: any }) => r.status === 409 && r.body?.error === LEND_ASK_FIRST_ERROR && r.body?.code === LEND_ASK_FIRST_CODE;
@@ -676,14 +681,14 @@ async function main(): Promise<void> {
     const t14b = pushMark();
     const asked14 = await ask(hal, mower, 2);
     await settle();
-    assert(asked14.status === 200 && asked14.body.transaction.status === 'requested' && asked14.body.transaction.credits === 12 && bal(hal.pk) === b14.hal
+    assert(asked14.status === 200 && asked14.body.transaction.status === 'requested' && asked14.body.transaction.amount_c === hc(12) && bal(hal.pk) === b14.hal
         && toldSince(gil, t14b).filter(n => n.title === '📩 New Request').length === 1,
         `Hal asks to borrow the mower for 2 days: a request for 12 Beans, nothing held yet, and Gil is pushed (${brief(asked14)})`);
     const yes14 = await agree(gil, asked14.body.transaction.id);
-    assert(yes14.status === 200 && postRow(mower).status === 'pending' && postRow(mower).accepted_by === hal.pk && bal(hal.pk) === r4(b14.hal - 12),
+    assert(yes14.status === 200 && postRow(mower).status === 'pending' && postRow(mower).accepted_by === hal.pk && bal(hal.pk) === b14.hal - hc(12),
         `Gil says yes: the mower is out to Hal, and his 12 Beans are held (${brief(yes14)})`);
     const back14 = await returned(hal, asked14.body.transaction.id);
-    assert(back14.status === 200 && backOnBoard(mower) && bal(gil.pk) === r4(b14.gil + 12 - 0.18) && commons() === r4(b14.commons + 0.18),
+    assert(back14.status === 200 && backOnBoard(mower) && bal(gil.pk) === b14.gil + hc(12) - hc(0.18) && commons() === b14.commons + hc(0.18),
         `returned: Gil is paid 12 Beans less 1.5% to the Commons, and the mower is back on the board (${brief(back14)})`);
     ledgerAddsUp('a loan asked for and agreed');
 
@@ -706,11 +711,11 @@ async function main(): Promise<void> {
         `in her deals it waits as a request, and nothing she is answered or sent says she is blocked (${ivyRow?.status})`);
     await signed('/api/marketplace/transactions/cancel-request', ivy, { transactionId: ivyAsks.body.transaction.id, buyerPublicKey: ivy.pk });
 
-    const bread = (await offer(gil, { title: 'Sourdough loaf', credits: 4 })).body?.post?.id as string;
+    const bread = (await offer(gil, { title: 'Sourdough loaf', price_c: hc(4) })).body?.post?.id as string;
     const gilJobs = (db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND title = 'Gil odd jobs'").get(gil.pk) as { id: string }).id;
     const hb = bal(hal.pk);
     const breadTaken = await take(hal, bread);
-    assert(breadTaken.status === 200 && breadTaken.body.transaction.status === 'pending' && bal(hal.pk) === r4(hb - 4) && postRow(bread).status === 'pending',
+    assert(breadTaken.status === 200 && breadTaken.body.transaction.status === 'pending' && bal(hal.pk) === hb - hc(4) && postRow(bread).status === 'pending',
         `an ordinary one-off Offer is still taken in one step: 4 Beans held, the loaf off the board (${brief(breadTaken)})`);
     const jobsTaken = await take(hal, gilJobs);
     assert(jobsTaken.status === 200 && jobsTaken.body.transaction.status === 'pending' && postRow(gilJobs).status === 'active' && postRow(gilJobs).repeatable === 1,
@@ -733,15 +738,16 @@ async function main(): Promise<void> {
         for (const [position, draft] of STARTER_OFFERS[category].entries()) {
             const at = `${category}.${position + 1} ${draft.title}`;
             // The composer's price types are Total, / Hr, / Dy ...: a Free draft is a Total of 0 Beans, as the Tool shed's sheet makes it.
+            // The catalog's figure is Beans; the composer sends it as whole hundredths.
             const shown = draft.priceType === 'free' ? 'fixed' : draft.priceType;
             const figure = draft.priceType === 'free' ? 0 : (draft.guide ? pricingItemFor(DEFAULT_PRICING_CATALOG, category, draft.guide)?.priceBeans : undefined) ?? 5;
             const made = await offer(fay, {
-                title: draft.title, description: draft.description, category, credits: figure, priceType: shown, ...(draft.lendable ? { lendable: true } : {}),
+                title: draft.title, description: draft.description, category, price_c: hc(figure), priceType: shown, ...(draft.lendable ? { lendable: true } : {}),
             });
             const row = made.status === 200 ? postRow(made.body.post.id) : undefined;
             if (!row) unkept.push(`${at}: not posted (${brief(made)})`);
             else if (row.price_type !== shown) unkept.push(`${at}: the composer showed ${shown}, the node kept ${row.price_type}`);
-            else if (row.credits !== figure) unkept.push(`${at}: the composer showed ${figure} Beans, the node kept ${row.credits}`);
+            else if (row.price_c !== hc(figure)) unkept.push(`${at}: the composer showed ${figure} Beans, the node kept ${row.price_c} hundredths`);
             else if (row.lendable !== (draft.lendable ? 1 : 0)) unkept.push(`${at}: lendable is ${row.lendable}`);
             else { drafted++; if (row.lendable === 1) draftsLent++; }
         }

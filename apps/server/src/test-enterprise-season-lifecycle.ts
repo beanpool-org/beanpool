@@ -55,6 +55,12 @@ import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths
+ * at the door and `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -99,20 +105,25 @@ function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
-/** An admin's binding with the keeper's pledge of `amount` beside it: the pledge row is the backing every floor reads. */
+/** An admin's binding with the keeper's pledge of `amount` Beans beside it: the pledge row is the backing every floor reads. */
 function assignWithPledge(enterprise: string, keeper: string, grantedBy: string, amount: number) {
     adminAssignTreasuryOperator(enterprise, keeper, grantedBy);
     db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
-        .run(crypto.randomUUID(), keeper, enterprise, amount, new Date().toISOString());
+        .run(crypto.randomUUID(), keeper, enterprise, hc(amount), new Date().toISOString());
     clearEnterpriseFloorCache(db, enterprise);
 }
 
+/** The node's drift in hundredths: every balance and the Commons, which add up to exactly zero. */
 function verifyConservation(): number {
     const sumAccounts = (db.prepare(
         "SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
     ).get() as any).s;
-    return Math.abs(sumAccounts + getCommonsBalanceExact());
+    return sumAccounts + getCommonsBalanceExact();
 }
+
+/** Does `table` still have the column `column`? */
+const hasColumn = (table: string, column: string) =>
+    !!db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column);
 
 async function main() {
     console.log('Running enterprise wind-up and ledger tests (docs/the-commons.md §2.2)...\n');
@@ -127,16 +138,16 @@ async function main() {
     seedMember(ordinaryMember, 'CharlieCitizen');
 
     // Give Charlie some initial beans from genesis for trading tests
-    transfer('genesis', ordinaryMember, 500, 'Seed citizen funds');
+    transfer('genesis', ordinaryMember, hc(500), 'Seed citizen funds');
 
     // Create an enterprise "GreenFarm"
-    const { publicKey: farm } = createTreasury('GreenFarm', AVATAR, 200);
+    const { publicKey: farm } = createTreasury('GreenFarm', AVATAR, hc(200));
     assignWithPledge(farm, leadKeeper, 'admin', 200);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(farm, leadKeeper);
     assignWithPledge(farm, regKeeper, 'admin', 50);
 
     // Initial offer for covenant
-    createPost('offer', 'food', 'Fresh Kale', 'Crisp organic kale', 20, 'fixed', farm);
+    createPost('offer', 'food', 'Fresh Kale', 'Crisp organic kale', hc(20), 'fixed', farm);
 
     // ─────────────────────────────────────────────────────────────────────────
     // 1. WIND-UP AUTHORIZATION & INITIATION
@@ -165,8 +176,8 @@ async function main() {
 
     // Insolvent enterprise in deficit cannot initiate
     // Farm spends 50 into credit (floor is -200)
-    transfer(farm, ordinaryMember, 50, 'Spend into deficit', 'escrow');
-    assert(getBalance(farm).balance === -50, 'GreenFarm is in deficit (-50)');
+    transfer(farm, ordinaryMember, hc(50), 'Spend into deficit', 'escrow');
+    assert(getBalance(farm).balance_c === hc(-50), `GreenFarm is in deficit (-50) (${getBalance(farm).balance_c} hundredths)`);
     let deficitInitThrew = false;
     try {
         initiateWindUp(farm, leadKeeper);
@@ -177,8 +188,8 @@ async function main() {
     assert(deficitInitThrew, 'Insolvent enterprise in deficit cannot initiate wind-up');
 
     // Restore solvent balance: Genesis grants GreenFarm 150 beans
-    transfer('genesis', farm, 150, 'Solvent capital payment');
-    assert(getBalance(farm).balance === 100, 'GreenFarm restored to positive balance (100)');
+    transfer('genesis', farm, hc(150), 'Solvent capital payment');
+    assert(getBalance(farm).balance_c === hc(100), `GreenFarm restored to positive balance (100) (${getBalance(farm).balance_c} hundredths)`);
 
     // Lead keeper initiates wind-up
     const initRes = initiateWindUp(farm, leadKeeper);
@@ -198,7 +209,7 @@ async function main() {
     // While winding up: no new listings allowed
     let newOfferThrew = false;
     try {
-        createPost('offer', 'food', 'Carrots', 'Fresh carrots', 15, 'fixed', farm);
+        createPost('offer', 'food', 'Carrots', 'Fresh carrots', hc(15), 'fixed', farm);
     } catch (e: any) {
         newOfferThrew = true;
         assert(e.message.includes('Enterprise is winding up — no new listings allowed'), `New listing rejected: "${e.message}"`);
@@ -217,7 +228,7 @@ async function main() {
     assert(acceptWindingUpThrew, 'acceptPost blocked when author is winding up');
 
     // Ensure ordinaryMember has an active offer listed so they pass contribution requirement if buying
-    const memberOffer = createPost('offer', 'tools', 'Shovel', 'Sturdy shovel', 10, 'fixed', ordinaryMember);
+    const memberOffer = createPost('offer', 'tools', 'Shovel', 'Sturdy shovel', hc(10), 'fixed', ordinaryMember);
     let acceptBuyerWindingUpThrew = false;
     try {
         acceptPost(memberOffer!.id, farm);
@@ -282,7 +293,7 @@ async function main() {
     // Charlie requests kale offer while farm is active (or verify rejection while winding up)
     const existingOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND status = 'active'").get(farm) as any;
     // Give Charlie an active offer so he can trade
-    createPost('offer', 'tools', 'Wrench', 'Steel wrench', 10, 'fixed', ordinaryMember);
+    createPost('offer', 'tools', 'Wrench', 'Steel wrench', hc(10), 'fixed', ordinaryMember);
 
     // Verify requestPost is blocked while winding up
     let reqWindingUpThrew = false;
@@ -313,8 +324,8 @@ async function main() {
         const dummyReqId = 'tx-dummy-req-1';
         db.prepare(`
             INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, amount_c, created_at)
-            VALUES (?, ?, ?, ?, 'requested', 5, ?)
-        `).run(dummyReqId, existingOffer.id, ordinaryMember, farm, eightDaysAgo);
+            VALUES (?, ?, ?, ?, 'requested', ?, ?)
+        `).run(dummyReqId, existingOffer.id, ordinaryMember, farm, hc(5), eightDaysAgo);
         approvePostRequest(dummyReqId, farm, { authSigner: leadKeeper });
     } catch (e: any) {
         approveWindingUpThrew = true;
@@ -322,10 +333,11 @@ async function main() {
     }
     assert(approveWindingUpThrew, 'approvePostRequest blocked when author is winding up');
 
-    // Create an active backing pledge, set pause/legacy floor, and insert a pending wage claim to verify release/cleanup upon finalise
-    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
-    db.prepare("UPDATE members SET legacy_credit_floor = 200, paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot_c = -200 WHERE public_key = ?").run(eightDaysAgo, leadKeeper, farm);
-    db.prepare("INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run('dwc-farm-1', farm, leadKeeper, existingOffer.id, txDeal.id, 15, eightDaysAgo);
+    // Create an active backing pledge, set pause, and insert a pending wage claim to verify release/cleanup upon finalise.
+    // (No legacy line to set: members.legacy_credit_floor is gone, E29; an enterprise's line is its keepers' pledges only.)
+    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, hc(50), eightDaysAgo);
+    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot_c = ? WHERE public_key = ?").run(eightDaysAgo, leadKeeper, hc(-200), farm);
+    db.prepare("INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run('dwc-farm-1', farm, leadKeeper, existingOffer.id, txDeal.id, hc(15), eightDaysAgo);
 
     // Finalise blocked while open transaction exists
     let openEscrowFinaliseThrew = false;
@@ -343,23 +355,25 @@ async function main() {
 
     // Record pre-sweep Commons pool balance
     const commonsPre = getCommonsBalance();
-    const farmPreBal = getBalance(farm).balance;
-    assert(farmPreBal > 0, `GreenFarm holds ${farmPreBal} beans before final wind-up sweep`);
+    const farmPreBal = getBalance(farm).balance_c;
+    assert(farmPreBal > 0, `GreenFarm holds ${beansOf(farmPreBal)} beans before final wind-up sweep`);
 
     // Now finalise wind-up!
     const finalRes = finaliseWindUp(farm, leadKeeper);
     assert(finalRes.ok === true && finalRes.status === 'completed', 'Wind-up finalised successfully');
-    assert(finalRes.sweptAmount === farmPreBal, `Swept full remaining balance (${farmPreBal}) to Commons`);
+    // sweptAmount keeps its name and carries whole hundredths, as the balance does.
+    assert(finalRes.sweptAmount === farmPreBal, `Swept full remaining balance (${beansOf(farmPreBal)}) to Commons (${finalRes.sweptAmount} hundredths)`);
 
     const activePledgesPost = db.prepare("SELECT COUNT(*) as c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL").get(farm) as any;
     assert(activePledgesPost.c === 0, 'Active pledges released upon wind-up finalisation');
 
-    const mPost = db.prepare("SELECT legacy_credit_floor, paused, paused_at, paused_by, paused_floor_snapshot_c FROM members WHERE public_key = ?").get(farm) as any;
-    assert(mPost.legacy_credit_floor === null, 'legacy_credit_floor cleared upon wind-up finalisation');
+    const mPost = db.prepare("SELECT paused, paused_at, paused_by, paused_floor_snapshot_c FROM members WHERE public_key = ?").get(farm) as any;
+    // No legacy line survives a wind-up because there is none to keep: the column is gone (E29). The floor reads 0 below.
+    assert(!hasColumn('members', 'legacy_credit_floor'), 'no legacy line to clear upon wind-up finalisation: members.legacy_credit_floor is gone (E29)');
     assert(mPost.paused === 0, 'paused reset to 0 upon wind-up finalisation');
     assert(mPost.paused_at === null, 'paused_at cleared upon wind-up finalisation');
     assert(mPost.paused_by === null, 'paused_by cleared upon wind-up finalisation');
-    assert(mPost.paused_floor_snapshot === null, 'paused_floor_snapshot cleared upon wind-up finalisation');
+    assert(mPost.paused_floor_snapshot_c === null, `paused_floor_snapshot cleared upon wind-up finalisation (${mPost.paused_floor_snapshot_c})`);
 
     const pendingClaimsPost = db.prepare("SELECT COUNT(*) as c FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND status = 'pending'").get(farm) as any;
     assert(pendingClaimsPost.c === 0, 'Pending deferred wage claims cancelled upon wind-up finalisation');
@@ -369,12 +383,12 @@ async function main() {
 
     // Verify sweep landed in Commons pool
     const commonsPost = getCommonsBalance();
-    assert(Math.round((commonsPost - commonsPre) * 100) / 100 === farmPreBal, `Commons pool received exactly swept amount (${farmPreBal})`);
-    assert(getBalance(farm).balance === 0, 'GreenFarm balance is now 0');
+    assert(commonsPost - commonsPre === farmPreBal, `Commons pool received exactly swept amount (${beansOf(farmPreBal)}) (Δ ${commonsPost - commonsPre} hundredths)`);
+    assert(getBalance(farm).balance_c === 0, 'GreenFarm balance is now 0');
 
     // Conservation check: SUM(balances) == 0
     const drift = verifyConservation();
-    assert(drift < 1e-6, `Ledger conservation strictly preserved (drift = ${drift})`);
+    assert(drift === 0, `Ledger conservation strictly preserved (drift = ${drift} hundredths)`);
 
     // Verify keepers released
     const remainingOps = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(farm) as any;
@@ -384,19 +398,19 @@ async function main() {
     createTreasury('BackingTestCoop', AVATAR, 0);
     const coopPubkey = (db.prepare("SELECT public_key FROM members WHERE callsign = 'BackingTestCoop'").get() as any).public_key;
     assignWithPledge(coopPubkey, regKeeper, 'keeper', 100);
-    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === -100, 'Operator backing is active for active keeper');
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === hc(-100), `Operator backing is active for active keeper (${getEnterpriseUnderlyingFloor(coopPubkey).floor})`);
     // Freeze credit of regKeeper
     db.prepare("UPDATE members SET credit_frozen = 1 WHERE public_key = ?").run(regKeeper);
     assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === 0, 'Operator backing excluded when keeper is credit_frozen');
     db.prepare("UPDATE members SET credit_frozen = 0, status = 'suspended' WHERE public_key = ?").run(regKeeper);
     assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === 0, 'Operator backing excluded when keeper is suspended');
     db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(regKeeper);
-    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === -100, 'Operator backing restored when keeper returns to active');
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === hc(-100), `Operator backing restored when keeper returns to active (${getEnterpriseUnderlyingFloor(coopPubkey).floor})`);
 
     // Verify name stays reserved
     let duplicateNameThrew = false;
     try {
-        createTreasury('GreenFarm', AVATAR, 100);
+        createTreasury('GreenFarm', AVATAR, hc(100));
     } catch (e: any) {
         duplicateNameThrew = true;
         assert(e.message.includes('That name is already taken'), `Duplicate name rejected: "${e.message}"`);
@@ -411,7 +425,7 @@ async function main() {
     // Cannot create posts
     let woundUpPostThrew = false;
     try {
-        createPost('offer', 'goods', 'Old Tools', 'Rakes', 10, 'fixed', farm);
+        createPost('offer', 'goods', 'Old Tools', 'Rakes', hc(10), 'fixed', farm);
     } catch (e: any) {
         woundUpPostThrew = true;
     }
@@ -420,7 +434,7 @@ async function main() {
     // Cannot be paid (transfer in blocked)
     let woundUpTransferInThrew = false;
     try {
-        transfer(ordinaryMember, farm, 25, 'Payment to closed enterprise');
+        transfer(ordinaryMember, farm, hc(25), 'Payment to closed enterprise');
     } catch (e: any) {
         woundUpTransferInThrew = true;
         assert(e.message.includes('Enterprise has wound up — account closed'), `Transfer in rejected: "${e.message}"`);
@@ -430,7 +444,7 @@ async function main() {
     // Cannot spend (transfer out blocked)
     let woundUpTransferOutThrew = false;
     try {
-        transfer(farm, ordinaryMember, 10, 'Spend from closed enterprise');
+        transfer(farm, ordinaryMember, hc(10), 'Spend from closed enterprise');
     } catch (e: any) {
         woundUpTransferOutThrew = true;
         assert(e.message.includes('Enterprise has wound up — account closed'), `Transfer out rejected: "${e.message}"`);
@@ -463,15 +477,15 @@ async function main() {
     console.log('── Step 5: Read-only accountability ledger ──');
 
     // Create active enterprise "SolarBakery" to test P&L transactions
-    const { publicKey: bakery } = createTreasury('SolarBakery', AVATAR, 100);
+    const { publicKey: bakery } = createTreasury('SolarBakery', AVATAR, hc(100));
     assignWithPledge(bakery, leadKeeper, 'admin', 100);
 
     // Initial funding transfer (150 beans)
-    transfer('genesis', bakery, 150, 'Startup capital grant');
+    transfer('genesis', bakery, hc(150), 'Startup capital grant');
     // Sale income (Charlie buys bread for 40 beans)
-    transfer(ordinaryMember, bakery, 40, 'Bought 4 sourdough loaves', 'escrow');
+    transfer(ordinaryMember, bakery, hc(40), 'Bought 4 sourdough loaves', 'escrow');
     // Spend input (Bakery buys flour from Charlie for 25 beans)
-    transfer(bakery, ordinaryMember, 25, 'Flour supply purchase', 'escrow');
+    transfer(bakery, ordinaryMember, hc(25), 'Flour supply purchase', 'escrow');
 
     // Fetch full ledger
     const ledger = getEnterpriseLedger(bakery);
@@ -483,27 +497,33 @@ async function main() {
     const genesisEntry = ledger.entries.find(e => e.memo.includes('Startup capital'));
     assert(genesisEntry?.counterpartyName === 'Genesis', `Genesis counterparty resolved: "${genesisEntry?.counterpartyName}"`);
 
-    const saleEntry = ledger.entries.find(e => e.direction === 'income' && e.amount === 40);
+    const saleEntry = ledger.entries.find(e => e.direction === 'income' && e.amount_c === hc(40));
     assert(saleEntry?.counterpartyName === 'CharlieCitizen', `Customer counterparty resolved to callsign: "${saleEntry?.counterpartyName}"`);
-    assert(saleEntry?.fee === 0.6, `Marketplace fee recorded (40 * 1.5% = 0.6)`);
-    assert(saleEntry?.netAmount === 39.4, `Net amount recorded (40 - 0.6 = 39.4)`);
+    assert(saleEntry?.fee_c === hc(0.6), `Marketplace fee recorded (40 * 1.5% = 0.6) (${saleEntry?.fee_c} hundredths)`);
+    // netAmount keeps its name and carries whole hundredths.
+    assert(saleEntry?.netAmount === hc(39.4), `Net amount recorded (40 - 0.6 = 39.4) (${saleEntry?.netAmount} hundredths)`);
 
-    const spendEntry = ledger.entries.find(e => e.direction === 'spend' && e.amount === 25);
+    const spendEntry = ledger.entries.find(e => e.direction === 'spend' && e.amount_c === hc(25));
     assert(spendEntry?.counterpartyName === 'CharlieCitizen', `Supplier counterparty resolved to callsign: "${spendEntry?.counterpartyName}"`);
 
-    // Verify summary totals
+    // Verify summary totals (the summary's figures keep their names and carry whole hundredths)
     assert(ledger.summary.transactionCount === 3, 'Summary transaction count is 3');
-    assert(ledger.summary.totalIncome === 190, `Total gross income is 190 (150 + 40, got ${ledger.summary.totalIncome})`);
-    assert(ledger.summary.totalSpend === 25, `Total gross spend is 25 (got ${ledger.summary.totalSpend})`);
+    assert(ledger.summary.totalIncome === hc(190), `Total gross income is 190 (150 + 40, got ${ledger.summary.totalIncome} hundredths)`);
+    assert(ledger.summary.totalSpend === hc(25), `Total gross spend is 25 (got ${ledger.summary.totalSpend} hundredths)`);
     assert(ledger.summary.startingBalance === 0, 'Starting balance is 0');
-    assert(ledger.summary.endingBalance === getBalance(bakery).balance, `Ending balance matches current balance (${getBalance(bakery).balance})`);
-    assert(Math.round((ledger.summary.startingBalance + ledger.summary.netChange) * 100) / 100 === ledger.summary.endingBalance, `Summary accounting invariant holds: starting (${ledger.summary.startingBalance}) + netChange (${ledger.summary.netChange}) === ending (${ledger.summary.endingBalance})`);
+    assert(ledger.summary.endingBalance === getBalance(bakery).balance_c, `Ending balance matches current balance (${getBalance(bakery).balance_c} hundredths)`);
+    assert(ledger.summary.startingBalance + ledger.summary.netChange === ledger.summary.endingBalance, `Summary accounting invariant holds: starting (${ledger.summary.startingBalance}) + netChange (${ledger.summary.netChange}) === ending (${ledger.summary.endingBalance})`);
 
-    // Verify getEnterpriseUnderlyingFloor with legacy floor and pledges
-    const { publicKey: eggsTestEnt } = createTreasury('EggsTestLifecycle', AVATAR, 0);
-    db.prepare("UPDATE members SET legacy_credit_floor = 200, earned_credit_c = 0 WHERE public_key = ?").run(eggsTestEnt);
-    const uFloorWithLegacy = getEnterpriseUnderlyingFloor(eggsTestEnt);
-    assert(uFloorWithLegacy.floor === -200, `getEnterpriseUnderlyingFloor accounts for legacy_credit_floor (-200, got ${uFloorWithLegacy.floor})`);
+    // Verify getEnterpriseUnderlyingFloor reads the keepers' pledges only: an opening line of 200 (createTreasury writes it
+    // as the enterprise's own earned_credit_c) is no line at all now (the legacy floor is gone, E29) and never stacks on pledges.
+    const { publicKey: eggsTestEnt } = createTreasury('EggsTestLifecycle', AVATAR, hc(200));
+    const eggsLine = (db.prepare('SELECT earned_credit_c AS e FROM members WHERE public_key = ?').get(eggsTestEnt) as { e: number }).e;
+    const uFloorLineOnly = getEnterpriseUnderlyingFloor(eggsTestEnt);
+    assert(eggsLine === hc(200) && uFloorLineOnly.floor === 0 && uFloorLineOnly.hasBacking === false,
+        `getEnterpriseUnderlyingFloor gives an opening line of 200 and no pledges no floor (0, got ${uFloorLineOnly.floor}; its own earned_credit_c ${eggsLine})`);
+    assignWithPledge(eggsTestEnt, regKeeper, 'admin', 100);
+    assert(getEnterpriseUnderlyingFloor(eggsTestEnt).floor === hc(-100),
+        `with a keeper's pledge of 100 beside the 200 line it reads -100, the pledge, never -300 (got ${getEnterpriseUnderlyingFloor(eggsTestEnt).floor})`);
 
     // Test period filtering with `since`
     // Set tx1 timestamp to 1 hour ago so since filtering is unambiguous across millisecond execution
@@ -513,7 +533,7 @@ async function main() {
     const tx2Time = ledger.entries[1].timestamp;
     const periodLedger = getEnterpriseLedger(bakery, { since: tx2Time });
     assert(periodLedger.entries.length === 2, `Period ledger filtered to 2 transactions (got ${periodLedger.entries.length})`);
-    assert(periodLedger.summary.startingBalance === 150, `Period starting balance is 150 (got ${periodLedger.summary.startingBalance})`);
+    assert(periodLedger.summary.startingBalance === hc(150), `Period starting balance is 150 (got ${periodLedger.summary.startingBalance} hundredths)`);
     // ─────────────────────────────────────────────────────────────────────────
     // 6. HTTP ROUTE LEVEL VERIFICATION
     // ─────────────────────────────────────────────────────────────────────────
@@ -525,13 +545,13 @@ async function main() {
     const httpKeeper = makeIdentity('HTTPKeeper');
     const httpOutsider = makeIdentity('HTTPOutsider');
 
-    const { publicKey: cafe } = createTreasury('CommunityCafe', AVATAR, 100);
+    const { publicKey: cafe } = createTreasury('CommunityCafe', AVATAR, hc(100));
     assignWithPledge(cafe, httpLead.pubKeyHex, 'admin', 100);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(cafe, httpLead.pubKeyHex);
     assignWithPledge(cafe, httpKeeper.pubKeyHex, 'admin', 50);
 
     // Initial funding to cafe
-    transfer('genesis', cafe, 80, 'Cafe initial capital');
+    transfer('genesis', cafe, hc(80), 'Cafe initial capital');
 
     // 1. Outsider cannot pause
     const outsiderPause = await signedFetch('POST', `/api/treasury/${cafe}/pause`, httpOutsider);
@@ -566,7 +586,7 @@ async function main() {
     const outsiderLedger = await signedFetch('GET', `/api/treasury/${cafe}/ledger`, httpOutsider);
     assert(outsiderLedger.status === 200, 'HTTP: Ordinary member can read accountability ledger (200)');
     assert(outsiderLedger.body?.enterprise?.name === 'CommunityCafe', 'HTTP: Ledger returned enterprise details');
-    assert(outsiderLedger.body?.summary?.totalIncome === 80, 'HTTP: Ledger summary totalIncome is 80');
+    assert(outsiderLedger.body?.summary?.totalIncome === hc(80), `HTTP: Ledger summary totalIncome is 80 (${outsiderLedger.body?.summary?.totalIncome} hundredths)`);
     assert(Array.isArray(outsiderLedger.body?.entries), 'HTTP: Ledger entries is an array');
 
     console.log(`\nAll ${passed}/${run} enterprise season lifecycle assertions passed!`);

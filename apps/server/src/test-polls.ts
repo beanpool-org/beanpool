@@ -133,7 +133,8 @@ async function main() {
     assert(errThrew, 'Threw error for credit-frozen creator');
 
     console.log('\n--- 2. Successful Creation & Isolation Invariants ---');
-    const poll1 = createPost('poll', 'tools', 'Community Timber Workshop on Sunday?', 'Should we open the workshop?', 50, 'hourly', 'pub-alice', 12.34, 56.78, ['data:image/jpeg;base64,...'], true, undefined, true, {
+    // Asked for at 50 Beans an hour (5000 hundredths): a poll takes no price, whatever it is sent.
+    const poll1 = createPost('poll', 'tools', 'Community Timber Workshop on Sunday?', 'Should we open the workshop?', 5000, 'hourly', 'pub-alice', 12.34, 56.78, ['data:image/jpeg;base64,...'], true, undefined, true, {
         pollOptions: [
             { id: 'opt_yes', text: 'Yes, definitely' },
             { id: 'opt_no', text: 'No, busy' }
@@ -146,7 +147,7 @@ async function main() {
     assert(poll1 !== null, 'Poll created successfully');
     assert(poll1!.type === 'poll', 'Post type is poll');
     assert(poll1!.category === 'community', 'Category forced to community (cannot pose as tools)');
-    assert(poll1!.credits === 0, 'Credits forced to 0');
+    assert(poll1!.price_c === 0, 'Price forced to 0');
     assert(poll1!.lat === null || poll1!.lat === undefined, 'Lat is null to prevent map pin drop');
     assert(poll1!.lng === null || poll1!.lng === undefined, 'Lng is null to prevent map pin drop');
     assert(poll1!.photos === undefined || poll1!.photos.length === 0, 'Photos forced empty');
@@ -162,7 +163,7 @@ async function main() {
     // Need covenant check: Alice cannot post a Need without an Offer
     errThrew = false;
     try {
-        createPost('need', 'tools', 'Need Chainsaw', 'Need for clearing', 10, 'fixed', 'pub-alice');
+        createPost('need', 'tools', 'Need Chainsaw', 'Need for clearing', 1000, 'fixed', 'pub-alice');
     } catch (e: any) {
         errThrew = true;
     }
@@ -537,7 +538,7 @@ async function main() {
             : null;
         replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits, rp.authorPublicKey, rp.createdAt,
+            rp.id, rp.type, rp.category, rp.title, rp.description, rp.price_c, rp.authorPublicKey, rp.createdAt,
             rp.active ? 1 : 0, rp.status, rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null, rp.originNode || 'node',
             rp.priceType || 'fixed', rp.acceptedBy || null, rp.acceptedAt || null, rp.pendingTransactionId || null,
             rp.completedAt || null, rp.updatedAt || rp.createdAt, pollOptionsJson, rp.pollClosesAt || null, rp.pollOpenVote === true ? 1 : 0

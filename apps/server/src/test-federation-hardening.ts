@@ -44,6 +44,8 @@ function assert(cond: boolean, msg: string): void {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const keyOf = () => crypto.randomBytes(32).toString('hex');
+/** The story's figures are Beans; the node's, the wire's and the caps are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 v8.setFlagsFromString('--expose-gc');
 const gc = vm.runInNewContext('gc') as () => void;
@@ -173,7 +175,7 @@ async function main(): Promise<void> {
             `relay_message is refused and nothing is stored (got ${JSON.stringify(r)}, lines ${linesBy(rita)})`);
         const listings = await ask(A, { action: 'list_listings' });
         assert(isOff(listings) && listings.listings === undefined, `list_listings is refused (got ${JSON.stringify(listings)})`);
-        const buy = await ask(A, { action: 'settle_purchase', key: 'k-off', buyerPublicKey: rita, sellerPublicKey: sam, amount: 1 });
+        const buy = await ask(A, { action: 'settle_purchase', key: 'k-off', buyerPublicKey: rita, sellerPublicKey: sam, amount_c: hc(1) });
         const settlementRows = (db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE key = 'k-off'").get() as { n: number }).n;
         assert(isOff(buy) && settlementRows === 0, `settle_purchase is refused, no settlement row (got ${JSON.stringify(buy)})`);
         const status = await ask(A, { action: 'settle_receipt_status', key: 'k-none' });
@@ -261,10 +263,11 @@ async function main(): Promise<void> {
 
     // ── M3 ──────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n=== M3: a cross-node buyer\'s home is the asking peer\'s ===\n');
-    cm.setConnectorCreditCap(ADDR_A, 100);
-    cm.setConnectorCreditCap(ADDR_B, 100);
+    cm.setConnectorCreditCap(ADDR_A, hc(100));
+    cm.setConnectorCreditCap(ADDR_B, hc(100));
+    /** A purchase of `amount` Beans asked for by `peerId`, carried as whole hundredths. */
     const buy = (key: string, peerId: string, buyer: string, amount: number, buyerHomeNode: string | null = null) =>
-        handlePurchaseRequest({ key, peerId, buyerPublicKey: buyer, buyerCallsign: 'Buyer', buyerHomeNode, sellerPublicKey: sam, postId: null, amount });
+        handlePurchaseRequest({ key, peerId, buyerPublicKey: buyer, buyerCallsign: 'Buyer', buyerHomeNode, sellerPublicKey: sam, postId: null, amount_c: hc(amount) });
     const settledHome = (key: string) => (db.prepare('SELECT buyer_home_node FROM settlements WHERE key = ?').get(key) as any)?.buyer_home_node ?? null;
     const aliceViaA = buy('m3-alice', A, alice, 1, HOME_B);
     assert(aliceViaA.accepted === true && homeOf(alice) === HOME_B && settledHome('m3-alice') === HOME_A,
@@ -281,7 +284,7 @@ async function main(): Promise<void> {
     // Ada: one key, a member of B and of A (apps/native/utils/join-another-community.ts keeps the key on every node).
     // This node learned her from B's board.
     const ada = keyOf();
-    const board = cacheRemoteListings(B, HOME_B, [{ id: 'ada-piano', type: 'offer', title: 'Piano lessons', credits: 6, authorPublicKey: ada, authorCallsign: 'Ada' }]);
+    const board = cacheRemoteListings(B, HOME_B, [{ id: 'ada-piano', type: 'offer', title: 'Piano lessons', price_c: hc(6), authorPublicKey: ada, authorCallsign: 'Ada' }]);
     assert(board.cached === 1 && homeOf(ada) === HOME_B, `setup: Ada's row here says home B, from B's board (got ${JSON.stringify(board)}, ${homeOf(ada)})`);
     const adaLinesBefore = linesBy(ada);
     const adaViaA = await relay(A, ada);
@@ -298,7 +301,7 @@ async function main(): Promise<void> {
     const ADDR_C = `/ip4/127.0.0.4/tcp/4001/p2p/${C}`;
     const HOME_C = 'https://203-0-113-7.example', HOME_C_NAMED = 'https://c.example';
     cm.addConnector(ADDR_C, 'peer', 'Peer C', HOME_C);
-    cm.setConnectorCreditCap(ADDR_C, 100);
+    cm.setConnectorCreditCap(ADDR_C, hc(100));
     const yara = keyOf();
     const yaraFirst = await relay(C, yara, { senderNodeUrl: HOME_C });   // as C's node sends it (main took the payload's)
     assert(yaraFirst?.success === true && homeOf(yara) === HOME_C, `setup: Yara, a member of C, writes; her home is C's first URL (got ${homeOf(yara)})`);

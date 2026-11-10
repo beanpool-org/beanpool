@@ -206,11 +206,11 @@ async function runTests() {
     section('A. Happy path: ask, the admin types the number on the phone, the node binds that phone, the phone is told bound');
     {
         const mia = join('MiaMember');
-        // Seven Beans she holds, from a trade with Ada (a conserving pair of rows, read into the ledger).
-        db.prepare('UPDATE accounts SET balance_c = 7 WHERE public_key = ?').run(mia.pubKeyHex);
-        db.prepare('UPDATE accounts SET balance_c = -7 WHERE public_key = ?').run(admin.pubKeyHex);
+        // Seven Beans she holds (700 hundredths), from a trade with Ada (a conserving pair of rows, read into the ledger).
+        db.prepare('UPDATE accounts SET balance_c = 700 WHERE public_key = ?').run(mia.pubKeyHex);
+        db.prepare('UPDATE accounts SET balance_c = -700 WHERE public_key = ?').run(admin.pubKeyHex);
         reconcileLedgerFromDb();
-        const before = getBalance(mia.pubKeyHex).balance;
+        const before = getBalance(mia.pubKeyHex).balance_c;
         const code = (await issue(adminSession, mia.pubKeyHex)).json.code as string;
         assert(/^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code), `the admin makes a code (${code})`);
         const phone = makeKeypair();
@@ -230,7 +230,7 @@ async function runTests() {
         const p1 = await poll(phone, code);
         assert(p1.status === 200 && p1.json.state === 'bound' && p1.json.callsign === 'MiaMember' && p1.json.linkSignInAgain === false,
             `the phone's poll says bound with the member's name, and nothing about a sign-in she never linked (got ${JSON.stringify(p1.json)})`);
-        assert(before === 7 && getBalance(phone.pubKeyHex).balance === before && !isMember(mia.pubKeyHex), `the balance moved to the new key (${before} → ${getBalance(phone.pubKeyHex).balance} Beans)`);
+        assert(before === 700 && getBalance(phone.pubKeyHex).balance_c === before && !isMember(mia.pubKeyHex), `the balance moved to the new key (${before} → ${getBalance(phone.pubKeyHex).balance_c} hundredths)`);
         const me = await signedReq(phone, 'GET', '/api/community/me');
         assert(me.status === 200, `the new key reads its own account (got ${me.status})`);
         const old = await signedReq(mia, 'GET', '/api/community/me');

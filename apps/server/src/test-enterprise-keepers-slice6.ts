@@ -43,6 +43,8 @@ import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -64,17 +66,24 @@ function hasBinding(treasury: string, member: string): boolean {
     return !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(treasury, member);
 }
 
+/**
+ * Trades that give `pubkey` exactly `targetEarned` Beans of earned credit. The trust curve runs in whole hundredths:
+ * earned_c = floor(192000 × V / (V + 500000)), V the trade value in hundredths (CREDIT_MAX_EARNED 1920 Beans, TRUST_CURVE_K
+ * 5000 Beans). The least V that reaches the target gives the target exactly: the curve climbs less than a hundredth per
+ * hundredth of value. One trade of at most 400 Beans per peer, under the 500-Bean per-partner cap.
+ */
 function giveEarnedCredit(pubkey: string, targetEarned: number) {
     if (targetEarned <= 0) return;
-    let vNeeded = Math.ceil((5000 * targetEarned) / (1920 - targetEarned));
+    const target = hc(targetEarned);
+    let vNeeded = Math.ceil((500000 * target) / (192000 - target));
     let peerIndex = 0;
     while (vNeeded > 0) {
-        const tradeAmount = Math.min(vNeeded, 400);
+        const tradeAmount = Math.min(vNeeded, hc(400));
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
         const now = new Date().toISOString();
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, now);
         setMemberPhoto(db, peerKey, 'avatar');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(peerKey, hc(1000));
         const pid = `post-ec-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
@@ -91,7 +100,7 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
         VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, callsign, now, now);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, hc(1000));
     if (earnedCredit > 0) {
         giveEarnedCredit(pubKeyHex, earnedCredit);
     }
@@ -160,7 +169,7 @@ async function main() {
 
     let completedThrew = false;
     try {
-        requestToJoinEnterprise(woundUpEnt, applicant1.pubKeyHex, 10);
+        requestToJoinEnterprise(woundUpEnt, applicant1.pubKeyHex, hc(10));
     } catch (e: any) {
         completedThrew = true;
         assert(e.message.includes('Completed enterprise accepts no requests'), 'Completed enterprise rejects join requests');
@@ -175,7 +184,7 @@ async function main() {
     // 1.3 No two pending requests from one member for one enterprise
     let dupThrew = false;
     try {
-        requestToJoinEnterprise(ent1, applicant1.pubKeyHex, 10);
+        requestToJoinEnterprise(ent1, applicant1.pubKeyHex, hc(10));
     } catch (e: any) {
         dupThrew = true;
         assert(e.message.includes('pending request already exists'), 'Duplicate pending request rejected');
@@ -212,13 +221,14 @@ async function main() {
     assert(!noPledgeRow, 'No row in enterprise_pledges for declined applicant');
 
     // 1.6 Request + approve creates the keeper with the pledged backing
-    assert(getAvailableBacking(applicant1.pubKeyHex) === 80, 'Applicant1 has 80 available to back');
-    const backedReq = requestToJoinEnterprise(ent1, applicant1.pubKeyHex, 50);
-    assert(backedReq.pledgedBacking === 50, 'Request created with 50 backing');
+    assert(getAvailableBacking(applicant1.pubKeyHex) === hc(80), `Applicant1 has 80 available to back (${getAvailableBacking(applicant1.pubKeyHex)} hundredths)`);
+    const backedReq = requestToJoinEnterprise(ent1, applicant1.pubKeyHex, hc(50));
+    // pledgedBacking keeps its name on the request and carries whole hundredths (pledged_backing_c).
+    assert(backedReq.pledgedBacking === hc(50), `Request created with 50 backing (${backedReq.pledgedBacking} hundredths)`);
 
     const approveRes = approveKeeperRequest(backedReq.id, lead1.pubKeyHex);
     assert(approveRes.ok === true, 'Approval succeeded');
-    assert(approveRes.backing === 50, 'Approved backing is 50');
+    assert(approveRes.backing_c === hc(50), `Approved backing is 50 (${approveRes.backing_c} hundredths)`);
     // Answer A (2026-09-19): with another keeper, the lead's approval opens a 3-day objection window.
     assert(approveRes.applied === false && approveRes.change?.kind === 'add', 'Approval in a two-keeper enterprise waits out the objection window');
     assert(!hasBinding(ent1, applicant1.pubKeyHex), 'Applicant is not a keeper while the window is open');
@@ -228,27 +238,27 @@ async function main() {
     const opRow = db.prepare("SELECT * FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(ent1, applicant1.pubKeyHex) as any;
     assert(!!opRow, 'Applicant is now in treasury_operators');
     assert(opRow.role === 'keeper', 'Role is keeper');
-    assert(opRow.backing === 50, 'Operator backing is 50');
+    assert(opRow.backing_c === hc(50), `Operator backing is 50 (${opRow.backing_c} hundredths)`);
 
     // Verify enterprise_pledges row
     const pledges = getEnterprisePledges(ent1);
     const applicantPledge = pledges.find(p => p.keeper === applicant1.pubKeyHex);
     assert(!!applicantPledge, 'Pledge found in enterprise_pledges');
-    assert(applicantPledge?.amount === 50, 'Pledged amount is 50 in enterprise_pledges');
+    assert(applicantPledge?.amount_c === hc(50), `Pledged amount is 50 in enterprise_pledges (${applicantPledge?.amount_c} hundredths)`);
 
     // Verify enterprise floor updated
     const entFloor = getEnterpriseFloor(ent1);
-    assert(entFloor.derivedAllowance === 50, 'Enterprise derived allowance is 50');
-    assert(entFloor.floor === -50, 'Enterprise floor is -50');
+    assert(entFloor.derivedAllowance === hc(50), `Enterprise derived allowance is 50 (${entFloor.derivedAllowance} hundredths)`);
+    assert(entFloor.floor === hc(-50), `Enterprise floor is -50 (${entFloor.floor} hundredths)`);
 
     // Verify applicant available backing decreased across all enterprises
-    assert(getAvailableBacking(applicant1.pubKeyHex) === 30, 'Applicant1 available backing reduced from 80 to 30');
+    assert(getAvailableBacking(applicant1.pubKeyHex) === hc(30), `Applicant1 available backing reduced from 80 to 30 (${getAvailableBacking(applicant1.pubKeyHex)} hundredths)`);
 
     // 1.7 Server-side re-validation at approval: pledge valid at request but exceeds available_to_back at approval is rejected
     const applicant2 = makeIdentity('Applicant2', 40);
-    assert(getAvailableBacking(applicant2.pubKeyHex) === 40, 'Applicant2 has 40 available to back');
+    assert(getAvailableBacking(applicant2.pubKeyHex) === hc(40), `Applicant2 has 40 available to back (${getAvailableBacking(applicant2.pubKeyHex)} hundredths)`);
 
-    const reqValidAtStart = requestToJoinEnterprise(ent1, applicant2.pubKeyHex, 40);
+    const reqValidAtStart = requestToJoinEnterprise(ent1, applicant2.pubKeyHex, hc(40));
     assert(reqValidAtStart.status === 'pending', 'Request with 40 was valid at request time');
 
     // Now applicant2 pledges 30 to another enterprise, so available_to_back drops to 10
@@ -258,9 +268,9 @@ async function main() {
     db.prepare(`
         INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
         VALUES (?, ?, ?, ?, ?, NULL)
-    `).run(crypto.randomUUID(), applicant2.pubKeyHex, entOther, 30, new Date().toISOString());
+    `).run(crypto.randomUUID(), applicant2.pubKeyHex, entOther, hc(30), new Date().toISOString());
 
-    assert(getAvailableBacking(applicant2.pubKeyHex) === 10, 'Applicant2 available to back is now 10 (less than 40)');
+    assert(getAvailableBacking(applicant2.pubKeyHex) === hc(10), `Applicant2 available to back is now 10 (less than 40) (${getAvailableBacking(applicant2.pubKeyHex)} hundredths)`);
 
     let approveOverpledgeThrew = false;
     try {
@@ -283,10 +293,10 @@ async function main() {
     assert(isLeadOrSoleKeeperOrAdmin(soleEnt, soleKeeper.pubKeyHex) === true, 'Sole keeper is recognized as lead authority');
 
     const applicant3 = makeIdentity('Applicant3', 50);
-    const soleReq = requestToJoinEnterprise(soleEnt, applicant3.pubKeyHex, 20);
+    const soleReq = requestToJoinEnterprise(soleEnt, applicant3.pubKeyHex, hc(20));
     const soleApproveRes = approveKeeperRequest(soleReq.id, soleKeeper.pubKeyHex);
     assert(soleApproveRes.ok === true, 'Sole keeper successfully approved join request');
-    assert(soleApproveRes.backing === 20, 'Backing recorded');
+    assert(soleApproveRes.backing_c === hc(20), `Backing recorded (${soleApproveRes.backing_c} hundredths)`);
     assert(soleApproveRes.applied === true && hasBinding(soleEnt, applicant3.pubKeyHex), 'A: a one-keeper enterprise binds the applicant at once');
 
     // 1.9 Suspended or frozen applicant cannot request to join or be approved
@@ -313,7 +323,7 @@ async function main() {
     assert(frozenReqThrew, 'Frozen member join request threw');
 
     const toSuspendApplicant = makeIdentity('ToSuspendApplicant', 50);
-    const suspendReq = requestToJoinEnterprise(ent1, toSuspendApplicant.pubKeyHex, 10);
+    const suspendReq = requestToJoinEnterprise(ent1, toSuspendApplicant.pubKeyHex, hc(10));
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(toSuspendApplicant.pubKeyHex);
     let approveSuspendedThrew = false;
     try {
@@ -335,7 +345,7 @@ async function main() {
 
     const opLaterSuspended = makeIdentity('OpLaterSuspended', 50);
     adminAssignTreasuryOperator(b3HomeEnt, opLaterSuspended.pubKeyHex, 'admin');
-    const b3Req = requestToJoinEnterprise(ent1, opLaterSuspended.pubKeyHex, 10);
+    const b3Req = requestToJoinEnterprise(ent1, opLaterSuspended.pubKeyHex, hc(10));
     adminSetOperator(opLaterSuspended.pubKeyHex, false);
     expectThrow(() => approveKeeperRequest(b3Req.id, lead1.pubKeyHex),
         'operator access is switched off', 'B3: lead cannot approve a request from a member suspended after asking');
@@ -438,12 +448,12 @@ async function main() {
     const oldLead = makeIdentity('OldLead', 100);
     adminAssignTreasuryOperator(succEnt, oldLead.pubKeyHex, 'admin');
     // The figure they joined with (bindApprovedKeeper writes it beside the pledge rows), as when they joined pledging 30.
-    db.prepare("UPDATE treasury_operators SET role = 'lead', backing_c = 30 WHERE treasury_pubkey = ? AND member_pubkey = ?").run(succEnt, oldLead.pubKeyHex);
+    db.prepare("UPDATE treasury_operators SET role = 'lead', backing_c = ? WHERE treasury_pubkey = ? AND member_pubkey = ?").run(hc(30), succEnt, oldLead.pubKeyHex);
     // Add backing pledge for oldLead
     db.prepare(`
         INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
-        VALUES (?, ?, ?, 30, ?, NULL)
-    `).run(crypto.randomUUID(), oldLead.pubKeyHex, succEnt, new Date().toISOString());
+        VALUES (?, ?, ?, ?, ?, NULL)
+    `).run(crypto.randomUUID(), oldLead.pubKeyHex, succEnt, hc(30), new Date().toISOString());
 
     const candKeeper = makeIdentity('CandKeeper', 60);
     adminAssignTreasuryOperator(succEnt, candKeeper.pubKeyHex, 'admin');
@@ -538,10 +548,10 @@ async function main() {
     // 2.5 Verify old lead becomes ordinary keeper AND keeps their backing
     const updatedOldLead = db.prepare("SELECT role, backing_c FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(succEnt, oldLead.pubKeyHex) as any;
     assert(updatedOldLead.role === 'keeper', 'Old lead role is now ordinary keeper');
-    assert(updatedOldLead.backing === 30, 'Old lead keeps backing amount in treasury_operators');
+    assert(updatedOldLead.backing_c === hc(30), `Old lead keeps backing amount in treasury_operators (${updatedOldLead.backing_c} hundredths)`);
 
     const oldLeadPledge = db.prepare("SELECT amount_c, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ?").get(succEnt, oldLead.pubKeyHex) as any;
-    assert(oldLeadPledge.amount === 30 && oldLeadPledge.released_at === null, 'Old lead pledge is still active in enterprise_pledges');
+    assert(oldLeadPledge.amount_c === hc(30) && oldLeadPledge.released_at === null, `Old lead pledge is still active in enterprise_pledges (${oldLeadPledge.amount_c} hundredths)`);
 
     // Verify candidate became lead keeper
     const updatedCand = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(succEnt, candKeeper.pubKeyHex) as any;
@@ -652,11 +662,12 @@ async function main() {
 
     // 1. Submit join request via HTTP
     const reqPostRes = await signedFetch('POST', `/api/enterprise/${httpEnt}/keepers/request`, httpApplicant, {
-        pledgedBacking: 25,
+        pledgedBacking_c: hc(25),
     });
     assert(reqPostRes.status === 200, 'HTTP POST keepers/request returns 200');
     assert(reqPostRes.body?.success === true, 'HTTP request returned success');
-    assert(reqPostRes.body?.request?.pledgedBacking === 25, 'HTTP pledgedBacking is 25');
+    // The answer's pledgedBacking keeps its name and carries whole hundredths.
+    assert(reqPostRes.body?.request?.pledgedBacking === hc(25), `HTTP pledgedBacking is 25 (${reqPostRes.body?.request?.pledgedBacking} hundredths)`);
     const httpReqId = reqPostRes.body?.request?.id;
 
     // 2. List requests via HTTP
@@ -677,7 +688,7 @@ async function main() {
     const leadApproveRes = await signedFetch('POST', `/api/enterprise/${httpEnt}/keepers/requests/${httpReqId}/approve`, httpLead);
     assert(leadApproveRes.status === 200, 'Lead HTTP approve returns 200');
     assert(leadApproveRes.body?.success === true, 'Lead approve response success');
-    assert(leadApproveRes.body?.backing === 25, 'Lead approve response backing 25');
+    assert(leadApproveRes.body?.backing_c === hc(25), `Lead approve response backing 25 (${leadApproveRes.body?.backing_c} hundredths)`);
 
     // 5. Test getTreasury endpoint returns keeperRequests & myPendingRequest & leadInactivity
     const getDetailRes = await signedFetch('GET', `/api/enterprise/${httpEnt}`, httpLead);
@@ -727,7 +738,7 @@ async function main() {
     const unsignedRes = await fetch(`${BASE}/api/enterprise/${actEnt}/keepers/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey: actLead.pubKeyHex, pledgedBacking: 0 }),
+        body: JSON.stringify({ publicKey: actLead.pubKeyHex, pledgedBacking_c: 0 }),
     });
     assert(unsignedRes.status === 401, 'B2: unsigned request is rejected');
     const afterUnsigned = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(actLead.pubKeyHex) as any;
@@ -736,7 +747,7 @@ async function main() {
         "B2: unsigned request carrying the lead's key does not cancel the proposal");
 
     // A signed request from the lead. The route's own answer does not matter here — the signer is verified.
-    await signedFetch('POST', `/api/enterprise/${actEnt}/keepers/request`, actLead, { pledgedBacking: 0 });
+    await signedFetch('POST', `/api/enterprise/${actEnt}/keepers/request`, actLead, { pledgedBacking_c: 0 });
     const afterSigned = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(actLead.pubKeyHex) as any;
     assert(new Date(afterSigned.last_active_at).getTime() > new Date(thirtyFiveDaysAgo).getTime(), 'B2: signed request from the lead records activity');
     assert((db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(actProp.proposal.id) as any).status === 'cancelled',
@@ -758,12 +769,12 @@ async function main() {
     assert(!db.prepare("SELECT 1 FROM members WHERE callsign = 'Throwaway Enterprise'").get(), 'Suspended: no enterprise was created');
     assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused enterprise creation leaves can_operate at 0');
 
-    const suspProjRes = await signedFetch('POST', '/api/commons/projects', suspKeeper, { title: 'Throwaway Project', description: 'x', requestedAmount: 10 });
+    const suspProjRes = await signedFetch('POST', '/api/commons/projects', suspKeeper, { title: 'Throwaway Project', description: 'x', requestedAmount_c: hc(10) });
     assert(suspProjRes.status >= 400 && /operator access is switched off/.test(suspProjRes.error || ''),
         `Suspended: POST /api/commons/projects is refused with a clear message (got ${suspProjRes.status} ${suspProjRes.error})`);
     assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused commons project leaves can_operate at 0');
 
-    const suspCrowdRes = await signedFetch('POST', '/api/crowdfund/projects', suspKeeper, { title: 'Throwaway Crowdfund', description: 'x', goalAmount: 10 });
+    const suspCrowdRes = await signedFetch('POST', '/api/crowdfund/projects', suspKeeper, { title: 'Throwaway Crowdfund', description: 'x', goalAmount_c: hc(10) });
     assert(suspCrowdRes.status >= 400 && /operator access is switched off/.test(suspCrowdRes.error || ''),
         `Suspended: POST /api/crowdfund/projects is refused with a clear message (got ${suspCrowdRes.status} ${suspCrowdRes.error})`);
     assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused crowdfund project leaves can_operate at 0');
@@ -771,9 +782,9 @@ async function main() {
     // The engine refuses too, so a route that forgets the check still cannot switch them back on.
     expectThrow(() => createTreasury('Engine Throwaway', 'avatarX', 0, { leadKeeperPubkey: suspKeeper.pubKeyHex }),
         'operator access is switched off', 'Suspended: createTreasury refuses a switched-off lead keeper');
-    expectThrow(() => createProject(suspKeeper.pubKeyHex, 'Engine Throwaway Project', 'x', 10),
+    expectThrow(() => createProject(suspKeeper.pubKeyHex, 'Engine Throwaway Project', 'x', hc(10)),
         'operator access is switched off', 'Suspended: createProject refuses a switched-off proposer');
-    expectThrow(() => createCrowdfundProject(crypto.randomUUID(), suspKeeper.pubKeyHex, 'Engine Throwaway Crowdfund', 'x', [], 10, null),
+    expectThrow(() => createCrowdfundProject(crypto.randomUUID(), suspKeeper.pubKeyHex, 'Engine Throwaway Crowdfund', 'x', [], hc(10), null),
         'operator access is switched off', 'Suspended: createCrowdfundProject refuses a switched-off creator');
     // And the write itself never raises the switch for a member who already keeps another enterprise.
     raiseCreatorOperatorSwitch(suspKeeper.pubKeyHex, 'some-new-enterprise');
@@ -791,7 +802,7 @@ async function main() {
         'Unsuspended keeper is lead of the new enterprise');
     assert(switchOf(okKeeper.pubKeyHex) === 1 && canOperateTreasury(okKeeper.pubKeyHex, okEntRes.body?.publicKey) === true,
         'Unsuspended keeper can operate the new enterprise');
-    const okProjRes = await signedFetch('POST', '/api/commons/projects', okKeeper, { title: 'Ok Keeper Project', description: 'x', requestedAmount: 10 });
+    const okProjRes = await signedFetch('POST', '/api/commons/projects', okKeeper, { title: 'Ok Keeper Project', description: 'x', requestedAmount_c: hc(10) });
     assert(okProjRes.status === 200 && okProjRes.body?.success === true, `Unsuspended keeper creates a commons project (got ${okProjRes.status} ${okProjRes.error})`);
 
     // A member with no binding at all starts with the switch off, and creating their first enterprise raises it, as before.

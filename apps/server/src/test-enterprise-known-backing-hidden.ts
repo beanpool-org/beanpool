@@ -62,6 +62,12 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (v: unknown) => JSON.stringify(v)?.slice(0, 240);
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths
+ * at the door and `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -74,11 +80,11 @@ function makeMember(name: string, beans = 0): Id {
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 
-/** An enterprise with keepers bound as a join binds them: `backing` is what each pledged as they joined. */
+/** An enterprise with keepers bound as a join binds them: `backing` is what each pledged as they joined, in Beans. */
 function makeEnterprise(name: string, keepers: { id: Id; backing: number }[]): string {
     const pk = keypair(name).pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
@@ -86,28 +92,33 @@ function makeEnterprise(name: string, keepers: { id: Id; backing: number }[]): s
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     setMemberPhoto(db, pk, AVATAR);
     for (const k of keepers) {
-        db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, backing_c) VALUES (?, ?, ?)').run(pk, k.id.pk, k.backing);
+        db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, backing_c) VALUES (?, ?, ?)').run(pk, k.id.pk, hc(k.backing));
         db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.id.pk);
     }
     clearEnterpriseFloorCache(db);
     return pk;
 }
 
-/** A keeper's own pledge of earned credit, as insertPledgeRows writes its earned part (a plain id). */
+/** A keeper's own pledge of `amount` Beans of earned credit, as insertPledgeRows writes its earned part (a plain id). */
 function earnedPledge(enterprise: string, keeper: Id, amount: number): void {
     db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, ?, ?)')
-        .run(crypto.randomUUID(), keeper.pk, enterprise, amount, ago(DAY));
+        .run(crypto.randomUUID(), keeper.pk, enterprise, hc(amount), ago(DAY));
     clearEnterpriseFloorCache(db);
 }
 
-/** Completed trades enough to earn about `target` of earned credit (test-enterprise-keeper-answers.ts giveEarnedCredit). */
+/**
+ * Completed trades enough to earn `target` Beans of earned credit (test-enterprise-keeper-answers.ts giveEarnedCredit), and
+ * the earned credit they give, in whole hundredths. The trust curve runs in hundredths: earned_c = floor(192000 × V /
+ * (V + 500000)), V the trade value in hundredths; the least V that reaches the target gives it exactly.
+ */
 function giveEarnedCredit(member: Id, target: number): number {
-    let valueNeeded = Math.ceil((5000 * target) / (1920 - target));
+    const targetC = hc(target);
+    let valueNeeded = Math.ceil((500000 * targetC) / (192000 - targetC));
     for (let i = 0; valueNeeded > 0; i++) {
-        const amount = Math.min(valueNeeded, 400);
+        const amount = Math.min(valueNeeded, hc(400));
         const peer = `peer-${member.pk.slice(0, 8)}-${i}`;
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peer, `Peer ${i}`, ago(30 * DAY));
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peer);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(peer, hc(1000));
         const post = `post-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', ?, ?, 'completed')`).run(post, amount, peer);
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-${crypto.randomUUID()}`, post, member.pk, peer, amount);
@@ -142,8 +153,8 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
     return { status: res.status, body: json };
 }
 
-type Pledge = { id: string; kind?: string; keeper: string; callsign: string; avatarUrl: string | null; amount: number; pledgedAt: string | null };
-type Keeper = { publicKey: string; callsign: string; backing: number };
+type Pledge = { id: string; kind?: string; keeper: string; callsign: string; avatarUrl: string | null; amount_c: number; pledgedAt: string | null };
+type Keeper = { publicKey: string; callsign: string; backing_c: number };
 /** One enterprise as a reader reads it on each of its three routes. */
 type Reads = { list: any; detail: any; pledges: any };
 
@@ -186,11 +197,11 @@ async function heardDuring(sock: Sock, enterprise: string, act: () => Promise<Re
     return { res, heard: sock.events.slice(from) };
 }
 
-/** An answer that names no known pledge: one folded entry of `sum`, naming no one, and no `known:` id anywhere in it. */
+/** An answer that names no known pledge: one folded entry of `sum` hundredths, naming no one, and no `known:` id anywhere in it. */
 function assertFolded(label: string, answer: { pledges: Pledge[] }, sum: number, confirmed: Id[]): void {
     const fold = folded(answer.pledges);
-    assert(fold.length === 1 && fold[0].amount === sum && fold[0].kind === 'known',
-        `${label}: one folded entry, kind known, of ${sum} (${show(fold)})`);
+    assert(fold.length === 1 && fold[0].amount_c === sum && fold[0].kind === 'known',
+        `${label}: one folded entry, kind known, of ${beansOf(sum)} (${show(fold)})`);
     assert(fold.length === 1 && fold[0].keeper === '' && fold[0].callsign === '' && fold[0].avatarUrl === null && fold[0].pledgedAt === null,
         `${label}: the folded entry names no keeper, name, photo or date (${show(fold[0])})`);
     assert(folded(answer.pledges).every(p => answer.pledges.indexOf(p) === answer.pledges.length - 1),
@@ -228,6 +239,7 @@ function figuresOf(enterprise: string, keeper: Id): Figures {
 /**
  * What main's release (#2313's releaseEnterpriseBacking) leaves for the same release on the same rows: it released every
  * row of the keeper's and pledged the remainder again, the known part first. Written and read in a transaction rolled back.
+ * `amount` is whole hundredths, as every figure here is.
  */
 function asMainReleases(enterprise: string, keeper: Id, amount: number): Figures {
     let figures: Figures | undefined;
@@ -278,20 +290,20 @@ async function main(): Promise<void> {
     // from his known grant, and Ada (an admin outside it) approves: bound at once, with a known pledge of 500.
     const kaiCo = makeEnterprise('Kai Co', [{ id: lee, backing: 300 }]);
     earnedPledge(kaiCo, lee, 300);
-    const request = requestToJoinEnterprise(kaiCo, kai.pk, 500);
+    const request = requestToJoinEnterprise(kaiCo, kai.pk, hc(500));
     const approved = approveKeeperRequest(request.id, ada.pk);
-    assert(approved.applied && approved.backing === 500, `Ada approves Kai with 500 of backing, bound at once (${show(approved)})`);
+    assert(approved.applied && approved.backing_c === hc(500), `Ada approves Kai with 500 of backing, bound at once (${show(approved)})`);
     const kaiKnown = db.prepare("SELECT SUM(amount_c) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id LIKE 'known:%' AND released_at IS NULL").get(kaiCo, kai.pk) as { s: number };
-    assert(kaiKnown.s === 500, `Kai's 500 is a known pledge (${kaiKnown.s})`);
+    assert(kaiKnown.s === hc(500), `Kai's 500 is a known pledge (${kaiKnown.s} hundredths)`);
     // And a pledge Kai chose to put in of his own earned credit, which stays his and named.
     earnedPledge(kaiCo, kai, 50);
     const kaiCoAllowance = getEnterpriseFloor(db, kaiCo).allowance;
-    assert(kaiCoAllowance === 850, `Kai Co's allowance counts all three: 300 + 50 earned, 500 known (${kaiCoAllowance})`);
+    assert(kaiCoAllowance === hc(850), `Kai Co's allowance counts all three: 300 + 50 earned, 500 known (${kaiCoAllowance} hundredths)`);
 
     // Two Co: Lia and Mo, both confirmed, each back it from their known grants.
     const twoCo = makeEnterprise('Two Co', [{ id: lia, backing: 0 }, { id: mo, backing: 0 }]);
-    pledgeEnterpriseBacking(twoCo, lia.pk, 200);
-    pledgeEnterpriseBacking(twoCo, mo.pk, 300);
+    pledgeEnterpriseBacking(twoCo, lia.pk, hc(200));
+    pledgeEnterpriseBacking(twoCo, mo.pk, hc(300));
     const twoKnown = db.prepare("SELECT COUNT(*) AS n FROM enterprise_pledges WHERE enterprise = ? AND id LIKE 'known:%' AND released_at IS NULL").get(twoCo) as { n: number };
     assert(twoKnown.n === 2, `Lia's 200 and Mo's 300 are known pledges (${twoKnown.n} rows)`);
     const twoCoAllowance = getEnterpriseFloor(db, twoCo).allowance;
@@ -300,20 +312,20 @@ async function main(): Promise<void> {
     console.log('── 1, 2. an ordinary member reads Kai Co ──');
     const unaReads = await readAs(una, kaiCo);
     for (const [route, answer] of Object.entries(unaReads) as [keyof Reads, any][]) {
-        assertFolded(`Una, ${route}`, answer, 500, [kai]);
+        assertFolded(`Una, ${route}`, answer, hc(500), [kai]);
         const named = (answer.pledges as Pledge[]).filter(p => p.id !== 'known');
-        assert(named.some(p => p.keeper === lee.pk && p.callsign === 'Lee' && p.amount === 300)
-            && named.some(p => p.keeper === kai.pk && p.callsign === 'Kai' && p.amount === 50) && named.length === 2,
+        assert(named.some(p => p.keeper === lee.pk && p.callsign === 'Lee' && p.amount_c === hc(300))
+            && named.some(p => p.keeper === kai.pk && p.callsign === 'Kai' && p.amount_c === hc(50)) && named.length === 2,
             `Una, ${route}: Lee's 300 and Kai's own 50 are named as before (${show(named)})`);
-        assert(answer.allowance === kaiCoAllowance, `Una, ${route}: the allowance is unchanged, ${kaiCoAllowance} (${answer.allowance})`);
+        assert(answer.allowance_c === kaiCoAllowance, `Una, ${route}: the allowance is unchanged, ${beansOf(kaiCoAllowance)} (${answer.allowance_c} hundredths)`);
     }
     for (const [route, answer] of [['list', unaReads.list], ['detail', unaReads.detail]] as const) {
         const keepers = answer.keepers as Keeper[];
-        assert(keeperOf(keepers, kai)?.backing === 50 && keeperOf(keepers, lee)?.backing === 300,
-            `Una, ${route}: each keeper's backing is their named pledges, Kai 50 and Lee 300, never Kai's 500 (${show(keepers.map(k => [k.callsign, k.backing]))})`);
+        assert(keeperOf(keepers, kai)?.backing_c === hc(50) && keeperOf(keepers, lee)?.backing_c === hc(300),
+            `Una, ${route}: each keeper's backing is their named pledges, Kai 50 and Lee 300, never Kai's 500 (${show(keepers.map(k => [k.callsign, k.backing_c]))})`);
         // Subtracting each keeper's named pledges from their backing leaves nothing to point at.
-        const gap = (who: Id) => (keeperOf(keepers, who)?.backing ?? NaN)
-            - (answer.pledges as Pledge[]).filter(p => p.keeper === who.pk).reduce((s, p) => s + p.amount, 0);
+        const gap = (who: Id) => (keeperOf(keepers, who)?.backing_c ?? NaN)
+            - (answer.pledges as Pledge[]).filter(p => p.keeper === who.pk).reduce((s, p) => s + p.amount_c, 0);
         assert(gap(kai) === 0 && gap(lee) === 0, `Una, ${route}: backing less named pledges is 0 for both keepers (Kai ${gap(kai)}, Lee ${gap(lee)})`);
     }
 
@@ -321,14 +333,14 @@ async function main(): Promise<void> {
     console.log('── 3. two confirmed keepers ──');
     const unaTwo = await readAs(una, twoCo);
     for (const [route, answer] of Object.entries(unaTwo) as [keyof Reads, any][]) {
-        assertFolded(`Una, Two Co ${route}`, answer, 500, [lia, mo]);
+        assertFolded(`Una, Two Co ${route}`, answer, hc(500), [lia, mo]);
         assert((answer.pledges as Pledge[]).length === 1, `Una, Two Co ${route}: the folded entry is the only pledge (${show(answer.pledges)})`);
-        assert(answer.allowance === twoCoAllowance && twoCoAllowance === 500, `Una, Two Co ${route}: the allowance is unchanged, 500 (${answer.allowance})`);
+        assert(answer.allowance_c === twoCoAllowance && twoCoAllowance === hc(500), `Una, Two Co ${route}: the allowance is unchanged, 500 (${answer.allowance_c} hundredths)`);
     }
     for (const [route, answer] of [['list', unaTwo.list], ['detail', unaTwo.detail]] as const) {
         const keepers = answer.keepers as Keeper[];
-        assert(keeperOf(keepers, lia)?.backing === 0 && keeperOf(keepers, mo)?.backing === 0,
-            `Una, Two Co ${route}: neither keeper shows a backing of their own (${show(keepers.map(k => [k.callsign, k.backing]))})`);
+        assert(keeperOf(keepers, lia)?.backing_c === 0 && keeperOf(keepers, mo)?.backing_c === 0,
+            `Una, Two Co ${route}: neither keeper shows a backing of their own (${show(keepers.map(k => [k.callsign, k.backing_c]))})`);
     }
 
     // ── 4. an owner or admin ─────────────────────────────────────────────────────────────────────────
@@ -336,24 +348,24 @@ async function main(): Promise<void> {
     const adaReads = await readAs(ada, kaiCo);
     for (const [route, answer] of Object.entries(adaReads) as [keyof Reads, any][]) {
         const known = knownRows(answer.pledges);
-        assert(known.length === 1 && known[0].keeper === kai.pk && known[0].callsign === 'Kai' && known[0].amount === 500 && folded(answer.pledges).length === 0,
+        assert(known.length === 1 && known[0].keeper === kai.pk && known[0].callsign === 'Kai' && known[0].amount_c === hc(500) && folded(answer.pledges).length === 0,
             `Ada (admin), ${route}: Kai's known pledge, by name, as before (${show(known)})`);
-        assert((answer.pledges as Pledge[]).length === 3 && answer.allowance === kaiCoAllowance,
-            `Ada (admin), ${route}: all three pledges, the allowance ${kaiCoAllowance} (${answer.allowance})`);
+        assert((answer.pledges as Pledge[]).length === 3 && answer.allowance_c === kaiCoAllowance,
+            `Ada (admin), ${route}: all three pledges, the allowance ${beansOf(kaiCoAllowance)} (${answer.allowance_c} hundredths)`);
     }
     for (const [route, answer] of [['list', adaReads.list], ['detail', adaReads.detail]] as const) {
-        assert(keeperOf(answer.keepers, kai)?.backing === 500 && keeperOf(answer.keepers, lee)?.backing === 300,
+        assert(keeperOf(answer.keepers, kai)?.backing_c === hc(500) && keeperOf(answer.keepers, lee)?.backing_c === hc(300),
             `Ada (admin), ${route}: the keepers' backing as before, Kai 500 and Lee 300`);
     }
     const adaTwo = await readAs(ada, twoCo);
     const adaTwoKnown = knownRows(adaTwo.pledges.pledges);
-    assert(adaTwoKnown.length === 2 && adaTwoKnown.some(p => p.keeper === lia.pk && p.amount === 200) && adaTwoKnown.some(p => p.keeper === mo.pk && p.amount === 300),
+    assert(adaTwoKnown.length === 2 && adaTwoKnown.some(p => p.keeper === lia.pk && p.amount_c === hc(200)) && adaTwoKnown.some(p => p.keeper === mo.pk && p.amount_c === hc(300)),
         `Ada (admin): Two Co's known pledges, each by its keeper (${show(adaTwoKnown)})`);
     // The manager reads the list with the admin sign-in, which has no member key.
     const managerList = await call('GET', null, '/api/local/admin/treasury', undefined, owner);
     const managerKaiCo = (managerList.body?.treasuries ?? []).find((e: any) => e.publicKey === kaiCo);
-    assert(managerList.status === 200 && knownRows(managerKaiCo?.pledges ?? []).some(p => p.keeper === kai.pk && p.amount === 500)
-        && keeperOf(managerKaiCo?.keepers ?? [], kai)?.backing === 500,
+    assert(managerList.status === 200 && knownRows(managerKaiCo?.pledges ?? []).some(p => p.keeper === kai.pk && p.amount_c === hc(500))
+        && keeperOf(managerKaiCo?.keepers ?? [], kai)?.backing_c === hc(500),
         `the manager's admin sign-in: Kai's known pledge and backing as before (${managerList.status} ${show(managerKaiCo?.pledges)})`);
     const founderReads = await readAs(founder, kaiCo);
     assert(knownRows(founderReads.detail.pledges).some(p => p.keeper === kai.pk),
@@ -368,13 +380,13 @@ async function main(): Promise<void> {
             `a guest is refused ${path}, and the refusal names no one (${r.status} ${show(r.body)})`);
     }
     const leeReads = await readAs(lee, kaiCo);
-    for (const [route, answer] of Object.entries(leeReads) as [keyof Reads, any][]) assertFolded(`Lee (Kai Co's other keeper), ${route}`, answer, 500, [kai]);
-    assert(keeperOf(leeReads.detail.keepers, kai)?.backing === 50 && keeperOf(leeReads.detail.keepers, lee)?.backing === 300,
+    for (const [route, answer] of Object.entries(leeReads) as [keyof Reads, any][]) assertFolded(`Lee (Kai Co's other keeper), ${route}`, answer, hc(500), [kai]);
+    assert(keeperOf(leeReads.detail.keepers, kai)?.backing_c === hc(50) && keeperOf(leeReads.detail.keepers, lee)?.backing_c === hc(300),
         `Lee: Kai's backing is his named 50, Lee's own row is his 300`);
     const kaiReads = await readAs(kai, kaiCo);
-    assertFolded('Kai himself, detail', kaiReads.detail, 500, []);
-    assert(keeperOf(kaiReads.detail.keepers, kai)?.backing === 500 && keeperOf(kaiReads.detail.keepers, lee)?.backing === 300,
-        `Kai reads his own row as before, 500, and Lee's as Lee's named 300 (${show(kaiReads.detail.keepers.map((k: Keeper) => [k.callsign, k.backing]))})`);
+    assertFolded('Kai himself, detail', kaiReads.detail, hc(500), []);
+    assert(keeperOf(kaiReads.detail.keepers, kai)?.backing_c === hc(500) && keeperOf(kaiReads.detail.keepers, lee)?.backing_c === hc(300),
+        `Kai reads his own row as before, 500, and Lee's as Lee's named 300 (${show(kaiReads.detail.keepers.map((k: Keeper) => [k.callsign, k.backing_c]))})`);
     const plain = makeEnterprise('Plain Co', [{ id: lee, backing: 100 }]);
     earnedPledge(plain, lee, 100);
     const plainReads = await readAs(una, plain);
@@ -387,20 +399,20 @@ async function main(): Promise<void> {
     await sleep(100);
     const foldOf = async () => (await readAs(una, twoCo)).detail;
     const before = await foldOf();
-    const pledged = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing`, { amount: 100 }));
+    const pledged = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing`, { amount_c: hc(100) }));
     const afterPledge = await foldOf();
     const pledgeEvents = pledged.heard.filter(e => e?.type === 'enterprise_pledge_updated' && e.enterprise === twoCo);
-    assert(pledged.res.status === 200 && folded(afterPledge.pledges)[0]?.amount === folded(before.pledges)[0]?.amount + 100,
-        `Lia, confirmed, pledges 100 more to Two Co: the folded total Una re-reads moves ${folded(before.pledges)[0]?.amount} → ${folded(afterPledge.pledges)[0]?.amount} (${pledged.res.status})`);
+    assert(pledged.res.status === 200 && folded(afterPledge.pledges)[0]?.amount_c === folded(before.pledges)[0]?.amount_c + hc(100),
+        `Lia, confirmed, pledges 100 more to Two Co: the folded total Una re-reads moves ${folded(before.pledges)[0]?.amount_c} → ${folded(afterPledge.pledges)[0]?.amount_c} hundredths (${pledged.res.status})`);
     assert(pledgeEvents.length >= 1 && pledgeEvents.every(e => Object.keys(e).sort().join(',') === 'enterprise,type'),
         `Una's socket hears the pledge as { type, enterprise } only, no keeper (${show(pledgeEvents)})`);
     assert(!JSON.stringify(pledged.heard).includes(lia.pk) && !JSON.stringify(pledged.heard).includes('Lia'),
         `nothing Una's socket heard around the pledge names Lia, so the move ties to no one (${show(pledged.heard)})`);
-    const released = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing/release`, { amount: 100 }));
+    const released = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing/release`, { amount_c: hc(100) }));
     const afterRelease = await foldOf();
     const releaseEvents = released.heard.filter(e => e?.type === 'enterprise_pledge_updated' && e.enterprise === twoCo);
-    assert(released.res.status === 200 && folded(afterRelease.pledges)[0]?.amount === folded(before.pledges)[0]?.amount,
-        `Lia releases it: the folded total moves back to ${folded(afterRelease.pledges)[0]?.amount} (${released.res.status} ${show(released.res.body)})`);
+    assert(released.res.status === 200 && folded(afterRelease.pledges)[0]?.amount_c === folded(before.pledges)[0]?.amount_c,
+        `Lia releases it: the folded total moves back to ${folded(afterRelease.pledges)[0]?.amount_c} hundredths (${released.res.status} ${show(released.res.body)})`);
     assert(releaseEvents.length >= 1 && releaseEvents.every(e => Object.keys(e).sort().join(',') === 'enterprise,type')
         && !JSON.stringify(released.heard).includes(lia.pk) && !JSON.stringify(released.heard).includes('Lia'),
         `the release's event names no keeper either, and nothing heard around it names Lia (${show(released.heard)})`);
@@ -414,28 +426,29 @@ async function main(): Promise<void> {
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, lee.pk);
     const zoe = makeMember('Zoe');
     const zoeEarned = giveEarnedCredit(zoe, 100);
-    const zoeKnown = 400 - zoeEarned;
+    const zoeKnown = hc(400) - zoeEarned;
     confirm(zoe, ada);
-    assert(zoeEarned > 0 && zoeEarned < 400, `Zoe has earned ${zoeEarned} of credit by trading, less than the 400 she will pledge`);
-    const zoeAsks = await call('POST', zoe, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking: 400 });
+    assert(zoeEarned > 0 && zoeEarned < hc(400), `Zoe has earned ${beansOf(zoeEarned)} of credit by trading, less than the 400 she will pledge`);
+    const zoeAsks = await call('POST', zoe, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking_c: hc(400) });
     const zoeApproved = await call('POST', lee, `/api/enterprise/${shed}/keepers/requests/${zoeAsks.body?.request?.id}/approve`, {});
-    assert(zoeAsks.status === 200 && zoeApproved.status === 200 && zoeApproved.body?.applied === false && zoeApproved.body?.change?.pledgedBacking === 400,
+    // A keeper change's and a request's pledgedBacking keep their name and carry whole hundredths.
+    assert(zoeAsks.status === 200 && zoeApproved.status === 200 && zoeApproved.body?.applied === false && zoeApproved.body?.change?.pledgedBacking === hc(400),
         `Lee, Shed's lead, approves Zoe's 400: the window opens, and the answer gives Lee, who decides it, the whole 400 (${zoeAsks.status} ${show(zoeApproved.body)})`);
     const changeFor = (who: Id, answer: any) => (answer?.keeperChanges ?? []).find((c: any) => c.memberPubkey === who.pk);
     const pageAs = async (who: Id, enterprise: string) => (await call('GET', who, `/api/enterprise/${enterprise}`)).body;
     const moWindow = await pageAs(mo, shed);
     assert(changeFor(zoe, moWindow)?.pledgedBacking === zoeEarned && changeFor(zoe, moWindow)?.namedBackingOnly === true
-        && !JSON.stringify(changeFor(zoe, moWindow)).includes(':400') && (moWindow.keeperRequests ?? []).length === 0,
-        `Mo, Shed's other keeper, reads Zoe's change with her named ${zoeEarned} only, never 400 (pledgedBacking ${changeFor(zoe, moWindow)?.pledgedBacking})`);
+        && !JSON.stringify(changeFor(zoe, moWindow)).includes(`:${hc(400)}`) && (moWindow.keeperRequests ?? []).length === 0,
+        `Mo, Shed's other keeper, reads Zoe's change with her named ${beansOf(zoeEarned)} only, never 400 (pledgedBacking ${changeFor(zoe, moWindow)?.pledgedBacking} hundredths)`);
     const leeWindow = await pageAs(lee, shed);
     const leeOpen = (leeWindow.keeperRequests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
-    assert(leeOpen?.pledgedBacking === 400 && leeOpen?.pendingChange?.pledgedBacking === 400 && changeFor(zoe, leeWindow)?.pledgedBacking === 400
+    assert(leeOpen?.pledgedBacking === hc(400) && leeOpen?.pendingChange?.pledgedBacking === hc(400) && changeFor(zoe, leeWindow)?.pledgedBacking === hc(400)
         && changeFor(zoe, leeWindow)?.namedBackingOnly !== true,
         `Lee, who decides it, reads the open request and its change whole, 400 on each (${show([leeOpen?.pledgedBacking, changeFor(zoe, leeWindow)])})`);
     const adaWindow = await pageAs(ada, shed);
-    assert(changeFor(zoe, adaWindow)?.pledgedBacking === 400, `Ada (admin) reads Zoe's change whole, 400 (${show(changeFor(zoe, adaWindow))})`);
+    assert(changeFor(zoe, adaWindow)?.pledgedBacking === hc(400), `Ada (admin) reads Zoe's change whole, 400 (${show(changeFor(zoe, adaWindow))})`);
     const zoeWindow = await pageAs(zoe, shed);
-    assert(zoeWindow.myPendingRequest?.pledgedBacking === 400 && zoeWindow.myPendingRequest?.pendingChange?.pledgedBacking === 400,
+    assert(zoeWindow.myPendingRequest?.pledgedBacking === hc(400) && zoeWindow.myPendingRequest?.pendingChange?.pledgedBacking === hc(400),
         `Zoe reads her own request and its change whole, 400 (${show(zoeWindow.myPendingRequest?.pendingChange)})`);
 
     // The window ends; Mo's next read applies it, and the one after reads it applied.
@@ -445,21 +458,21 @@ async function main(): Promise<void> {
     const zoeSplit = db.prepare("SELECT id LIKE 'known:%' AS known, SUM(amount_c) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL GROUP BY 1 ORDER BY 1")
         .all(shed, zoe.pk) as { known: number; s: number }[];
     assert(!!keeperOf(moAfter.keepers, zoe) && show(zoeSplit) === show([{ known: 0, s: zoeEarned }, { known: 1, s: zoeKnown }]),
-        `the window ends: Zoe keeps Shed, with ${zoeEarned} named and ${zoeKnown} known (${show(zoeSplit)})`);
+        `the window ends: Zoe keeps Shed, with ${beansOf(zoeEarned)} named and ${beansOf(zoeKnown)} known (${show(zoeSplit)})`);
     for (const query of ['?status=approved', '']) {
         const listed = await call('GET', lee, `/api/enterprise/${shed}/keepers/requests${query}`);
         const row = (listed.body?.requests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
-        const named = (moAfter.pledges as Pledge[]).filter(p => p.keeper === zoe.pk).reduce((s, p) => s + p.amount, 0);
+        const named = (moAfter.pledges as Pledge[]).filter(p => p.keeper === zoe.pk).reduce((s, p) => s + p.amount_c, 0);
         assert(listed.status === 200 && row?.status === 'approved' && row.pledgedBacking === zoeEarned && row.namedBackingOnly === true && row.pledgedBacking - named === 0,
-            `Lee's requests (${query || 'all'}): Zoe's approved request reads her named ${zoeEarned}, never 400; less her named pledges, 0 (pledgedBacking ${row?.pledgedBacking}, named ${named})`);
+            `Lee's requests (${query || 'all'}): Zoe's approved request reads her named ${beansOf(zoeEarned)}, never 400; less her named pledges, 0 (pledgedBacking ${row?.pledgedBacking}, named ${named})`);
     }
     const adaListed = await call('GET', ada, `/api/enterprise/${shed}/keepers/requests?status=approved`);
     const adaRow = (adaListed.body?.requests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
-    assert(adaListed.status === 200 && adaRow?.pledgedBacking === 400 && adaRow?.namedBackingOnly !== true,
+    assert(adaListed.status === 200 && adaRow?.pledgedBacking === hc(400) && adaRow?.namedBackingOnly !== true,
         `Ada (admin) reads Zoe's approved request whole, 400 (${show(adaRow)})`);
     const zoeAfter = await pageAs(zoe, shed);
-    assert(keeperOf(zoeAfter.keepers, zoe)?.backing === 400 && keeperOf(moAfter.keepers, zoe)?.backing === zoeEarned,
-        `Zoe reads her own keeper row whole, 400; Mo reads it as her named ${zoeEarned} (${keeperOf(zoeAfter.keepers, zoe)?.backing}, ${keeperOf(moAfter.keepers, zoe)?.backing})`);
+    assert(keeperOf(zoeAfter.keepers, zoe)?.backing_c === hc(400) && keeperOf(moAfter.keepers, zoe)?.backing_c === zoeEarned,
+        `Zoe reads her own keeper row whole, 400; Mo reads it as her named ${beansOf(zoeEarned)} (${keeperOf(zoeAfter.keepers, zoe)?.backing_c}, ${keeperOf(moAfter.keepers, zoe)?.backing_c} hundredths)`);
     assertFolded('Mo, Shed after Zoe joins', moAfter, zoeKnown, [zoe]);
 
     // ── 8. a join the other keeper objects to ────────────────────────────────────────────────────────
@@ -467,7 +480,7 @@ async function main(): Promise<void> {
     // Ivy, confirmed, with no earned credit, asks to join with 200, all of it from her known grant. Lee approves; Mo objects.
     const ivy = makeMember('Ivy');
     confirm(ivy, ada);
-    const ivyAsks = await call('POST', ivy, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking: 200 });
+    const ivyAsks = await call('POST', ivy, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking_c: hc(200) });
     const ivyApproved = await call('POST', lee, `/api/enterprise/${shed}/keepers/requests/${ivyAsks.body?.request?.id}/approve`, {});
     const moIvy = changeFor(ivy, await pageAs(mo, shed));
     assert(ivyApproved.body?.applied === false && moIvy?.pledgedBacking === 0 && moIvy?.namedBackingOnly === true,
@@ -480,7 +493,7 @@ async function main(): Promise<void> {
     assert(leeDeclined?.status === 'declined' && leeDeclined.pledgedBacking === 0 && leeDeclined.namedBackingOnly === true,
         `Lee reads Ivy's declined request with nothing named, never 200 (${show(leeDeclined)})`);
     const adaDeclined = (await call('GET', ada, `/api/enterprise/${shed}/keepers/requests?status=declined`)).body?.requests?.find((r: any) => r.memberPubkey === ivy.pk);
-    assert(adaDeclined?.pledgedBacking === 200, `Ada (admin) reads Ivy's declined request whole, 200 (${show(adaDeclined)})`);
+    assert(adaDeclined?.pledgedBacking === hc(200), `Ada (admin) reads Ivy's declined request whole, 200 (${show(adaDeclined)})`);
 
     // ── 9. a confirmed keeper who also has earned credit releases part of his pledge ─────────────────────
     console.log('── 9. a confirmed keeper with earned credit releases inside his known part, then past it ──');
@@ -494,15 +507,15 @@ async function main(): Promise<void> {
     // Five live offers each, so Barn's and Zed's usable floors read their whole lines, not the offer bands' first steps.
     for (const author of [barn, zed.pk]) {
         for (let i = 0; i < 5; i++) {
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'goods', 'goods', 10, ?, 'active', 1)`)
-                .run(`post-${crypto.randomUUID()}`, author);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'goods', 'goods', ?, ?, 'active', 1)`)
+                .run(`post-${crypto.randomUUID()}`, hc(10), author);
         }
     }
-    const zedFirst = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 40 });
-    const zedTopUp = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 260 });
+    const zedFirst = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount_c: hc(40) });
+    const zedTopUp = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount_c: hc(260) });
     const zedStart = figuresOf(barn, zed);
-    assert(zedFirst.status === 200 && zedTopUp.status === 200 && zedEarned > 40 && zedStart.earned === zedEarned && zedStart.known === 300 - zedEarned,
-        `Zed pledges 40, then 260: ${zedEarned} of it named, ${300 - zedEarned} known (${zedFirst.status} ${zedTopUp.status} ${show(zedStart)})`);
+    assert(zedFirst.status === 200 && zedTopUp.status === 200 && zedEarned > hc(40) && zedStart.earned === zedEarned && zedStart.known === hc(300) - zedEarned,
+        `Zed pledges 40, then 260: ${beansOf(zedEarned)} of it named, ${beansOf(hc(300) - zedEarned)} known (${zedFirst.status} ${zedTopUp.status} ${show(zedStart)})`);
     // The top-up wrote a named row and a known row in one write: the residual Rule 3 records ("What folding cannot hide").
     console.log(`  (residual, Rule 3) the 260 wrote a named row beside its known part, at one moment: ${show(db.prepare(
         "SELECT id LIKE 'known:%' AS known, amount_c, pledged_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? ORDER BY rowid").all(barn, zed.pk))}`);
@@ -514,18 +527,18 @@ async function main(): Promise<void> {
             detail: (reads.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
             pledges: (reads.pledges.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
             stored: db.prepare("SELECT id, amount_c, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id NOT LIKE 'known:%' ORDER BY rowid").all(barn, zed.pk),
-            fold: folded(reads.detail.pledges)[0]?.amount ?? 0,
+            fold: folded(reads.detail.pledges)[0]?.amount_c ?? 0,
         };
     };
-    /** One release by Zed over HTTPS, and what main's release of the same amount on the same rows leaves (asMainReleases). */
+    /** One release of `amount` hundredths by Zed over HTTPS, and what main's release of the same amount on the same rows leaves (asMainReleases). */
     const zedReleases = async (amount: number) => {
         const before = await zedAsUnaReads();
         const onMain = asMainReleases(barn, zed, amount);
-        const res = await call('POST', zed, `/api/enterprise/${barn}/backing/release`, { amount });
+        const res = await call('POST', zed, `/api/enterprise/${barn}/backing/release`, { amount_c: amount });
         return { res, before, after: await zedAsUnaReads(), onMain, figures: figuresOf(barn, zed) };
     };
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-    const brief = (rows: any[]) => show(rows.map(p => [p.id.slice(0, 8), p.amount, p.pledgedAt ?? p.pledged_at, p.released_at].filter(v => v !== undefined)));
+    const brief = (rows: any[]) => show(rows.map(p => [p.id.slice(0, 8), p.amount_c, p.pledgedAt ?? p.pledged_at, p.released_at].filter(v => v !== undefined)));
     const assertNamedUntouched = (label: string, r: Awaited<ReturnType<typeof zedReleases>>) => {
         assert(r.after.detail.length > 0 && same(r.after.detail, r.before.detail) && same(r.after.pledges, r.before.pledges),
             `${label}: the named pledges Una re-reads are byte-identical, same ids, amounts and dates (before ${brief(r.before.detail)}, after ${brief(r.after.detail)})`);
@@ -533,39 +546,39 @@ async function main(): Promise<void> {
             `${label}: Zed's earned rows as stored are untouched, none released or written (before ${brief(r.before.stored)}, after ${brief(r.after.stored)})`);
     };
     const assertAsMain = (label: string, r: Awaited<ReturnType<typeof zedReleases>>, earned: number, known: number) => {
-        assert(r.figures.earned === earned && r.figures.known === known && r.figures.allowance === 100 + earned + known,
-            `${label}: ${earned} named and ${known} known stay pledged, Barn's allowance ${100 + earned + known} (${show(r.figures)})`);
+        assert(r.figures.earned === earned && r.figures.known === known && r.figures.allowance === hc(100) + earned + known,
+            `${label}: ${beansOf(earned)} named and ${beansOf(known)} known stay pledged, Barn's allowance ${beansOf(hc(100) + earned + known)} (${show(r.figures)})`);
         assert(same(r.figures, r.onMain),
             `${label}: the sums, the allowance and every floor are main's for the same release (${show(r.onMain)})`);
     };
 
     // 9a. 50 of his known part: only the known rows are written again.
-    const inside = await zedReleases(50);
-    assert(inside.res.status === 200 && inside.before.fold === 300 - zedEarned && inside.after.fold === 250 - zedEarned,
-        `9a. Zed releases 50, inside his known part: the fold Una re-reads moves ${inside.before.fold} → ${inside.after.fold} (${inside.res.status} ${show(inside.res.body)})`);
+    const inside = await zedReleases(hc(50));
+    assert(inside.res.status === 200 && inside.before.fold === hc(300) - zedEarned && inside.after.fold === hc(250) - zedEarned,
+        `9a. Zed releases 50, inside his known part: the fold Una re-reads moves ${inside.before.fold} → ${inside.after.fold} hundredths (${inside.res.status} ${show(inside.res.body)})`);
     assertNamedUntouched('9a', inside);
-    assertAsMain('9a', inside, zedEarned, 250 - zedEarned);
+    assertAsMain('9a', inside, zedEarned, hc(250) - zedEarned);
 
     // 9b. exactly the rest of his known part: the fold goes, his named pledges stay as they were.
-    const exact = await zedReleases(250 - zedEarned);
+    const exact = await zedReleases(hc(250) - zedEarned);
     assert(exact.res.status === 200 && exact.after.fold === 0 && exact.figures.known === 0,
-        `9b. Zed releases the rest of his known part, ${250 - zedEarned}: the fold Una re-reads moves ${exact.before.fold} → none (${exact.res.status})`);
+        `9b. Zed releases the rest of his known part, ${beansOf(hc(250) - zedEarned)}: the fold Una re-reads moves ${exact.before.fold} hundredths → none (${exact.res.status})`);
     assertNamedUntouched('9b', exact);
     assertAsMain('9b', exact, zedEarned, 0);
 
     // 9c. past his known part: the known part goes first, then the earned rows as before (pledged again under a new id).
-    const zedAgain = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 100 });
+    const zedAgain = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount_c: hc(100) });
     const again = figuresOf(barn, zed);
-    assert(zedAgain.status === 200 && again.earned === zedEarned && again.known === 100,
+    assert(zedAgain.status === 200 && again.earned === zedEarned && again.known === hc(100),
         `9c. Zed pledges 100 again, all of it known (his earned credit is all pledged) (${zedAgain.status} ${show(again)})`);
-    const past = await zedReleases(130);
-    assert(past.res.status === 200 && past.after.fold === 0 && past.res.body?.releasedAmount === 130,
-        `9c. Zed releases 130, past his known 100: the fold moves ${past.before.fold} → none (${past.res.status} ${show(past.res.body)})`);
-    assertAsMain('9c (the known 100 first, then 30 of the earned)', past, zedEarned - 30, 0);
+    const past = await zedReleases(hc(130));
+    assert(past.res.status === 200 && past.after.fold === 0 && past.res.body?.releasedAmount_c === hc(130),
+        `9c. Zed releases 130, past his known 100: the fold moves ${past.before.fold} hundredths → none (${past.res.status} ${show(past.res.body)})`);
+    assertAsMain('9c (the known 100 first, then 30 of the earned)', past, zedEarned - hc(30), 0);
     const adaBarn = await readAs(ada, barn);
     assert(knownRows(adaBarn.detail.pledges).filter(p => p.keeper === zed.pk).length === 0
-        && (adaBarn.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk).reduce((s, p) => s + p.amount, 0) === zedEarned - 30,
-        `9c. Ada (admin) reads none of Zed's known pledges left, and ${zedEarned - 30} of his earned (${show(adaBarn.detail.pledges)})`);
+        && (adaBarn.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk).reduce((s, p) => s + p.amount_c, 0) === zedEarned - hc(30),
+        `9c. Ada (admin) reads none of Zed's known pledges left, and ${beansOf(zedEarned - hc(30))} of his earned (${show(adaBarn.detail.pledges)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

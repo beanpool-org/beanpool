@@ -49,15 +49,25 @@ function expectThrow(fn: () => unknown, fragment: string, msg: string): void {
     assert(threw && message.includes(fragment), `${msg}${threw ? (message.includes(fragment) ? '' : ` (threw: ${message})`) : ' (did not throw)'}`);
 }
 
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths. */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/**
+ * Trades that give `pubkey` exactly `targetEarned` Beans of earned credit. The trust curve runs in whole hundredths:
+ * earned_c = floor(192000 × V / (V + 500000)), V the trade value in hundredths (CREDIT_MAX_EARNED 1920 Beans, TRUST_CURVE_K
+ * 5000 Beans). The least V that reaches the target gives the target exactly: the curve climbs less than a hundredth per
+ * hundredth of value. One trade of at most 400 Beans per peer, under the 500-Bean per-partner cap.
+ */
 function giveEarnedCredit(pubkey: string, targetEarned: number) {
-    let vNeeded = Math.ceil((5000 * targetEarned) / (1920 - targetEarned));
+    const target = hc(targetEarned);
+    let vNeeded = Math.ceil((500000 * target) / (192000 - target));
     let peerIndex = 0;
     while (vNeeded > 0) {
-        const tradeAmount = Math.min(vNeeded, 400);
+        const tradeAmount = Math.min(vNeeded, hc(400));
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
         setMemberPhoto(db, peerKey, 'avatar');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(peerKey, hc(1000));
         const pid = `post-ec-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
@@ -75,7 +85,7 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
         VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, `${callsign}${++seq}`, now, now);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, hc(1000));
     if (earnedCredit > 0) giveEarnedCredit(pubKeyHex, earnedCredit);
     return { pubKeyHex, privateKey };
 }
@@ -103,10 +113,10 @@ function activePledge(ent: string, keeper: string): number {
     return Number((db.prepare("SELECT COALESCE(SUM(amount_c),0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL").get(ent, keeper) as any).t);
 }
 
-/** Set the enterprise's balance directly, in the ledger and its row (a test fixture, not a ledger path). */
+/** Set the enterprise's balance directly to `balance` Beans, in the ledger and its row (a test fixture, not a ledger path). */
 function setEnterpriseBalance(ent: string, balance: number) {
-    ledger.getAccount(ent).balance = balance;
-    db.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0) ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c").run(ent, balance);
+    ledger.getAccount(ent).balance_c = hc(balance);
+    db.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0) ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c").run(ent, hc(balance));
 }
 
 async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: any) {
@@ -140,7 +150,7 @@ async function main() {
 
         // Objected: one objection cancels.
         const app1 = makeIdentity('AApp1', 30);
-        const r1 = requestToJoinEnterprise(ent, app1.pubKeyHex, 10);
+        const r1 = requestToJoinEnterprise(ent, app1.pubKeyHex, hc(10));
         const res1 = approveKeeperRequest(r1.id, lead.pubKeyHex);
         assert(res1.applied === false && !!res1.change, 'A: approval with other keepers opens a pending change');
         assert(role(ent, app1.pubKeyHex) === null, 'A: applicant is not a keeper during the window');
@@ -161,24 +171,24 @@ async function main() {
 
         // Unopposed: applies when the window ends, not before.
         const app2 = makeIdentity('AApp2', 30);
-        const r2 = requestToJoinEnterprise(ent, app2.pubKeyHex, 20);
+        const r2 = requestToJoinEnterprise(ent, app2.pubKeyHex, hc(20));
         const res2 = approveKeeperRequest(r2.id, lead.pubKeyHex);
         tickEnterpriseKeepers(Date.now() + KEEPER_CHANGE_OBJECTION_MS - 60_000);
         assert(role(ent, app2.pubKeyHex) === null, 'A: not applied before the window ends');
         tickEnterpriseKeepers(AFTER_WINDOW());
         assert(role(ent, app2.pubKeyHex) === 'keeper', 'A: applied when the window ends');
-        assert(activePledge(ent, app2.pubKeyHex) === 20, 'A: the pledge is recorded at apply');
+        assert(activePledge(ent, app2.pubKeyHex) === hc(20), `A: the pledge is recorded at apply (${activePledge(ent, app2.pubKeyHex)} hundredths)`);
         assert(getKeeperChanges(ent).find(c => c.id === res2.change!.id)?.status === 'applied', 'A: the change reads applied');
         expectThrow(() => objectToKeeperChange(res2.change!.id, k3.pubKeyHex), 'window for this change has closed', 'A: no objection after the window');
 
         // Pledge re-checked at apply time.
         const app3 = makeIdentity('AApp3', 30);
-        const r3 = requestToJoinEnterprise(ent, app3.pubKeyHex, 30);
+        const r3 = requestToJoinEnterprise(ent, app3.pubKeyHex, hc(30));
         const res3 = approveKeeperRequest(r3.id, lead.pubKeyHex);
         const { publicKey: elsewhere } = createTreasury(`AElsewhere${++seq}`, 'avatar', 0);
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, 20, ?, NULL)")
-            .run(crypto.randomUUID(), app3.pubKeyHex, elsewhere, new Date().toISOString());
-        assert(getAvailableBacking(app3.pubKeyHex) === 10, 'A: applicant pledged elsewhere during the window (10 left)');
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)")
+            .run(crypto.randomUUID(), app3.pubKeyHex, elsewhere, hc(20), new Date().toISOString());
+        assert(getAvailableBacking(app3.pubKeyHex) === hc(10), `A: applicant pledged elsewhere during the window (10 left) (${getAvailableBacking(app3.pubKeyHex)} hundredths)`);
         tickEnterpriseKeepers(AFTER_WINDOW());
         const c3 = getKeeperChanges(ent).find(c => c.id === res3.change!.id)!;
         assert(c3.status === 'failed' && /standing doesn't cover this pledge/.test(c3.reason || '') && !/\d/.test(c3.reason || ''), 'A: an over-pledge at apply time fails the change');
@@ -196,7 +206,7 @@ async function main() {
 
         // A transient error while applying (not a business refusal) leaves the change pending for the next tick.
         const app6 = makeIdentity('AApp6', 10);
-        const res6 = approveKeeperRequest(requestToJoinEnterprise(ent, app6.pubKeyHex, 5).id, k2.pubKeyHex);
+        const res6 = approveKeeperRequest(requestToJoinEnterprise(ent, app6.pubKeyHex, hc(5)).id, k2.pubKeyHex);
         db.exec("CREATE TEMP TRIGGER test_keeper_bind_fails BEFORE INSERT ON treasury_operators BEGIN SELECT RAISE(ABORT, 'simulated database failure'); END");
         const origError = console.error;
         let logged = '';
@@ -227,7 +237,7 @@ async function main() {
     {
         const lead = makeIdentity('RLead', 40), k2 = makeIdentity('RK2', 40), k3 = makeIdentity('RK3', 40), k4 = makeIdentity('RK4', 40);
         const ent = makeEnterprise('REnt', lead, [k2, k3, k4]);
-        pledgeEnterpriseBacking(ent, k3.pubKeyHex, 15);
+        pledgeEnterpriseBacking(ent, k3.pubKeyHex, hc(15));
 
         expectThrow(() => proposeKeeperRemoval(ent, k2.pubKeyHex, k3.pubKeyHex), 'Only the lead keeper', 'M: an ordinary keeper cannot remove a keeper');
         expectThrow(() => proposeKeeperRemoval(ent, lead.pubKeyHex, lead.pubKeyHex), 'step down', 'M: the lead removing themselves is pointed to step down');
@@ -256,15 +266,15 @@ async function main() {
     {
         const lead = makeIdentity('SLead', 60), k2 = makeIdentity('SK2', 60), k3 = makeIdentity('SK3', 60);
         const ent = makeEnterprise('SEnt', lead, [k2, k3]);
-        pledgeEnterpriseBacking(ent, k2.pubKeyHex, 40);
-        pledgeEnterpriseBacking(ent, k3.pubKeyHex, 10);
+        pledgeEnterpriseBacking(ent, k2.pubKeyHex, hc(40));
+        pledgeEnterpriseBacking(ent, k3.pubKeyHex, hc(10));
 
         // In debt by 30: the others' pledges (10) do not cover it without k2's 40.
         setEnterpriseBalance(ent, -30);
-        assert(getBalance(ent).balance === -30, 'M: fixture — the enterprise is 30 beans in debt');
+        assert(getBalance(ent).balance_c === hc(-30), `M: fixture — the enterprise is 30 beans in debt (${getBalance(ent).balance_c} hundredths)`);
         expectThrow(() => stepDownAsKeeper(ent, k2.pubKeyHex), '30 beans in debt', 'M: a keeper whose pledge covers the debt cannot step down yet');
         expectThrow(() => stepDownAsKeeper(ent, k2.pubKeyHex), 'other keepers pledge 20 beans more', 'M: the refusal says what must happen first');
-        assert(role(ent, k2.pubKeyHex) === 'keeper' && activePledge(ent, k2.pubKeyHex) === 40, 'M: refused step-down changes nothing');
+        assert(role(ent, k2.pubKeyHex) === 'keeper' && activePledge(ent, k2.pubKeyHex) === hc(40), 'M: refused step-down changes nothing');
 
         // k3's pledge is not needed (k2's 40 covers 30): k3 may go, and their pledge is released.
         const sd = stepDownAsKeeper(ent, k3.pubKeyHex);
@@ -272,7 +282,8 @@ async function main() {
 
         setEnterpriseBalance(ent, 0);
         const sd2 = stepDownAsKeeper(ent, k2.pubKeyHex);
-        assert(sd2.releasedBacking === 40 && activePledge(ent, k2.pubKeyHex) === 0, 'M: once solvent, the keeper steps down and the pledge is released');
+        // releasedBacking keeps its name and carries whole hundredths.
+        assert(sd2.releasedBacking === hc(40) && activePledge(ent, k2.pubKeyHex) === 0, `M: once solvent, the keeper steps down and the pledge is released (${sd2.releasedBacking} hundredths)`);
         expectThrow(() => stepDownAsKeeper(ent, lead.pubKeyHex), 'only keeper', 'M: the only keeper cannot step down');
         expectThrow(() => stepDownAsKeeper(ent, k2.pubKeyHex), 'not a keeper', 'M: a non-keeper cannot step down');
     }
@@ -423,7 +434,7 @@ async function main() {
 
         // Pending keeper changes name an applicant and their pledge, or a keeper being removed: keepers and admins only.
         const happ = makeIdentity('HApp', 10);
-        const hadd = approveKeeperRequest(requestToJoinEnterprise(ent, happ.pubKeyHex, 3).id, lead.pubKeyHex);
+        const hadd = approveKeeperRequest(requestToJoinEnterprise(ent, happ.pubKeyHex, hc(3)).id, lead.pubKeyHex);
         const anonRes = await fetch(`${BASE}/api/enterprise/${ent}`);
         const anon = await anonRes.json() as any;
         // The enterprise detail is members' on every node (2026-10-01): an anonymous reader is refused it whole.

@@ -300,8 +300,8 @@ async function main(): Promise<void> {
     assert(wesJoins.status === 200 && liveConfirmation(wesId.pk)?.entry_id === wes.entryId && inviteRow(bothMade.body.invite.code)?.names_bind_outcome === 'confirmed',
         `7b. the binding keeps working: Wes joins confirmed against the entry (${show(wesJoins)})`);
     const wesBalance = getBalance(wesId.pk);
-    assert(wesBalance.knownGrant > 0 && wesBalance.floor === -wesBalance.knownGrant, `7b. his floor is the known floor (known ${wesBalance.knownGrant}, floor ${wesBalance.floor})`);
-    assert(getBalance(wesId.pk).usableFloor === 0, '7b. and with no live Offer none of it is usable');
+    assert(wesBalance.knownGrant_c > 0 && wesBalance.floor_c === -wesBalance.knownGrant_c, `7b. his floor is the known floor (known ${wesBalance.knownGrant_c}, floor ${wesBalance.floor_c} hundredths)`);
+    assert(getBalance(wesId.pk).usableFloor_c === 0, '7b. and with no live Offer none of it is usable');
     require_((await dial(false)).status === 200, '7b. the dial goes back off');
 
     // ── 8. Answering a knock adds the entry and binds it in one step ─────────────────────────────

@@ -68,7 +68,7 @@ function apiAnswer(pathname, search, me, door = null, signer = '') {
     if (door?.open) {
         // The global node with its 12-words door open, as /api/community/info says it after #1425.
         if (pathname === '/api/community/info') {
-            return { memberCount: 4, postCount: 3, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, wordsDoor: true, beans: false } };
+            return { memberCount: 4, postCount: 3, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, wordsDoor: true, beans: false } };
         }
         if (pathname.startsWith('/api/members/callsign-available/')) return { available: true };
         if (pathname === '/api/join/sso-nonce') return { nonce: 'harness-nonce', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null };

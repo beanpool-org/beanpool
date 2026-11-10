@@ -30,9 +30,9 @@ const ASK = { id: 'a1', firstName: 'Saoirse', howKnown: 'She runs the bakery on 
 const json = (body, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 function answer(url, who) {
     const u = new URL(url);
-    if (u.pathname === '/api/community/info') return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance: 0, profile: 'local', features: { beans: true, invites: true, knocks: true, inviteAsks: true, door: 'admins' } });
+    if (u.pathname === '/api/community/info') return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance_c: 0, profile: 'local', features: { beans: true, invites: true, knocks: true, inviteAsks: true, door: 'admins' } });
     if (u.pathname === '/api/node-admin/me') return json({ role: who === 'admin' ? 'admin' : null });
-    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance: 0, floor: 0, usableFloor: 0 });
+    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance_c: 0, floor_c: 0, usableFloor_c: 0 });
     if (u.pathname.startsWith('/api/invite/mine/')) return json({ invites: [] });
     if (u.pathname === '/api/invite/tree') return json([]);
     if (u.pathname === '/api/invite/asks/mine') return json({ waiting: [ASK], answers: [

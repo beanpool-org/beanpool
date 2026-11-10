@@ -159,15 +159,16 @@ describe('OffboxBackupsPanel', () => {
         expect(said).toHaveTextContent(/lifecycle rule/);
     });
 
-    it('says a server older than off-box backups needs an update, rather than breaking', async () => {
+    it('says a refusal or an answer that is not a status in plain words, rather than breaking', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'Not Found' }, false, 404)));
         const { unmount } = render(<OffboxBackupsPanel activeNode={node} />);
-        expect(await screen.findByText(/older than backups off the server: update it/)).toBeInTheDocument();
+        expect(await screen.findByText(/Not Found/)).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/older than backups off the server/);
         unmount();
-        // A 200 that is not a status (a proxy's page, an older route): the same sentence.
+        // A 200 that is not a status (a proxy's page): said as what it is.
         vi.stubGlobal('fetch', vi.fn(async () => json({ success: true })));
         render(<OffboxBackupsPanel activeNode={node} />);
-        expect(await screen.findByText(/older than backups off the server: update it/)).toBeInTheDocument();
+        expect(await screen.findByText(/answer was not a backup status/)).toBeInTheDocument();
     });
 
     it("shows the node's refusal in one line to someone who is not an owner", async () => {

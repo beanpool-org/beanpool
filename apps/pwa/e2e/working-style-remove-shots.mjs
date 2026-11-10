@@ -33,7 +33,7 @@ function answer(route) {
     const p = new URL(route.request().url()).pathname;
     const reply = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (p.startsWith('/api/profile/')) return reply(200, mine);
-    if (p === '/api/community/info') return reply(200, { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance: 640, profile: 'local', features: { beans: true } });
+    if (p === '/api/community/info') return reply(200, { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance_c: 64000, profile: 'local', features: { beans: true } });
     if (p.startsWith('/api/community/membership/')) return reply(200, { isMember: true });
     if (p.startsWith('/api/marketplace/posts')) return reply(200, []);
     if (p.startsWith('/api/ratings/')) return reply(200, { average: 0, count: 0, asProvider: { average: 0, count: 0 }, asReceiver: { average: 0, count: 0 }, ratings: [] });

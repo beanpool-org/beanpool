@@ -1181,6 +1181,28 @@ const COMMUNITY_SHAPE = {
 
 const AGENT_TAKEDOWNS = agentTakedowns(HOSTILE_REASON);
 
+/** Each member's posts and messages, as /admin/data/members sends them beside its page. */
+const MEMBER_STATS = { active: 7, suspended: 1, newcomers: 2, residents: 3, stewards: 1, elders: 2 };
+
+/** What /admin/data counts (server state-engine getAdminMemberCounts), from the fixture members. */
+function memberCounts() {
+    const live = MEMBERS.filter((mm) => mm.status !== 'pruned');
+    const platforms = { ios: 0, android: 0, web: 0, unknown: 0 };
+    for (const mm of live) {
+        const p = String(mm.platform || '').toLowerCase();
+        if (p === 'ios' || p === 'android') platforms[p]++;
+        else if (p === 'web' || p === 'pwa') platforms.web++;
+        else platforms.unknown++;
+    }
+    return {
+        members: live.length,
+        treasuries: live.filter((mm) => mm.isTreasury).length,
+        doorMembers: live.filter((mm) => String(mm.invitedBy ?? '').startsWith('open:')).length,
+        owners: live.filter((mm) => mm.nodeRole === 'owner').length,
+        platforms,
+    };
+}
+
 export function mockResponse(method, pathname, searchParams, bodyText) {
     const ok = (json) => ({ status: 200, json });
     const m = (method || 'GET').toUpperCase();
@@ -1228,22 +1250,39 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
         });
     }
 
-    // ---- admin/data (members, reports, posts, health, enterprises) ----
+    // ---- admin/data (reports, health, counts; members and posts a page at a time) ----
+    // As the node answers (server routes/admin.ts): `lists: 'none'`, what the console always sends, is the summary with the
+    // counts and no member or post; the console then reads /admin/data/members and /admin/data/posts. Without it, the lists
+    // come whole beside the same summary.
     if (pathname === '/api/local/admin/data') {
-        return ok({
+        let req = {};
+        try { req = JSON.parse(bodyText || '{}'); } catch {}
+        const summary = {
             health: { healthScore: 78, flags: HEALTH_FLAGS },
             reports: REPORTS,
-            members: MEMBERS,
-            profiles: [],
-            posts: POSTS,
             reportCount: REPORTS.length,
             escrowDisputesCount: DISPUTES.length,
-            memberStats: { active: 7, suspended: 1, newcomers: 2, residents: 3, stewards: 1, elders: 2 },
             // Whole hundredths of a Bean, as /admin/data sends them (getTradeTotals, getCommonsBalance).
             tradeTotals: { deals: 48, volume: 849275, cancelled: 3 },
             commonsBalance: 24000,
             enterprises: ENTERPRISES,
-        });
+            counts: memberCounts(),
+        };
+        if (req.lists === 'none') return ok(summary);
+        return ok({ ...summary, members: MEMBERS, profiles: [], posts: POSTS, memberStats: MEMBER_STATS });
+    }
+    // One page holds every member and every post here: the fixtures are a small community.
+    if (pathname === '/api/local/admin/data/members') {
+        let req = {};
+        try { req = JSON.parse(bodyText || '{}'); } catch {}
+        const q = typeof req.q === 'string' ? req.q.trim().toLowerCase() : '';
+        const members = q ? MEMBERS.filter((mm) => String(mm.callsign || '').toLowerCase().includes(q) || String(mm.publicKey).includes(q)) : MEMBERS;
+        return ok({ members, profiles: [], memberStats: MEMBER_STATS, nextCursor: null, total: members.length, limit: Number(req.limit) || 100 });
+    }
+    if (pathname === '/api/local/admin/data/posts') {
+        let req = {};
+        try { req = JSON.parse(bodyText || '{}'); } catch {}
+        return ok({ posts: POSTS, nextCursor: null, limit: Number(req.limit) || 100 });
     }
     if (pathname === '/api/local/admin/logs') return ok({ logs: LOGS });
     if (pathname === '/api/local/admin/onboarding-funnel') return ok({ days: Number(searchParams.get('days')) || 30, rows: FUNNEL_ROWS, openDoor: true });

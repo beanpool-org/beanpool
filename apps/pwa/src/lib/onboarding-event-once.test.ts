@@ -15,6 +15,7 @@ vi.mock('./identity', () => ({ loadIdentity: vi.fn(async () => identity) }));
 let identity: { publicKey: string; privateKey: string } | null = null;
 
 import { recordOnboardingEvent, setNodeApiUrl } from './api';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
 const fetchMock = vi.fn();
 
@@ -31,6 +32,7 @@ beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) });
     vi.stubGlobal('fetch', fetchMock);
+    resetNodeVersionGateForTests();
 });
 
 afterEach(() => {
@@ -68,6 +70,8 @@ describe('recordOnboardingEvent counts a step once per person', () => {
     });
 
     it('reports again on a DIFFERENT node — joining a second community is a second join', async () => {
+        // Both run 1.4.0 (lib/node-version-gate.ts): the funnel posts are all this stub answers.
+        for (const node of ['https://alpha.example.org', 'https://beta.example.org']) hearNodeVersionForTests(node);
         setNodeApiUrl('https://alpha.example.org');
         await recordOnboardingEvent('protection_shown');
         setNodeApiUrl('https://beta.example.org');

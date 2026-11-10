@@ -169,6 +169,7 @@ export const SUITES = [
     'test-admin-password-query',
     'test-cors-policy',
     'test-knock-cors',
+    'test-health-cors',
     'test-gateway-config',
     'test-gateway-real-client',
     'test-dos-hardening',

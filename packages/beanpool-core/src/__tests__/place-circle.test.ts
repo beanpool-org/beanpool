@@ -3,7 +3,7 @@ import { GROUP_KIND_CIRCLE, PLACE_CIRCLE_WORDS, circleKnockLine, circleKnockTrou
 import { t } from '../words.js';
 
 describe('what a knock\'s answer means for Ask to join', () => {
-    it.each([429, 500, 502, 503, 504, 520])('a %i says nothing about this person: the button stays for another tap', status => {
+    it.each([426, 429, 500, 502, 503, 504, 520])('a %i says nothing about this person: the button stays for another tap', status => {
         expect(circleKnockTrouble({ kind: 'refused', status })).toBe('later');
     });
 

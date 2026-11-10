@@ -56,7 +56,7 @@ export function OwnerWordsChecksPanel({ activeNode, now = Date.now() }: { active
     useEffect(() => { void load(); }, [load]);
 
     if (error) {
-        // An older server without the route, or a moderator's session: say nothing rather than alarm.
+        // A moderator's session (the list is owners' only): say nothing rather than alarm.
         return null;
     }
     if (!owners) return null;

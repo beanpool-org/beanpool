@@ -5,6 +5,7 @@ import { CategoryTile } from '../src/components/CategoryTile';
 import { HomePage } from '../src/pages/HomePage';
 import type { MarketplacePost } from '../src/lib/marketplace';
 import type { BeanPoolIdentity } from '../src/lib/identity';
+import { formatHundredths } from '@beanpool/core';
 import '../src/index.css';
 
 const PHOTO_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><rect width="400" height="400" fill="%23f59e0b"/><circle cx="200" cy="200" r="100" fill="%23d97706"/><text x="200" y="215" font-family="sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle">OWN PHOTO</text></svg>';
@@ -18,7 +19,7 @@ const postWithPhoto: MarketplacePost = {
     description: 'Freshly baked artisan sourdough bread.',
     category: 'food',
     type: 'offer',
-    credits: 6,
+    price_c: 600,
     priceType: 'fixed',
     photos: [PHOTO_SVG],
     status: 'active',
@@ -36,7 +37,7 @@ const postWithBanner: MarketplacePost = {
     description: 'Heritage starter from the community bakery enterprise.',
     category: 'food',
     type: 'offer',
-    credits: 4,
+    price_c: 400,
     priceType: 'fixed',
     photos: [],
     status: 'active',
@@ -53,7 +54,7 @@ const postWithTile: MarketplacePost = {
     description: 'Solid tools ready to borrow for your garden beds.',
     category: 'tools',
     type: 'offer',
-    credits: 8,
+    price_c: 800,
     priceType: 'fixed',
     photos: [],
     status: 'active',
@@ -72,7 +73,7 @@ const mockIdentity: BeanPoolIdentity = {
 const mockHomeData = {
     generatedAt: new Date().toISOString(),
     profile: 'local',
-    community: { name: 'Mullumbimby Commons', members: 42, openInvites: 0, publicBoard: false, tradesThisMonth: 12, commonsPot: 150, listings: 3, eventsSoon: 0 },
+    community: { name: 'Mullumbimby Commons', members: 42, openInvites: 0, publicBoard: false, tradesThisMonth: 12, commonsPot_c: 123456, listings: 3, eventsSoon: 0 },
     cards: {
         market: {
             items: [
@@ -114,7 +115,7 @@ function PhoneStandin({ viewMode }: { viewMode: 'grid' | 'list' | 'compact' }) {
                                     {post.type.toUpperCase()}
                                 </div>
                                 <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-slate-900/85 text-[10px] font-bold text-white">
-                                    {post.credits} Beans
+                                    {formatHundredths(post.price_c)} Beans
                                 </div>
                             </div>
                             <div className="p-2 flex-1 flex flex-col justify-between">
@@ -144,7 +145,7 @@ function PhoneStandin({ viewMode }: { viewMode: 'grid' | 'list' | 'compact' }) {
                             </div>
                             <div className="min-w-0 flex-1">
                                 <div className="text-xs font-semibold truncate text-neutral-900 dark:text-neutral-100">{post.title}</div>
-                                <div className="text-[10px] text-neutral-500">{post.credits} Beans · {post.authorCallsign}</div>
+                                <div className="text-[10px] text-neutral-500">{formatHundredths(post.price_c)} Beans · {post.authorCallsign}</div>
                             </div>
                         </div>
                     ))}
@@ -171,7 +172,7 @@ function PhoneStandin({ viewMode }: { viewMode: 'grid' | 'list' | 'compact' }) {
                             <div>
                                 <div className="flex items-center justify-between gap-1 mb-0.5">
                                     <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">{post.type.toUpperCase()}</span>
-                                    <span className="text-[10px] font-bold text-neutral-900 dark:text-neutral-100">{post.credits} Beans</span>
+                                    <span className="text-[10px] font-bold text-neutral-900 dark:text-neutral-100">{formatHundredths(post.price_c)} Beans</span>
                                 </div>
                                 <div className="text-xs font-semibold line-clamp-2 text-neutral-900 dark:text-neutral-100">{post.title}</div>
                             </div>

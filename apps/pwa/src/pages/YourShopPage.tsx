@@ -226,15 +226,6 @@ export function YourShopPage({
                     </ToolSection>
                 ) : null}
 
-                {read?.state === 'older' ? (
-                    <ToolSection testId="shop-older">
-                        <ToolEmpty
-                            icon="🏪"
-                            title={t("Your community's server doesn't have shops yet. They come with its next update.")}
-                        />
-                    </ToolSection>
-                ) : null}
-
                 {read?.state === 'none' ? (
                     <ToolSection testId="shop-none">
                         {closed ? (

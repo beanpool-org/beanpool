@@ -35,24 +35,25 @@ html { font-size: ${scale * 100}% !important; }
 ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map((px) => `.text-\\[${px}px\\] { font-size: ${px * scale}px !important; }`).join('\n')}
 `;
 
-const balance = (beans) => ({
-    balance: beans, floor: -153, usableFloor: -153, liveOffers: 1, activated: true, frozen: false, earnedCredit: 3, tierCredit: 3,
-    commonsBalance: 12.5, qualifiedValue: 10, avgRating: 5, reviewCount: 0, trustStats: { uniquePartners: 1 }, callsign: 'Visitor',
-    tier: { name: 'Newcomer' }, roomHeld: 150,
+// Every Beans figure is whole hundredths under a `_c` key, as the node answers (qualifiedValue and the gift's max, room and canGive keep their names).
+const balance = (balance_c) => ({
+    balance_c, floor_c: -15300, usableFloor_c: -15300, liveOffers: 1, activated: true, frozen: false, earnedCredit_c: 300, tierCredit_c: 300,
+    commonsBalance_c: 1250, qualifiedValue: 1000, avgRating: 5, reviewCount: 0, trustStats: { uniquePartners: 1 }, callsign: 'Visitor',
+    tier: { name: 'Newcomer' }, roomHeld_c: 15000,
 });
 
 const unanswered = new Set();
 function answer(method, pathname, search, state) {
     if (pathname === '/api/credit/gift') {
-        if (method === 'GET') return { status: 200, body: { offered: true, max: 100, room: 150, canGive: 100, why: null } };
-        return state.refuse ? { status: 409, body: { error: REFUSAL, code: 'in_use' } } : { status: 200, body: { amount: 50, room: 100, canGive: 50 } };
+        if (method === 'GET') return { status: 200, body: { offered: true, max: 10000, room: 15000, canGive: 10000, why: null } };
+        return state.refuse ? { status: 409, body: { error: REFUSAL, code: 'in_use' } } : { status: 200, body: { amount_c: 5000, room: 10000, canGive: 5000 } };
     }
-    if (pathname.startsWith('/api/ledger/balance')) return { status: 200, body: balance(state.beans) };
+    if (pathname.startsWith('/api/ledger/balance')) return { status: 200, body: balance(state.balance_c) };
     if (pathname === '/api/ledger/transactions') return { status: 200, body: [] };
     if (pathname === '/api/community/members') return { status: 200, body: [{ publicKey: DANA, callsign: 'Dana' }] };
     if (pathname === '/api/members') return { status: 200, body: { members: [{ publicKey: DANA, callsign: 'Dana' }], nextCursor: null } };
     if (pathname === '/api/community/me') return { status: 200, body: { mute: { muted: false, until: null }, features: null } };
-    if (pathname === '/api/community/info') return { status: 200, body: { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance: 12.5, profile: 'local', features: {} } };
+    if (pathname === '/api/community/info') return { status: 200, body: { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance_c: 1250, profile: 'local', features: {} } };
     if (pathname === '/api/commons/repayment') return { status: 200, body: { repayment: null } };
     if (pathname.startsWith('/api/friends/')) return { status: 200, body: [] };
     const fallback = mockResponse(pathname, search);
@@ -125,10 +126,9 @@ async function main() {
         for (const mode of ['light', 'dark']) {
             for (const shot of ['credit-tab', 'refusal', 'no-beans']) {
                 const run = `${mode} · ${shot}`;
-                const state = { beans: shot === 'no-beans' ? 0 : 85, refuse: shot === 'refusal' };
+                const state = { balance_c: shot === 'no-beans' ? 0 : 123456, refuse: shot === 'refusal' };
                 const context = await browser.newContext({ viewport: { width: 320, height: 568 }, reducedMotion: 'reduce', colorScheme: mode });
                 await context.addInitScript((m) => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', m);
                 }, mode);
                 await context.route((url) => url.origin !== origin, (route) => route.abort());

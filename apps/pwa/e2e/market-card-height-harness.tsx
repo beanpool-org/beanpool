@@ -30,7 +30,7 @@ function post(i: number): MarketplacePost {
         description: 'A short course.',
         category: ['tech', 'food', 'tools', 'garden', 'services'][i % 5],
         type: i % 4 === 3 ? 'need' : 'offer',
-        credits: 45 + i,
+        price_c: (45 + i) * 100,
         priceType: 'fixed',
         repeatable: true,
         photos: k === 'photo' ? [SVG('f59e0b', 400, 400)] : [],

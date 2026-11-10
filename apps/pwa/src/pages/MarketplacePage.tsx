@@ -40,7 +40,7 @@ import {
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
-import { marked, readsOwn, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, readsOwn, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -1008,21 +1008,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
-                let statusesError: unknown = null;
-                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch((e) => { statusesError = e; return null; });
+                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
                 // Online events have no place, so a read by radius never meets them: read beside it where the feed asks for
                 // events (DESIGN-event-times §9).
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
-                const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents, localEvents] = await Promise.all([
+                const [homeData, myOwnPosts, statusesData, onlineEvents, localEvents] = await Promise.all([
                     // The newest within the radius where the node reads by area (lib/listings-near, sort=recent); the viewer's
                     // own listings wherever they are. Read from the distance setting: cut to the exact circle, the newest
                     // created first, as many as the node's page without a limit.
                     readNearestInCircle(near, NODE_PAGE_DEFAULT, page => getMarketplacePosts({ ...filter, ...nearParams(near), ...page })),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
-                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock),
-                    // and never where enterprises are a preview or off (lib/features treasuriesFallback).
-                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : treasuriesFallback(statusesError)),
                     near && wantsEvents ? getMarketplacePosts({ ...filter, online: true }).catch(() => []) : Promise.resolve([]),
                     // On a local community the page is the newest CHANGED 50, so an event posted weeks ago is not in it, and
                     // the day before it starts it comes back among that day's posts (core market-order): the events are read
@@ -1034,12 +1030,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
                 if (statusesData?.enterprises) {
                     for (const t of statusesData.enterprises) {
-                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
-                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
-                        }
-                    }
-                } else if (fallbackTreasuries?.treasuries) {
-                    for (const t of fallbackTreasuries.treasuries) {
                         if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
                             inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
                         }

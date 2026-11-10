@@ -75,49 +75,50 @@ const DAY = 24 * 3600 * 1000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const KEEPERS = [
-    { publicKey: 'lead-alice', callsign: 'Alice', role: 'lead', backing: 0 },
-    { publicKey: ME, callsign: 'Bob', role: 'keeper', backing: 20 },
-    { publicKey: 'keeper-cara', callsign: 'Cara', role: 'keeper', backing: 0, suspended: true },
+    { publicKey: 'lead-alice', callsign: 'Alice', role: 'lead', backing_c: 0 },
+    { publicKey: ME, callsign: 'Bob', role: 'keeper', backing_c: 2000 },
+    { publicKey: 'keeper-cara', callsign: 'Cara', role: 'keeper', backing_c: 0, suspended: true },
 ];
 const INACTIVITY = { leadPubkey: 'lead-alice', leadCallsign: 'Alice', daysInactive: 40, isEligible: true, autoPromoted: false };
 const BUSY = {
     publicKey: 'ent-busy', name: 'Bindarrabi Community Eggs', purpose: 'Eggs for the street, from the hens at the hall.', status: 'active', paused: false,
-    lifecycle: 'ongoing', balance: -12.5, creditLine: 200, liveOffers: 2, earnedSurplus: 30, workingCapitalCeiling: null,
-    deferredClaims: [{ id: 'c1', status: 'pending', amount: 8 }],
-    pendingBids: [{ id: 'bid-1', post_title: 'Clean the coop', credits: 10, peer_callsign: 'Dan' }],
+    lifecycle: 'ongoing', balance_c: -1250, creditLine_c: 123456, liveOffers: 2, earnedSurplus_c: 3000, workingCapitalCeiling_c: null,
+    deferredClaims: [{ id: 'c1', status: 'pending', amount_c: 800 }],
+    pendingBids: [{ id: 'bid-1', post_title: 'Clean the coop', amount_c: 1000, peer_callsign: 'Dan' }],
     activeDeals: [
-        { id: 'deal-1', post_id: 'p1', post_title: 'Egg delivery', credits: 6, action_required: 'fulfill', peer_callsign: 'Eve' },
-        { id: 'deal-2', post_id: 'p3', post_title: 'Fix the fence', credits: 15, action_required: 'release', peer_callsign: null, price_type: 'fixed' },
+        { id: 'deal-1', post_id: 'p1', post_title: 'Egg delivery', amount_c: 600, action_required: 'fulfill', peer_callsign: 'Eve' },
+        { id: 'deal-2', post_id: 'p3', post_title: 'Fix the fence', amount_c: 1500, action_required: 'release', peer_callsign: null, price_type: 'fixed' },
     ],
     keepers: KEEPERS, isLeadOrSoleKeeperOrAdmin: true,
     keeperRequests: [
-        { id: 'req-1', enterprisePubkey: 'ent-busy', memberPubkey: 'member-dan', callsign: 'Dan', pledgedBacking: 5, status: 'pending', createdAt: iso(-DAY), canBackPledge: false },
+        { id: 'req-1', enterprisePubkey: 'ent-busy', memberPubkey: 'member-dan', callsign: 'Dan', pledgedBacking: 500, status: 'pending', createdAt: iso(-DAY), canBackPledge: false },
         { id: 'req-2', enterprisePubkey: 'ent-busy', memberPubkey: 'member-fay', callsign: 'Fay', pledgedBacking: 0, status: 'pending', createdAt: iso(-DAY), canBackPledge: true, pendingChange: { appliesAt: iso(2 * DAY + 60_000) } },
     ],
-    keeperChanges: [{ id: 'chg-1', enterprisePubkey: 'ent-busy', kind: 'add', memberPubkey: 'member-gus', memberCallsign: 'Gus', requestId: 'req-0', pledgedBacking: 4,
+    keeperChanges: [{ id: 'chg-1', enterprisePubkey: 'ent-busy', kind: 'add', memberPubkey: 'member-gus', memberCallsign: 'Gus', requestId: 'req-0', pledgedBacking: 400,
         proposedBy: 'lead-alice', proposedByCallsign: 'Alice', status: 'pending', createdAt: iso(-DAY), appliesAt: iso(2 * DAY + 60_000), resolvedAt: null, resolvedBy: null }],
     leadInactivity: INACTIVITY,
     succession: { inactivity: INACTIVITY, proposals: [{ id: 'prop-1', enterprisePubkey: 'ent-busy', leadPubkey: 'lead-alice', candidatePubkey: 'keeper-cara', candidateCallsign: 'Cara',
         status: 'active', votesCount: 1, noVotesCount: 0, requiredVotes: 2, totalEligible: 2, deadlineAt: iso(13 * DAY + 60_000), votes: [] }] },
     posts: [
-        { id: 'p1', type: 'offer', title: 'Dozen eggs', description: 'Free range, collected this morning', credits: 6, price_type: 'hourly', repeatable: true },
-        { id: 'p2', type: 'need', title: 'Coop cleaning', credits: 10 },
+        { id: 'p1', type: 'offer', title: 'Dozen eggs', description: 'Free range, collected this morning', price_c: 600, price_type: 'hourly', repeatable: true },
+        { id: 'p2', type: 'need', title: 'Coop cleaning', price_c: 1000 },
     ],
-    flow: [{ id: 'f1', memo: 'Egg sale', amount: 6, incoming: true, timestamp: iso(-2 * DAY) }, { id: 'f2', memo: '', amount: 2, incoming: false, timestamp: iso(-DAY) }],
+    flow: [{ id: 'f1', memo: 'Egg sale', amount_c: 600, incoming: true, timestamp: iso(-2 * DAY) }, { id: 'f2', memo: '', amount_c: 200, incoming: false, timestamp: iso(-DAY) }],
     lat: -28.55, lng: 153.5,
 };
 const ROOF = {
-    ...BUSY, publicKey: 'prj-roof', name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance: 120, goalAmount: 500, currentAmount: 120,
-    deadlineAt: iso(5 * DAY), availableToBack: 30, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null,
+    ...BUSY, publicKey: 'prj-roof', name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance_c: 123456, goalAmount_c: 500000, currentAmount_c: 123456,
+    deadlineAt: iso(5 * DAY), availableToBack_c: 3000, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null,
     pendingBids: [], activeDeals: [], keepers: KEEPERS.slice(0, 2),
 };
 const LEDGER = {
-    enterprise: { publicKey: 'ent-busy', name: 'Bindarrabi Community Eggs', status: 'active', paused: false, balance: -12.5 },
+    enterprise: { publicKey: 'ent-busy', name: 'Bindarrabi Community Eggs', status: 'active', paused: false, balance_c: -1250 },
     period: { since: null, until: null },
-    summary: { totalIncome: 120, totalSpend: 40, netChange: 78, startingBalance: -90.5, endingBalance: -12.5, transactionCount: 2 },
+    // The summary and the rows' netAmount and runningBalance keep their names and are whole hundredths, as the node sends them.
+    summary: { totalIncome: 12000, totalSpend: 4000, netChange: 7800, startingBalance: -9050, endingBalance: -1250, transactionCount: 2 },
     entries: [
-        { id: 'e1', timestamp: iso(-3 * DAY), direction: 'income', amount: 120, fee: 2, netAmount: 118, counterparty: 'member-dan', counterpartyName: 'Dan', memo: 'Veggie box', runningBalance: 29.5 },
-        { id: 'e2', timestamp: iso(-2 * DAY), direction: 'spend', amount: 40, fee: 0, netAmount: 40, counterparty: 'member-eve', counterpartyName: '', memo: '', runningBalance: -12.5 },
+        { id: 'e1', timestamp: iso(-3 * DAY), direction: 'income', amount_c: 12000, fee_c: 180, netAmount: 11820, counterparty: 'member-dan', counterpartyName: 'Dan', memo: 'Veggie box', runningBalance: 2950 },
+        { id: 'e2', timestamp: iso(-2 * DAY), direction: 'spend', amount_c: 4000, fee_c: 0, netAmount: -4000, counterparty: 'member-eve', counterpartyName: '', memo: '', runningBalance: -1250 },
     ],
 };
 const THREAD = {
@@ -128,8 +129,8 @@ const THREAD = {
     ],
 };
 const BALANCE = {
-    balance: 450, floor: -1000, usableFloor: -200, liveOffers: 1, frozen: true, activated: true, earnedCredit: 300, tierCredit: 400,
-    commonsBalance: 1234.5, qualifiedValue: 2500, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 6 }, callsign: 'Visitor',
+    balance_c: 123456, floor_c: -100000, usableFloor_c: -20000, liveOffers: 1, frozen: true, activated: true, earnedCredit_c: 30000, tierCredit_c: 40000,
+    commonsBalance_c: 123450, qualifiedValue: 250000, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 6 }, callsign: 'Visitor',
     tier: { name: 'Resident' }, keeperOf: ['ent-busy'],
 };
 const MEMBERS = [
@@ -137,8 +138,8 @@ const MEMBERS = [
     { publicKey: 'member-kofi', callsign: 'Kofi Mensah-Abernathy', avatarUrl: 'bundled://leaf', role: 'member', joinedAt: iso(-3 * DAY) },
 ];
 const TXNS = [
-    { id: 't1', from: 'member-dana', to: ME, amount: 3, taxFee: 0, memo: 'thanks for the eggs', timestamp: iso(-DAY) },
-    { id: 't2', from: ME, to: 'member-dana', amount: 12.5, taxFee: 0, memo: 'for the bread', timestamp: iso(-2 * DAY) },
+    { id: 't1', from: 'member-dana', to: ME, amount_c: 300, fee_c: 0, memo: 'thanks for the eggs', timestamp: iso(-DAY) },
+    { id: 't2', from: ME, to: 'member-dana', amount_c: 1250, fee_c: 0, memo: 'for the bread', timestamp: iso(-2 * DAY) },
 ];
 const decision = (id, over = {}) => ({
     id, authorPubkey: 'author', title: `Fix the hall roof (${id})`, description: 'The north side leaks in heavy rain.', touches: 'member', effect: 'freeze_credit',
@@ -170,9 +171,9 @@ const ENTERPRISE_DECISIONS = {
     canPropose: true, rollSize: 3,
     decisions: [
         { id: 'ed1', authorPubkey: 'lead-alice', title: 'Pay Bob for the coop roof', description: 'Two days on the roof in the rain.', effect: 'pay_wage', subject: ME,
-            params: { amount: 20 }, status: 'open', opensAt: iso(-DAY), closesAt: iso(2 * DAY), tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.5 }, myVote: null, canVote: true },
+            params: { amount_c: 2000 }, status: 'open', opensAt: iso(-DAY), closesAt: iso(2 * DAY), tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.5 }, myVote: null, canVote: true },
         { id: 'ed2', authorPubkey: 'lead-alice', title: 'Buy a second feeder', description: '', effect: 'spend', subject: null,
-            params: { amount: 35, memo: 'Feeder' }, status: 'passed', opensAt: iso(-9 * DAY), closesAt: iso(-2 * DAY), tally: { voted: 3, roll: 3, quorumRequired: 2, thresholdRequired: 0.5, yes: 3, no: 0 }, myVote: { support: true, updatedAt: iso(-5 * DAY) } },
+            params: { amount_c: 3500, memo: 'Feeder' }, status: 'passed', opensAt: iso(-9 * DAY), closesAt: iso(-2 * DAY), tally: { voted: 3, roll: 3, quorumRequired: 2, thresholdRequired: 0.5, yes: 3, no: 0 }, myVote: { support: true, updatedAt: iso(-5 * DAY) } },
     ],
 };
 
@@ -187,16 +188,16 @@ function answer(pathname, search) {
     if (pathname === '/api/ledger/transactions') return TXNS;
     if (pathname === '/api/community/members') return MEMBERS;
     if (pathname === '/api/community/me') return { mute: { muted: false, until: null }, features: null };
-    if (pathname === '/api/commons/decisions') return { decisions: [decision('a'), decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount: 50 } })], myPoolVoting: { hasCompletedTrade: true, voiceCredits: 16 }, canPropose: true };
+    if (pathname === '/api/commons/decisions') return { decisions: [decision('a'), decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount_c: 5000 } })], myPoolVoting: { hasCompletedTrade: true, voiceCredits: 16 }, canPropose: true };
     if (pathname === '/api/groups') return [GROUP];
     if (pathname === '/api/groups/g1') return GROUP;
     if (pathname === '/api/groups/g1/members') return ROSTER;
     if (pathname === '/api/groups/g1/succession') return SUCCESSION;
     if (pathname === '/api/groups/g1/decisions') return { decisions: [], roll: [], onRoll: true };
     if (pathname.startsWith('/api/friends/')) return [];
-    if (pathname === '/api/commons/balance') return { balance: 1234.5 };
+    if (pathname === '/api/commons/balance') return { balance_c: 123450 };
     if (pathname === '/api/commons/repayment') return { repayment: null };
-    if (pathname === '/api/community/info') return { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance: 1234.5, profile: 'local', features: {} };
+    if (pathname === '/api/community/info') return { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance_c: 123450, profile: 'local', features: {} };
     if (pathname === '/api/members') return { members: MEMBERS, nextCursor: null };
     const fallback = mockResponse(pathname, search);
     if (fallback === undefined) unanswered.add(pathname);
@@ -302,7 +303,6 @@ async function main() {
                 const run = `${sc.name} ${lang}`;
                 const context = await browser.newContext({ viewport: { width: 320, height: 568 }, reducedMotion: 'reduce', colorScheme: 'light' });
                 await context.addInitScript(() => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', 'light');
                 });
                 await context.route((url) => url.origin !== origin, (route) => route.abort());

@@ -25,7 +25,7 @@ vi.mock('../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => n
 vi.mock('../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false), blockUser: vi.fn(), unblockUser: vi.fn(),
-    onBlocklistUpdated: vi.fn(() => () => {}), getBlocklistFullNote: vi.fn(() => null),
+    onBlocklistUpdated: vi.fn(() => () => {}),
 }));
 vi.mock('../lib/api', () => ({
     getMemberProfile: vi.fn(async () => ({

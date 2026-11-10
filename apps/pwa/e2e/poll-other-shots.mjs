@@ -52,7 +52,7 @@ async function startNode(root, members) {
 async function open(browser, origin, who, dark) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
     await context.addInitScript(([mode]) => {
-        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); localStorage.setItem('beanpool-install-dismissed-forever', '1'); } catch { /* none */ }
+        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-install-dismissed-forever', '1'); } catch { /* none */ }
         document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = 'html { font-size: 130% !important; }'; document.head.appendChild(s); });
     }, [dark ? 'dark' : 'light']);
     const page = await context.newPage();

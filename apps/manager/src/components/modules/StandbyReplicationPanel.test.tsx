@@ -413,8 +413,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
     });
 
-    it('never asks for the main server admin password, and shows the legacy-password warning', async () => {
-        const warning = "This standby is NOT copying: the main server refuses its stored admin password. The password is still kept in plain text in local-config.json.";
+    it('never asks for the main server admin password: a standby copies with a replication token alone', async () => {
         const fetchMock = vi.fn().mockImplementation(async (url: string) => {
             if (url.includes('/api/local/admin/backup-status')) {
                 return { ok: true, json: async () => ({ role: 'backup', primaryUrl: 'https://primary.example.com' }) };
@@ -422,12 +421,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
             if (url.includes('/api/local/admin/replication-config/get')) {
                 return {
                     ok: true,
-                    json: async () => ({
-                        primaryUrl: 'https://primary.example.com',
-                        hasPassword: true,
-                        hasToken: false,
-                        credential: { using: 'password', passwordStored: true, passwordInEnv: false, warning, lastSwap: 'failed' },
-                    }),
+                    json: async () => ({ primaryUrl: 'https://primary.example.com', hasToken: false }),
                 };
             }
             return { ok: true, json: async () => ({ success: true }) };
@@ -437,9 +431,10 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         render(<StandbyReplicationPanel activeNode={mockNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/This standby is NOT copying: the main server refuses its stored admin password/);
+            expect(screen.getByLabelText(/Primary Replication Token/i)).toBeInTheDocument();
         });
         expect(screen.queryByLabelText(/Admin Password/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
         await userEvent.type(screen.getByLabelText(/Primary Replication Token/i), 'pasted-token');
         await userEvent.click(screen.getByRole('button', { name: /Save Connection/i }));

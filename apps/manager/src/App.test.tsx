@@ -6,6 +6,14 @@ import { App } from './App';
  * A node answering as if this browser holds a live password session (the httpOnly cookie the password sign-in sets):
  * /auth/session says so, /csrf-token gives its token. `onAdmin` sees every other request.
  */
+/** The pages the console reads after the node's summary (members, then posts): one member, so the node is not a brand-new one. */
+function pagedAnswer(url: string) {
+    const page = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (url.endsWith('/api/local/admin/data/members')) return page({ members: [{ publicKey: 'aa'.repeat(32), callsign: 'Ana', isTreasury: false }], profiles: [], memberStats: {}, nextCursor: null, total: 1 });
+    if (url.endsWith('/api/local/admin/data/posts')) return page({ posts: [], nextCursor: null });
+    return null;
+}
+
 function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
     const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
         if (String(url).includes('/api/local/admin/auth/session')) {
@@ -20,6 +28,8 @@ function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
         }
         const custom = onAdmin?.(String(url), opts);
         if (custom) return custom;
+        const paged = pagedAnswer(String(url));
+        if (paged) return paged;
         return Promise.resolve({
             ok: true,
             status: 200,
@@ -58,6 +68,8 @@ describe('App Component', () => {
                         }),
                 });
             }
+            const paged = pagedAnswer(url);
+            if (paged) return paged;
             return Promise.resolve({
                 ok: true,
                 status: 200,
@@ -257,6 +269,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
 
             expect(screen.getByText('BeanPool')).toBeInTheDocument();
             expect(screen.getByText('Node Settings')).toBeInTheDocument();
@@ -294,6 +307,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
             });
@@ -313,6 +327,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
             });
@@ -395,6 +410,8 @@ describe('App Component', () => {
                     });
                 }
                 if (String(url).includes('/api/local/admin/')) adminCalls.push({ url: String(url), headers: opts?.headers || {} });
+                const paged = pagedAnswer(String(url));
+                if (paged) return paged;
                 return Promise.resolve({
                     ok: true,
                     status: 200,
@@ -562,6 +579,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
 
             for (const secret of ['stale-password-from-storage', 'stale-replication-token']) {
                 expect(storedText()).not.toContain(secret);

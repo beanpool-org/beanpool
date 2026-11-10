@@ -50,7 +50,7 @@ const json = (body) => ({ status: 200, contentType: 'application/json', body: JS
 function answer(url, method) {
     const u = new URL(url);
     switch (`${method} ${u.pathname}`) {
-        case 'GET /api/community/info': return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance: 0, profile: 'local', features: { beans: true } });
+        case 'GET /api/community/info': return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance_c: 0, profile: 'local', features: { beans: true } });
         case 'GET /api/tools/things': return json({ tool: 'things', doc: null, updatedAt: null });
         case 'PUT /api/tools/things': return json({ success: true, tool: 'things', updatedAt: new Date().toISOString() });
         case 'GET /api/marketplace/posts': return json([{ id: 'post-1', title: 'Cordless drill', type: 'offer', status: 'active', authorPublicKey: 'tool-shed-harness-owner', priceType: 'fixed' }]);

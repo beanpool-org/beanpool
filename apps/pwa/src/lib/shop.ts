@@ -75,8 +75,8 @@ export function movedCount(v: unknown): number {
     return count(v);
 }
 
-/** The member's own shop: none yet, open (closed for now included), a node from before shops, or no answer. */
-export type MyShopRead = { state: 'none' } | { state: 'open'; shop: MyShop } | { state: 'older' } | { state: 'offline' };
+/** The member's own shop: none yet, open (closed for now included), or no answer. */
+export type MyShopRead = { state: 'none' } | { state: 'open'; shop: MyShop } | { state: 'offline' };
 
 export const SHOP_TOGGLE_READ_MS = 5_000;
 export const SHOP_COMPOSER_WAIT_MS = 5_000;
@@ -87,7 +87,6 @@ export async function readMyShop(options: { timeoutMs?: number } = {}): Promise<
     const timer = stop ? setTimeout(() => stop.abort(), options.timeoutMs) : null;
     try {
         const res = await signedFetch('GET', '/api/shops/mine', undefined, stop?.signal);
-        if (res.status === 404) return { state: 'older' };
         if (!res.ok) return { state: 'offline' };
         const json = await res.json().catch(() => null) as { shop?: unknown } | null;
         if (json && json.shop === null) return { state: 'none' };

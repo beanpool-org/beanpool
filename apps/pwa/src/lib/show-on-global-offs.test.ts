@@ -52,6 +52,9 @@ describe('an Off global has not answered, with the tab left open', () => {
         vi.resetModules();
         lib = await import('./show-on-global');
         pairs = await import('./copy-pairs');
+        // Every fetch is read here: the communities are heard new enough, so the version gate's own read is not among them.
+        const versions = await import('./node-version-gate');
+        for (const community of ['https://global.test', 'https://home.test']) versions.hearNodeVersionForTests(community);
         const gate = await import('./visitor-lobby-gate');
         vi.mocked(gate.communityInfoOnce).mockResolvedValue({ profile: 'local', globalCommunityUrl: 'https://global.test', addresses: [] } as never);
         await pairs.copyPairs.change(() => [COPY]);

@@ -199,24 +199,6 @@ describe('"Remind me" on an event (decision 2)', () => {
         await waitFor(() => expect(screen.queryByTestId('event-reminder')).toBeNull());
     });
 
-    it('disappears on a node that has no such route, rather than showing an error (decision 7)', async () => {
-        vi.mocked(api.getMyEvents).mockRejectedValue(notFound());
-        render(<EventDetail post={event} identity={identity} />);
-        await waitFor(() => expect(api.getMyEvents).toHaveBeenCalled());
-        expect(screen.queryByTestId('event-reminder')).toBeNull();
-    });
-
-    it('takes itself away if the save is the thing that finds the older node', async () => {
-        vi.mocked(api.getMyEvents).mockResolvedValue([mine({ reminderOffsets: null })]);
-        vi.mocked(api.setEventReminder).mockRejectedValue(notFound());
-        render(<EventDetail post={event} identity={identity} />);
-        await screen.findByTestId('event-reminder');
-        fireEvent.click(screen.getByTestId('event-reminder-change'));
-        fireEvent.click(screen.getByTestId('event-reminder-save'));
-        await waitFor(() => expect(screen.queryByTestId('event-reminder')).toBeNull());
-        expect(screen.queryByRole('alert')).toBeNull();
-    });
-
     it('says so when a save fails for any other reason', async () => {
         vi.mocked(api.getMyEvents).mockResolvedValue([mine({ reminderOffsets: null })]);
         vi.mocked(api.setEventReminder).mockRejectedValue(new Error('You are not going to this event.'));

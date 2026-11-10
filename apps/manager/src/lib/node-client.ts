@@ -288,7 +288,7 @@ export interface NodeDataPayload {
     /** The Commons pot, whole hundredths of a Bean under its old name (server routes/admin.ts /admin/data getCommonsBalance). */
     commonsBalance?: number;
     enterprises?: unknown[];
-    /** What the screens count (the node's `counts`, or made from a whole list by a node from before the pages). */
+    /** What the screens count: the node's `counts`. */
     counts?: NodeDataCounts;
     /** The cursor of the next members page, or null when every member is held. */
     membersNext?: string | null;
@@ -795,14 +795,8 @@ export async function fetchOnboardingFunnel(
         cache: 'no-store',
     });
     if (!res.ok) {
-        // 401 and 404 need telling apart, because the fix is in a different place for
-        // each and the status code alone sent someone hunting the wrong one: 401 is this
-        // node's stored admin password, 404 is a node that predates the endpoint.
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error('This node is running a build without the funnel endpoint. Redeploy it.');
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -838,9 +832,6 @@ export async function fetchWebVisits(
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count web app visits yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -889,9 +880,6 @@ export async function fetchAppVersions(nodeUrl: string, adminPassword?: string, 
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count app versions yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -1094,8 +1082,7 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
 /**
  * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
  * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
- * has 5 minutes, long on purpose: a node from before the pages sends every member (~4 MB on a big node), over what can
- * be a slow phone link.
+ * has 5 minutes, long on purpose: a big node's pages come over what can be a slow phone link.
  */
 export const NODE_DATA_ANSWER_MS = 30_000;
 export const NODE_DATA_ALL_MS = 5 * 60_000;
@@ -1197,37 +1184,13 @@ export function withPostsPage(data: NodeDataPayload, page: PostsPage): NodeDataP
     };
 }
 
-/** What a node from before the pages never sent: the counts, from its whole list. */
-export function countsFromMembers(members: MemberItem[] | undefined): NodeDataCounts | undefined {
-    if (!Array.isArray(members)) return undefined;
-    const platforms = { ios: 0, android: 0, web: 0, unknown: 0 };
-    for (const m of members) {
-        const p = String(m.platform || '').toLowerCase();
-        if (p === 'ios' || p === 'android') platforms[p]++;
-        else if (p === 'web' || p === 'pwa') platforms.web++;
-        else platforms.unknown++;
-    }
-    return {
-        members: members.length,
-        treasuries: members.filter((m) => m.isTreasury).length,
-        doorMembers: members.filter((m) => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:')).length,
-        owners: members.filter((m) => m.nodeRole === 'owner').length,
-        platforms,
-    };
-}
-
 /**
  * The node's data: its summary (`lists: 'none'`), with the first page of members and of posts, so every screen has the
- * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more. A node from before
- * the pages ignores `lists` and sends the lists whole: kept as they came, with counts made from them and nothing more to
- * load.
+ * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more.
  */
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const json = await postNodeRead(nodeUrl, '/api/local/admin/data', { lists: 'none' }, adminPassword, tfaToken);
     const data = normalizeNodeData(json);
-    if (Array.isArray(data.members) || !data.counts) {
-        return { ...data, counts: data.counts ?? countsFromMembers(data.members), membersNext: null, postsNext: null };
-    }
     const [members, posts] = await Promise.all([
         fetchMembersPage(nodeUrl, adminPassword, tfaToken),
         fetchPostsPage(nodeUrl, adminPassword, tfaToken),
@@ -2761,7 +2724,7 @@ export async function fetchTakeoverStatus(nodeUrl: string, adminPassword?: strin
     return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, adminPassword, tfaToken) as unknown as TakeoverStatus;
 }
 
-/** Null when the node is too old to say (before #968). */
+/** Null when the answer carries no backup lock status. */
 export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<BackupLockStatus | null> {
     const json = await takeoverPost(nodeUrl, '/api/local/admin/backup-status', {}, adminPassword, tfaToken);
     const lock = json.backupLock as BackupLockStatus | undefined;
@@ -3642,8 +3605,7 @@ export async function cancelRekeyCodeApi(
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        // A node before the cancel answers 404 with no message.
-        throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

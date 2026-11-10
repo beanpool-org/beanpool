@@ -45,7 +45,6 @@ import {
     openRestoredAccount,
     requestFindNonce,
     restoreProviders,
-    serverTooOldMessage,
     type EphemeralKey,
     type RestoreCandidate,
     type RestoreNonce,
@@ -94,8 +93,6 @@ type Screen =
     | { name: 'pick'; accounts: RestoreCandidate[] }
     /** No account here uses this sign-in. */
     | { name: 'none'; provider: JoinProvider }
-    /** The community's server has no find yet. */
-    | { name: 'too_old' }
     /** Collected, fetched and opened: the sign-in copy becoming the account. */
     | { name: 'restoring' }
     /** Handed to WelcomePage, which asks the node and saves it. */
@@ -212,10 +209,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             if ('nonce' in got) {
                 setNonceHeld({ value: got.nonce, at: Date.now() });
                 return got.nonce;
-            }
-            if ('tooOld' in got) {
-                setScreen({ name: 'too_old' });
-                return null;
             }
             setNotice({ tone: 'error', text: findRefusalMessage(got.answer, null) });
         } catch (e) {
@@ -549,16 +542,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 <>
                     <p role="alert" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(noAccountMessage(community, screen.provider))}</p>
                     <button type="button" style={primaryButton} onClick={() => void startAgain()}>{t('Start again')}</button>
-                    {otherWays}
-                    {back}
-                </>
-            );
-            break;
-
-        case 'too_old':
-            body = (
-                <>
-                    <p role="alert" data-testid="restore-too-old-server" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(serverTooOldMessage(community))}</p>
                     {otherWays}
                     {back}
                 </>

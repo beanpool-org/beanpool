@@ -117,7 +117,7 @@ function Harness() {
         return (
             <div className="min-h-screen bg-oat-100 dark:bg-nature-950 p-4 space-y-3">
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-3 space-y-2 border border-nature-200 dark:border-nature-800">
-                    <PostAuthorTrust callsign="Rowan (no photo)" publicKey={'b7'.repeat(32)} avatarUrl={null} energyCycled={600} />
+                    <PostAuthorTrust callsign="Rowan (no photo)" publicKey={'b7'.repeat(32)} avatarUrl={null} energyCycled={60000} />
                     <PostAuthorTrust callsign="Sam (no photo)" publicKey={'c3'.repeat(32)} avatarUrl={null} mode="compact" />
                     <PostAuthorTrust callsign="Lena (a preset)" publicKey={'d9'.repeat(32)} avatarUrl="bundled://leaf" />
                 </div>

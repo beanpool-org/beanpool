@@ -29,7 +29,6 @@ vi.mock('../lib/blocklist', () => ({
     unblockUser: vi.fn(),
     getBlockedUsers: vi.fn(() => []),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 vi.mock('../lib/archetypes', () => ({

@@ -47,7 +47,7 @@ const HOME = {
     cards: {
         deals: { open: 2, waiting: 1, waitingOnMe: null },
         market: {
-            items: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, type: i % 3 === 2 ? 'need' : 'offer', title: TITLES[i % TITLES.length], category: 'food', credits: 10 + i, photoUrl: `/api/marketplace/posts/p${i}/photos/0?v=1&k=K${i}` })),
+            items: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, type: i % 3 === 2 ? 'need' : 'offer', title: TITLES[i % TITLES.length], category: 'food', price_c: (10 + i) * 100, photoUrl: `/api/marketplace/posts/p${i}/photos/0?v=1&k=K${i}` })),
             total14d: 12, more: false,
         },
         community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
@@ -63,7 +63,7 @@ const browser = await chromium.launch();
 async function open({ width, height, dark = false, view, clock = false }) {
     const context = await browser.newContext({ viewport: { width, height }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
     await context.addInitScript(([mode]) => {
-        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme is still a theme */ }
+        try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme is still a theme */ }
     }, [dark ? 'dark' : 'light']);
     const asked = [];
     await context.route('**/api/**', async (route) => {

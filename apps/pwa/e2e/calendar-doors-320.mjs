@@ -54,7 +54,7 @@ try {
     for (const scheme of ['light', 'dark']) {
         const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme: scheme, reducedMotion: 'reduce' });
         await context.addInitScript(([mode]) => {
-            try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme is still a theme */ }
+            try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme is still a theme */ }
         }, [scheme]);
         await context.route('**/api/**', async (route) => {
             const url = new URL(route.request().url());

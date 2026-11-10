@@ -14,14 +14,14 @@ const iso = (msFromNow) => new Date(Date.now() + msFromNow).toISOString();
 const listing = (over) => ({
     type: 'offer',
     category: 'tools',
-    credits: 12,
+    price_c: 1200,
     priceType: 'fixed',
     status: 'active',
     active: true,
     repeatable: false,
     authorPublicKey: 'member-ada',
     authorCallsign: 'Ada',
-    authorEnergyCycled: 40,
+    authorEnergyCycled: 4000,
     createdAt: iso(-3 * HOUR),
     photos: [],
     ...over,
@@ -29,27 +29,27 @@ const listing = (over) => ({
 
 export const POSTS = [
     listing({
-        id: 'm-1', title: 'Chainsaw, sharpened', category: 'tools', credits: 8, priceType: 'daily',
+        id: 'm-1', title: 'Chainsaw, sharpened', category: 'tools', price_c: 800, priceType: 'daily',
         description: 'Husqvarna 435. Chaps and a spare chain come with it. Tell me what you are felling and I will '
             + 'say whether this is the right saw — it is not the one for a big camphor laurel, and I would rather lend '
             + 'you the right tool than watch you fight the wrong one all afternoon.',
-        photos: ['/assets/header-bg.png'], authorCallsign: 'Ada', authorEnergyCycled: 320,
+        photos: ['/assets/header-bg.png'], authorCallsign: 'Ada', authorEnergyCycled: 32000,
     }),
     listing({
-        id: 'm-2', title: 'Sourdough starter', category: 'food', credits: 1, description: 'Ten years old.',
-        authorPublicKey: 'member-bo', authorCallsign: 'Bo', authorEnergyCycled: 15, createdAt: iso(-5 * HOUR),
+        id: 'm-2', title: 'Sourdough starter', category: 'food', price_c: 100, description: 'Ten years old.',
+        authorPublicKey: 'member-bo', authorCallsign: 'Bo', authorEnergyCycled: 1500, createdAt: iso(-5 * HOUR),
     }),
     listing({
-        id: 'm-3', type: 'need', title: 'Help moving a piano', category: 'labour', credits: 40, priceType: 'fixed',
+        id: 'm-3', type: 'need', title: 'Help moving a piano', category: 'labour', price_c: 4000, priceType: 'fixed',
         description: 'Upright, ground floor to ground floor, four of us needed for an hour on Saturday morning.',
-        authorPublicKey: 'member-cy', authorCallsign: 'Cy', authorEnergyCycled: 90, createdAt: iso(-7 * HOUR),
+        authorPublicKey: 'member-cy', authorCallsign: 'Cy', authorEnergyCycled: 9000, createdAt: iso(-7 * HOUR),
     }),
     {
-        id: 'p-1', type: 'poll', category: 'community', status: 'active', active: true, credits: 0,
+        id: 'p-1', type: 'poll', category: 'community', status: 'active', active: true, price_c: 0,
         priceType: 'fixed', repeatable: false, photos: [],
         title: 'Where should the new tool shed go?',
         description: 'The working bee is on the 12th either way. This decides where we pour the slab.',
-        authorPublicKey: 'member-dee', authorCallsign: 'Dee', authorEnergyCycled: 210, createdAt: iso(-2 * HOUR),
+        authorPublicKey: 'member-dee', authorCallsign: 'Dee', authorEnergyCycled: 21000, createdAt: iso(-2 * HOUR),
         pollOptions: [
             { id: 'o1', text: "It's Amazing by the north gate, nearest the road", votes: 9, percentage: 45 },
             { id: 'o2', text: 'Behind the south barn, out of the wind', votes: 6, percentage: 30 },
@@ -64,31 +64,31 @@ export const POSTS = [
         ],
     },
     {
-        id: 'e-1', type: 'event', category: 'community', status: 'active', active: true, credits: 0,
+        id: 'e-1', type: 'event', category: 'community', status: 'active', active: true, price_c: 0,
         priceType: 'fixed', repeatable: false, photos: [],
         title: 'Working bee at the packing shed',
         description: 'Bring gloves and a thermos.',
-        authorPublicKey: 'member-eve', authorCallsign: 'Eve', authorEnergyCycled: 65, createdAt: iso(-4 * HOUR),
+        authorPublicKey: 'member-eve', authorCallsign: 'Eve', authorEnergyCycled: 6500, createdAt: iso(-4 * HOUR),
         lat: -28.55, lng: 153.5, eventStartAt: iso(30 * HOUR), eventPlaceName: 'Packing shed',
         eventState: 'scheduled', goingCount: 7, interestedCount: 3, myRsvp: null,
     },
     listing({
-        id: 'm-4', title: 'Bike repair, gears and brakes', category: 'services', credits: 15, priceType: 'hourly',
+        id: 'm-4', title: 'Bike repair, gears and brakes', category: 'services', price_c: 1500, priceType: 'hourly',
         description: 'Derailleurs, cables, bleeding hydraulics. Bring the bike to me.',
         photos: ['/assets/neon-vines-banner.png'], authorPublicKey: ME, authorCallsign: 'You',
-        authorEnergyCycled: 500, createdAt: iso(-9 * HOUR),
+        authorEnergyCycled: 50000, createdAt: iso(-9 * HOUR),
     }),
     listing({
-        id: 'm-5', title: 'Two crates of lemons', category: 'food', credits: 3,
-        description: '', authorPublicKey: 'member-fen', authorCallsign: 'Fen', authorEnergyCycled: 5,
+        id: 'm-5', title: 'Two crates of lemons', category: 'food', price_c: 300,
+        description: '', authorPublicKey: 'member-fen', authorCallsign: 'Fen', authorEnergyCycled: 500,
         createdAt: iso(-11 * HOUR),
     }),
     listing({
-        id: 'm-6', type: 'need', title: 'Ladder, 3m', category: 'tools', credits: 4,
+        id: 'm-6', type: 'need', title: 'Ladder, 3m', category: 'tools', price_c: 400,
         description: 'For a weekend. Happy to collect and to bring it back cleaner than I found it, which is the '
             + 'least anyone can do with a borrowed ladder.',
         photos: ['/assets/header-bg.png'], authorPublicKey: 'member-gil', authorCallsign: 'Gil',
-        authorEnergyCycled: 120, createdAt: iso(-13 * HOUR),
+        authorEnergyCycled: 12000, createdAt: iso(-13 * HOUR),
     }),
 ];
 
@@ -144,6 +144,6 @@ export function mockResponse(pathname, search, posts = POSTS, extras = {}) {
         // Four stars on everyone, so the trust line is drawn rather than absent — it is part of a tile's height.
         return { ratings: [], average: 4.4, count: 6, asProvider: { average: 4.4, count: 6 }, asReceiver: { average: 4.4, count: 6 } };
     }
-    if (pathname.startsWith('/api/ledger/balance')) return { balance: 240, isBlockedFromTrading: false };
+    if (pathname.startsWith('/api/ledger/balance')) return { balance_c: 24000, isBlockedFromTrading: false };
     return undefined;
 }

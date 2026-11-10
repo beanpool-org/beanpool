@@ -114,7 +114,7 @@ try {
                 for (const plain of [false, true]) {
                     const context = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
                     await context.addInitScript(([mode]) => {
-                        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme */ }
+                        try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme */ }
                     }, [dark ? 'dark' : 'light']);
                     await context.route('**/api/**', async (route) => {
                         const url = new URL(route.request().url());

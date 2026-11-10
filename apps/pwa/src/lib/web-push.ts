@@ -14,6 +14,7 @@
  */
 import { t, verifyPushNotice, word } from '@beanpool/core';
 import { signedFetchAt } from './api';
+import { refuseIfNodeTooOld } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
 import { APP_STORE_URL, PLAY_URL } from './peek';
 
@@ -179,7 +180,10 @@ export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIde
         if (permission === 'denied') return { ok: false, place: { kind: 'blocked', phone: place.device === 'phone' }, reason: 'blocked' };
         if (permission !== 'granted') return { ok: false, place, reason: 'dismissed' };
         const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: SERVICE_WORKER_SCOPE });
-        const keyRes = await fetch(`${origin}${WEB_PUSH_KEY_PATH}`, { cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
+        // The key read goes past api.ts, so it asks the version first, as the signed post after it does (lib/node-version-gate.ts).
+        const keySignal = AbortSignal.timeout(TIMEOUT_MS);
+        await refuseIfNodeTooOld(origin, keySignal);
+        const keyRes = await fetch(`${origin}${WEB_PUSH_KEY_PATH}`, { cache: 'no-store', signal: keySignal });
         const vapidKey = keyRes.ok ? (await keyRes.json())?.vapidKey : null;
         if (typeof vapidKey !== 'string') return { ok: false, place, reason: 'failed' };
         // Not navigator.serviceWorker.ready: that waits for a worker over THIS page, and /app is outside the scope /app/.

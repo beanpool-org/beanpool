@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-    getGroupSuccession, proposeGroupSuccession, voteGroupSuccession, isRouteMissing,
+    getGroupSuccession, proposeGroupSuccession, voteGroupSuccession,
     type GroupMember, type GroupSuccessionData,
 } from '../lib/api';
 import { buildSuccessionView, voteConfirmText } from '../lib/group-succession';
@@ -40,9 +40,8 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
         try {
             setData(await getGroupSuccession(groupId));
         } catch (e) {
-            // A node older than the route answers 404: show nothing, say nothing. Anything else is also not
-            // worth an error about a section the group may never need.
-            if (!isRouteMissing(e)) console.warn('[GroupSuccession] Could not read the lead vote:', e);
+            // Not worth an error about a section the group may never need: show nothing.
+            console.warn('[GroupSuccession] Could not read the lead vote:', e);
             setData(null);
         }
     }, [groupId]);

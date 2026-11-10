@@ -66,7 +66,7 @@ describe('FleetSidebar Component', () => {
         const onEditNode = vi.fn();
         render(<FleetSidebar {...defaultProps} onEditNode={onEditNode} />);
 
-        const editButtons = screen.getAllByTitle('Configure Node Credentials & Admin Password');
+        const editButtons = screen.getAllByTitle('Configure Node Credentials');
         fireEvent.click(editButtons[0]);
 
         expect(onEditNode).toHaveBeenCalledWith(mockProfiles[0]);

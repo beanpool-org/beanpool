@@ -29,10 +29,10 @@ const EMPTY_FORM: OffboxDestinationInput = {
     name: '', endpoint: '', bucket: '', region: 'auto', prefix: '', accessKeyId: '', secretAccessKey: '',
 };
 
-/** A server older than off-box backups answers 404, or something that is not a status: say so, never crash. */
-const TOO_OLD = "This server's BeanPool is older than backups off the server: update it to use them.";
+/** Something that is not a status (a proxy's page): say so, never crash. */
+const NOT_A_STATUS = "The server's answer was not a backup status.";
 function checked(s: OffboxStatus | null | undefined): OffboxStatus {
-    if (!s || typeof s !== 'object' || !Array.isArray(s.destinations) || typeof s.message !== 'string') throw new Error(TOO_OLD);
+    if (!s || typeof s !== 'object' || !Array.isArray(s.destinations) || typeof s.message !== 'string') throw new Error(NOT_A_STATUS);
     return s;
 }
 
@@ -80,8 +80,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
             setLoadError(null);
         } catch (e: unknown) {
             setStatus(null);
-            // The status route itself missing (404) is a server from before it.
-            setLoadError((e as { status?: number })?.status === 404 ? TOO_OLD : e instanceof Error ? e.message : String(e));
+            setLoadError(e instanceof Error ? e.message : String(e));
         }
     }, [activeNode.url, creds]);
 

@@ -16,6 +16,7 @@ import { accountMessage, answerMessage, readyMessage } from '../lib/handoff';
 import { generateIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { isEstablishedKey, isKnockKey } from '../lib/knock-key';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { hearNodeVersionForTests, nodeTooOldText, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const NODE = 'https://byron.example.org';
 const GLOBAL = 'https://global.example.org';
@@ -35,6 +36,9 @@ beforeEach(async () => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     localStorage.clear();
     localStorage.setItem('bp_node_url', NODE);
+    // Byron runs 1.4.0 (lib/node-version-gate.ts): the stub answers Byron's own routes alone.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(NODE);
     yes = true;
     statusReads = [];
     account = await generateIdentity('CJ Global');
@@ -95,6 +99,17 @@ describe('the handoff door at the community', () => {
         expect(await loadIdentity()).toBeNull();
         // Its last word to the page that opened it: the link goes.
         expect(window.opener).toBeNull();
+    });
+
+    it("a community the version gate refuses (heard on 1.2.37): its line, not 'no yes here'; nothing is asked or kept", async () => {
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests(NODE, '1.2.37');
+        renderPage();
+        send(accountMessage(NONCE, handed(), null));
+        expect(await screen.findByTestId('handoff-refused')).toHaveTextContent(nodeTooOldText('1.2.37'));
+        expect(screen.getByTestId('handoff-refused')).not.toHaveTextContent('This account has no yes here.');
+        expect(statusReads).toEqual([]);
+        expect(await loadIdentity()).toBeNull();
     });
 
     it('a browser with another account here: says so, answers held, and that account is untouched', async () => {

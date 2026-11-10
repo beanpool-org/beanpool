@@ -14,15 +14,17 @@ const node = { id: 'node-1', name: 'Primary Node', url: 'https://primary.example
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('the token field', () => {
-    it('is masked, saves the token with the profile, and says the password is not sent', async () => {
+    it('is masked, and saves the token with the profile: the profile screen has no password field', async () => {
         const onSave = vi.fn();
         render(<EditNodeModal node={node} onClose={vi.fn()} onSave={onSave} />);
         const field = screen.getByLabelText('Automation token') as HTMLInputElement;
         expect(field.type).toBe('password');
         fireEvent.change(field, { target: { value: TOKEN } });
-        expect(screen.getByText('Not sent while a token is set.')).toBeTruthy();
+        // The token's own is the only masked field on the screen.
+        expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
         await userEvent.click(screen.getByText('Save Settings'));
-        expect(onSave).toHaveBeenCalledWith('node-1', expect.objectContaining({ automationToken: TOKEN, adminPassword: 'pass123' }));
+        expect(onSave).toHaveBeenCalledWith('node-1', expect.objectContaining({ automationToken: TOKEN }));
+        expect(onSave.mock.calls[0][1]).not.toHaveProperty('adminPassword');
     });
 
     it('refuses something that is not a token, and saves nothing', async () => {
@@ -66,6 +68,6 @@ describe('the token field', () => {
         fireEvent.change(screen.getByPlaceholderText(/https:\/\/node2/), { target: { value: 'https://byron.example' } });
         fireEvent.change(screen.getByLabelText('Automation token'), { target: { value: TOKEN } });
         fireEvent.submit(screen.getByLabelText('Automation token').closest('form')!);
-        expect(onAdd).toHaveBeenCalledWith('Byron', 'https://byron.example', undefined, TOKEN);
+        expect(onAdd).toHaveBeenCalledWith('Byron', 'https://byron.example', TOKEN);
     });
 });

@@ -17,8 +17,7 @@ vi.mock('../lib/api', async () => {
         rsvpEvent: vi.fn(),
         removeMarketplacePost: vi.fn(async () => ({ success: true })),
         getMarketplacePosts: vi.fn(async () => []),
-        // An older node: no "Remind me" row here (its choice is written by lib/event-extras.ts, EventExtras.words.test.tsx).
-        getMyEvents: vi.fn(async () => { throw Object.assign(new Error('Not Found'), { status: 404 }); }),
+        getMyEvents: vi.fn(async () => []),
         getNotificationPreferences: vi.fn(async () => ({})),
     };
 });
@@ -125,9 +124,10 @@ describe('an event in the pseudo-locale', () => {
         await showIn('xx');
         render(<EventDetail post={event} identity={identity} onShowOnMap={vi.fn()} onOpenChat={vi.fn()} />);
         await waitFor(() => expect(api.getMyEvents).toHaveBeenCalled());
-        await waitFor(() => expect(screen.queryByTestId('event-reminder')).toBeNull());
+        await screen.findByTestId('event-reminder');
         expect(bracketed()).toBeGreaterThan(8);
-        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        // The "Remind me" row's choice line is lib/event-extras.ts's, held to its words by EventExtras.words.test.tsx.
+        expect(bypassing(document.body, { others: [...OTHERS, '1 day before (your default)'] })).toEqual([]);
         expect(screen.getByText(xx('Note for people who are going'))).toBeInTheDocument();
         expect(screen.getByTestId('event-open-chat')).toHaveTextContent(xx('Open event chat'));
     });

@@ -163,7 +163,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } 
         const reply = (status, body, headers = {}) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
         const p = url.pathname;
         if (p === '/api/community/info') {
-            return reply(200, { memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: !seen.doorShut, beans: false } });
+            return reply(200, { memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: !seen.doorShut, beans: false } });
         }
         // Free unless another member has it, case forgiven; `exclude` leaves a member's own name out (isCallsignAvailable).
         if (p.startsWith('/api/members/callsign-available/')) {

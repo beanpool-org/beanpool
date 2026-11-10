@@ -16,6 +16,7 @@ import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from '..
 import { keepToolDoc, patchToolSettings, readToolRecord, readToolSettings, resetToolStoreForTest, type ToolSettings } from '../store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type WebToolCopy } from '../node-copy';
 import { readDoc } from '../builder';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../../lib/node-version-gate';
 
 const NODE = 'https://mullum.example';
 const ME = 'me-key';
@@ -131,6 +132,9 @@ let t0: number;
 beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('bp_node_url', NODE);
+    // Every fetch is the fake node's to answer: the communities are heard new enough, so the version gate's own read is not among them.
+    resetNodeVersionGateForTests();
+    for (const community of [NODE, 'https://elsewhere.example']) hearNodeVersionForTests(community);
     resetAccountEpochForTest();
     node = new FakeNode();
     vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -679,7 +683,10 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
     /** Another tab of the same browser: the same IndexedDB and server, its own node-copy queue. */
     async function otherTab() {
         vi.resetModules();
-        return import('../node-copy');
+        const tab = await import('../node-copy');
+        // Its own copy of the page's code has heard no version yet: the node is heard new enough, so the version gate's read is not among the node's log.
+        (await import('../../lib/node-version-gate')).hearNodeVersionForTests(NODE);
+        return tab;
     }
 
     it('each request gets a signal; a PUT slower than the limit is let go then, and only then does the off send its DELETE', async () => {

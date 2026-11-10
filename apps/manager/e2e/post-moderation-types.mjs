@@ -70,7 +70,7 @@ async function openAs(browser, origin, { role, width, textScale, colorScheme }) 
     const opened = await openSettings(browser, origin, {
         width, textScale, colorScheme, signedIn: false, handoffRole: role, screen: { tab: 'people' }, hash: `#handoff=${'ab'.repeat(16)}`,
         overrides: {
-            '/api/local/admin/data': (json) => ({ ...json, posts: POSTS }),
+            '/api/local/admin/data/posts': (json) => ({ ...json, posts: POSTS }),
             '/api/local/admin/agent/takedowns': withTakedowns,
         },
     });

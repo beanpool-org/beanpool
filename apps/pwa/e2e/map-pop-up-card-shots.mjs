@@ -29,15 +29,15 @@ const PHOTO = fs.readFileSync(path.join(PWA_DIR, 'public', 'assets', 'neon-vines
 
 const HOUR = 3600_000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
-const base = { description: '', credits: 5, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: false, photos: [] };
+const base = { description: '', price_c: 500, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: false, photos: [] };
 const at = (n) => ({ lat: -28.64 - n * 0.02, lng: 153.5 + n * 0.03 });
 const POSTS = [
-    { ...base, id: 'p1', type: 'offer', category: 'food', title: 'A dozen eggs from the back paddock', credits: 12, repeatable: true, authorPublicKey: 'pk-bea',
+    { ...base, id: 'p1', type: 'offer', category: 'food', title: 'A dozen eggs from the back paddock', price_c: 1200, repeatable: true, authorPublicKey: 'pk-bea',
       photos: ['/api/marketplace/posts/p1/photos/0?v=1'], ...at(0) },
-    { ...base, id: 'p3', type: 'need', category: 'transport', title: 'A lift to the Saturday market', credits: 8, authorPublicKey: 'pk-cal', authorCallsign: 'Cal', ...at(2) },
-    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café at the hall', authorPublicKey: 'pk-hazel', authorCallsign: 'Hazel', credits: 0,
+    { ...base, id: 'p3', type: 'need', category: 'transport', title: 'A lift to the Saturday market', price_c: 800, authorPublicKey: 'pk-cal', authorCallsign: 'Cal', ...at(2) },
+    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café at the hall', authorPublicKey: 'pk-hazel', authorCallsign: 'Hazel', price_c: 0,
       eventStartAt: iso(2 * HOUR), eventState: 'scheduled', eventPlaceName: 'Mullumbimby Civic Hall', goingCount: 0, interestedCount: 0, myRsvp: null, ...at(4) },
-    { ...base, id: 'e2', type: 'event', category: 'community', title: 'Working bee in the community garden', authorPublicKey: 'pk-hazel', authorCallsign: 'Hazel', credits: 0,
+    { ...base, id: 'e2', type: 'event', category: 'community', title: 'Working bee in the community garden', authorPublicKey: 'pk-hazel', authorCallsign: 'Hazel', price_c: 0,
       photos: ['/api/marketplace/posts/e2/photos/0?v=1'], eventStartAt: iso(26 * HOUR), eventState: 'scheduled', eventPlaceName: 'Community garden',
       goingCount: 3, interestedCount: 1, myRsvp: 'going', ...at(6) },
 ];
@@ -58,7 +58,7 @@ function answer(pathname, search) {
     if (pathname === '/api/node/config') return { readAuthRequired: false };
     if (pathname === '/api/node/info') return { callsign: 'Harness', peerNodes: [] };
     if (pathname === '/api/federation/peers/reachable') return { peers: [] };
-    if (pathname.startsWith('/api/ledger/balance')) return { balance: 240, isBlockedFromTrading: false };
+    if (pathname.startsWith('/api/ledger/balance')) return { balance_c: 24000, isBlockedFromTrading: false };
     return undefined;
 }
 
@@ -138,7 +138,7 @@ try {
         for (const theme of ['light', 'dark']) {
             const context = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: theme, reducedMotion: 'reduce' });
             await context.addInitScript(([mode]) => {
-                try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme */ }
+                try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme */ }
             }, [theme]);
             await context.route('**/*', async (route) => {
                 const url = new URL(route.request().url());

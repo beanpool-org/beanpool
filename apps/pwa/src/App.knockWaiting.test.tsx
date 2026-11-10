@@ -42,6 +42,7 @@ import { commitKnockKey, draftKnockKey } from './lib/knock-key';
 import { rememberKnock } from './lib/knock';
 import { memoryIndexedDB } from './lib/memory-indexeddb';
 import type { BeanPoolIdentity } from './lib/identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './lib/node-version-gate';
 
 const CARD = {
     name: 'Castlemaine BeanPool', host: 'castlemaine.beanpool.org', members: 9, area: null, joining: 'requests',
@@ -70,6 +71,9 @@ beforeEach(async () => {
     window.history.replaceState(null, '', '/app');
     calls = [];
     knockStatus = { status: 'pending' };
+    // Castlemaine runs 1.4.0 (lib/node-version-gate.ts): the calls recorded are the page's own.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests('https://castlemaine.beanpool.org');
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const path = new URL(String(input), 'https://castlemaine.beanpool.org').pathname;
         const signer = (init.headers as Record<string, string> | undefined)?.['X-Public-Key'] ?? null;

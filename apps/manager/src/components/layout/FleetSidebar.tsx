@@ -466,7 +466,7 @@ export function FleetSidebar({
                                                 onEditNode(p);
                                             }}
                                             className="text-nature-400 hover:text-white transition-all transform hover:rotate-45 text-base p-0 border-none bg-transparent focus:outline-none"
-                                            title="Configure Node Credentials & Admin Password"
+                                            title="Configure Node Credentials"
                                         >
                                             ⚙️
                                         </button>

@@ -25,8 +25,8 @@ const PAYEE = 'b'.repeat(64);
 const NOW = Date.parse('2026-11-09T08:00:00.000Z');
 const row = (id: string, o: Partial<MarketplaceTransaction> = {}): MarketplaceTransaction => ({
     id, postId: 'post-1', postTitle: 'Vehicle Storage', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    credits: 50, status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
-    standingId: `sd-${id}`, periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    amount_c: 5000, status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
+    standingId: `sd-${id}`, periodNo: 2, standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 });
@@ -38,9 +38,9 @@ await startLanguage(window.location.search);
 createRoot(document.getElementById('root')!).render(
     <div data-testid="shot" style={{ padding: 16 }}>
         {view === 'take-up'
-            ? <StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} />
+            ? <StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} />
             : view === 'no-room'
-            ? <StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} room={30} />
+            ? <StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} room={3000} />
             : view === 'panels' ? <>
                 <StandingPanel tx={row('paid-payer')} actingAs={PAYER} busy={false} onStop={noop} onMessage={noop} messageLabel="Message Rob" />
                 <StandingPanel tx={row('paid-payee')} actingAs={PAYEE} busy={false} onStop={noop} onMessage={noop} messageLabel="Message Marty" />

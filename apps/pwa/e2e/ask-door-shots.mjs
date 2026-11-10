@@ -47,7 +47,7 @@ const isPhoto = (p) => /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/.test(
 
 const GUEST_POST = {
     id: POST_ID, type: 'offer', category: 'tools', title: 'Long ladder to lend for the weekend', status: 'active', active: true,
-    description: 'A 6 m extension ladder, light enough for one person. Good for gutters and fruit trees.', credits: 15, priceType: 'fixed',
+    description: 'A 6 m extension ladder, light enough for one person. Good for gutters and fruit trees.', price_c: 1500, priceType: 'fixed',
     photos: [`/api/marketplace/posts/${POST_ID}/photos/0?v=1&k=key`], createdAt: new Date(Date.now() - 86_400_000).toISOString(),
     audienceScope: 'public', lat: -37.1, lng: 144.2, repeatable: false,
     authorPublicKey: 'hidden', authorCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0, authorFoundingNeeded: false,
@@ -91,7 +91,6 @@ async function main() {
                 document.addEventListener('securitypolicyviolation', (e) => {
                     window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, page: location.href });
                 });
-                localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                 localStorage.setItem('beanpool-theme-mode', dark ? 'dark' : 'light');
                 document.addEventListener('DOMContentLoaded', () => {
                     const s = document.createElement('style');
@@ -120,7 +119,7 @@ async function main() {
                 }
                 const signer = req.headers()['x-public-key'] || null;
                 if (signer && !PUBLIC.has(p) && !KNOCK.has(p) && !isPhoto(p)) seen.signedElsewhere.push(p);
-                if (p === '/api/community/info') return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { beans: true, shareOutside: true } });
+                if (p === '/api/community/info') return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { beans: true, shareOutside: true } });
                 if (p === '/api/community/card') return reply(200, CARD);
                 if (p === '/api/community/health') return reply(200, { status: 'ok', version: '1.2.31' });
                 if (p === `/api/marketplace/posts/${POST_ID}` && url.searchParams.get('peek') === TICKET) return reply(200, { post: GUEST_POST });
@@ -220,7 +219,6 @@ async function main() {
             });
             try {
                 await doorContext.addInitScript(([scale, dark]) => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', dark ? 'dark' : 'light');
                     document.addEventListener('DOMContentLoaded', () => {
                         const s = document.createElement('style');
@@ -233,7 +231,7 @@ async function main() {
                     if (url.origin !== SITE) return route.abort();
                     if (!url.pathname.startsWith('/api/')) return route.fulfill({ response: await route.fetch({ url: `${local}${url.pathname}${url.search}` }) });
                     const reply = (code, body) => route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(body) });
-                    if (url.pathname === '/api/community/info') return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { beans: true } });
+                    if (url.pathname === '/api/community/info') return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { beans: true } });
                     if (url.pathname === '/api/community/card') return reply(200, CARD);
                     return reply(404, { error: 'Not Found' });
                 });

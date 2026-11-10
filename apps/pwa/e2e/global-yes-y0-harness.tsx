@@ -31,7 +31,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 const knock = view === 'waiting' ? { status: 'pending' } : { status: 'approved', invite: 'KN0C-K1NV', expiresAt: null };
 window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const path = String(input).replace(NODE, '');
-    if (path === '/api/community/info') return json(200, { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } });
+    if (path === '/api/community/info') return json(200, { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } });
     if (path === '/api/community/card') return json(200, { name: 'Byron Shire BeanPool', host: 'byron.example.org', members: 40, joining: 'requests' });
     if (path === '/api/join/knock/status') return json(200, knock);
     if (path.startsWith('/api/community/membership/')) return json(200, { isMember: false, callsign: null });

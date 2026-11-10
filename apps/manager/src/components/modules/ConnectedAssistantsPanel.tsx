@@ -180,8 +180,6 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
             if (res.ok && Array.isArray(json.grants)) {
                 setData(json as GrantsAnswer);
                 setListMessage('');
-            } else if (res.status === 404) {
-                setListMessage("This server's BeanPool is older than AI assistants: update it to connect one.");
             } else {
                 setListMessage(`The assistants could not be listed: ${json.error || `HTTP ${res.status}`}`);
             }

@@ -21,8 +21,9 @@ const PROFILES_KEY = 'bp_fleet_profiles';
 /**
  * A profile's credentials, by profile id, for this page's lifetime. The profile list itself is kept in localStorage,
  * which on a node is the members' web app's origin too: a password stored there is one script away from that app
- * (Fable's web review, M1). So the list is saved without them, and anything an older build saved is taken out
- * on load (loadNodeProfiles saves the list back). A reload asks for them again.
+ * (Fable's web review, M1). So the list is saved without them, and read without them: whatever a stored list holds of
+ * that kind is never taken as a credential, and the list is saved back without it on load (loadNodeProfiles). A reload
+ * asks for them again.
  */
 const heldCredentials = new Map<string, { adminPassword?: string; replicationToken?: string; automationToken?: string }>();
 

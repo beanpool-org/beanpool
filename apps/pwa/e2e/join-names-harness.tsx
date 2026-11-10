@@ -25,7 +25,7 @@ const ask = params.get('ask');
 document.documentElement.classList.toggle('dark', params.get('dark') === '1');
 document.documentElement.classList.toggle('dark-theme', params.get('dark') === '1');
 
-const BASE = { memberCount: 36, postCount: 20, transactionCount: 0, commonsBalance: 0 };
+const BASE = { memberCount: 36, postCount: 20, transactionCount: 0, commonsBalance_c: 0 };
 const INFO = {
     ours: { ...BASE, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false }, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' },
     hall: { ...BASE, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false }, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' },

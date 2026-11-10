@@ -10,6 +10,7 @@
 import { isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
+import { isNodeTooOldError } from './node-version-gate';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
@@ -293,7 +294,9 @@ export async function sendKnock(communityUrl: string | null, identity: BeanPoolI
     try {
         const body = JSON.stringify(knockBody(req, origin.replace(/^https:\/\//, '')));
         res = await withTimeout(signedFetchAt('POST', origin, KNOCK_PATH, body, identity));
-    } catch {
+    } catch (e) {
+        // The version gate sent nothing: its own line, a refusal when the server named an older version, else out of reach.
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { kind: 'refused', status: 426, code: 'node_too_old', message: e.message } : { kind: 'unreachable', message: e.message };
         return { kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (res.status === 201 || res.status === 200) return { kind: 'waiting', message: t(KNOCK_MESSAGES.waiting) };
@@ -310,7 +313,8 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     let res: Response;
     try {
         res = await withTimeout(signedFetchAt('GET', origin, KNOCK_STATUS_PATH, '', identity));
-    } catch {
+    } catch (e) {
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { ok: false, kind: 'refused', status: 426, code: 'node_too_old', message: e.message } : { ok: false, kind: 'unreachable', message: e.message };
         return { ok: false, kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (!res.ok) {
@@ -333,7 +337,8 @@ export async function cancelKnock(
     let res: Response;
     try {
         res = await withTimeout(signedFetchAt('POST', origin, KNOCK_CANCEL_PATH, '{}', identity));
-    } catch {
+    } catch (e) {
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { ok: false, message: e.message, status: 426, code: 'node_too_old' } : { ok: false, message: e.message };
         return { ok: false, message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (!res.ok) {

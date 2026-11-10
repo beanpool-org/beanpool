@@ -148,7 +148,6 @@ async function main() {
             for (const lang of LANGUAGES) {
                 const context = await browser.newContext({ viewport: { width: WIDTH, height: 568 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme });
                 await context.addInitScript((mode) => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', mode);
                 }, scheme);
                 await context.route((url) => url.origin !== origin, (route) => route.abort());

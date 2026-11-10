@@ -5,21 +5,19 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface AddNodeModalProps {
     onClose: () => void;
-    onAdd: (name: string, url: string, adminPassword?: string, automationToken?: string) => void;
+    onAdd: (name: string, url: string, automationToken?: string) => void;
 }
 
 export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
     const [name, setName] = useState('');
     const [url, setUrl] = useState('');
-    const [password, setPassword] = useState('');
     const [token, setToken] = useState('');
     const tokenOk = token.trim() === '' || isAutomationToken(token.trim());
-    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim() || !url.trim() || !tokenOk) return;
-        onAdd(name.trim(), normalizeNodeUrl(url), password.trim() || undefined, token.trim() || undefined);
+        onAdd(name.trim(), normalizeNodeUrl(url), token.trim() || undefined);
     };
 
     return (
@@ -65,27 +63,6 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                         />
                     </div>
                     <AutomationTokenField value={token} onChange={setToken} />
-                    <div>
-                        <label className="block text-nature-300 font-semibold mb-1">Admin Password (old nodes, optional)</label>
-                        <div className="relative">
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                autoComplete="off"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Node Admin Password"
-                                className="w-full bg-nature-950 border border-nature-800 pl-3.5 pr-10 py-2.5 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500 shadow-inner"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-nature-400 hover:text-white transition-colors text-sm"
-                                title={showPassword ? 'Hide password' : 'Show password'}
-                            >
-                                {showPassword ? '🙈' : '👁️'}
-                            </button>
-                        </div>
-                    </div>
 
                     <div className="flex justify-end gap-3 pt-3">
                         <button

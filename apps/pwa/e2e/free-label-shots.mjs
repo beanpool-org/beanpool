@@ -41,7 +41,7 @@ function answer(pathname) {
     if (pathname === '/api/marketplace/transactions') return [];
     // The member has a name and a photo, so posting is not gated (lib/profile-status.ts).
     if (pathname.startsWith('/api/profile/')) return { publicKey: pathname.split('/').pop(), callsign: 'You', avatar: 'https://placehold.invalid/a.png' };
-    if (pathname.startsWith('/api/ledger/balance')) return { balance: 240, isBlockedFromTrading: false };
+    if (pathname.startsWith('/api/ledger/balance')) return { balance_c: 24000, isBlockedFromTrading: false };
     return undefined;
 }
 

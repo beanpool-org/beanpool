@@ -50,8 +50,8 @@ const LANGS = (only('WORDS_SCREENS_LANGS') ?? DEFAULT_LANGS)
     .map((lang) => ({ lang, html: lang === 'xx' ? 'en-XA' : lang, name: LANG_NAMES[lang] }));
 const VIEW = { viewport: { width: 320, height: 568 }, textScale: 1.3 };
 
-const LOCAL_INFO = { memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
-const GLOBAL_INFO = { memberCount: 40, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+const LOCAL_INFO = { memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
+const GLOBAL_INFO = { memberCount: 40, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
 const { pseudoLocalise } = await import(pathToFileURL(path.join(CORE_DIST, 'words.js')).href);
 /** A sentence as the screen shows it in `lang`: the pseudo-locale's form, the catalog's, or the English (the key). */
 function wordIn(lang, key) {
@@ -164,7 +164,6 @@ async function main() {
                 document.addEventListener('securitypolicyviolation', (e) => {
                     window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI });
                 });
-                localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                 localStorage.setItem('beanpool-theme-mode', dark ? 'dark' : 'light');
                 document.addEventListener('DOMContentLoaded', () => {
                     const s = document.createElement('style');

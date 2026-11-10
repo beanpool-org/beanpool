@@ -14,6 +14,7 @@ import {
 } from './web-push';
 import { APP_STORE_URL, PLAY_URL } from './peek';
 import { signedFetchAt } from './api';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
 vi.mock('./api', () => ({ signedFetchAt: vi.fn() }));
 
@@ -297,6 +298,9 @@ describe('the tap (tellMeWhenTheyAnswer)', () => {
         });
         // `ready` never settles for a page outside the worker's scope: the tap must not wait on it.
         Object.defineProperty(navigator, 'serviceWorker', { value: { register, ready: new Promise(() => {}) }, configurable: true });
+        // The community runs 1.4.0 (lib/node-version-gate.ts): the key read is all this stub answers.
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests('https://node.example');
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ vapidKey }), { status: 200 }));
         vi.mocked(signedFetchAt).mockImplementation(async () => new Response(JSON.stringify({ success: true, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey }), { status: 201 }));
         try {

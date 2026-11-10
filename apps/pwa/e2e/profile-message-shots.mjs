@@ -61,10 +61,17 @@ try {
                             memberCount: 2,
                             postCount: 0,
                             transactionCount: 0,
-                            commonsBalance: 0,
+                            commonsBalance_c: 0,
                             profile: 'local',
                             features: {},
                         }),
+                    });
+                }
+                if (url.includes('/api/blocks')) {
+                    return route.fulfill({
+                        status: 200,
+                        contentType: 'application/json',
+                        body: JSON.stringify({ blocked: c.blocked ? [{ publicKey: KOFI_PUBKEY, blockedAt: '2026-09-27T00:00:00.000Z' }] : [], max: 500 }),
                     });
                 }
                 if (url.includes('/api/friends/added-you')) {
@@ -108,7 +115,7 @@ try {
                         contentType: 'application/json',
                         body: JSON.stringify({
                             tier: { name: 'Resident', emoji: '🌱' },
-                            earnedCredit: 50,
+                            earnedCredit_c: 5000,
                             completionRate: 0.95,
                             stats: { tradeCount: 12, uniquePartners: 8 },
                             risk: { band: 'green', headline: 'Good standing' },
@@ -139,14 +146,9 @@ try {
                 });
             });
 
-            await page.addInitScript(({ isBlocked, targetPk, themeMode }) => {
+            await page.addInitScript(({ themeMode }) => {
                 localStorage.setItem('beanpool-theme-mode', themeMode);
-                if (isBlocked) {
-                    localStorage.setItem('beanpool_blocked_users', JSON.stringify([targetPk]));
-                } else {
-                    localStorage.removeItem('beanpool_blocked_users');
-                }
-            }, { isBlocked: c.blocked, targetPk: KOFI_PUBKEY, themeMode: theme });
+            }, { themeMode: theme });
 
             const targetUrl = `${base}?view=${c.view}`;
             await page.goto(targetUrl, { waitUntil: 'networkidle' });

@@ -3579,7 +3579,7 @@ export async function getConversationKind(conversationId: string, opts: { askNod
 
 // Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the
 // actor from the signature only and decides who may act; these throw the server's own error message.
-export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot_c?: number; alreadyPaused?: boolean }> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/pause`, {});
 }
 
@@ -4500,8 +4500,9 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const av = m.avatarUrl || m.avatar_url || null;
             const joinedAt = m.joinedAt || m.joined_at || null;
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
-            // The node's earnedCredit keeps its name and carries whole hundredths (M1); anything else is 0.
-            const ec = isHundredths(m.earnedCredit) ? m.earnedCredit : 0;
+            // The node's earnedCredit keeps its name and carries whole hundredths (M1). A card the phone already holds
+            // (asHeldRow, kept from a search result by keepCards) carries the copy's own earned_credit_c. Anything else is 0.
+            const ec = isHundredths(m.earnedCredit) ? m.earnedCredit : isHundredths(m.earned_credit_c) ? m.earned_credit_c : 0;
             let arch = m.archetype || null;
             let finalArch = arch;
             // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'

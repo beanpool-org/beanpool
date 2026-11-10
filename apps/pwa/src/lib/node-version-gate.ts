@@ -98,9 +98,10 @@ async function readHealth(origin: string): Promise<boolean> {
         timer = setTimeout(() => { controller.abort(); reject(new Error('health read timed out')); }, HEALTH_READ_TIMEOUT_MS);
     });
     try {
-        // A plain GET: no header of its own and no credential, so a browser sends it without a preflight.
+        // A plain GET: no header of its own, no credential and no cache mode (one a browser could turn into headers), so a
+        // browser sends it without a preflight. The answer carries no freshness, so a browser never reuses one unasked.
         const body = await Promise.race([timedOut, (async () => {
-            const res = await fetch(`${origin}${HEALTH_PATH}`, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal });
+            const res = await fetch(`${origin}${HEALTH_PATH}`, { method: 'GET', credentials: 'omit', signal: controller.signal });
             return res.ok ? await res.json().catch(() => null) : null;
         })()]);
         if (!isHealthAnswer(body)) return false;

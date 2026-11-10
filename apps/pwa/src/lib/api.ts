@@ -83,7 +83,7 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
     const start = Date.now();
     try {
         const sanitized = url.trim().replace(/\/+$/, '');
-        // A node below 1.4.0 is refused here, with the one line the gate gives (lib/node-version-gate.ts).
+        // A node not known to run 1.4.0 (below it, or its version unread) is refused here, with the gate's line (lib/node-version-gate.ts).
         await refuseIfNodeTooOld(sanitized);
         const res = await fetch(`${sanitized}/api/community/info`, { cache: 'no-store' });
         const latencyMs = Date.now() - start;

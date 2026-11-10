@@ -133,6 +133,7 @@ describe('refuseIfNodeTooOld', () => {
         expect(init.method).toBe('GET');
         expect(init.headers).toBeUndefined();
         expect(init.credentials).toBe('omit');
+        expect(init.cache).toBeUndefined();
         expect(init.body).toBeUndefined();
     });
 

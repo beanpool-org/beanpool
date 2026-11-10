@@ -30,8 +30,8 @@ const NODE_URL_KEY = 'bp_node_url';
 /**
  * What a community answered about the key. 'stranger' only when it said so plainly (`isMember: false` and not
  * recovering); no answer, an error, a timeout or an answer that isn't the membership route's is 'unreachable'. So is a
- * community whose server is below 1.4.0 (lib/node-version-gate.ts): it is not asked, and counts as one the key may still
- * serve, so a delete here never costs the key there.
+ * community whose server is not known to run 1.4.0, below it or its version unread (lib/node-version-gate.ts): it is not
+ * asked, and counts as one the key may still serve, so a delete here never costs the key there.
  */
 export type Membership = 'member' | 'stranger' | 'unreachable';
 

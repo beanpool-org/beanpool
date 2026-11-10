@@ -71,16 +71,17 @@ function HarnessApp() {
                 <MyBudgetModal
                     vouching={{
                         voucher: true,
-                        budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+                        // The budget's figures keep their names and are whole hundredths, as the node sends them (heldInvites and peopleVouched are counts).
+                        budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
                         noLimit: owner,
-                        presets: owner ? [25, 50, 75, 100, 200, 500] : [25, 50, 75, 100],
-                        vouchMax: owner ? 500 : 100,
-                        budgetMax: 2000,
+                        presets: owner ? [2500, 5000, 7500, 10000, 20000, 50000] : [2500, 5000, 7500, 10000],
+                        vouchMax: owner ? 50000 : 10000,
+                        budgetMax: 200000,
                         vouchedBy: [],
                         history: [
-                            { kind: 'grant', amount: 1000, actor: 'b'.repeat(64), actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
-                            { kind: 'hold', amount: -100, actor: '0'.repeat(64), actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
-                            { kind: 'top_up', amount: 500, actor: 'c'.repeat(64), actorCallsign: 'damo', at: '2026-11-04T00:00:00Z' },
+                            { kind: 'grant', amount_c: 100000, actor: 'b'.repeat(64), actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
+                            { kind: 'hold', amount_c: -10000, actor: '0'.repeat(64), actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
+                            { kind: 'top_up', amount_c: 50000, actor: 'c'.repeat(64), actorCallsign: 'damo', at: '2026-11-04T00:00:00Z' },
                         ],
                     }}
                     onClose={() => {}}

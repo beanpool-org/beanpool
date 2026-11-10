@@ -67,7 +67,7 @@ const samplePost: MarketplacePost = {
     active: true,
     audienceScope: 'public',
     description: 'A 6 m extension ladder, light enough for one person.',
-    credits: 15,
+    price_c: 1500,
     createdAt: new Date().toISOString(),
     authorPublicKey: 'pk-sample-author',
     authorCallsign: 'Alice',

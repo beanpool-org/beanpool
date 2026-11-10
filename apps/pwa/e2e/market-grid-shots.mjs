@@ -143,7 +143,7 @@ const HOUR = 60 * 60 * 1000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
 /** The node's own Daily Pulse, drawn as the Pulse tile (its author is "Daily Pulse"). */
 const PULSE = {
-    id: 'pulse-1', type: 'offer', category: 'community', status: 'active', active: true, credits: 0, priceType: 'fixed',
+    id: 'pulse-1', type: 'offer', category: 'community', status: 'active', active: true, price_c: 0, priceType: 'fixed',
     title: 'Daily Pulse: what the village is up to', description: 'Three new offers, a working bee on Saturday and the shed poll.',
     authorPublicKey: 'daily-pulse', authorCallsign: 'Daily Pulse', createdAt: iso(-HOUR / 2), photos: [],
 };
@@ -153,8 +153,8 @@ const pin = (posts, ids) => posts.map(p => (ids.includes(p.id)
 /** The reader's zone: Queensland, UTC+10 all year, an hour behind NSW on daylight time (October to April). */
 const READER_TZ = 'Australia/Brisbane';
 const event = (over) => ({
-    type: 'event', category: 'community', status: 'active', active: true, credits: 0, priceType: 'fixed', repeatable: false,
-    photos: [], description: '', authorPublicKey: 'member-eve', authorCallsign: 'Eve', authorEnergyCycled: 65, createdAt: iso(-3 * HOUR),
+    type: 'event', category: 'community', status: 'active', active: true, price_c: 0, priceType: 'fixed', repeatable: false,
+    photos: [], description: '', authorPublicKey: 'member-eve', authorCallsign: 'Eve', authorEnergyCycled: 6500, createdAt: iso(-3 * HOUR),
     lat: -28.64, lng: 153.61, eventState: 'scheduled', goingCount: 4, interestedCount: 2, myRsvp: null, ...over,
 });
 /**
@@ -201,8 +201,8 @@ const COPY = {
 };
 /** The poll Marty saw (5 Nov 2026), and a two-answer and a six-answer one: the grid's tile must fill its box with each. */
 const poll = (over) => ({
-    type: 'poll', category: 'community', status: 'active', active: true, credits: 0, priceType: 'fixed', repeatable: false, photos: [],
-    description: '', authorPublicKey: 'member-damo', authorCallsign: 'Damo (The IT guy)', authorEnergyCycled: 30, createdAt: iso(-HOUR),
+    type: 'poll', category: 'community', status: 'active', active: true, price_c: 0, priceType: 'fixed', repeatable: false, photos: [],
+    description: '', authorPublicKey: 'member-damo', authorCallsign: 'Damo (The IT guy)', authorEnergyCycled: 3000, createdAt: iso(-HOUR),
     pollClosesAt: iso(10 * 24 * HOUR + HOUR), pollVotes: [], pollOpenVote: false, userVotedOptionId: null, ...over,
 });
 const POLL_4 = poll({

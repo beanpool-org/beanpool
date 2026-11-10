@@ -38,17 +38,18 @@ html { font-size: ${scale * 100}% !important; }
 ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map((px) => `.text-\\[${px}px\\] { font-size: ${px * scale}px !important; }`).join('\n')}
 `;
 
+// Every Beans figure is whole hundredths under a `_c` key, as the node answers (qualifiedValue keeps its name and is hundredths too).
 const BALANCE = {
-    balance: 85, floor: -200, usableFloor: -200, liveOffers: 1, activated: true, frozen: false, earnedCredit: 150, tierCredit: 200,
-    commonsBalance: 12.5, qualifiedValue: 300, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 4 }, callsign: 'Visitor',
+    balance_c: 123456, floor_c: -20000, usableFloor_c: -20000, liveOffers: 1, activated: true, frozen: false, earnedCredit_c: 15000, tierCredit_c: 20000,
+    commonsBalance_c: 1250, qualifiedValue: 30000, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 4 }, callsign: 'Visitor',
     tier: { name: 'Resident' },
 };
 const TXNS = (held) => (held ? [
-    { id: 't1', from: ME, to: 'escrow_deal-1', amount: 45, taxFee: 0, memo: `Escrow hold for offer ${LISTING}`, timestamp: iso(-DAY) },
-    { id: 't2', from: ME, to: 'escrow_deal-gone', amount: 5, taxFee: 0, memo: 'Adjust escrow for 2 hours', timestamp: iso(-2 * DAY) },
-    { id: 't3', from: 'member-mia', to: ME, amount: 40, taxFee: 0, memo: `Paid for ${LISTING} thanks`, timestamp: iso(-3 * DAY) },
+    { id: 't1', from: ME, to: 'escrow_deal-1', amount_c: 4500, fee_c: 0, memo: `Escrow hold for offer ${LISTING}`, timestamp: iso(-DAY) },
+    { id: 't2', from: ME, to: 'escrow_deal-gone', amount_c: 500, fee_c: 0, memo: 'Adjust escrow for 2 hours', timestamp: iso(-2 * DAY) },
+    { id: 't3', from: 'member-mia', to: ME, amount_c: 4000, fee_c: 0, memo: `Paid for ${LISTING} thanks`, timestamp: iso(-3 * DAY) },
 ] : [
-    { id: 't3', from: 'member-mia', to: ME, amount: 40, taxFee: 0, memo: 'Fresh eggs', timestamp: iso(-3 * DAY) },
+    { id: 't3', from: 'member-mia', to: ME, amount_c: 4000, fee_c: 0, memo: 'Fresh eggs', timestamp: iso(-3 * DAY) },
 ]);
 
 const unanswered = new Set();
@@ -58,7 +59,7 @@ function answer(pathname, search, held) {
     if (pathname === '/api/community/members') return [];
     if (pathname === '/api/members') return { members: [], nextCursor: null };
     if (pathname === '/api/community/me') return { mute: { muted: false, until: null }, features: null };
-    if (pathname === '/api/community/info') return { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance: 12.5, profile: 'local', features: {} };
+    if (pathname === '/api/community/info') return { memberCount: 40, postCount: 4, transactionCount: 9, commonsBalance_c: 1250, profile: 'local', features: {} };
     if (pathname === '/api/commons/repayment') return { repayment: null };
     if (pathname.startsWith('/api/friends/')) return [];
     const fallback = mockResponse(pathname, search);
@@ -111,7 +112,6 @@ async function main() {
                 const run = `${mode} · ${held ? 'beans held in trust' : 'nothing held'}`;
                 const context = await browser.newContext({ viewport: { width: 320, height: 568 }, reducedMotion: 'reduce', colorScheme: mode });
                 await context.addInitScript((m) => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', m);
                 }, mode);
                 await context.route((url) => url.origin !== origin, (route) => route.abort());

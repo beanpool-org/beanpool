@@ -71,7 +71,6 @@ async function openPage(browser, origin, { width, height, dark, textScale, posts
     await context.addInitScript(([mode]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
         } catch {}
     }, [dark ? 'dark' : 'light']);
 

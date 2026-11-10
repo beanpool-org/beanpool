@@ -36,7 +36,7 @@ const wordIn = (lang, english) => (lang === 'xx' ? pseudoLocalise(english) : eng
 
 const AT = '2026-10-03T12:00:00.000Z';
 const NONCE = { nonce: 'node-nonce-1', expiresInSeconds: 600, providers: ['google', 'apple', 'facebook'], clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' } };
-const LOCAL = { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance: 640, profile: 'local', features: { beans: true, invites: true, knocks: true, door: 'members' } };
+const LOCAL = { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance_c: 64000, profile: 'local', features: { beans: true, invites: true, knocks: true, door: 'members' } };
 
 /** Into the name screen from "have you used BeanPool before?", with a name someone here already has. */
 async function toName(page, lang) {

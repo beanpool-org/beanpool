@@ -88,7 +88,6 @@ async function scenario({ dark = false, redirectToSpy = false, readyThenSpy = fa
         window.process = window.process || { env: {} };
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
         document.addEventListener('DOMContentLoaded', () => {
@@ -112,7 +111,7 @@ async function scenario({ dark = false, redirectToSpy = false, readyThenSpy = fa
                 if (u.pathname.startsWith('/api/profile/')) return json(route, { publicKey: decodeURIComponent(u.pathname.split('/')[3]), callsign: 'CJ Global', avatar: PHOTO });
                 return json(route, {});
             }
-            if (u.pathname === '/api/community/info') return json(route, { profile: 'local', memberCount: 40, postCount: 0, transactionCount: 0, commonsBalance: 0, features: { openJoin: false, knocks: true } });
+            if (u.pathname === '/api/community/info') return json(route, { profile: 'local', memberCount: 40, postCount: 0, transactionCount: 0, commonsBalance_c: 0, features: { openJoin: false, knocks: true } });
             if (u.pathname === '/api/community/card') return json(route, { name: NAME, host: 'byron.example.org', members: 40, joining: 'requests' });
             if (u.pathname === '/api/join/knock/status') {
                 state.statusReads.push(signer);

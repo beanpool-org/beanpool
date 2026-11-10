@@ -41,7 +41,7 @@ const answer = () => ({
     layout: { v: 2, cards: CARDS, dismissed: {}, updatedAt: null },
     cards: {
         events: { items: [{ id: 'e0', title: 'Seed swap', startsAt: new Date(NOW + 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: null },
-        market: { items: [{ id: 'p0', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 10, photoUrl: null }], total14d: 1, more: false },
+        market: { items: [{ id: 'p0', type: 'offer', title: 'Pottery lessons', category: 'arts', price_c: 1000, photoUrl: null }], total14d: 1, more: false },
         community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
     },
 });
@@ -54,7 +54,7 @@ const browser = await chromium.launch();
 async function open({ width, dark, textScale }) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
     await context.addInitScript(([mode]) => {
-        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme is still a theme */ }
+        try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme is still a theme */ }
     }, [dark ? 'dark' : 'light']);
     await context.route('**/api/**', (route) => {
         const url = new URL(route.request().url());

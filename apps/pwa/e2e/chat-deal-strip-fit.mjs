@@ -49,7 +49,7 @@ const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();
 /** A deal between me and Bob. By default I pay (I am the buyer) and it is held in trust. */
 const deal = (id, title, over = {}) => ({
     id, postId: `post-${id}`, postTitle: title, buyerPublicKey: ME, buyerCallsign: 'Alice', sellerPublicKey: BOB, sellerCallsign: 'Bob',
-    credits: 12, status: 'pending', createdAt: ago(2), ratedByBuyer: false, ratedBySeller: false, ...over,
+    amount_c: 1200, status: 'pending', createdAt: ago(2), ratedByBuyer: false, ratedBySeller: false, ...over,
 });
 /** The same deal with Bob paying: I am its seller. */
 const sold = (id, title, over = {}) => deal(id, title, { buyerPublicKey: BOB, buyerCallsign: 'Bob', sellerPublicKey: ME, sellerCallsign: 'Alice', ...over });

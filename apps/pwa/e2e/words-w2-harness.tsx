@@ -52,15 +52,15 @@ const decision = (id: string, over: Record<string, any> = {}): any => ({
 });
 const DECISIONS = [
     decision('a', { myVote: { support: true, voteCount: 1, creditsUsed: 0, updatedAt: '' } }),
-    decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount: 50 }, myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '' } }),
+    decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount_c: 5000 }, myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '' } }),
     decision('c', { effect: 'keep_suspension', params: { memberName: 'Dave', suspendedAt: iso(-2 * DAY) } }),
-    decision('d', { effect: 'remove_member', params: { memberName: 'Eve', debt: 12.5, commonsPool: 300 } }),
+    decision('d', { effect: 'remove_member', params: { memberName: 'Eve', debt_c: 1250, commonsPool_c: 30000 } }),
 ];
 const POOL_VOTING = { hasCompletedTrade: true, voiceCredits: 16 };
 
 const poll = (over: Record<string, unknown> = {}): any => ({
     id: 'poll-1', type: 'poll', category: 'community', title: 'Where should the tool shed go?', description: 'North gate or south barn.',
-    authorPublicKey: ME, authorCallsign: 'Alice', createdAt: iso(-DAY), status: 'active', active: true, credits: 0, priceType: 'fixed', repeatable: false,
+    authorPublicKey: ME, authorCallsign: 'Alice', createdAt: iso(-DAY), status: 'active', active: true, price_c: 0, priceType: 'fixed', repeatable: false,
     pollOptions: [{ id: 'o1', text: 'North Gate', votes: 3, percentage: 60 }, { id: 'o2', text: 'South Barn', votes: 2, percentage: 40 }],
     pollClosesAt: iso(6.5 * DAY), totalVotes: 5, userVotedOptionId: 'o1', pollOpenVote: true,
     pollVotes: [{ voterPubkey: 'v1', voterCallsign: 'Bob', optionId: 'o1', createdAt: iso(-DAY) }],
@@ -80,7 +80,7 @@ const ROSTER: any[] = [
 ];
 
 const card = (over: Record<string, unknown> = {}): any => ({
-    publicKey: 'ent-1', name: 'Bindarrabi Bakery', callsign: 'bakery', balance: 120, creditLine: 0, liveOffers: 1,
+    publicKey: 'ent-1', name: 'Bindarrabi Bakery', callsign: 'bakery', balance_c: 12000, creditLine_c: 0, liveOffers: 1,
     purpose: 'Bread for the valley, baked at dawn.', keepers: [{ publicKey: 'a', callsign: 'Ann' }, { publicKey: 'b', callsign: 'Bob' }],
     lifecycle: 'ongoing', status: 'active', ...over,
 });
@@ -99,9 +99,9 @@ function Screen() {
         case 'credit-bar':
             return (
                 <Column>
-                    <CreditBar balance={-100} floor={-1000} usableFloor={-200} liveOffers={1} />
-                    <CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} />
-                    <CreditBar balance={600} floor={-500} />
+                    <CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />
+                    <CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} />
+                    <CreditBar balance_c={123456} floor_c={-50000} />
                 </Column>
             );
         case 'enterprise':
@@ -113,12 +113,12 @@ function Screen() {
         case 'commons-decide': return <ProjectsPage identity={IDENTITY as never} initialSection="decide" />;
         case 'decide':
             return (
-                <DecideSection decisions={DECISIONS} myPoolVoting={POOL_VOTING} identity={IDENTITY as never} commonsBalance={300} onRefresh={noneAsync}
+                <DecideSection decisions={DECISIONS} myPoolVoting={POOL_VOTING} identity={IDENTITY as never} commonsBalance={30000} onRefresh={noneAsync}
                     onOpenPropose={none} canPropose hasOpenDecision activeView="open" onChangeView={none} />
             );
-        case 'commons-info': return <CommonsInfoModal isOpen onClose={none} commonsBalance={123.45} />;
+        case 'commons-info': return <CommonsInfoModal isOpen onClose={none} commonsBalance={123456} />;
         case 'propose':
-            return <ProposeDecisionModal isOpen onClose={none} onCreated={none} identity={IDENTITY as never} commonsBalance={321.6} treasuries={[]} members={[{ publicKey: 'm'.repeat(64), callsign: 'Mia' }] as never} />;
+            return <ProposeDecisionModal isOpen onClose={none} onCreated={none} identity={IDENTITY as never} commonsBalance={32160} treasuries={[]} members={[{ publicKey: 'm'.repeat(64), callsign: 'Mia' }] as never} />;
         case 'polls':
             return (
                 <Column>
@@ -135,16 +135,16 @@ function Screen() {
         case 'enterprise-cards':
             return (
                 <Column>
-                    <EnterpriseCard treasury={card({ earnedSurplus: 30 })} />
-                    <EnterpriseCard treasury={card({ publicKey: 'e2', balance: -1, liveOffers: 3, keepers: [], callsign: undefined, purpose: null })} />
-                    <EnterpriseCard treasury={card({ publicKey: 'e3', name: 'Seed library', lifecycle: 'bounded', goalAmount: 500, currentAmount: 120, deadlineAt: iso(5 * DAY) })} />
-                    <EnterpriseCard treasury={card({ publicKey: 'e5', paused: true, balance: 0 })} />
+                    <EnterpriseCard treasury={card({ earnedSurplus_c: 3000 })} />
+                    <EnterpriseCard treasury={card({ publicKey: 'e2', balance_c: -100, liveOffers: 3, keepers: [], callsign: undefined, purpose: null })} />
+                    <EnterpriseCard treasury={card({ publicKey: 'e3', name: 'Seed library', lifecycle: 'bounded', goalAmount_c: 500000, currentAmount_c: 123456, deadlineAt: iso(5 * DAY) })} />
+                    <EnterpriseCard treasury={card({ publicKey: 'e5', paused: true, balance_c: 0 })} />
                     <EnterpriseCard treasury={card({ publicKey: 'e6', status: 'winding_up' })} />
                     <EnterpriseCard treasury={card({ publicKey: 'e7', status: 'completed' })} />
                 </Column>
             );
         case 'enterprise-decisions':
-            return <Column><EnterpriseDecisions treasuryKey="ent-busy" myPubkey={ME} keepers={KEEPERS} balance={120} earnedSurplus={100} lifecycle="ongoing" /></Column>;
+            return <Column><EnterpriseDecisions treasuryKey="ent-busy" myPubkey={ME} keepers={KEEPERS} balance={12000} earnedSurplus={10000} lifecycle="ongoing" /></Column>;
         case 'location-picker':
             return <Column><EnterpriseLocationPicker treasury={{ publicKey: 'ent-1', lat: -28.549, lng: 153.501 }} onLocationSaved={none} onClose={none} /></Column>;
         default: return <p>Unknown screen {SCREEN}</p>;

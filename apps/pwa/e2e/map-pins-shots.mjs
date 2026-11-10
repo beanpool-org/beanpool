@@ -26,23 +26,23 @@ fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 const HOUR = 3600_000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
-const base = { description: '', credits: 5, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: true, photos: [] };
+const base = { description: '', price_c: 500, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: true, photos: [] };
 // The community's centre is where the map opens; the groups sit round it, a kilometre apart, so each is its own bubble.
 const CENTRE = { lat: -28.64, lng: 153.5 };
 const SPOTS = [
     { dx: -0.014, dy: -0.016, n: 3 }, { dx: -0.014, dy: 0.016, n: 12 }, { dx: 0.014, dy: -0.016, n: 30 }, { dx: 0.014, dy: 0.016, n: 120 },
 ];
 const POSTS = [
-    { ...base, id: 'elder-offer', type: 'offer', category: 'food', title: 'Elder eggs', authorPublicKey: 'pk-elder', authorEnergyCycled: 5000, lat: CENTRE.lat + 0.003, lng: CENTRE.lng - 0.008 },
-    { ...base, id: 'elder-need', type: 'need', category: 'tools', title: 'Elder ladder', authorPublicKey: 'pk-elder', authorEnergyCycled: 5000, lat: CENTRE.lat + 0.003, lng: CENTRE.lng + 0.008 },
-    { ...base, id: 'new-offer', type: 'offer', category: 'garden', title: 'New seedlings', authorPublicKey: 'pk-new', authorEnergyCycled: 20, lat: CENTRE.lat - 0.006, lng: CENTRE.lng - 0.006 },
-    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café', authorPublicKey: 'pk-hazel', credits: 0, repeatable: false,
+    { ...base, id: 'elder-offer', type: 'offer', category: 'food', title: 'Elder eggs', authorPublicKey: 'pk-elder', authorEnergyCycled: 500000, lat: CENTRE.lat + 0.003, lng: CENTRE.lng - 0.008 },
+    { ...base, id: 'elder-need', type: 'need', category: 'tools', title: 'Elder ladder', authorPublicKey: 'pk-elder', authorEnergyCycled: 500000, lat: CENTRE.lat + 0.003, lng: CENTRE.lng + 0.008 },
+    { ...base, id: 'new-offer', type: 'offer', category: 'garden', title: 'New seedlings', authorPublicKey: 'pk-new', authorEnergyCycled: 2000, lat: CENTRE.lat - 0.006, lng: CENTRE.lng - 0.006 },
+    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café', authorPublicKey: 'pk-hazel', price_c: 0, repeatable: false,
       eventStartAt: iso(2 * HOUR), eventState: 'scheduled', goingCount: 2, interestedCount: 1, myRsvp: null, lat: CENTRE.lat - 0.006, lng: CENTRE.lng + 0.006 },
 ];
 SPOTS.forEach((s, g) => {
     for (let i = 0; i < s.n; i++) {
         // Within ~25 m of each other: one bubble at every zoom the map opens at.
-        POSTS.push({ ...base, id: `c${g}-${i}`, type: i % 3 ? 'offer' : 'need', category: 'food', title: `Group ${g} item ${i}`, authorPublicKey: `pk-${g}-${i}`, authorEnergyCycled: 20,
+        POSTS.push({ ...base, id: `c${g}-${i}`, type: i % 3 ? 'offer' : 'need', category: 'food', title: `Group ${g} item ${i}`, authorPublicKey: `pk-${g}-${i}`, authorEnergyCycled: 2000,
             lat: CENTRE.lat + s.dx + ((i * 7) % 11) * 0.00002, lng: CENTRE.lng + s.dy + ((i * 5) % 13) * 0.00002 });
     }
 });
@@ -63,7 +63,7 @@ function answer(pathname, search) {
     if (pathname === '/api/node/config') return { readAuthRequired: false };
     if (pathname === '/api/node/info') return { callsign: 'Harness', peerNodes: [] };
     if (pathname === '/api/federation/peers/reachable') return { peers: [] };
-    if (pathname.startsWith('/api/ledger/balance')) return { balance: 240, isBlockedFromTrading: false };
+    if (pathname.startsWith('/api/ledger/balance')) return { balance_c: 24000, isBlockedFromTrading: false };
     return undefined;
 }
 
@@ -128,7 +128,7 @@ try {
         for (const theme of ['light', 'dark']) {
             const context = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: theme, reducedMotion: 'reduce' });
             await context.addInitScript(([mode]) => {
-                try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme */ }
+                try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme */ }
             }, [theme]);
             await context.route('**/*', async (route) => {
                 const url = new URL(route.request().url());

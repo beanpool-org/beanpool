@@ -35,9 +35,9 @@ const GLOBAL = { profile: 'global', features: { beans: false, nearbyListings: { 
 const AREA = { lat: -28.5, lng: 153.5 };
 
 const listing = (id, title, over = {}) => ({
-    id, title, type: 'offer', category: 'tools', credits: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
+    id, title, type: 'offer', category: 'tools', price_c: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
     description: 'Some words about it, enough to run onto a second line at this width.',
-    authorPublicKey: 'member-ada', authorCallsign: 'Ada', authorEnergyCycled: 40, photos: [], createdAt: iso(-3 * HOUR), lat: -28.6, lng: 153.4, ...over,
+    authorPublicKey: 'member-ada', authorCallsign: 'Ada', authorEnergyCycled: 4000, photos: [], createdAt: iso(-3 * HOUR), lat: -28.6, lng: 153.4, ...over,
 });
 const near = (n) => Array.from({ length: n }, (_, i) => listing(`near-${i}`, `Near ${i}`, { distanceKm: 3 + i, category: ['tools', 'food', 'garden'][i % 3] }));
 const far = (n) => Array.from({ length: n }, (_, i) => listing(`far-${i}`, `Far ${i}`, {
@@ -49,7 +49,6 @@ async function open(browser, origin, { dark, nearCount }) {
     await context.addInitScript(([mode]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
         } catch { /* a picture of the default theme is still a picture */ }
     }, [dark ? 'dark' : 'light']);
     const reads = [];

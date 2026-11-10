@@ -47,7 +47,7 @@ const json = (body) => ({ status: 200, contentType: 'application/json', body: JS
 function answer(url, method) {
     const u = new URL(url);
     switch (`${method} ${u.pathname}`) {
-        case 'GET /api/community/info': return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance: 0, profile: 'local', features: { beans: true } });
+        case 'GET /api/community/info': return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance_c: 0, profile: 'local', features: { beans: true } });
         // Only the Your community card is asked for (src/tools/builder.ts webPlace): its place is Mullumbimby's.
         case 'GET /api/home': return json({ generatedAt: new Date(NOW).toISOString(), profile: 'local', features: {}, me: null, cards: { community: { place: { lat: -28.55, lng: 153.5 } } } });
         default: return null;

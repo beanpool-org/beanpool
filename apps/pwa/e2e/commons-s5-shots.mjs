@@ -48,10 +48,10 @@ try {
             await page.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { document.documentElement.style.fontSize = '130%'; }); });
             await page.route('**/api/**', async (route) => {
                 const url = route.request().url();
-                if (url.includes('/api/community/info')) return json(route, { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 250, profile: 'local', features: { beans: true, enterprises: true, decisions: true } });
+                if (url.includes('/api/community/info')) return json(route, { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 123456, profile: 'local', features: { beans: true, enterprises: true, decisions: true } });
                 if (url.includes('/api/commons/decisions')) return json(route, { decisions: [], myPoolVoting: { voiceCredits: 9.6, hasCompletedTrade: true, qualifiedTradeValue: 9.6 }, canPropose: true });
-                if (url.includes('/api/commons/balance')) return json(route, { balance: 250 });
-                if (url.includes('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, commonsBalance: 250, earnedCredit: 12, callsign: 'Alice', keeperOf: [], tier: 'contributor' });
+                if (url.includes('/api/commons/balance')) return json(route, { balance_c: 123456 });
+                if (url.includes('/api/ledger/balance')) return json(route, { balance_c: 123456, floor_c: -50000, commonsBalance_c: 123456, earnedCredit_c: 1200, callsign: 'Alice', keeperOf: [], tier: 'contributor' });
                 if (url.includes('/api/treasuries')) return json(route, { treasuries: [] });
                 if (url.includes('/api/your-groups')) return json(route, { items: [] });
                 if (url.includes('/api/groups')) return json(route, []);

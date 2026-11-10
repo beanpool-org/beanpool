@@ -39,7 +39,7 @@ const iso = (ms: number) => new Date(Date.now() + ms).toISOString();
 const none = () => {};
 
 const listing = (over: Record<string, unknown>) => ({
-    id: 'c1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning, still warm.', credits: 12,
+    id: 'c1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning, still warm.', price_c: 1200,
     priceType: 'hourly', authorPublicKey: 'member-kofi', authorCallsign: 'Kofi', active: true, status: 'active',
     repeatable: false, photos: [], createdAt: iso(-2 * HOUR), ...over,
 }) as any;
@@ -47,29 +47,29 @@ const CARDS = [
     listing({ id: 'c1', repeatable: true, cashAlsoNeeded: true, authorFoundingNeeded: true, audienceScope: 'group', targetGroupName: 'Garden club', authorPublicKey: ME }),
     listing({ id: 'c2', photos: ['/assets/header-bg.png'], repeatable: true, authorFoundingNeeded: true, status: 'pending', priceType: 'weekly' }),
     listing({ id: 'c3', type: 'need', category: 'tools', title: 'Borrow a ladder', description: '', status: 'pending', priceType: 'daily', photos: ['/assets/header-bg.png'] }),
-    listing({ id: 'c4', status: 'paused', priceType: 'monthly', credits: 2.5, category: 'mindset' }),
+    listing({ id: 'c4', status: 'paused', priceType: 'monthly', price_c: 250, category: 'mindset' }),
     listing({ id: 'c5', authorCallsign: 'Daily Pulse', title: 'On sharing', description: 'A thought for today' }),
 ];
 
 const deal = (over: Record<string, unknown>) => ({
     id: 'tx', postId: 'p-bike', postTitle: 'Bike tune-up', buyerPublicKey: ME, buyerCallsign: 'You', sellerPublicKey: 'member-kofi',
-    sellerCallsign: 'Kofi', credits: 20, status: 'pending', createdAt: iso(-26 * HOUR), ...over,
+    sellerCallsign: 'Kofi', amount_c: 2000, status: 'pending', createdAt: iso(-26 * HOUR), ...over,
 }) as any;
 const DEAL_POSTS = [
-    listing({ id: 'p-couch', type: 'need', title: 'Help moving a couch', authorPublicKey: ME, authorCallsign: 'You', credits: 30, priceType: 'fixed' }),
-    listing({ id: 'p-mend', title: 'Mending jackets', authorPublicKey: ME, authorCallsign: 'You', credits: 15, priceType: 'fixed' }),
-    listing({ id: 'p-bike', title: 'Bike tune-up', status: 'pending', acceptedBy: ME, credits: 20, priceType: 'fixed' }),
+    listing({ id: 'p-couch', type: 'need', title: 'Help moving a couch', authorPublicKey: ME, authorCallsign: 'You', price_c: 3000, priceType: 'fixed' }),
+    listing({ id: 'p-mend', title: 'Mending jackets', authorPublicKey: ME, authorCallsign: 'You', price_c: 1500, priceType: 'fixed' }),
+    listing({ id: 'p-bike', title: 'Bike tune-up', status: 'pending', acceptedBy: ME, price_c: 2000, priceType: 'fixed' }),
 ];
 const DEALS = [
     deal({ id: 'tx-1' }),
-    deal({ id: 'tx-2', postId: 'p-weed', postTitle: 'Weed the veggie patch', buyerPublicKey: 'member-tama', buyerCallsign: 'Tama', sellerPublicKey: ME, sellerCallsign: 'You', credits: 10 }),
-    deal({ id: 'tx-3', postId: 'p-mend', postTitle: 'Mending jackets', status: 'completed', buyerPublicKey: 'member-mere', buyerCallsign: 'Mere', sellerPublicKey: ME, sellerCallsign: 'You', credits: 15 }),
-    deal({ id: 'tx-4', postId: 'p-bread', postTitle: 'Rye bread', status: 'cancelled', sellerPublicKey: 'member-mere', sellerCallsign: 'Mere', credits: 8 }),
+    deal({ id: 'tx-2', postId: 'p-weed', postTitle: 'Weed the veggie patch', buyerPublicKey: 'member-tama', buyerCallsign: 'Tama', sellerPublicKey: ME, sellerCallsign: 'You', amount_c: 1000 }),
+    deal({ id: 'tx-3', postId: 'p-mend', postTitle: 'Mending jackets', status: 'completed', buyerPublicKey: 'member-mere', buyerCallsign: 'Mere', sellerPublicKey: ME, sellerCallsign: 'You', amount_c: 1500 }),
+    deal({ id: 'tx-4', postId: 'p-bread', postTitle: 'Rye bread', status: 'cancelled', sellerPublicKey: 'member-mere', sellerCallsign: 'Mere', amount_c: 800 }),
 ];
 
 const event = (over: Record<string, unknown>) => ({
     id: 'ev-1', type: 'event', category: 'community', title: 'Working bee at the hall', description: 'Bring gloves and a thermos.',
-    credits: 0, priceType: 'fixed', authorPublicKey: 'member-hazel', authorCallsign: 'Hazel', createdAt: iso(-HOUR), active: true,
+    price_c: 0, priceType: 'fixed', authorPublicKey: 'member-hazel', authorCallsign: 'Hazel', createdAt: iso(-HOUR), active: true,
     status: 'active', repeatable: false, photos: [], lat: -28.55, lng: 153.5, eventStartAt: iso(30 * HOUR), eventEndAt: iso(33 * HOUR),
     eventPlaceName: 'Bindarrabi Hall', eventState: 'scheduled', goingCount: 7, interestedCount: 3, myRsvp: null, ...over,
 }) as any;

@@ -16,7 +16,7 @@ const HOUR = 60 * 60 * 1000;
 const start = new Date(2030, 8, 28, 9, 0).getTime();
 
 const base: any = {
-    type: 'event', category: 'community', description: 'Clearing the back garden', credits: 0, priceType: 'fixed',
+    type: 'event', category: 'community', description: 'Clearing the back garden', price_c: 0, priceType: 'fixed',
     authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: new Date().toISOString(), active: true,
     status: 'active', repeatable: false, lat: -28.55, lng: 153.5,
     eventStartAt: new Date(start).toISOString(), eventEndAt: new Date(start + 3 * HOUR).toISOString(),

@@ -203,7 +203,6 @@ async function openContext(browser, origin, { identity = null, dark = false, geo
         });
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             if (quiet) localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     }, [dark ? 'dark' : 'light', installDismissed]);

@@ -36,8 +36,8 @@ const WHEN = process.env.LEDGER_WHEN === 'before' ? 'before' : 'after';
 const VIEW = { width: 320, height: 720 };
 const TEXT_SCALE = 1.3;
 const SUFFIX = process.env.LEDGER_SUFFIX || '';
-/** The local member's Beans: over 300, so the Circulation box shows a month's amount. */
-const LOCAL_BALANCE = 750;
+/** The local member's Beans, in whole hundredths (750 Beans): over 300, so the Circulation box shows a month's amount. */
+const LOCAL_BALANCE = 75000;
 
 const failures = [];
 function check(ok, what) {
@@ -101,7 +101,6 @@ async function openContext(browser, origin, identity, dark) {
     await context.addInitScript((mode) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     }, dark ? 'dark' : 'light');
@@ -245,7 +244,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('ledger-preview').waitFor({ timeout: 10_000 });
         await wait(1_500);
         const text = await page.getByTestId('ledger-preview').innerText();
-        check(/an example member/.test(text) && /\+85\.0B/.test(text), 'Ledger: Example Valley\'s example member, +85.0B');
+        check(/an example member/.test(text) && /\+85B/.test(text), 'Ledger: Example Valley\'s example member, +85B');
         check(/Level 2 of 4 · 200 trust/.test(text), 'Levels: Level 2 of 4 · 200 trust');
         check(!/Rua/.test(text), 'the reader\'s own name never shows');
         check(await page.getByTestId('levels-shelf').locator('button').count() === 4, 'Levels: the four tiles');
@@ -291,7 +290,7 @@ async function globalMember(browser, root, dark) {
 async function localMember(browser, root, dark) {
     const scheme = dark ? 'dark' : 'light';
     const ana = memberIdentity('Ana');
-    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30, balance: LOCAL_BALANCE }]);
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30, balance_c: LOCAL_BALANCE }]);
     console.log(`\nA member of a local node (Beans live), ${scheme}, ${WHEN}, on ${node.origin}:`);
     const { context, page } = await openContext(browser, node.origin, ana, dark);
     try {

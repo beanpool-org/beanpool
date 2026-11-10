@@ -54,14 +54,14 @@ function answer({ listings = 4, events = 2 } = {}) {
                 radiusKm: null,
             },
             market: {
-                items: Array.from({ length: listings }, (_, i) => ({ id: `p${i}`, type: i % 3 === 2 ? 'need' : 'offer', title: TITLES[i % TITLES.length], category: 'food', credits: 10 + i, photoUrl: null })),
+                items: Array.from({ length: listings }, (_, i) => ({ id: `p${i}`, type: i % 3 === 2 ? 'need' : 'offer', title: TITLES[i % TITLES.length], category: 'food', price_c: (10 + i) * 100, photoUrl: null })),
                 total14d: listings, more: false,
             },
             decide: { open: 1, soonestClosesAt: new Date(NOW + 3 * day).toISOString(), polls: 2, pollsMore: false },
             groups: { items: [{ id: 'g1', kind: 'group', name: 'Garden group', unread: 2, muted: false }, { id: 'g2', kind: 'group', name: 'Tool library', unread: 0, muted: false }], total: 2 },
             joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Kofi', avatarUrl: null }, { callsign: 'Wren', avatarUrl: null }] },
             pulse: { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }, { id: 'u2', title: 'Mending day at the hall', thumbnailUrl: null, platform: 'youtube', callsign: 'Wren', category: 'education', url: null }] },
-            beans: { balance: 12, room: 200, tier: 'Resident', activated: true, frozen: false },
+            beans: { balance_c: 123456, room_c: 20000, tier: 'Resident', activated: true, frozen: false },
             notices: { unseen: 1, first: { id: 'n1', title: 'Market day moved', line: 'Saturday, not Sunday.' } },
             community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
         },
@@ -77,7 +77,7 @@ const base = `http://localhost:${server.httpServer.address().port}/e2e/home-pack
 async function open(browser, { width, height = 900, dark = false, textScale = 1 }) {
     const context = await browser.newContext({ viewport: { width, height }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
     await context.addInitScript(([mode]) => {
-        try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme is still a theme */ }
+        try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme is still a theme */ }
     }, [dark ? 'dark' : 'light']);
     const node = { answer: answer(), held: null, tag: 1 };
     await context.route('**/api/**', async (route) => {

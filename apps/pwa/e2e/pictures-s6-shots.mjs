@@ -54,7 +54,7 @@ try {
                         body: JSON.stringify({
                             generatedAt: new Date().toISOString(),
                             profile: 'local',
-                            community: { name: 'Mullumbimby Commons', members: 42, openInvites: 0, publicBoard: false, tradesThisMonth: 12, commonsPot: 150, listings: 3, eventsSoon: 0 },
+                            community: { name: 'Mullumbimby Commons', members: 42, openInvites: 0, publicBoard: false, tradesThisMonth: 12, commonsPot_c: 123456, listings: 3, eventsSoon: 0 },
                             cards: {
                                 market: {
                                     items: [

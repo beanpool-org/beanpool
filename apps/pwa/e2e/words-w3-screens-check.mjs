@@ -60,7 +60,7 @@ const PEER = 'peer-pk-000000000000000000000000000';
 const archetype = (primary, secondary) => JSON.stringify({ primary, secondary, mode: 'quick', updatedAt: '2026-10-01T00:00:00Z' });
 const at = (ms) => new Date(Date.now() + ms).toISOString();
 const API = {
-    info: { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance: 640, profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } },
+    info: { memberCount: 14, postCount: 30, transactionCount: 9, commonsBalance_c: 64000, profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } },
     health: { online: true, status: 'ok', version: '1.2.29', nodeName: 'Riverbend', memberCount: 14, postCount: 30, transactions: 9 },
     me: { probation: { onProbation: true, keptPosts: 1, keptPostsNeeded: 3, ageEndsAt: at(2 * 86_400_000), endsWhen: { hours: 72, keptPosts: 3 }, limits: {
         posts: { limit: 3, used: 1, remaining: 2, resetsAt: at(5 * 3_600_000) },
@@ -70,14 +70,14 @@ const API = {
     profile: (pk) => (pk === PEER
         ? { publicKey: PEER, callsign: 'Bob', avatar: null, bio: 'Fixes bikes on Sundays', role: 'member', joinedAt: '2026-09-14T00:00:00Z', archetype: archetype('weaver', 'connector') }
         : { publicKey: ME, callsign: 'Alice', avatar: null, bio: 'Bakes on Fridays', role: 'member', joinedAt: '2026-01-01T00:00:00Z', archetype: archetype('catalyst', 'spark'), contact: { value: 'alice@example.org', visibility: 'friends' } }),
-    balance: { balance: 12.5, floor: -50, earnedCredit: 140, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } },
+    balance: { balance_c: 123456, floor_c: -5000, earnedCredit_c: 14000, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } },
     ratings: { average: 4.5, count: 2, asProvider: { average: 5, count: 1 }, asReceiver: { average: 4, count: 1 }, ratings: [
         { stars: 5, comment: 'Lovely bread', role: 'provider', createdAt: '2026-09-02T00:00:00Z' }, { stars: 4, comment: '', role: 'receiver', createdAt: '2026-09-20T00:00:00Z' },
     ] },
     given: { ratings: [{ id: 'r1', stars: 4, comment: '', target_callsign: 'Dan', transactionId: 'tx1', targetPubkey: 'dan-pk', createdAt: '2026-08-01T00:00:00Z' }] },
     prefs: { holiday_mode: 'false', show_as_connection_in_common: 'true', notify_chat: 'true', notify_marketplace: 'true', notify_escrow: 'false', eventReminderOffsets: '[1440,60]' },
     blocks: { blocked: [{ publicKey: PEER, blockedAt: '2026-10-01T00:00:00Z' }], max: 100 },
-    listing: [{ id: 'p1', type: 'offer', title: 'Sourdough loaves', status: 'active', credits: 12, photos: null, authorPublicKey: PEER }],
+    listing: [{ id: 'p1', type: 'offer', title: 'Sourdough loaves', status: 'active', price_c: 1200, photos: null, authorPublicKey: PEER }],
 };
 
 /** Each screen: its `?screen=`, what shows it is drawn, what to do first, and (for the shell) where to measure. */

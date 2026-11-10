@@ -162,7 +162,6 @@ async function openContext(browser, origin, identity, dark, holdInfoMs = 0) {
     await context.addInitScript((mode) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     }, dark ? 'dark' : 'light');

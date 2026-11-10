@@ -33,7 +33,7 @@ const PINS = Array.from({ length: 40 }, (_, i) => ({
 
 const params = new URLSearchParams(location.search);
 const POSTS = Array.from({ length: Number(params.get('n') || 50) }, (_, i) => ({
-    id: `m${i}`, type: 'offer', category: 'food', title: `Listing ${i}`, description: '', credits: 5, priceType: 'fixed',
+    id: `m${i}`, type: 'offer', category: 'food', title: `Listing ${i}`, description: '', price_c: 500, priceType: 'fixed',
     authorPublicKey: 'a'.repeat(64), authorCallsign: 'Rowan', active: true, status: 'active', createdAt: '2026-11-01T00:00:00.000Z',
     photos: [`${params.get('photos') ?? ''}/api/marketplace/posts/m${i}/photos/0?v=1&k=K${i}`],
 }) as unknown as MarketplacePost);

@@ -74,7 +74,7 @@ const SCREENS: Record<string, () => ReactNode> = {
     'start-community': () => <StartCommunityScreen onClose={noop} onNearYou={noop} />,
     'suggest': () => <Page><div className="p-4"><SuggestChangeForm appVersion="1.2.29" onDone={noop} /></div></Page>,
     'radius': () => <RadiusPickerPage initial={{ lat: -28.6, lng: 153.5, radiusKm: 50, label: '50km radius' }} onApply={noop} onCancel={noop} onReset={noop} />,
-    'lobby': () => <GuestLobby info={{ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } } as never} onComplete={noop} />,
+    'lobby': () => <GuestLobby info={{ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } } as never} onComplete={noop} />,
     'shell': () => <App />,
 };
 

@@ -5,6 +5,7 @@ import { requestSync, applyLivePostChange, ownCardChanged, lastPillarSyncStarted
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
 import { isPlainNodeAddress, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
+import { learnNodeVersion, tooOldVersionOf } from '../utils/node-version-gate';
 
 class WebSocketSyncClient {
     private ws: WebSocket | null = null;
@@ -130,6 +131,14 @@ class WebSocketSyncClient {
             // it names on iOS, so no socket is opened to it.
             if (!isPlainNodeAddress(anchorUrl)) {
                 console.warn('[WS Sync] Refusing a socket to an address that is not plain host[:port]');
+                this.isConnecting = false;
+                return;
+            }
+            // A server older than this app talks to (utils/node-version-gate.ts) gets no socket: its health is heard first
+            // when this run hasn't heard it, as for every request to it (utils/node-request-signing.ts).
+            await learnNodeVersion(anchorUrl, fetch);
+            if (typeof tooOldVersionOf(anchorUrl) === 'string') {
+                console.warn('[WS Sync] Refusing a socket to a server older than this app talks to');
                 this.isConnecting = false;
                 return;
             }

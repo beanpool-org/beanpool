@@ -9,8 +9,6 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}) } }));
-vi.mock('../nodes', () => ({ recordRequestSigning: vi.fn() }));
-vi.mock('../request-signing-version', () => ({ trackInfoRead: vi.fn() }));
 
 import { LANGS, setLanguage } from '@beanpool/core';
 import { LANGUAGE_NAMES, LANGUAGE_OPTIONS, chooseLanguage, defaultLanguage, languageForNode, languageHeader, storedChoice } from '../language-choice';

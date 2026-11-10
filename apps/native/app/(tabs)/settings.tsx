@@ -28,7 +28,7 @@ import {
 } from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
-import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
+import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import { withNodeScheme } from '../../utils/node-address-scheme';
 import { claimNodeOrigin } from '../../utils/claim-link';
@@ -968,7 +968,6 @@ export default function SettingsScreen() {
                     const res = await fetch(`${cleanUrl}/api/community/info?_t=${Date.now()}`);
                      if (res.ok) {
                         const data = await res.json();
-                        await recordRequestSigning(cleanUrl, data);
                         let remoteTxCount = data.transactionCount || 0;
                         
                         // The member's own ledger is Beans: never asked where they are a preview (the global node).

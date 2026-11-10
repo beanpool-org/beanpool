@@ -5,33 +5,23 @@
  *
  * The app builds every text it signs from fields it checked itself, and never signs text a node sent. Before this
  * the Manage button signed whatever "challenge" string the node answered with, so a hostile community could have it
- * sign a complete request for another community. Now:
- *
- *   - A node that says `requestSigning: 2` gets format 2 through core's builders: `0xFF ‖ beanpool-…/2\nHOST\n…`,
- *     bound to the host the app talks to, and the statement carries `signedFor: HOST` so the node knows which host's
- *     text to check.
- *   - A node whose info answered without it (older than #1219) gets the old form, rebuilt here from the checked
- *     fields. The Manage button signs the old challenge only when it is exactly the shape main's server makes
- *     (`beanpool-admin-auth:<the same 64-hex id>:<13-digit ms, near now>`), which can never be a request; anything
- *     else is refused and nothing is signed.
+ * sign a complete request for another community. Now every statement is format 2, through core's builders:
+ * `0xFF ‖ beanpool-…/2\nHOST\n…`, bound to the host the app talks to, and it carries `signedFor: HOST` so the node knows
+ * which host's text to check. There is no other form: every server this app talks to reads it (utils/node-version-gate.ts).
  *
  * Each one first refuses, signing nothing, a node address whose authority isn't exactly `host[:port]`
  * (node-url.ts `assertPlainNodeAddress`): on iOS such an address reaches a different host than the one signed for.
  */
 
 import {
-    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation, utf8Bytes, toBase64,
-    type Signer, type StandingAuthorisationFields, type StandingStartBody,
+    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation,
+    type StandingAuthorisationFields, type StandingStartBody,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { hallAudienceFor } from './hall-state';
-import { requestSigningFormatFor } from './request-signing-version';
 import { assertPlainNodeAddress } from './node-url';
 
 const CHALLENGE_ID_RE = /^[0-9a-f]{64}$/;
-
-/** How far the old server's challenge time may be from this phone's clock (its challenges live 60 s). */
-export const OLD_CHALLENGE_CLOCK_SLACK_MS = 5 * 60_000;
 
 /** Why nothing was signed. Shown as is. */
 export const UNSIGNABLE_CHALLENGE_MESSAGE =
@@ -45,24 +35,11 @@ export class UnsignableChallengeError extends Error {
     }
 }
 
-/**
- * Whether `challenge` is exactly an old server's sign-in challenge for `challengeId` (apps/server
- * admin-key-auth.ts `createAdminChallenge` before request binding): `beanpool-admin-auth:<id>:<Date.now()>`, with the
- * same 64-hex id and a 13-digit millisecond time within {@link OLD_CHALLENGE_CLOCK_SLACK_MS} of now. No line break,
- * nothing before or after, so it can't be read as a request anywhere.
- */
-export function isOldAdminChallenge(challenge: unknown, challengeId: unknown, now: number = Date.now()): boolean {
-    if (typeof challenge !== 'string' || typeof challengeId !== 'string' || !CHALLENGE_ID_RE.test(challengeId)) return false;
-    const m = /^beanpool-admin-auth:([0-9a-f]{64}):(\d{13})$/.exec(challenge);
-    if (!m || m[1] !== challengeId) return false;
-    return Math.abs(Number(m[2]) - now) <= OLD_CHALLENGE_CLOCK_SLACK_MS;
-}
-
 export interface SignedStatement {
     /** Base64. */
     signature: string;
-    /** The host it was signed for, sent as `signedFor`. Absent in the old form. */
-    signedFor?: string;
+    /** The host it was signed for, sent as `signedFor`. */
+    signedFor: string;
 }
 
 /**
@@ -70,22 +47,13 @@ export interface SignedStatement {
  * {@link UnsignableChallengeError}, having signed nothing, when the node's answer can't be signed safely.
  */
 export async function signAdminChallenge(
-    nodeUrl: string, chal: { challengeId?: unknown; challenge?: unknown }, privateKeyHex: string, now: number = Date.now(),
+    nodeUrl: string, chal: { challengeId?: unknown; challenge?: unknown }, privateKeyHex: string,
 ): Promise<SignedStatement> {
     assertPlainNodeAddress(nodeUrl);
-    const { challengeId, challenge } = chal;
-    if (await requestSigningFormatFor(nodeUrl) === 2) {
-        const host = audienceOf(nodeUrl);
-        if (!host || typeof challengeId !== 'string' || !CHALLENGE_ID_RE.test(challengeId)) throw new UnsignableChallengeError();
-        return { signature: await signAdminSignin(nodeUrl, challengeId, memberSigner(privateKeyHex)), signedFor: host };
-    }
-    if (!isOldAdminChallenge(challenge, challengeId, now)) throw new UnsignableChallengeError();
-    return { signature: await oldFormSignature(challenge as string, memberSigner(privateKeyHex)) };
-}
-
-/** The old pairing text. Must match pairingMessage() in the server's settings-signin-pairing.ts before request binding. */
-export function oldPairingText(action: 'approve' | 'decline', pairingId: string, shortCode: string): string {
-    return `beanpool-settings-signin:v1:${action}:${pairingId}:${shortCode}`;
+    const { challengeId } = chal;
+    const host = audienceOf(nodeUrl);
+    if (!host || typeof challengeId !== 'string' || !CHALLENGE_ID_RE.test(challengeId)) throw new UnsignableChallengeError();
+    return { signature: await signAdminSignin(nodeUrl, challengeId, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 /** Approving (or declining) the browser pairing `pairingId` shown by the node at `nodeUrl`. */
@@ -93,18 +61,14 @@ export async function signPairing(
     nodeUrl: string, action: 'approve' | 'decline', pairingId: string, shortCode: string, privateKeyHex: string,
 ): Promise<SignedStatement> {
     assertPlainNodeAddress(nodeUrl);
-    if (await requestSigningFormatFor(nodeUrl) === 2) {
-        const host = audienceOf(nodeUrl);
-        if (!host) throw new Error('Cannot sign in: the node address names no host');
-        return { signature: await signSettingsSignin(nodeUrl, action, pairingId, shortCode, memberSigner(privateKeyHex)), signedFor: host };
-    }
-    return { signature: await oldFormSignature(oldPairingText(action, pairingId, shortCode), memberSigner(privateKeyHex)) };
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot sign in: the node address names no host');
+    return { signature: await signSettingsSignin(nodeUrl, action, pairingId, shortCode, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 /**
  * An offline invite ticket from `inviter` for the community at `nodeUrl` (this phone's current community), as the
- * `BP-…` code the joiner types. Format 2 joins only there; the old form, for an older node, is the `{i, t, f}` JSON
- * builds before it made.
+ * `BP-…` code the joiner types. Format 2: it joins only there.
  */
 export async function makeOfflineTicket(
     nodeUrl: string, inviter: string, privateKeyHex: string, opts: { intendedFor?: string | null; timestamp?: number; namesEntryId?: string | null } = {},
@@ -112,24 +76,16 @@ export async function makeOfflineTicket(
     assertPlainNodeAddress(nodeUrl);
     const timestamp = opts.timestamp ?? Date.now();
     const sign = memberSigner(privateKeyHex);
-    if (await requestSigningFormatFor(nodeUrl) === 2) {
-        return `BP-${await buildInviteTicket(nodeUrl, inviter, sign, { timestamp, intendedFor: opts.intendedFor || null, namesEntryId: opts.namesEntryId || null })}`;
-    }
-    // A ticket bound to a names-list entry (community modes slice 3) is format 2 only: the old form has no place for it.
-    if (opts.namesEntryId) throw new Error('This community’s server is too old for a ticket bound to a name. Invite them once you have signal.');
-    const payload = JSON.stringify({ i: inviter, t: timestamp, f: opts.intendedFor || undefined });
-    const s = await oldFormSignature(payload, sign);
-    return `BP-${toBase64(utf8Bytes(JSON.stringify({ p: toBase64(utf8Bytes(payload)), s })))}`;
+    return `BP-${await buildInviteTicket(nodeUrl, inviter, sign, { timestamp, intendedFor: opts.intendedFor || null, namesEntryId: opts.namesEntryId || null })}`;
 }
 
 /**
  * The leave statement for this phone's push token at the community at `nodeUrl` (push-leave.ts), signed by the leaving
- * account's key: "`publicKey` no longer wants `token` here", with the phone's stamp `leftAt`. Format 2 only, whatever the
- * node's info says: a node older than leave statements has no route to take one, and the phone keeps it until it has.
+ * account's key: "`publicKey` no longer wants `token` here", with the phone's stamp `leftAt`.
  */
 export async function signPushLeaveStatement(
     nodeUrl: string, publicKey: string, token: string, leftAt: number, privateKeyHex: string,
-): Promise<Required<SignedStatement>> {
+): Promise<SignedStatement> {
     assertPlainNodeAddress(nodeUrl);
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign a leave statement: the node address names no host');
@@ -139,9 +95,8 @@ export async function signPushLeaveStatement(
 /**
  * A re-key ask's proof of possession (utils/rekey-redeem.ts): core's signReEnroll builds `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`
  * from the community's address and the code as the admin's screen spells it, signed by the key the phone wants bound.
- * Format 2 only: no app ever asked before the route took asks, so no server takes the old form.
  */
-export async function signReEnrollStatement(nodeUrl: string, code: string, privateKeyHex: string): Promise<Required<SignedStatement>> {
+export async function signReEnrollStatement(nodeUrl: string, code: string, privateKeyHex: string): Promise<SignedStatement> {
     assertPlainNodeAddress(nodeUrl);
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign a re-key ask: the node address names no host');
@@ -157,9 +112,4 @@ export async function signReEnrollStatement(nodeUrl: string, code: string, priva
 export async function signStandingStatement(nodeUrl: string, fields: StandingAuthorisationFields, privateKeyHex: string): Promise<StandingStartBody> {
     assertPlainNodeAddress(nodeUrl);
     return signStandingAuthorisation(nodeUrl, fields, memberSigner(privateKeyHex), await hallAudienceFor(nodeUrl));
-}
-
-/** The old forms are plain UTF-8, which never starts with the 0xFF every format-2 signature does. */
-async function oldFormSignature(text: string, sign: Signer): Promise<string> {
-    return toBase64(await sign(utf8Bytes(text)));
 }

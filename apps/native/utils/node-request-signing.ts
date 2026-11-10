@@ -16,16 +16,21 @@
  *
  * This makes the published app forward-compatible so read-auth can be enabled
  * server-side later without another app-store release.
+ *
+ * The same wrapper keeps the app away from a server older than it talks to (utils/node-version-gate.ts): a request to one
+ * of this phone's communities waits for that community's health the first time this run, and one to a server heard below
+ * MIN_NODE_VERSION is refused before it leaves the phone. And it hears the community refuse this app (426 app_too_old,
+ * the node's floor): that is the full-screen "Update required" (utils/force-update.ts noteAppRefused).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LANGUAGE_HEADER, REQUEST_SIGNING_VERSION, signedPathOf } from '@beanpool/core';
+import { LANGUAGE_HEADER } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
-import { getSavedNodes, loadSavedRequestSigning } from './nodes';
-import { APP_VERSION_HEADER } from './force-update';
+import { getSavedNodes } from './nodes';
+import { APP_TOO_OLD_ERROR, APP_VERSION_HEADER, noteAppRefused } from './force-update';
 import { languageForNode } from './language-choice';
-import { fellBackToOldFormat, OLD_SERVER_SIGNATURE_REFUSAL, settledRequestSigning } from './request-signing-version';
+import { isHealthRead, learnNodeVersion, noteHealthAnswer, refuseIfNodeTooOld, tooOldVersionOf } from './node-version-gate';
 
 let installed = false;
 /** `X-BeanPool-App`'s value on this phone (utils/force-update.ts appVersionHeaderValue), or null: sent with nothing. */
@@ -45,16 +50,6 @@ export function isAnchorRequest(url: string, anchorUrl: string): boolean {
     return origin ? origin === anchor : url.startsWith(anchorUrl);
 }
 
-/** A header's value from a plain headers object, any case; undefined from anything else. */
-function plainHeader(headers: any, name: string): string | undefined {
-    if (!headers || typeof headers !== 'object' || typeof headers.get === 'function') return undefined;
-    const lower = name.toLowerCase();
-    const key = Object.keys(headers).find(k => k.toLowerCase() === lower);
-    return key === undefined ? undefined : String(headers[key]);
-}
-
-const SIGNING_HEADERS = new Set(['x-public-key', 'x-signature', 'x-timestamp', 'x-nonce', 'x-signed-for', 'content-type']);
-
 /** Whether `url` goes to the community open on this phone (the anchor) or a saved one: the same origin. */
 async function isSavedCommunity(url: string): Promise<boolean> {
     const origin = plainOriginOf(url);
@@ -62,36 +57,6 @@ async function isSavedCommunity(url: string): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (anchorUrl && plainOriginOf(anchorUrl) === origin) return true;
     return (await getSavedNodes()).some(n => plainOriginOf(n.url) === origin);
-}
-
-/**
- * A request signed in format 2 (it names a host: X-Signed-For) that a node refused as an old server refuses a signature
- * it can't read, before this phone had heard which format that node reads (its info couldn't be read): signed again,
- * once, in the old format, which is then kept for that node until its info says otherwise (request-signing-version.ts
- * `fellBackToOldFormat`). Never for a node that has said it reads 2. Only to one of this phone's communities
- * (`isSavedCommunity`): any other host could answer a write that way just to get it signed in the old format, which
- * names no host, and replay it at the member's community until the switch. Only for a plain headers object, a string
- * body (or none) and the phone's own key: anything else is returned as answered. Null: not signed again.
- */
-async function signedAgainForOldNode(
-    url: string, method: string, init: any, res: Response, send: (init: any) => Promise<Response>,
-): Promise<Response | null> {
-    if (res.status !== 403 && res.status !== 401) return null;
-    const headers = init?.headers;
-    const signedFor = plainHeader(headers, 'X-Signed-For');
-    const pubkey = plainHeader(headers, 'X-Public-Key');
-    if (!signedFor || !pubkey) return null;
-    if (init?.body !== undefined && init?.body !== null && typeof init.body !== 'string') return null;
-    if (typeof (res as any).clone !== 'function') return null;
-    const refusal = await res.clone().json().catch(() => null);
-    if (refusal?.error !== OLD_SERVER_SIGNATURE_REFUSAL) return null;
-    const identity = await loadIdentity();
-    if (!identity?.privateKey || identity.publicKey !== pubkey) return null;
-    if (!(await isSavedCommunity(url))) return null;
-    if (!(await fellBackToOldFormat(url))) return null;
-    const kept = Object.fromEntries(Object.entries(headers).filter(([k]) => !SIGNING_HEADERS.has(k.toLowerCase())));
-    const signed = await buildSignedHeaders(method, url, init?.body ?? '', identity.privateKey, identity.publicKey);
-    return send({ ...init, headers: { ...kept, ...signed } });
 }
 
 /** Read a header value from either a plain object or a Headers instance. */
@@ -128,10 +93,6 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
     installed = true;
     appVersionHeader = options.appVersionHeader ?? null;
 
-    // Which format each saved community's server reads, as recorded on an earlier run (request binding). Signed
-    // requests made before it has loaded wait for it.
-    void loadSavedRequestSigning();
-
     const originalFetch = global.fetch;
 
     global.fetch = async function signingFetch(input: any, init?: any): Promise<Response> {
@@ -145,6 +106,20 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
             throw new Error('Refusing cleartext (http/ws) request to a public host (NAT-4). Use https.');
         }
 
+        // A server older than this app talks to (node-version-gate.ts) is sent its health read and nothing else: one of
+        // this phone's communities not heard from yet this run is asked first, and a server heard below the minimum (one
+        // of ours, or one a join read the health of) is refused here, before anything is sent. Not swallowed below.
+        const healthRead = !!url && isHealthRead(url);
+        if (url && !healthRead) {
+            try {
+                if (tooOldVersionOf(url) === undefined && await isSavedCommunity(url)) await learnNodeVersion(url, originalFetch);
+            } catch {
+                // The saved communities unreadable: a doubt, and a doubt sends the request.
+            }
+            refuseIfNodeTooOld(url);
+        }
+
+        let toAnchor = false;
         try {
             const method: string = String(
                 init?.method ?? (typeof input !== 'string' ? input?.method : undefined) ?? 'GET',
@@ -152,17 +127,11 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
 
             if (url) {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                const toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
+                toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
                 if (toAnchor && appVersionHeader) init = withHeader(input, init, APP_VERSION_HEADER, appVersionHeader);
                 if (toAnchor) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
-                // Only sign requests to our own node, and never double-sign. Nor the read of a node's info while this
-                // phone doesn't know it reads format 2: that read is how it learns, an older node refuses a format-2
-                // signature even on its public info, a request signed meanwhile waits for this answer
-                // (request-signing-version.ts learnRequestSigning) so signing it would wait on itself, and a node
-                // updated since it was old must be able to say so even once it refuses the old format.
-                const learningRead = signedPathOf(url) === '/api/community/info'
-                    && ((await settledRequestSigning(url)) ?? 0) < REQUEST_SIGNING_VERSION;
-                if (method === 'GET' && toAnchor && !learningRead && !hasHeader(init?.headers, 'X-Signature')) {
+                // Only sign requests to our own node, and never double-sign.
+                if (method === 'GET' && toAnchor && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();
                     if (identity?.privateKey && identity?.publicKey) {
                         // Signed over the URL fetched: its host (request binding) and its path, which is the
@@ -181,13 +150,28 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
             if (e instanceof UnsafeNodeAddressError) throw e;
         }
         const res = await originalFetch(input, init);
-        if (typeof input !== 'string' || !url) return res;
-        try {
-            const method = String(init?.method ?? 'GET').toUpperCase();
-            return (await signedAgainForOldNode(url, method, init, res, (again) => originalFetch(input, again))) ?? res;
-        } catch (e) {
-            if (e instanceof UnsafeNodeAddressError) throw e;
-            return res;
+        if (!url) return res;
+        // What a server's health says of its version, wherever the app read it: a server updated while the app ran is let
+        // through again at once, and one a join reads is refused if it is too old. Read from a copy, never the caller's.
+        if (healthRead && res.ok) void readCopy(res).then((body) => noteHealthAnswer(url, body));
+        // The community refusing this app (its floor, 426 app_too_old): the full-screen "Update required". Only its own
+        // community's answer counts: any other host could say it just to cover the app.
+        if (toAnchor && res.status === 426) {
+            const body = await readCopy(res);
+            if (body && typeof body === 'object' && (body as { error?: unknown }).error === APP_TOO_OLD_ERROR) {
+                noteAppRefused((body as { minAppVersion?: unknown }).minAppVersion);
+            }
         }
+        return res;
     };
+}
+
+/** The JSON of a copy of `res`, or null: the caller's own body is never read here. */
+async function readCopy(res: Response): Promise<unknown> {
+    try {
+        if (typeof (res as any).clone !== 'function') return null;
+        return await res.clone().json();
+    } catch {
+        return null;
+    }
 }

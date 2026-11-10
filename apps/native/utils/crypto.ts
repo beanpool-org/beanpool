@@ -3,10 +3,9 @@ import { getPublicKey, sign, verify, etc, hashes } from '@noble/ed25519';
 import * as Crypto from 'expo-crypto';
 import { WORDLIST } from '../../pwa/src/lib/bip39-wordlist';
 import {
-    toEd25519Seed, lowercaseRecoveryWords, recoveryWordsFromEntropy, RECOVERY_ENTROPY_LEN, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
+    toEd25519Seed, lowercaseRecoveryWords, recoveryWordsFromEntropy, RECOVERY_ENTROPY_LEN, audienceOf, buildBoundRequestHeaders, buildBoundWsParams,
     type Signer,
 } from '@beanpool/core';
-import { requestSigningFormatFor } from './request-signing-version';
 import { assertPlainNodeAddress } from './node-url';
 import { hallAudienceFor } from './hall-state';
 
@@ -188,8 +187,7 @@ export async function signData(message: Uint8Array, privateKey: Uint8Array): Pro
 }
 
 /**
- * The member key as @beanpool/core's `Signer`. Handed only to core's builders and to the old-form fallbacks for a
- * server older than request binding (here and in member-statements.ts): the app never signs bytes a node chose.
+ * The member key as @beanpool/core's `Signer`. Handed only to core's builders: the app never signs bytes a node chose.
  * utils/__tests__/request-binding-source-rule.test.ts holds every caller to that.
  */
 export function memberSigner(privateKeyHex: string): Signer {
@@ -205,8 +203,7 @@ export function memberSigner(privateKeyHex: string): Signer {
  *
  * Format 2 (request binding): `0xFF ‖ beanpool-request/2\nHOST\nMETHOD\nPATH\nTS\nNONCE\nBODY`
  * plus `X-Signed-For: HOST`, so the signature counts only at the community it was
- * sent to. The old `METHOD\nPATH\nTS\nNONCE\nBODY` only for a node whose info said
- * it predates that (request-signing-version.ts).
+ * sent to. The only format: every server this app talks to (utils/node-version-gate.ts, 1.4.0 on) reads it.
  *
  * Throws, having signed nothing, for a URL whose authority isn't exactly `host[:port]` (node-url.ts
  * `assertPlainNodeAddress`): iOS would connect to a different host than the one signed for.
@@ -224,9 +221,7 @@ export async function buildSignedHeaders(
     assertPlainNodeAddress(url);
     if (!audienceOf(url)) throw new Error(`Cannot sign a request for ${JSON.stringify(url)}: pass the full URL fetched`);
     const sign = memberSigner(privateKeyHex);
-    const signed = await requestSigningFormatFor(url) === 2
-        ? await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(url) })
-        : await unboundRequestHeaders(method, url, bodyString, publicKeyHex, sign);
+    const signed = await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(url) });
     return { 'Content-Type': 'application/json', ...signed };
 }
 
@@ -255,7 +250,7 @@ export async function buildVaultSignedHeaders(
  * timestamp, nonce, empty body). `wsUrl` is the full `ws(s)://…/ws` URL the socket
  * opens (before its query). The node gives the full live feed only to a
  * member-signed socket; an unsigned one gets public doorbells only. Returns a
- * `&`-joinable query fragment: in format 2 it adds `for=HOST&v=2`. Refuses, like {@link buildSignedHeaders}, a
+ * `&`-joinable query fragment, format 2 (`for=HOST&v=2`). Refuses, like {@link buildSignedHeaders}, a
  * URL whose authority isn't plain.
  */
 export async function buildSignedWsParams(
@@ -266,43 +261,12 @@ export async function buildSignedWsParams(
     assertPlainNodeAddress(wsUrl);
     if (!audienceOf(wsUrl)) throw new Error(`Cannot sign a socket for ${JSON.stringify(wsUrl)}: pass the full URL opened`);
     const sign = memberSigner(privateKeyHex);
-    // Read the node's info first when this phone hasn't heard from it: a socket an old server refuses (401) can't be
-    // signed again the way an HTTP request is (request-signing-version.ts).
     // On the hall laptop, signed for the community's own name, as buildSignedHeaders is.
-    return await requestSigningFormatFor(wsUrl, { readInfoFirst: true }) === 2
-        ? buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(wsUrl) })
-        : unboundWsParams(wsUrl, publicKeyHex, sign);
+    return buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(wsUrl) });
 }
 
 function freshNonce(): string {
     return bytesToHex(Crypto.getRandomBytes(16));
-}
-
-// ── The old format, for a server older than request binding ──────────────────────────────────────────────
-// Only for a node whose /api/community/info answered without `requestSigning` (request-signing-version.ts).
-// Byte for byte what builds before it sent, through core's `unboundRequestText`. Every server refuses it after
-// the switch, so a node that only pretends to be old gains nothing lasting.
-
-async function unboundRequestHeaders(
-    method: string, url: string, bodyString: string, publicKeyHex: string, sign: Signer,
-): Promise<Record<string, string>> {
-    const timestamp = String(Date.now());
-    const nonce = freshNonce();
-    const text = unboundRequestText({ method: method.toUpperCase(), path: signedPathOf(url), timestamp, nonce, body: bodyString });
-    return {
-        'X-Public-Key': publicKeyHex,
-        'X-Signature': toBase64(await sign(utf8Bytes(text))),
-        'X-Timestamp': timestamp,
-        'X-Nonce': nonce,
-    };
-}
-
-async function unboundWsParams(wsUrl: string, publicKeyHex: string, sign: Signer): Promise<string> {
-    const timestamp = String(Date.now());
-    const nonce = freshNonce();
-    const text = unboundRequestText({ method: 'WS', path: signedPathOf(wsUrl), timestamp, nonce, body: '' });
-    const sig = toBase64(await sign(utf8Bytes(text)));
-    return `pubkey=${encodeURIComponent(publicKeyHex)}&ts=${timestamp}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
 }
 
 export async function verifyData(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {

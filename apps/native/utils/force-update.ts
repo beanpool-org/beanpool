@@ -16,8 +16,16 @@
  * every doubt is "no": no community, no answer, an older node with no `appFloors`, a version that is not a version on
  * either side, a store version the node does not know, or one below the floor (nobody is held to a build they cannot
  * download). The grace date is the node's (`blocking`, on its clock): a phone's own clock is not trusted for it.
+ *
+ * Two more answers put the same block up:
+ *   - the community refusing this app outright (426 `app_too_old`, heard by utils/node-request-signing.ts on any request
+ *     to it): every request it sends meets the same refusal, so nothing the member started can finish. It goes up at
+ *     once (noteAppRefused), naming the node's `minAppVersion`;
+ *   - the community's server being older than this app talks to (utils/node-version-gate.ts, MIN_NODE_VERSION): the
+ *     block then says so ("Its operator must update"), with no store button, and the phone sends it nothing else.
  */
 import { normaliseVersion, isVersionOlder, pickStoreVersion, type AppStoreVersions } from './app-version';
+import { nodeVersionBelowMinimum, noteHealthAnswer } from './node-version-gate';
 
 /** How long away makes a return a safe moment. */
 export const SAFE_RETURN_MS = 5 * 60 * 1000;
@@ -28,6 +36,29 @@ export const CHECK_TIMEOUT_MS = 8_000;
 
 /** The header the app names itself with on every request to its own community (utils/node-request-signing.ts). */
 export const APP_VERSION_HEADER = 'X-BeanPool-App';
+
+/** The error a community answers (426) to an app below its floor: apps/server https-server.ts. */
+export const APP_TOO_OLD_ERROR = 'app_too_old';
+
+const refusalListeners = new Set<(version: string) => void>();
+
+/**
+ * The community refused this app (426 `app_too_old`): tell the block (components/ForceUpdateBlock.tsx), naming the
+ * node's `minAppVersion`, or nothing when that is not a version (a doubt never blocks).
+ */
+export function noteAppRefused(minAppVersion: unknown): void {
+    const version = normaliseVersion(minAppVersion);
+    if (!version) return;
+    for (const listener of [...refusalListeners]) {
+        try { listener(version); } catch { /* one listener's throw never stops the others */ }
+    }
+}
+
+/** Hear the community refuse this app (noteAppRefused). Returns the unsubscribe. */
+export function onAppRefused(listener: (version: string) => void): () => void {
+    refusalListeners.add(listener);
+    return () => { refusalListeners.delete(listener); };
+}
 
 /**
  * `<version> <platform>`, for the community's counts of who runs what (apps/server/src/app-version-counts.ts): only on a
@@ -46,11 +77,23 @@ export type ForceUpdateDecision =
     /** The community answered, and this app may carry on. */
     | { kind: 'clear' }
     /** The community answered, and this app is below its floor: `version` is the store's build to install. */
-    | { kind: 'block'; version: string };
+    | { kind: 'block'; version: string }
+    /** The community answered, and its server is below MIN_NODE_VERSION: `version` is the server's. */
+    | { kind: 'node-too-old'; version: string };
+
+/** What the block shows: this app below the community's floor, or (`nodeTooOld`) the community's server too old for it. */
+export interface UpdateBlockShown {
+    /** The store's build to install; with `nodeTooOld`, the server's version. */
+    version: string;
+    nodeTooOld?: true;
+}
 
 /** What a community's health answer means for this app (`localVersion` on `platform`). */
 export function evaluateForceUpdate(localVersion: unknown, health: unknown, platform: string): ForceUpdateDecision {
     if (!health || typeof health !== 'object') return { kind: 'unknown' };
+    // A server older than this app talks to: nothing it says of floors matters, it is sent nothing else.
+    const nodeVersion = nodeVersionBelowMinimum(health);
+    if (nodeVersion) return { kind: 'node-too-old', version: nodeVersion };
     const local = normaliseVersion(localVersion);
     if (!local || (platform !== 'ios' && platform !== 'android')) return { kind: 'clear' };
     const entry = (health as { appFloors?: Record<string, unknown> }).appFloors?.[platform] as { min?: unknown; blocking?: unknown } | undefined;
@@ -71,8 +114,8 @@ export interface ForceUpdateGateDeps {
     now(): number;
     /** Ask the community. Never throws for it to matter: a throw is 'unknown'. */
     check(): Promise<ForceUpdateDecision>;
-    /** Put the block up, naming the build to install, or take it down (null). */
-    show(block: { version: string } | null): void;
+    /** Put the block up, naming the build to install (or the server's version), or take it down (null). */
+    show(block: UpdateBlockShown | null): void;
     /**
      * Whether App Lock's own unlock prompt is open now (LocalAuth.isAppLockPromptOpen). Leaving the front while it is open
      * is the prompt's doing, not the member's: see createForceUpdateGate. Absent: never.
@@ -99,6 +142,12 @@ export interface ForceUpdateGate {
      * community now in use is asked at once. Switching back to a community whose floor stops this app puts it up again.
      */
     communitySwitched(): Promise<void>;
+    /**
+     * The community refused this app (426 `app_too_old`, noteAppRefused): the block goes up at once, naming `version`,
+     * whatever the member is doing, since every request meets the same refusal. A check already on its way is dropped, so
+     * its older answer can't take the block straight down; the next safe moment asks again as usual.
+     */
+    refused(version: string): void;
 }
 
 /**
@@ -130,7 +179,7 @@ export interface ForceUpdateGate {
  * and the next safe moment asks anew.
  */
 export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGate {
-    let blocked: { version: string } | null = null;
+    let blocked: UpdateBlockShown | null = null;
     /** In front, or out of it only while App Lock's prompt is open (promptAway). */
     let inFront = false;
     let beenInFront = false;
@@ -144,7 +193,7 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
      * A block decided at a safe moment while App Lock's prompt was up: it goes up once the prompt has closed. `doorsAt`:
      * the door prompts opened by that safe moment.
      */
-    let held: { version: string; doorsAt: number } | null = null;
+    let held: { block: UpdateBlockShown; doorsAt: number } | null = null;
 
     const promptOpen = () => {
         try { return deps.appLockPromptOpen?.() === true; } catch { return false; }
@@ -161,11 +210,17 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
     /** A door's prompt opened since `doorsAt`, or is open now: the member is in the middle of something. */
     const doorSince = (doorsAt: number) => doorsOpened() !== doorsAt;
 
-    const show = (next: { version: string } | null) => {
+    const show = (next: UpdateBlockShown | null) => {
         held = null;
-        if (next?.version === blocked?.version) return;
+        if (next?.version === blocked?.version && next?.nodeTooOld === blocked?.nodeTooOld) return;
         blocked = next;
         deps.show(next);
+    };
+    /** What a decision puts up, or null for none. */
+    const shownFor = (decision: ForceUpdateDecision): UpdateBlockShown | null => {
+        if (decision.kind === 'block') return { version: decision.version };
+        if (decision.kind === 'node-too-old') return { version: decision.version, nodeTooOld: true };
+        return null;
     };
 
     /**
@@ -175,7 +230,7 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
     const showHeld = () => {
         if (!held) return;
         if (doorSince(held.doorsAt)) { held = null; return; }
-        if (inFront && !promptAway && !promptOpen()) show({ version: held.version });
+        if (inFront && !promptAway && !promptOpen()) show(held.block);
     };
 
     /** Once App Lock's prompts have closed: show what was held, or start the leave the prompt was covering. */
@@ -207,10 +262,11 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         if (ask !== asks || decision.kind === 'unknown') return;
         if (blocked) {
             // Already covering the app: the answer applies whatever it is.
-            show(decision.kind === 'block' ? { version: decision.version } : null);
+            show(shownFor(decision));
             return;
         }
-        if (decision.kind !== 'block') return;
+        const next = shownFor(decision);
+        if (!next) return;
         // Raised only at the safe moment itself: the app has stayed in front since (App Lock's prompt aside: no ordinary
         // leave, however short, counted since `at`) and the answer came in time. NaN is not.
         const took = deps.now() - at;
@@ -218,11 +274,11 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         // A door's prompt since the safe moment, or open now, is a leave too, whatever AppState did.
         if (doorSince(doorsAt)) return;
         if (promptAway || promptOpen()) {
-            held = { version: decision.version, doorsAt };
+            held = { block: next, doorsAt };
             afterPrompt();
             return;
         }
-        show({ version: decision.version });
+        show(next);
     }
 
     return {
@@ -272,6 +328,12 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
             show(null);
             if (inFront && !promptAway) await safeMoment();
         },
+        refused(version) {
+            const v = normaliseVersion(version);
+            if (!v) return;
+            asks++;
+            show({ version: v });
+        },
     };
 }
 
@@ -289,6 +351,8 @@ export async function checkCommunityForUpdate(opts: {
     if (!anchor) return { kind: 'clear' };
     let health: unknown;
     try { health = await opts.fetchJson(`${anchor}/api/community/health`, CHECK_TIMEOUT_MS); } catch { return { kind: 'unknown' }; }
+    // What it says of its server's version holds for every request to it (utils/node-version-gate.ts), whoever asked.
+    noteHealthAnswer(anchor, health);
     // The answer is about the community asked: one the member switched away from meanwhile says nothing.
     try { if ((await opts.anchorUrl()) !== anchor) return { kind: 'unknown' }; } catch { return { kind: 'unknown' }; }
     return evaluateForceUpdate(opts.localVersion, health, opts.platform);

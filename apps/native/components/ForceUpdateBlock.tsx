@@ -11,7 +11,8 @@ import { useNodeStatus } from '../app/NodeStatusContext';
 import { useTheme } from '../app/ThemeContext';
 import { bootClockMs } from '../modules/boot-clock';
 import { onCommunitySwitched } from '../utils/community-switch';
-import { checkCommunityForUpdate, createForceUpdateGate } from '../utils/force-update';
+import { checkCommunityForUpdate, createForceUpdateGate, onAppRefused, type UpdateBlockShown } from '../utils/force-update';
+import { MIN_NODE_VERSION } from '../utils/node-version-gate';
 import { hasMnemonic } from '../utils/identity';
 import { authenticateUser, doorPrompts, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -36,7 +37,11 @@ import { word } from '@beanpool/core';
  * whole app, the lock screen included, and has no way past it into the community that set the floor but the store.
  * When it goes up, and when it never does, is utils/force-update.ts: only at a safe moment (a cold start, back after
  * five minutes away, or a switch of community), and only when the community says this build is below its floor and the
- * store has one that meets it.
+ * store has one that meets it; or at once, when the community refuses this app (426 app_too_old).
+ *
+ * The same block, with no store button, is the one card a community whose server is older than this app talks to gets
+ * (utils/node-version-gate.ts, MIN_NODE_VERSION): "This community's server runs BeanPool x. This app needs 1.4.0 or newer.
+ * Its operator must update." Its ways out are the same.
  *
  * It holds that one community only, and its ways out depend on nothing that community answers
  * (utils/update-block-escape.ts): the other communities saved on the phone, one tap each; the member's 12 words, shown
@@ -117,7 +122,7 @@ export default function ForceUpdateBlock() {
     const insets = useSafeAreaInsets();
     const { identity, setIdentity } = useIdentity();
     const { recheck } = useNodeStatus();
-    const [block, setBlock] = useState<{ version: string } | null>(null);
+    const [block, setBlock] = useState<UpdateBlockShown | null>(null);
     const [others, setOthers] = useState<OtherCommunity[]>([]);
     const [switching, setSwitching] = useState<string | null>(null);
     const [switchError, setSwitchError] = useState<string | null>(null);
@@ -150,10 +155,13 @@ export default function ForceUpdateBlock() {
         void gate.start(AppState.currentState);
         const sub = AppState.addEventListener('change', (next) => { void gate.appStateChanged(next); });
         const stopSwitches = onCommunitySwitched(() => { void gate.communitySwitched(); });
+        // The community refusing this app on any request (426 app_too_old: utils/node-request-signing.ts).
+        const stopRefusals = onAppRefused((version) => { gate.refused(version); });
         return () => {
             mounted = false;
             sub.remove();
             stopSwitches();
+            stopRefusals();
         };
     }, []);
 
@@ -485,6 +493,17 @@ export default function ForceUpdateBlock() {
 
     const main = (
         <ScrollView style={scrollFrame} contentContainerStyle={styles.scroll}>
+            {block.nodeTooOld ? (
+            <View style={card}>
+                <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
+                <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
+                    {t('Server update needed')}
+                </Text>
+                <Text style={[styles.body, { color: colors.text.body }]}>
+                    {t("This community's server runs BeanPool {version}. This app needs {minimum} or newer. Its operator must update.", { version: block.version, minimum: MIN_NODE_VERSION })}
+                </Text>
+            </View>
+            ) : (
             <View style={card}>
                 <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
                 <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
@@ -511,6 +530,7 @@ export default function ForceUpdateBlock() {
                     {t("Can't update? Ask the people who run your community.")}
                 </Text>
             </View>
+            )}
 
             {others.length > 0 && (
                 <View style={[...card, styles.next]}>

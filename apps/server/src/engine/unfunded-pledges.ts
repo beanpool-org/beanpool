@@ -124,7 +124,7 @@ export function findUnfundedProjectsDue(now: number = Date.now()): UnfundedProje
         if (readsFunded(p)) {
             return {
                 projectId: p.id, title: p.title ?? '', status: p.status ?? '', escrow: `escrow_${p.id}`, held: Number(p.balance_c), ok: false as const,
-                reason: `its rows say it reached its goal (raised ${p.current_amount_c} of ${p.goal_amount_c}, its enterprise ${p.enterprise_status}), so nothing goes back`,
+                reason: `its rows say it reached its goal (raised ${formatHundredths(p.current_amount_c, 'en')} of ${formatHundredths(p.goal_amount_c, 'en')} Beans, its enterprise ${p.enterprise_status}), so nothing goes back`,
                 ...extra,
             };
         }
@@ -196,7 +196,7 @@ export function returnUnfundedPledges(hooks: UnfundedPledgeHooks, now: number = 
     for (const s of due) {
         if (!s.ok) {
             left++;
-            leaveForOperator(s.projectId, `${s.escrow} (project ${s.projectId}, ended ${s.deadline}) holds ${s.held} Beans of pledges due back, not returned: ${s.reason}.`);
+            leaveForOperator(s.projectId, `${s.escrow} (project ${s.projectId}, ended ${s.deadline}) holds ${formatHundredths(s.held, 'en')} Beans of pledges due back, not returned: ${s.reason}.`);
             continue;
         }
         if (returnOne(hooks, s)) returned++;

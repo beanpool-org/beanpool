@@ -38,7 +38,7 @@
 // The same attribution gives an unfunded project's backers their Beans back a week after its end date
 // (engine/unfunded-pledges.ts): who is owed what from an escrow is worked out one way, here.
 
-import { isSyntheticAccount } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -232,7 +232,7 @@ export function returnStrandedPledges(ledger: StrandedPledgeLedger): { returned:
     for (const s of found) {
         if (!s.ok) {
             left++;
-            console.error(`[Pledges] LEFT FOR THE OPERATOR: ${s.escrow} (project "${s.title}", ${s.status}) holds ${s.held} Beans pledged after its goal, not returned: ${s.reason}.`);
+            console.error(`[Pledges] LEFT FOR THE OPERATOR: ${s.escrow} (project "${s.title}", ${s.status}) holds ${formatHundredths(s.held, 'en')} Beans pledged after its goal, not returned: ${s.reason}.`);
             continue;
         }
         const memo = `Pledge returned: "${s.title}" had already reached its goal, so this pledge never reached it`;

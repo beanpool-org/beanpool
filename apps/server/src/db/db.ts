@@ -3325,7 +3325,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // Guard against non-zero account balance to maintain ledger conservation
     const account = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
     if (account && account.balance_c !== 0) {
-        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance_c}). Drain or sweep funds first.`);
+        throw new Error(`Cannot delete project enterprise with non-zero balance (${formatHundredths(account.balance_c, 'en')} Beans). Drain or sweep funds first.`);
     }
 
     // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that already

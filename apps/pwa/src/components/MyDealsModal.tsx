@@ -678,7 +678,7 @@ export function MyDealsModal({
                                                         </div>
                                                         <div className="flex items-center">
                                                             <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
-                                                                {beans(item.amount_c ?? '?')}
+                                                                {beans(item.price_c ?? '?')}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
@@ -747,7 +747,7 @@ export function MyDealsModal({
                                                     </span>
                                                     <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                         <span className="font-black text-sm text-indigo-500 dark:text-indigo-300 whitespace-nowrap shrink-0">
-                                                            {beans(item.amount_c ?? '?')}
+                                                            {beans(item.price_c ?? '?')}
                                                         </span>
                                                         <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                     </div>

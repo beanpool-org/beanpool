@@ -242,3 +242,33 @@ describe('a deal already under way on the listing (deal_open)', () => {
         expect(screen.getByText('Accept this Offer?')).toBeInTheDocument();
     });
 });
+
+// The deciding review of #3033 (MarketplacePage.tsx): core's feeOf and dealAmountFor throw on a figure that isn't whole
+// hundredths, and the open listing computes both on every render. A listing without a price_c (a peer's from before them,
+// or its kept copy) or an absurd number of hours typed took the page to the error boundary; now it draws, with no figure.
+describe('an open listing never throws on a figure that is not whole hundredths', () => {
+    it("a listing with no price_c (a peer's from before whole hundredths) opens", async () => {
+        const old = { ...course, id: 'offer-old', title: 'Old peer jam', price_c: undefined, credits: 12 };
+        stubNode([old]);
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-old" onPostOpened={() => {}}
+            transactions={[]} onRefreshTransactions={vi.fn()} />);
+        expect(await screen.findByRole('heading', { name: /Old peer jam/ })).toBeInTheDocument();
+        await settle();
+        expect(screen.getByRole('heading', { name: /Old peer jam/ })).toBeInTheDocument();
+    });
+
+    it('an hourly Offer with 100,000,000,000 hours typed: no sentence for a total past what a deal holds, and no throw', async () => {
+        const lessons = { ...course, id: 'offer-lessons', title: 'Wheel lessons', priceType: 'hourly', price_c: 4000, repeatable: false };
+        stubNode([lessons]);
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lessons" onPostOpened={() => {}}
+            transactions={[]} onRefreshTransactions={vi.fn()} />);
+        await screen.findByRole('heading', { name: /Wheel lessons/ });
+        await settle();
+        fireEvent.click(screen.getByText('🤝 Accept Offer'));
+        await screen.findByText('Accept this Offer?');
+        fireEvent.change(screen.getByDisplayValue('1'), { target: { value: '100000000000' } });
+        await settle();
+        expect(screen.getByText('Accept this Offer?')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Wheel lessons/ })).toBeInTheDocument();
+    });
+});

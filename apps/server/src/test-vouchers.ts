@@ -1074,6 +1074,11 @@ async function main(): Promise<void> {
         && markOf(tx) === 'others' && markOf(ty) === 'inside' && markOf(tz) === 'none' && JSON.stringify(tiaRow?.trading) === JSON.stringify({ withOthers: 1, insideOnly: 1 })
         && !tiaCard.text.includes(mel.pk),
         `22. Tia's card: "Trading: 1 with others · 1 inside only": Tex traded with Mel, Ty only with Tex, Zed's deal isn't done; no name of whom they traded with (${JSON.stringify({ trading: tiaCard.body?.trading, marks: [markOf(tx), markOf(ty), markOf(tz)] })})`);
+    // Each person's vouch is `amount_c`, whole hundredths, the name the web's card reads (the deciding review of #3033:
+    // the node sent `amount`, so the card read "— Beans" for everyone).
+    const tiaPeople = (tiaCard.body?.people as any[] | undefined) ?? [];
+    assert(tiaPeople.length === 3 && tiaPeople.every((p) => p.amount_c === hc(25) && !('amount' in p)),
+        `22. on Tia's card each person she vouched for carries amount_c ${hc(25)} (25 Beans), and no other name for it (${JSON.stringify(tiaPeople.map((p) => ({ amount_c: p.amount_c, amount: p.amount })))})`);
 
     // ── 23. A raise is a target (invites-vouching I6; DESIGN-invites-vouching-review-fable.md §4) ─────────────────────────
     // A voucher with a budget of 100 vouches 25 for one person and 50 for another (25 left): raising the first to 100 would

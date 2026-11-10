@@ -1222,7 +1222,7 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
 }
 
 /**
- * The people one voucher vouched for, one level, newest first: how much, raised or not, below zero now (a mark, no figure),
+ * The people one voucher vouched for, one level, newest first: how much (`amount_c`, whole hundredths), raised or not, below zero now (a mark, no figure),
  * and where their completed trades reach (`trading`, tradingOf).
  */
 function peopleOf(pk: string) {
@@ -1233,7 +1233,7 @@ function peopleOf(pk: string) {
         .map((r) => {
             const m = getMember(db, r.pk);
             return {
-                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount: r.amount_c, raised: r.pieces > 1,
+                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount_c: r.amount_c, raised: r.pieces > 1,
                 byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off_c,
                 vouchesForMe: pairOf(r.pk, pk).total > 0, trading: trading.get(r.pk) ?? 'none',
             };

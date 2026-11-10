@@ -63,7 +63,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
+import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -96,6 +96,19 @@ import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
 import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
+
+/**
+ * core's dealAmountFor for a figure drawn while the member types: null where core refuses one (a price that isn't whole
+ * hundredths, from a peer's listing made before them; a quantity whose total passes what a deal can hold), so a render
+ * never throws. The Accept press computes it again inside its own try and says why.
+ */
+function dealAmountOrNull(perUnit: unknown, quantity: number): number | null {
+    try {
+        return dealAmountFor(perUnit as number, quantity);
+    } catch {
+        return null;
+    }
+}
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -1731,8 +1744,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // What the commission costs including the cross-node fee, which is inside the allowance — the server
         // checks `amount + fee`, so a button quoting the bare price would offer a number the route refuses.
         // The fee is core's feeOf (whole hundredths, truncated once); hardcoding the arithmetic here would be a second
-        // definition of it.
-        const commissionNeeded = selectedPost.price_c + feeOf(selectedPost.price_c);
+        // definition of it. A listing without whole hundredths for a price (a peer's from before them, or its kept copy) has no
+        // figure: NaN, so nothing is offered for it, rather than feeOf throwing mid-render.
+        const commissionNeeded = isHundredths(selectedPost.price_c) && selectedPost.price_c >= 0 ? selectedPost.price_c + feeOf(selectedPost.price_c) : NaN;
 
         // A pinned deal (Your deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
@@ -2615,7 +2629,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (selectedPost.priceType !== 'fixed' && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = standingNeed ? 1 : (acceptHoursValue || 0);
                                         // The node's own figure (core dealAmountFor: whole hundredths, truncated once).
-                                        const tot = selectedPost.priceType !== 'fixed' ? (hrs > 0 ? dealAmountFor(selectedPost.price_c, hrs) : 0) : selectedPost.price_c;
+                                        const tot = selectedPost.priceType !== 'fixed' ? (hrs > 0 ? dealAmountOrNull(selectedPost.price_c, hrs) : 0) : selectedPost.price_c;
+                                        // A figure core can't make (a price that isn't whole hundredths, a quantity past what a deal can
+                                        // hold) is no sentence, never a throw mid-render: the Accept press says why (its own try).
+                                        if (!isHundredths(tot)) return null;
                                         // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
                                         // not free (as the phone's post/[id].tsx).
                                         if (isLoan && !selectedPost.price_c) return t('Free to borrow. Nothing is held: the lender says yes first.');
@@ -2797,7 +2814,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                             ⚠️ is aria-hidden: a screen reader saying "warning sign" before the
                                             sentence adds nothing the words do not. */}
-                                        {commissionNeeded > commissionLink.allowance ? (
+                                        {!isHundredths(commissionNeeded) ? null : commissionNeeded > commissionLink.allowance ? (
                                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
                                                 <span aria-hidden="true">⚠️ </span>{t('This listing needs {needed} 🫘 with the fee, which is more than the {allowance} available. An operator can raise the ceiling in Settings.', { needed: formatHundredths(commissionNeeded), allowance: formatHundredths(commissionLink.allowance) })}
                                             </p>
@@ -2852,7 +2869,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             >
                                                 {commissioning
                                                     ? t('Commissioning…')
-                                                    : t('Commission for the community — {n} 🫘', { n: commissionNeeded })}
+                                                    : t('Commission for the community — {n} 🫘', { n: formatHundredths(commissionNeeded) })}
                                             </button>
                                         )}
                                         {/* aria-live alongside role="status", which already implies polite — so

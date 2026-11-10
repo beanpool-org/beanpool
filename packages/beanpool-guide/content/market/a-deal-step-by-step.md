@@ -2,12 +2,14 @@
 slug: a-deal-step-by-step
 title: A deal, step by step
 summary: From asking to getting paid, for an Offer and for a Need, and leaving a review.
-related: my-deals, when-a-deal-goes-wrong, posting, how-it-works
+related: my-deals, when-a-deal-goes-wrong, posting, how-it-works, standing-deals
 ---
 
 ## The idea
 
 When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans "credits" in a few places; they mean the same thing.
+
+Most posts priced by the week or the month make a **standing deal** instead. It holds nothing: each week or month is paid when it starts. This page is about the other deals. For a standing deal, and which posts make one, see "Standing deals".
 
 You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you pay for counts as one of your 100 payments a day too (see "Sending a gift"). Releasing beans, cancelling and being paid are never limited.
 
@@ -15,6 +17,7 @@ You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you p
 
 - Open the Offer and tap **Accept Offer**.
 - If it is priced by the hour, say how many hours.
+- If it is priced by the week or the month, a **Take this up?** screen opens instead, and the first week or month is paid straight away. See "Standing deals".
 - Tap **Confirm**. Your beans are held straight away, and the seller is told. There is no waiting for the seller to say yes.
 - A chat with the seller opens. Agree when and where.
 
@@ -22,7 +25,7 @@ You need to have posted an Offer of your own first. If you have not, the app off
 
 ## Helping with someone's Need
 
-- Open the Need and tap **I can do this**. Under it the app says in one sentence what you would be paid and what happens next, such as: **You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.** A Need with nothing to pay says **You'd do it for free** instead. If it is priced by the hour, day, week or month, say how many first, and the amount follows. Then tap **Confirm**.
+- Open the Need and tap **I can do this**. Under it the app says in one sentence what you would be paid and what happens next, such as: **You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.** A Need with nothing to pay says **You'd do it for free** instead. If it is priced by the hour or day, say how many first, and the amount follows. Then tap **Confirm**. A Need priced by the week or month asks nothing more: it is a standing deal, and the person who posted it chooses how long it runs. See "Standing deals".
 - Your request shows the market fee: **You have requested to earn 20 credits (19.70 net after 1.5% transaction fee)**. The fee goes to your community's Commons, and comes off when you are paid.
 - The person who posted it decides. Until then you can tap **Withdraw Request**. If they do not answer in 7 days, the request ends by itself and you are both told.
 - They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.
@@ -31,6 +34,8 @@ You need to have posted an Offer of your own first. If you have not, the app off
 In the web app, **Withdraw Request** is **Cancel Offer** and **Approve & Commit** is **Approve & Hold in Trust**. The person who posted the Need can only **Deny** or approve there: a request has no **Message** button.
 
 ## While the beans are held
+
+A standing deal holds nothing, so none of this applies to it: it has no **Release Credits** and no button to call a hold off. See "Standing deals".
 
 Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, the button to call it off is **Cancel Hold**.
 
@@ -50,6 +55,7 @@ The post itself shows your deal, so you never need to go looking for it. It says
 - **You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you**, or **no Beans held** on a free Need, and **Pending Release by** their name. Do the job; they release the beans.
 - **You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.
 - **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.
+- **A standing deal is running on it:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then when this month was paid and when the next goes, with **Stop…** and **Message**. Both of you see it, and neither has a **Release Credits**. See "Standing deals".
 - **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
 - **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
 
@@ -77,6 +83,8 @@ Each person can be in one deal on a Repeatable post at a time. Taking it up agai
 After releasing, the person paying is asked to rate the deal: 1 to 5 stars and a short, optional comment. Tap **Submit Rating**, or **Skip for now**.
 
 Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in Your deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old.
+
+A standing deal asks for one review, on its first period, and never again.
 
 Everyone in your community can read the stars and words of a review. Only the two people in the trade can see who wrote it and which deal it was about.
 

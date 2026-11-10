@@ -171,7 +171,7 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
         d.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, 'Old')`).run(memberKey);
     });
     expectRefused(dir1218, REFUSED_TOO_OLD, 'the 1.2.18 database');
-    assert(REFUSED_TOO_OLD.includes('older than 1.2.36') && REFUSED_TOO_OLD.includes('ghcr.io/beanpool-org/beanpool-node:1.2.37')
+    assert(REFUSED_TOO_OLD.includes('older than 1.2.36') && REFUSED_TOO_OLD.includes('ghcr.io/beanpool-org/beanpool-node:1.2.36')
         && REFUSED_TOO_OLD.endsWith('Nothing was changed.'), 'the words name the minimum, the image to start once, and that nothing changed');
     {
         const before = sha256(stateDb(dir1218));

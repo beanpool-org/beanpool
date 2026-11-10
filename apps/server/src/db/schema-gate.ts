@@ -39,7 +39,7 @@ export const RELEASE_1_2_36_OBJECT = 'idx_posts_copy_authors';
 
 /** What an operator reads when the file was last started before 1.2.36 (§1's words). Nothing was written. */
 export const REFUSED_TOO_OLD = 'This database was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. '
-    + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.37, then start this version again. Nothing was changed.';
+    + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.36, then start this version again. Nothing was changed.';
 
 /** What an operator reads when a newer release has stamped the file (rollback by image, which §1 rules out). Nothing was written. */
 export const refusedTooNew = (stamp: number): string =>

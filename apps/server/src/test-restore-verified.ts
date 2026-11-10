@@ -807,7 +807,7 @@ async function main(): Promise<void> {
             // A backup last started before 1.2.36, node_roles and all: the gate would refuse it at the next start
             // (db/schema-gate.ts), so the restore refuses it first, in the gate's words, and the file is left as it was.
             const OLDER = "This backup's state.db was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. "
-                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.37, then start this version again. Nothing was changed.';
+                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.36, then start this version again. Nothing was changed.';
             const older = oldReleaseDb(UPDATED);
             const olderBytes = fs.readFileSync(older).toString('base64');
             const tooOld = direct(older);

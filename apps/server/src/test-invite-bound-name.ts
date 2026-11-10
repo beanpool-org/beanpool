@@ -221,8 +221,14 @@ async function main(): Promise<void> {
     assert(again.status === 409 && again.body?.code === 'entry_taken', `3. a new invite for an entry already confirmed: 409 entry_taken (${show(again)})`);
     const ott = await addEntry(owenP, { name: 'Ottoline Brackenbury', note: '' });
     const first = await bindInvite(owen, ott.entryId);
-    const second = await bindInvite(owen, ott.entryId);
-    require_(first.status === 201 && second.status === 201, '3. two invites for one entry nobody holds yet');
+    const refused = await bindInvite(owen, ott.entryId);
+    assert(first.status === 201 && refused.status === 409 && refused.body?.code === 'invite_out', `3. a second live invite on the entry is refused (invites I2): 409 invite_out (${show(refused)})`);
+    // Two bound invites on one entry no longer come from the route; the redeem still never strands the second's joiner (an
+    // offline ticket bound on a phone, or a row planted by whoever runs the server, as in 4.): planted here.
+    const planted = (await generate(owen)).body.invite.code as string;
+    db.prepare('UPDATE invite_codes SET names_entry_id = ? WHERE code = ?').run(ott.entryId, planted);
+    const second = { body: { invite: { code: planted } } };
+    require_(first.status === 201 && inviteRow(planted)?.names_entry_id === ott.entryId, '3. two invites for one entry nobody holds yet');
     const ottId = newId('Ott');
     const yanId = newId('Yan');
     require_((await redeem(ottId, first.body.invite.code)).status === 200 && liveConfirmation(ottId.pk)?.entry_id === ott.entryId, '3. the first confirms Ott');

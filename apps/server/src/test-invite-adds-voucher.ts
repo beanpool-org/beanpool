@@ -213,12 +213,15 @@ async function main(): Promise<void> {
     require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 100 })).status === 200 && budgetOf(ada.pk).left === 100, "Owen sets Ada's budget to 100");
     const adaFirst = await bind(ada, e2, { vouchAmount: 100 });
     require_(adaFirst.status === 201 && budgetOf(ada.pk).held === 100 && budgetOf(ada.pk).left === 0, `Ada's bound invite holds all 100 of hers (${show(adaFirst)})`);
+    // Each on an entry of its own: e2 has Ada's invite out now, and a second live invite on one entry is refused first (I2).
+    const e2b = await addEntry('Hollis Merriweather Two');
+    const e2c = await addEntry('Hollis Merriweather Three');
     invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     linesBefore = allLines();
-    const overBudget = await bind(ada, e2, { vouchAmount: 25 });
+    const overBudget = await bind(ada, e2b, { vouchAmount: 25 });
     assert(overBudget.status === 409 && overBudget.body?.code === 'not_enough', `2. a vouch past what is left on a bound invite: 409 not_enough with the sentence (${show(overBudget)})`);
     db.prepare("UPDATE vouchers SET stopped_at = '2026-01-01T00:00:00.000Z' WHERE member_pubkey = ?").run(ada.pk);
-    const notVoucher = await bind(ada, e2, { vouchAmount: 25 });
+    const notVoucher = await bind(ada, e2c, { vouchAmount: 25 });
     db.prepare('UPDATE vouchers SET stopped_at = NULL WHERE member_pubkey = ?').run(ada.pk);
     assert(notVoucher.status === 403 && notVoucher.body?.code === 'not_a_voucher', `2. a maker who is no voucher: 403 not_a_voucher (${show(notVoucher)})`);
     assert(count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore && allLines() === linesBefore, '2. none of those wrote an invite or a budget line');

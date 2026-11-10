@@ -29,11 +29,10 @@ export interface NodeRoleRecord {
  *   - 'key-session': a key session in Settings (a computer's, or the phone's Manage hand-off): "Make a break-glass code",
  *     or the enrolment that made them owner
  *   - 'app': the app's own "Break-glass code" row, signed with the member key (routes/node-admin.ts)
- *   - 'password': the admin password
  *   - 'break-glass': an enrolment opened with another owner's break-glass code
  *   - 'recover': `beanpool recover` on the server (recover-command.ts)
  */
-export type BreakGlassMadeBy = 'key-session' | 'app' | 'password' | 'break-glass' | 'recover';
+export type BreakGlassMadeBy = 'key-session' | 'app' | 'break-glass' | 'recover';
 
 /**
  * The rows whose node role acts: an active member's, not a visitor's (members.is_visitor). A visitor's row never joined,

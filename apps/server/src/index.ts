@@ -57,7 +57,7 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
+import { localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls } from './services/tls.js';
 import { startAcmeScheduler } from './services/acme/schedule.js';
@@ -133,9 +133,6 @@ async function main() {
     const genesis = await ensureGenesis();
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
-
-    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
-    initAdminPassword();
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();

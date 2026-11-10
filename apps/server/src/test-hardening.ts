@@ -59,7 +59,7 @@ async function main() {
     assert(!/from|body field/i.test(err), 'A2-13: response does not name the identity field');
 
     // A2-22 — seed >200 transactions, then ?limit=-1 must NOT return them all.
-    const ins = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`);
+    const ins = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`);
     // The reader's own: a member reads only their own history (2026-09-28), which is where a limit still applies.
     db.transaction(() => { for (let i = 0; i < 250; i++) ins.run('tx' + i, pubHex, 'B', 1, 'm', new Date(Date.now() - i * 1000).toISOString()); })();
     // The ledger read is member-only (read auth is on by default), so sign it as a seeded member —

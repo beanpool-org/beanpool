@@ -28,7 +28,7 @@ vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
 
 const identity: BeanPoolIdentity = { publicKey: 'viewer-pubkey', privateKey: 'mock-private-key-hex', callsign: 'Viewer', createdAt: '2026-09-17T00:00:00.000Z' };
 const need = {
-    id: 'p-need', title: 'Help moving a sofa', description: 'Saturday', type: 'need', category: 'services', credits: 0, status: 'active', active: true,
+    id: 'p-need', title: 'Help moving a sofa', description: 'Saturday', type: 'need', category: 'services', price_c: 0, status: 'active', active: true,
     authorPublicKey: 'member-ana', authorCallsign: 'Ana', createdAt: '2026-09-14T00:00:00Z',
 };
 const WORLDWIDE = { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true };
@@ -39,7 +39,7 @@ beforeEach(() => {
     vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getMyMarketplaceTransactions').mockResolvedValue([]);
     vi.spyOn(api, 'getMemberProfile').mockResolvedValue(null as any);
     vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ average: 0, count: 0, ratings: [] } as any);

@@ -7,7 +7,7 @@
  *     one 300 km out is not; a Need with no place at all is not near anyone
  *  2. a reader with no point (no `lat`/`lng`, and no area of their own) is shown nothing, not the other side of the world
  *     under a name that says near
- *  3. Beans are off: a row carries no `credits`
+ *  3. Beans are off: a row carries no price (`price_c`, nor the old `credits`)
  *  4. a visitor (unsigned) is not given the card: the visitors' Home is the Market, Coming up and the community's counts
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-home-asked-card-global)
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?, ?, ?, ?)`)
             .run(pubKeyHex, callsign, joined, `INV-${callsign.toUpperCase()}`, area?.lat ?? null, area?.lng ?? null, area ? joined : null);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
     const sydneyReader = memberAt('SydReader', SYDNEY);
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
         n++;
         resetGatewayRateLimit();
         const r = await request('POST', '/api/marketplace/posts', {
-            type: 'need', category: 'garden', title, description: 'Someone to dig a bed', credits: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place,
+            type: 'need', category: 'garden', title, description: 'Someone to dig a bed', price_c: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
         if (!id) throw new Error(`could not post a Need (${title}): ${r.status} ${r.error}`);
@@ -118,7 +118,10 @@ async function main(): Promise<void> {
     const ids: string[] = (sydney.asked?.items ?? []).map((i: any) => i.id);
     assert(sydney.r.status === 200 && JSON.stringify(ids) === JSON.stringify([here]),
         `a Sydney member is asked for the Need in Sydney, not Lagos, not 300 km out, not one with no place (${show(ids)}; lagos ${lagos.slice(0, 6)}, far ${far.slice(0, 6)}, none ${noPlace.slice(0, 6)})`);
-    assert(sydney.asked?.items?.[0] && !('credits' in sydney.asked.items[0]), `Beans are off here: a row has no credits (${show(sydney.asked?.items?.[0])})`);
+    // The price under its name since whole hundredths, `price_c`, and its old one: an absence checked by the old name alone
+    // would pass whatever the row carries.
+    assert(sydney.asked?.items?.[0] && !('price_c' in sydney.asked.items[0]) && !('credits' in sydney.asked.items[0]),
+        `Beans are off here: a row has no price, price_c or credits (${show(sydney.asked?.items?.[0])})`);
     assert(sydney.asked?.items?.[0]?.title === 'Dig a bed in Sydney' && sydney.asked?.items?.[0]?.category === 'garden',
         `and says what the Need said (${show(sydney.asked?.items?.[0])})`);
 

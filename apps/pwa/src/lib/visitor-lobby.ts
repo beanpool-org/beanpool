@@ -10,7 +10,7 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
-import { askHost, FREE_PRICE_WORDS, t, tn, word } from '@beanpool/core';
+import { askHost, FREE_PRICE_WORDS, t, tn, word, formatHundredths } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
 /** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
@@ -49,17 +49,19 @@ export function beansOn(info: CommunityInfo | null | undefined): boolean {
 }
 
 /** A listing's terms on a visitor's card: no Beans figure where there are no Beans. */
-export function visitorPriceText(post: Pick<MarketplacePost, 'credits' | 'priceType'>, beans: boolean): string {
+export function visitorPriceText(post: Pick<MarketplacePost, 'price_c' | 'priceType'>, beans: boolean): string {
     if (!beans) return t(VISITOR_WORDS.noBeansTerms);
-    if (!post.credits) return t(FREE_PRICE_WORDS.short);
-    // One English form for both ("1 Beans"), as the lobby always wrote it: the other languages get theirs.
-    const n = post.credits;
+    if (!post.price_c) return t(FREE_PRICE_WORDS.short);
+    // One English form for both ("1 Beans"), as the lobby always wrote it: the other languages get theirs. The figure is
+    // whole hundredths, written as every figure is (formatHundredths); the plural form is read from its Beans.
+    const n = post.price_c / 100;
+    const shown = { n: formatHundredths(post.price_c) };
     switch (post.priceType) {
-        case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour');
-        case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day');
-        case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week');
-        case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month');
-        default: return tn(n, '{n} Beans', '{n} Beans');
+        case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour', shown);
+        case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day', shown);
+        case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week', shown);
+        case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month', shown);
+        default: return tn(n, '{n} Beans', '{n} Beans', shown);
     }
 }
 

@@ -89,7 +89,7 @@ function keySession(kp: Keypair): { sessionId?: string; csrfToken?: string; role
 function addMember(kp: Keypair, callsign: string, invitedBy: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(kp.pubKeyHex, callsign, new Date().toISOString(), invitedBy, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
 }
 
 /** A concrete path for a route pattern: every :param and regex group becomes a harmless literal. */

@@ -6,12 +6,14 @@
  * An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none disabled for budget, and "From your budget: No limit".
  * A raise (`raiseFrom`, slice I6): "Raise to: 200 · 500", the totals above what you vouched already (core raiseTargetsFor),
  * no None; a choice is greyed only when the difference it draws is more than the budget has left.
+ * Every figure is whole hundredths of a Bean (core VOUCH_PRESETS are 2500 … 10000, the budget's `left` and `level` too),
+ * written by formatHundredths ("25"); a chip's test id names its whole Beans (`invite-vouch-25`), as the web's does.
  *
  * Meets 44 dp min target size and wraps cleanly on 320 dp screens at 1.3x text.
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { formatNumber, t, vouchPresetsFor, raiseTargetsFor, vouchPresets } from '@beanpool/core';
+import { formatHundredths, t, vouchPresetsFor, raiseTargetsFor, vouchPresets, wholeBeansOf } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 export interface VouchPresetChoiceProps {
@@ -93,7 +95,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, ra
         ? t(vouchPresets.fromBudgetNoLimit)
         : noneLeft
             ? t(vouchPresets.noneLeft)
-            : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
+            : t(vouchPresets.fromBudget, { left: formatHundredths(budgetLeft), total: formatHundredths(budgetTotal) });
 
     const picks = raising ? raiseTargetsFor(noLimit, raiseFrom) : vouchPresetsFor(noLimit);
     const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
@@ -103,8 +105,8 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, ra
             const notEnoughBudget = !noLimit && (raising ? p - raiseFrom : p) > budgetLeft;
             return {
                 amount: p,
-                label: String(p),
-                ariaLabel: t(vouchPresets.beans, { amount: p }),
+                label: formatHundredths(p),
+                ariaLabel: t(vouchPresets.beans, { amount: formatHundredths(p) }),
                 disabled: notEnoughBudget,
                 why: notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
             };
@@ -127,7 +129,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, ra
                             accessibilityState={{ selected: isSelected, disabled }}
                             accessibilityLabel={ariaLabel}
                             accessibilityHint={disabled ? why : undefined}
-                            testID={`invite-vouch-${amount ?? 'none'}`}
+                            testID={`invite-vouch-${amount === null ? 'none' : wholeBeansOf(amount)}`}
                             style={[
                                 styles.chip,
                                 isSelected && styles.chipSelected,

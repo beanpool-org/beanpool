@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(mia, 'Mia Neighbour');
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(owner.pub);
@@ -210,7 +210,7 @@ async function main(): Promise<void> {
         assert(Math.abs(closes - (before + 14 * DAY)) < 60_000, `its closing time, 14 days on (${stored?.poll_closes_at})`);
         assert(stored?.poll_open_vote === 0, 'anonymous unless asked');
         assert(stored?.created_via === `assistant:${A.id}` && stored?.author_pubkey === owner.pub && stored?.created_by === null, `the audit: created_via is this grant, the author is the owner (${stored?.created_via})`);
-        assert(stored?.category === 'community' && stored?.credits === 0 && stored?.reach === 'local' && stored?.lat === null && (db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(firstId) as any).c === 0,
+        assert(stored?.category === 'community' && stored?.price_c === 0 && stored?.reach === 'local' && stored?.lat === null && (db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(firstId) as any).c === 0,
             'it holds what a poll from the apps holds: community, no price, local, no place, no photo');
         const firstAnswer = structured(first);
         assert(firstAnswer?.kind === 'poll' && firstAnswer?.link === `/?post=${encodeURIComponent(firstId)}` && firstAnswer?.closesAt === stored?.poll_closes_at && firstAnswer?.openVote === false && firstAnswer?.postsToday >= 1,
@@ -338,7 +338,7 @@ async function main(): Promise<void> {
             const r = await edit({ post_id: editId, [field[0]]: field[1] });
             assert(r.isError === true && new RegExp(`A poll has no ${field[0]}`).test(errorText(r)) && row(editId)?.title === keptQuestion, `${field[0]} on a poll → refused in words, not dropped (${errorText(r).slice(0, 70)})`);
         }
-        assert(row(editId)?.credits === 0 && row(editId)?.category === 'community' && row(editId)?.tags === '' && row(editId)?.free_tags === '', 'nothing of those reached the row');
+        assert(row(editId)?.price_c === 0 && row(editId)?.category === 'community' && row(editId)?.tags === '' && row(editId)?.free_tags === '', 'nothing of those reached the row');
         for (const [what, args, says] of [
             ['days, which nothing can change', { days: 14 }, /length is set when it is made and can't be changed: close_poll ends it early/],
             ['a field no post has', { reach: 'everywhere' }, /update_post has no field reach: it takes description, question, options, open_vote/],
@@ -359,7 +359,8 @@ async function main(): Promise<void> {
             const r = await edit({ post_id: editId, ...args });
             assert(r.isError === true && says.test(errorText(r)) && row(editId)?.title === keptQuestion, `${what} → refused in words (${errorText(r).slice(0, 80)})`);
         }
-        const offer = createPost('offer', 'food', 'Olive\'s jam', 'From the phone.', 2, 'fixed', owner.pub, -28.55, 153.5, [AVATAR], false, undefined, false, { createdVia: `assistant:${A.id}` })!.id;
+        // 2 Beans, in whole hundredths (createPost takes price_c; the assistant's own tools speak Beans).
+        const offer = createPost('offer', 'food', 'Olive\'s jam', 'From the phone.', 200, 'fixed', owner.pub, -28.55, 153.5, [AVATAR], false, undefined, false, { createdVia: `assistant:${A.id}` })!.id;
         for (const field of ['question', 'options', 'open_vote']) {
             const r = await edit({ post_id: offer, [field]: field === 'open_vote' ? true : field === 'options' ? ['a', 'b'] : 'Asked?' });
             assert(r.isError === true && new RegExp(`Only a poll has ${field}`).test(errorText(r)), `${field} on an Offer → refused in words (${errorText(r).slice(0, 80)})`);

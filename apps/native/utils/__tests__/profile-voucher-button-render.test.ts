@@ -82,7 +82,8 @@ describe('the profile’s button follows the person’s state', () => {
     });
 
     it('a voucher: "Voucher · 400 left ›" opens their card here, in a modal inside the safe area', async () => {
-        await draw({ state: 'voucher', left: 400, noLimit: false });
+        // `left` keeps its name on the node and carries whole hundredths: 40000 is 400 Beans.
+        await draw({ state: 'voucher', left: 40000, noLimit: false });
         expect(btn()?.textContent).toBe('Voucher · 400 left ›');
         expect(host.querySelector('[data-modal]')).toBeNull();
         await act(async () => { btn()!.click(); await new Promise((r) => setTimeout(r, 0)); });
@@ -92,7 +93,7 @@ describe('the profile’s button follows the person’s state', () => {
     });
 
     it('an owner is "Voucher · No limit ›", with no figure', async () => {
-        await draw({ state: 'voucher', left: 1000, noLimit: true });
+        await draw({ state: 'voucher', left: 100000, noLimit: true });
         expect(btn()?.textContent).toBe('Voucher · No limit ›');
         expect(btn()?.textContent).not.toMatch(/\d/);
     });
@@ -105,7 +106,7 @@ describe('the profile’s button follows the person’s state', () => {
     });
 
     it('no balance anywhere', async () => {
-        for (const state of [{ state: 'add' }, { state: 'make' }, { state: 'voucher', left: 400, noLimit: false }]) {
+        for (const state of [{ state: 'add' }, { state: 'make' }, { state: 'voucher', left: 40000, noLimit: false }]) {
             await draw(state);
             expect(host.textContent).not.toMatch(/balance/i);
         }

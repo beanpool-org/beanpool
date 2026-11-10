@@ -18,7 +18,7 @@ const ME = 'e'.repeat(64);
 
 function offer(extra: Record<string, unknown> = {}): MarketplacePost {
     return {
-        id: 'post-1', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', credits: 5,
+        id: 'post-1', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', price_c: 500,
         authorPublicKey: ANN, authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z',
         updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', ...extra,
     } as MarketplacePost;

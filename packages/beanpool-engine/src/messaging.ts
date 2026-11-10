@@ -27,7 +27,8 @@ export enum SystemMessageType {
 export type SystemMessageTypeVal = SystemMessageType | string;
 
 export interface TypedMessagePayload {
-    amount?: number;
+    /** Whole hundredths of a Bean. */
+    amount_c?: number;
     postId?: string;
     actorPubkey?: string;
     buyerPubkey?: string;

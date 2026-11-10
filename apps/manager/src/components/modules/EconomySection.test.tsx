@@ -21,11 +21,11 @@ const mockTreasuries: nodeClient.NodeTreasury[] = [
         publicKey: 'treasury_pk_1234567890',
         name: 'Community Garden',
         avatar: '🌾',
-        balance: 150,
-        creditLine: 0,
+        balance_c: 15000,
+        creditLine_c: 0,
         liveOffers: 2,
         purpose: 'Fresh vegetables for the community',
-        workingCapitalCeiling: 250,
+        workingCapitalCeiling_c: 25000,
         keepers: ['member_pk_alice'],
     },
 ];
@@ -85,7 +85,9 @@ describe('EconomySection Component', () => {
         expect(screen.getByText('Community Garden')).toBeInTheDocument();
         expect(screen.getByText('@alice')).toBeInTheDocument();
         expect(screen.getByText(/Ceiling:/i)).toBeInTheDocument();
+        // The node's figures are whole hundredths of a Bean (listTreasuries' *_c fields): 25000 is 250, 15000 is 150.
         expect(screen.getByText('250 beans')).toBeInTheDocument();
+        expect(screen.getByText('150 beans')).toBeInTheDocument();
     });
 
     it('opens Create Enterprise modal and applies preset', async () => {
@@ -387,6 +389,42 @@ describe('EconomySection Component', () => {
         expect(screen.queryByText(/demurrage rate/i)).not.toBeInTheDocument();
     });
 
+    it("the pool tab's reserve is the node's Commons pot, whole hundredths in words, never a figure made here", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ projects: [], balance: 24050 }) }));
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /commons pool/i }));
+        });
+        expect(screen.getByTestId('pool-reserve')).toHaveTextContent('240.50 Beans');
+        expect(screen.getByText(/Solvent/)).toBeInTheDocument();
+    });
+
+    it('a Commons pot below zero reads with the true minus and claims no solvency; none read is "—"', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ projects: [], balance: -982 }) }));
+        const { unmount } = render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} initialSubTab="pool" />);
+        expect(await screen.findByText('−9.82 Beans')).toBeInTheDocument();
+        expect(screen.queryByText(/Solvent/)).toBeNull();
+        unmount();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }));
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} initialSubTab="pool" />);
+        });
+        expect(screen.getByTestId('pool-reserve')).toHaveTextContent('— Beans');
+    });
+
+    it("a proposal's requested amount is whole hundredths in words", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ projects: [{ id: 'p1', title: 'Seed library', description: 'Shelves', requestedAmount: 50025 }], balance: 0 }),
+        }));
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} initialSubTab="decisions" />);
+        });
+        expect(await screen.findByText('Requesting: 500.25 beans')).toBeInTheDocument();
+    });
+
     it('handles keepers returned as objects without crashing on pubkey.slice', async () => {
         const objectKeepers = [
             {
@@ -402,8 +440,8 @@ describe('EconomySection Component', () => {
                 publicKey: 'treasury_pk_object_keepers',
                 name: 'Community Bakery',
                 avatar: '🥖',
-                balance: 100,
-                creditLine: 50,
+                balance_c: 10000,
+                creditLine_c: 5000,
                 liveOffers: 1,
                 keepers: objectKeepers,
             },
@@ -484,8 +522,8 @@ describe('EconomySection Component', () => {
                 publicKey: 'treasury_pk_malformed',
                 name: 'Malformed Enterprise',
                 avatar: '🌱',
-                balance: 0,
-                creditLine: 0,
+                balance_c: 0,
+                creditLine_c: 0,
                 liveOffers: 0,
                 keepers: [12345, null, undefined, {}],
             },
@@ -522,8 +560,8 @@ describe('EconomySection Component', () => {
                 publicKey: 'treasury_pk_custom_keeper',
                 name: 'Community Bakery',
                 avatar: '🥖',
-                balance: 100,
-                creditLine: 0,
+                balance_c: 10000,
+                creditLine_c: 0,
                 liveOffers: 1,
                 keepers: keeperWithPubkey,
             },
@@ -585,8 +623,8 @@ describe('EconomySection Component', () => {
                 publicKey: 'treasury_pk_filter_test',
                 name: 'Community Farm',
                 avatar: '🌱',
-                balance: 100,
-                creditLine: 0,
+                balance_c: 10000,
+                creditLine_c: 0,
                 liveOffers: 1,
                 keepers: keeperWithPubkey,
             },
@@ -666,6 +704,62 @@ describe('EconomySection Component', () => {
         nodeClient.setTfaSessionToken(mockProfile.id, undefined);
     });
 
+    it('sends a typed ceiling as whole hundredths, and refuses one finer than a cent before sending anything', async () => {
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /create enterprise/i }));
+        });
+        fireEvent.change(screen.getByPlaceholderText(/Community Eggs, Tool Shed, Bakery/i), { target: { value: 'Community Bakery' } });
+        const ceiling = screen.getByPlaceholderText(/surplus above this automatically sweeps to Commons/i);
+
+        // Finer than a cent: the box's own step refuses it in a browser; sent past that, the console refuses it in words.
+        fireEvent.change(ceiling, { target: { value: '12.505' } });
+        await act(async () => {
+            fireEvent.submit(ceiling.closest('form')!);
+        });
+        expect(nodeClient.createNodeTreasury).not.toHaveBeenCalled();
+        expect(alertSpy).toHaveBeenCalledWith('Working capital ceiling: Type at most 2 decimals, like 12.5.');
+
+        fireEvent.change(ceiling, { target: { value: '200.5' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /^create enterprise$/i }));
+        });
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
+            mockProfile.url,
+            expect.objectContaining({ name: 'Community Bakery', workingCapitalCeiling_c: 20050 }),
+            mockProfile.adminPassword,
+            undefined,
+        );
+        expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
+        alertSpy.mockRestore();
+    });
+
+    it('sends a typed offer price to the cent as price_c', async () => {
+        vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({ success: true, post: {} });
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /seed offer/i }));
+        });
+        fireEvent.change(screen.getByPlaceholderText(/e\.g\. Fresh farm eggs dozen/i), { target: { value: 'Half dozen eggs' } });
+        fireEvent.change(screen.getByLabelText('Price (Beans)'), { target: { value: '12.50' } });
+        await pickOfferPhoto();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /post offer/i }));
+        });
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            expect.objectContaining({ title: 'Half dozen eggs', price_c: 1250 }),
+            mockProfile.adminPassword,
+            undefined,
+        );
+    });
+
     it('forwards 2FA session token to seedTreasuryOffer when posting an initial offer', async () => {
         nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-sess-economy');
         vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({
@@ -700,13 +794,15 @@ describe('EconomySection Component', () => {
             fireEvent.click(postOfferBtn);
         });
 
+        // The price as the node takes it: `price_c`, whole hundredths (the form's 15 Beans is 1500), never the old `credits`.
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            expect.objectContaining({ title: 'Organic Veggie Box', photos: [PICKED_PHOTO] }),
+            expect.objectContaining({ title: 'Organic Veggie Box', photos: [PICKED_PHOTO], price_c: 1500 }),
             mockProfile.adminPassword,
             'tfa-sess-economy'
         );
+        expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
 
         nodeClient.setTfaSessionToken(mockProfile.id, undefined);
     });
@@ -807,8 +903,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_pk_beanpool',
                     name: 'BeanPool Central',
                     avatar: 'bundled://sprout',
-                    balance: 100,
-                    creditLine: 0,
+                    balance_c: 10000,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -838,8 +934,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_pk_eggs',
                     name: 'Community Eggs',
                     avatar: apiAvatarUrl,
-                    balance: 50,
-                    creditLine: 0,
+                    balance_c: 5000,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -868,8 +964,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_pk_tools',
                     name: 'Tool Shed',
                     avatar: '🛠️',
-                    balance: 200,
-                    creditLine: 0,
+                    balance_c: 20000,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -895,8 +991,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_pk_empty',
                     name: 'No Avatar Co-op',
                     avatar: '',
-                    balance: 10,
-                    creditLine: 0,
+                    balance_c: 1000,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -923,8 +1019,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_pk_broken',
                     name: 'Broken Image Co-op',
                     avatar: brokenUrl,
-                    balance: 10,
-                    creditLine: 0,
+                    balance_c: 1000,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -961,8 +1057,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_eggs_1',
                     name: 'Community Eggs',
                     avatar: '🥚',
-                    balance: 35.82,
-                    creditLine: 200,
+                    balance_c: 3582,
+                    creditLine_c: 20000,
                     liveOffers: 1,
                     keepers: ['89aa85a84d1234567890abcdef'],
                 },
@@ -999,8 +1095,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_eggs_case',
                     name: 'Community Eggs',
                     avatar: '🥚',
-                    balance: 35.82,
-                    creditLine: 200,
+                    balance_c: 3582,
+                    creditLine_c: 20000,
                     liveOffers: 1,
                     keepers: ['89AA85A84D1234567890ABCDEF'],
                 },
@@ -1036,8 +1132,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_eggs_2',
                     name: 'Community Eggs',
                     avatar: '🥚',
-                    balance: 35.82,
-                    creditLine: 200,
+                    balance_c: 3582,
+                    creditLine_c: 20000,
                     liveOffers: 1,
                     keepers: [
                         {
@@ -1073,8 +1169,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_unknown_keeper',
                     name: 'Unknown Co-op',
                     avatar: '🌾',
-                    balance: 0,
-                    creditLine: 0,
+                    balance_c: 0,
+                    creditLine_c: 0,
                     liveOffers: 0,
                     keepers: ['1234567890abcdef1234567890'],
                 },
@@ -1103,8 +1199,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_mixed_keepers',
                     name: 'Community Eggs',
                     avatar: '🥚',
-                    balance: 35.82,
-                    creditLine: 200,
+                    balance_c: 3582,
+                    creditLine_c: 20000,
                     liveOffers: 1,
                     keepers: [
                         '89aa85a84d1234567890abcdef',
@@ -1153,8 +1249,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_alias_keeper',
                     name: 'Bakery Co-op',
                     avatar: '🍞',
-                    balance: 10,
-                    creditLine: 50,
+                    balance_c: 1000,
+                    creditLine_c: 5000,
                     liveOffers: 1,
                     keepers: [
                         {
@@ -1195,8 +1291,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_select_test',
                     name: 'Select Test Co-op',
                     avatar: '🌾',
-                    balance: 10,
-                    creditLine: 50,
+                    balance_c: 1000,
+                    creditLine_c: 5000,
                     liveOffers: 1,
                     keepers: [],
                 },
@@ -1246,8 +1342,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_empty_keepers',
                     name: 'Empty Keepers Co-op',
                     avatar: '🌾',
-                    balance: 0,
-                    creditLine: 0,
+                    balance_c: 0,
+                    creditLine_c: 0,
                     liveOffers: 0,
                     keepers: [],
                 },
@@ -1255,8 +1351,8 @@ describe('EconomySection Component', () => {
                     publicKey: 'treasury_missing_keepers_prop',
                     name: 'Missing Keepers Prop Co-op',
                     avatar: '🌾',
-                    balance: 0,
-                    creditLine: 0,
+                    balance_c: 0,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 } as any,
             ];

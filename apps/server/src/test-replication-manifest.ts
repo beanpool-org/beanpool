@@ -311,7 +311,7 @@ async function main(): Promise<void> {
     // whole-set table with no row to plant fails, so the next one gets its check.
     const WHOLE_SET_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
         accounts: () => {
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('manifest-whole-set', 1, '2000-01-01T00:00:00.000Z', 0)`).run();
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('manifest-whole-set', 1, '2000-01-01T00:00:00.000Z', 0)`).run();
             return (x) => x?.publicKey === 'manifest-whole-set';
         },
         treasury_operators: () => {
@@ -322,7 +322,7 @@ async function main(): Promise<void> {
     // A row stamped long ago by its watermark and now by its second one: a delta from now finds it by the second.
     const OR_WATERMARK_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
         enterprise_pledges: () => {
-            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                         VALUES ('manifest-or-watermark', 'k', 'e', 1, '2000-01-01T00:00:00.000Z', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run();
             return (x) => x?.id === 'manifest-or-watermark';
         },
@@ -338,7 +338,7 @@ async function main(): Promise<void> {
     const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
         poll_answers: () => {
             db.prepare("INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-poller', 'Manifest Poller')").run();
-            db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, poll_options) VALUES ('manifest-in-row-poll', 'poll', 'community', 'Q', '', 0, 'manifest-in-row-poller', '[]')").run();
+            db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, poll_options) VALUES ('manifest-in-row-poll', 'poll', 'community', 'Q', '', 0, 'manifest-in-row-poller', '[]')").run();
             db.prepare("INSERT INTO poll_answers (post_id, id, option_id, words) VALUES ('manifest-in-row-poll', 'a1', 'o1', 'typed')").run();
             return (x) => x?.id === 'manifest-in-row-poll' && x?.pollAnswers?.[0]?.words === 'typed';
         },

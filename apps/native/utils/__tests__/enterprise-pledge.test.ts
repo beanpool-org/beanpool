@@ -77,7 +77,8 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
 describe('pledgeReturnLine: what the project screen says happens to the Beans if the goal is not reached', () => {
     // 10:00 UTC is the same calendar day on every clock from UTC-10 to UTC+13, so these read the same wherever they run.
     const NOW = Date.parse('2026-11-20T10:00:00.000Z');
-    const project = { goalAmount: 100, currentAmount: 45, status: 'active' };
+    // Whole hundredths of a Bean, as the detail sends them (goalAmount_c, currentAmount_c): a goal of 100, 45 raised.
+    const project = { goalAmount_c: 10000, currentAmount_c: 4500, status: 'active' };
 
     it('before its end date is over: if the goal isn’t reached by then, everyone’s Beans go back a week after it', () => {
         expect(pledgeReturnLine({ ...project, deadlineAt: '2026-11-30T10:00:00.000Z' }, NOW))
@@ -86,7 +87,7 @@ describe('pledgeReturnLine: what the project screen says happens to the Beans if
         expect(pledgeReturnLine({ ...project, deadlineAt: '2026-11-20T10:00:00.000Z' }, NOW + 5 * HOUR))
             .toBe('If the goal isn’t reached by 20 Nov 2026, everyone’s Beans go back on 27 Nov 2026.');
         // And to a project nobody has backed yet: it is what a backer is promised.
-        expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-30T10:00:00.000Z' }, NOW))
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 0, deadlineAt: '2026-11-30T10:00:00.000Z' }, NOW))
             .toBe('If the goal isn’t reached by 30 Nov 2026, everyone’s Beans go back on 7 Dec 2026.');
     });
 
@@ -108,30 +109,32 @@ describe('pledgeReturnLine: what the project screen says happens to the Beans if
     });
 
     it('once the node has returned them: they went back, on the day it did', () => {
-        expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-10T10:00:00.000Z', pledgesReturnedAt: '2026-11-17T10:00:30.000Z' }, NOW))
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 0, deadlineAt: '2026-11-10T10:00:00.000Z', pledgesReturnedAt: '2026-11-17T10:00:30.000Z' }, NOW))
             .toBe('The goal wasn’t reached by 10 Nov 2026, so everyone’s Beans went back on 17 Nov 2026.');
     });
 
     it('says nothing once its end date is over with nothing pledged: nothing is held to go back', () => {
-        expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW)).toBeNull();
-        expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW)).toBeNull();
-        // In cents: a float residue where every pledge went back is nothing pledged, not Beans due back (review of #2525: the
-        // node's raised figure was 2.2e-16 once 0.1, 0.3, 0.2, 0.6 and 0.7 had gone back). A cent is a pledge.
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 0, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW)).toBeNull();
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 0, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW)).toBeNull();
+        // Whole hundredths: a figure that isn't one (the float residue of #2525's review, 2.2e-16 once 0.1, 0.3, 0.2, 0.6
+        // and 0.7 had gone back) is no figure, so nothing pledged, never Beans due back. One hundredth is a pledge.
         for (const residue of [2.220446049250313e-16, 1.4e-14, 0.004]) {
-            expect(pledgeReturnLine({ ...project, currentAmount: residue, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
-            expect(pledgeReturnLine({ ...project, currentAmount: residue, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
+            expect(pledgeReturnLine({ ...project, currentAmount_c: residue, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
+            expect(pledgeReturnLine({ ...project, currentAmount_c: residue, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
         }
-        expect(pledgeReturnLine({ ...project, currentAmount: 0.01, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW))
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 1, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW))
             .toBe('The goal wasn’t reached by 1 Nov 2026, so everyone’s Beans are due back from 8 Nov 2026.');
     });
 
     it('says nothing for a project that reached its goal, an enterprise with no goal, or a project with no end date', () => {
         const ahead = '2026-11-30T10:00:00.000Z';
-        expect(pledgeReturnLine({ ...project, currentAmount: 100, deadlineAt: ahead }, NOW)).toBeNull();
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 10000, deadlineAt: ahead }, NOW)).toBeNull();
+        // One hundredth short of the goal is not reached.
+        expect(pledgeReturnLine({ ...project, currentAmount_c: 9999, deadlineAt: ahead }, NOW)).not.toBeNull();
         expect(pledgeReturnLine({ ...project, status: 'funded', deadlineAt: ahead }, NOW)).toBeNull();
         expect(pledgeReturnLine({ ...project, status: 'completed', deadlineAt: ahead }, NOW)).toBeNull();
-        expect(pledgeReturnLine({ ...project, goalAmount: null, deadlineAt: ahead }, NOW)).toBeNull();
-        expect(pledgeReturnLine({ ...project, goalAmount: 0, deadlineAt: ahead }, NOW)).toBeNull();
+        expect(pledgeReturnLine({ ...project, goalAmount_c: null, deadlineAt: ahead }, NOW)).toBeNull();
+        expect(pledgeReturnLine({ ...project, goalAmount_c: 0, deadlineAt: ahead }, NOW)).toBeNull();
         for (const deadlineAt of [null, undefined, '', 'not a date']) expect(pledgeReturnLine({ ...project, deadlineAt }, NOW), String(deadlineAt)).toBeNull();
     });
 
@@ -178,7 +181,8 @@ describe('The enterprise screen: a sentence, not a pledge box, when pledges are 
 });
 
 describe('The Commons card says "Pledge Beans" only while the enterprise takes pledges', () => {
-    const project = { balance: 5, liveOffers: 0, goalAmount: 20, currentAmount: 5, lifecycle: 'bounded', status: 'active', paused: false, keepers: [] };
+    // Whole hundredths, as the /api/treasuries row sends them: a goal of 20, 5 raised.
+    const project = { balance_c: 500, liveOffers: 0, goalAmount_c: 2000, currentAmount_c: 500, lifecycle: 'bounded', status: 'active', paused: false, keepers: [] };
 
     it('an active project short of its goal takes pledges', () => {
         expect(enterpriseCardStatus(project).takesPledges).toBe(true);
@@ -186,10 +190,10 @@ describe('The Commons card says "Pledge Beans" only while the enterprise takes p
 
     it('a funded, winding-up or closed one does not, nor one with no goal', () => {
         expect(enterpriseCardStatus({ ...project, status: 'funded' }).takesPledges).toBe(false);
-        expect(enterpriseCardStatus({ ...project, currentAmount: 20 }).takesPledges).toBe(false);
+        expect(enterpriseCardStatus({ ...project, currentAmount_c: 2000 }).takesPledges).toBe(false);
         expect(enterpriseCardStatus({ ...project, status: 'winding_up' }).takesPledges).toBe(false);
         expect(enterpriseCardStatus({ ...project, status: 'completed' }).takesPledges).toBe(false);
-        expect(enterpriseCardStatus({ ...project, goalAmount: null }).takesPledges).toBe(false);
+        expect(enterpriseCardStatus({ ...project, goalAmount_c: null }).takesPledges).toBe(false);
         const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
         expect(enterpriseCardStatus({ ...project, deadlineAt: past }).takesPledges).toBe(false);
     });

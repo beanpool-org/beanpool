@@ -68,7 +68,7 @@
  * was set). The open door, the private preview, visitors
  * and connections are the server's: 400.
  */
-import { word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
+import { formatHundredths, isHundredths, word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { VOUCHER_WORDS, writeMemberGiftSetting, saveVoucherBudgetSetting } from '../engine/vouchers.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
@@ -198,7 +198,8 @@ const NOTICE = {
     note: word('From the owners: “{note}”'),
 } satisfies Record<string, WordKey>;
 
-const beansAmount = (n: number) => n.toLocaleString('en');
+/** A money setting (whole hundredths) in the notice's English words. */
+const beansAmount = (c: number) => formatHundredths(c, 'en');
 
 /** The fixed sentence a member reads for one change, or null where members are not told (the directory switches). */
 function memberSentence(change: PlannedChange): string | null {
@@ -209,7 +210,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'knocks': return on ? tr(NOTICE.knocksOn) : tr(NOTICE.knocksOff);
         case 'beans': return on ? tr(NOTICE.beansOn) : tr(NOTICE.beansOff);
         case 'voucherBudget': return tr(NOTICE.voucherBudget, { budget: beansAmount(Number(change.to)) });
-        case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: change.to });
+        case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: beansAmount(Number(change.to)) });
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);
         case 'shareOutside': return on ? tr(NOTICE.shareOutsideOn) : tr(NOTICE.shareOutsideOff);
@@ -229,7 +230,7 @@ function memberSentence(change: PlannedChange): string | null {
  */
 function floorSentence(plan: KnownFloorPlan, dialBefore: boolean, dialAfter: boolean): string | null {
     if (dialAfter !== dialBefore) return dialAfter ? tr(NOTICE.floorOn, { floor: beansAmount(plan.floor) }) : tr(NOTICE.floorOff);
-    if (dialAfter && plan.floor !== plan.before.knownFloor) return tr(NOTICE.floorNow, { floor: beansAmount(plan.floor) });
+    if (dialAfter && plan.floor !== plan.before.knownFloor_c) return tr(NOTICE.floorNow, { floor: beansAmount(plan.floor) });
     return null;
 }
 
@@ -367,7 +368,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
     // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
     if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
     const shape = readShape();
-    if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${c.from} → ${c.to}`).join(', ')}, set by ${by.actor}.`);
+    if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${shownValue(c.setting, c.from)} → ${shownValue(c.setting, c.to)}`).join(', ')}, set by ${by.actor}.`);
     if (plan.lock) console.log(`🔒 Core settings confirmed and locked by ${by.actor}.`);
     noteSecurityEvent({
         key: 'sec.settings',
@@ -416,12 +417,23 @@ function namesOf(lines: readonly PlannedChange[]): string {
     return [...new Set(lines.map((c) => SETTING_NAMES[c.setting.split('.')[0] as ShapeSettingName]))].join(', ');
 }
 
+/** The settings whose values are whole hundredths of a Bean: a change carries them as that integer's text ('100000'). */
+const MONEY_SETTINGS: ReadonlySet<string> = new Set(['knownFloor.floor', 'knownFloor.cap', 'voucherBudget', 'memberGift']);
+
+/** A change's value as a person reads it: a money setting's hundredths in Beans ('100000' reads 1,000), any other as it is. */
+function shownValue(setting: string, v: string | null | undefined): string {
+    if (v === null || v === undefined) return 'not set';
+    if (!MONEY_SETTINGS.has(setting)) return v;
+    const n = Number(v);
+    return isHundredths(n) ? formatHundredths(n, 'en') : v;
+}
+
 /** One Core change as the owners' alert says it: the setting, and from what to what (a known-floor line names its part). */
 function lineWords(c: PlannedChange): string {
     const [base, part] = c.setting.split('.');
     const name = SETTING_NAMES[base as ShapeSettingName];
     const what = part === 'on' ? 'the dial' : part === 'floor' ? 'the floor' : part === 'cap' ? 'the cap' : null;
-    return `${name}${what ? `, ${what}` : ''} (${c.from ?? 'not set'} → ${c.to})`;
+    return `${name}${what ? `, ${what}` : ''} (${shownValue(c.setting, c.from)} → ${shownValue(c.setting, c.to)})`;
 }
 
 /** The request read and checked whole, as applyShapeChanges writes it: every refusal thrown, nothing written. */
@@ -539,14 +551,14 @@ function planShapeChanges(body: unknown): ShapePlan {
     if (asked.knownFloor !== undefined) {
         const kf = asked.knownFloor;
         if (!kf || typeof kf !== 'object' || Array.isArray(kf) || Object.keys(kf).length === 0
-            || Object.keys(kf).some((k) => k !== 'on' && k !== 'floor' && k !== 'cap')) {
-            bad('knownFloor', 'knownFloor is { on, floor, cap }, each optional: the dial, the known floor and the cap.');
+            || Object.keys(kf).some((k) => k !== 'on' && k !== 'floor_c' && k !== 'cap_c')) {
+            bad('knownFloor', 'knownFloor is { on, floor_c, cap_c }, each optional: the dial, the known floor and the cap (whole hundredths of a Bean).');
         }
-        const { on, floor, cap } = kf as { on?: unknown; floor?: unknown; cap?: unknown };
+        const { on, floor_c: floor, cap_c: cap } = kf as { on?: unknown; floor_c?: unknown; cap_c?: unknown };
         let plan: KnownFloorPlan;
         try {
             // Beans are this route's to check, after the request: the amounts are the known floor's.
-            plan = checkKnownFloorSettings({ confirmation: on, knownFloor: floor, creditCap: cap }, true);
+            plan = checkKnownFloorSettings({ confirmation: on, knownFloor_c: floor, creditCap_c: cap }, true);
         } catch (e) {
             if (!(e instanceof KnownFloorError)) throw e;
             throw new ShapeChangeError(400, e.code, e.message, 'knownFloor');
@@ -556,8 +568,8 @@ function planShapeChanges(body: unknown): ShapePlan {
         if (plan.confirmation !== undefined && plan.confirmation !== plan.before.confirmationSet) {
             lines.push({ setting: 'knownFloor.on', from: onOff(plan.before.confirmationSet), to: onOff(plan.confirmation) });
         }
-        if (plan.floor !== plan.before.knownFloor) lines.push({ setting: 'knownFloor.floor', from: String(plan.before.knownFloor), to: String(plan.floor) });
-        if (plan.cap !== plan.before.creditCap) lines.push({ setting: 'knownFloor.cap', from: String(plan.before.creditCap), to: String(plan.cap) });
+        if (plan.floor !== plan.before.knownFloor_c) lines.push({ setting: 'knownFloor.floor', from: String(plan.before.knownFloor_c), to: String(plan.floor) });
+        if (plan.cap !== plan.before.creditCap_c) lines.push({ setting: 'knownFloor.cap', from: String(plan.before.creditCap_c), to: String(plan.cap) });
         // The dial asked on reads off all the same without Beans: refused, as any change is, never a 200 that leaves it off.
         if ((lines.length > 0 || plan.confirmation === true) && !beansAfter) refuse('knownFloor', LOCKS_AFTER_A_CHANGE.beansOff());
         if (lines.length > 0) {

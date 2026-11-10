@@ -185,16 +185,20 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const now = Date.now();
 const xx = (s: string) => pseudoLocalise(s);
 
-/** A small community on the map: an Elder's offer with no photo, a need, an event the host has changed. */
+/**
+ * A small community on the map: an Elder's offer with no photo, a need, an event the host has changed. An author's
+ * author_energy_cycled is their tier's start in whole hundredths, as the node fills it (tierForCredit(…).minCredit):
+ * Kofi's 1200000 is an Elder's, Mia's 70000 a Steward's. A price is the copy's price_c, whole hundredths too.
+ */
 const POSTS = [
     {
         id: 'p-eggs', type: 'offer', status: 'active', title: 'Fresh duck eggs', description: 'A dozen a week', category: 'food',
-        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 12000, credits: 5, price_type: 'fixed',
+        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 1200000, price_c: 500, price_type: 'fixed',
         photos: [], lat: -28.65, lng: 153.6, created_at: iso(now - 60_000),
     },
     {
         id: 'p-ladder', type: 'need', status: 'active', title: 'Borrow a long ladder', description: 'For the gutters', category: 'tools',
-        author_pubkey: 'mia-key', author_callsign: 'Mia', author_energy_cycled: 700, credits: 3, price_type: 'daily',
+        author_pubkey: 'mia-key', author_callsign: 'Mia', author_energy_cycled: 70000, price_c: 300, price_type: 'daily',
         photos: [], lat: -28.66, lng: 153.61, created_at: iso(now - DAY),
     },
     {
@@ -208,7 +212,7 @@ const PEERS = [{ peerId: 'peer-byron-0001', callsign: 'Byron Bay' }, { peerId: '
 /** Everything members and communities wrote: shown as written, in every language. */
 const COPY = {
     id: 'p-copy', type: 'offer', status: 'active', title: 'Quince paste', description: 'A jar', category: 'food', author_pubkey: 'hidden',
-    credits: 0, price_type: 'fixed', photos: [], lat: -28.68, lng: 153.63, created_at: iso(now - DAY),
+    price_c: 0, price_type: 'fixed', photos: [], lat: -28.68, lng: 153.63, created_at: iso(now - DAY),
     shown_from: JSON.stringify({ host: 'byron.beanpool.org', name: 'Mullumbimby', url: 'https://byron.beanpool.org', door: 'ask', price: { amount: 20, unit: 'fixed' } }),
 };
 POSTS.push(COPY as any);

@@ -79,7 +79,8 @@ export interface MarketplacePost {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    /** The price, whole hundredths of a Bean. */
+    price_c: number;
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorCallsign: string;
     authorPublicKey: string;

@@ -84,7 +84,8 @@ import { HIDDEN_AUTHOR, ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
+import { requirePositiveHundredths } from '../money-body.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR, PhotoTooBigError, routePhotoValueRefusal, tooManyPixelsText } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -1938,7 +1939,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS };
         return;
     }
-    const { to, amount, memo, from: bodyFrom } = (ctx as any).requestBody || {};
+    const { to, memo, from: bodyFrom } = (ctx as any).requestBody || {};
     // The sender is the authenticated signer, and only that. The signature middleware sets both the actor
     // and authSig; requiring them to agree here keeps this route fail-closed on its own, rather than
     // trusting that every path to it was authenticated. transfer() cannot carry this check itself: its
@@ -1963,20 +1964,16 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return;
     }
-    const parsedAmount = Number(amount);
-    // SECURITY (SRV-8): require a positive, finite amount at the route. Don't
-    // rely solely on transfer()'s internal guard / the transactions CHECK.
-    if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    // SECURITY (SRV-8): whole hundredths above 0 at the route (money-body.ts: 400 amount_c_required for the old `amount`,
+    // a float, a string, 0 or a negative). The signature covers this integer exactly (core request-signing.ts), and a
+    // standby re-verifies it against the row (engine/sync.ts verifyTransactionAuthorship).
+    if (!to) {
         ctx.status = 400;
         ctx.body = { error: 'to and a positive amount are required' };
         return;
     }
-    // To the cent, as a pledge and a payment to the Commons are (LED-05).
-    if (!isWholeCents(parsedAmount)) {
-        ctx.status = 400;
-        ctx.body = { error: WHOLE_CENTS_ERROR };
-        return;
-    }
+    const parsedAmount = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+    if (parsedAmount === null) return;
 
     // A2-18: this public route is member→member only. Reject SYNTHETIC recipients
     // (escrow_/project_/COMMONS_POOL/SYSTEM/genesis). Sending to an escrow_* key
@@ -2641,7 +2638,7 @@ function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
         nodeRole: rolesByPubkey.get(r.public_key) ?? null,
         avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
         profileUpdatedAt: r.profile_updated_at || null,
-        earnedCredit: r.earned_credit ?? 0,
+        earnedCredit: r.earned_credit_c ?? 0,
         archetype: r.archetype || null,
     }));
 }

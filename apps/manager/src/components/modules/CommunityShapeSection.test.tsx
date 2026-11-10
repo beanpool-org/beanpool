@@ -61,8 +61,9 @@ function makeDefaultShape(overrides: Partial<ShapeSettings> = {}, meta: Partial<
                 actorCallsign: null,
                 actorRole: 'owner',
                 setting: 'knownFloor.cap',
-                from: '2000',
-                to: '3000',
+                // The log keeps hundredths text (config/known-floor.ts log, community-shape-write.ts).
+                from: '200000',
+                to: '300050',
                 note: null,
             },
         ],
@@ -79,9 +80,10 @@ function makeDefaultShape(overrides: Partial<ShapeSettings> = {}, meta: Partial<
                 lock: null,
                 includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true },
             },
+            // The shape reads the known floor in whole hundredths of a Bean (config/community-shape.ts readShape).
             knownFloor: {
-                value: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
-                configured: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
+                value: { on: true, floor: 100000, cap: 200000, capMax: 500000 },
+                configured: { on: true, floor: 100000, cap: 200000, capMax: 500000 },
                 source: 'default',
                 lock: null,
             },
@@ -175,18 +177,23 @@ describe('CommunityShapeSection — Re-homed Door & Known Floor contract', () =>
     });
 
     it('says the known floor in hours', () => {
-        expect(hoursWording(1000)).toBe('1,000 Beans is about 25 hours of work the community is trusting you for.');
-        expect(hoursWording(40)).toBe('40 Beans is about 1 hour of work the community is trusting you for.');
-        expect(hoursWording(3000)).toBe('3,000 Beans is about 75 hours of work the community is trusting you for.');
+        // Whole hundredths of a Bean: 100000 is 1,000 Beans, 25 hours at 40 Beans an hour.
+        expect(hoursWording(100000)).toBe('1,000 Beans is about 25 hours of work the community is trusting you for.');
+        expect(hoursWording(4000)).toBe('40 Beans is about 1 hour of work the community is trusting you for.');
+        expect(hoursWording(300000)).toBe('3,000 Beans is about 75 hours of work the community is trusting you for.');
+        expect(hoursWording(100050)).toBe('1,000.50 Beans is about 25 hours of work the community is trusting you for.');
     });
 
     it('reads only a whole known floor answer', () => {
-        const s = { confirmation: false, knownFloor: 1000, creditCap: 2000, creditCapDefault: 2000, creditCapMax: 5000 };
-        expect(readKnownFloorSettings(s)).toMatchObject({ confirmation: false, knownFloor: 1000, creditCap: 2000 });
+        // As GET /api/local/admin/known-floor sends it (config/known-floor.ts knownFloorSettings): `*_c`, whole hundredths.
+        const s = { confirmation: false, knownFloor_c: 100000, creditCap_c: 200000, creditCapDefault_c: 200000, creditCapMax_c: 500000 };
+        expect(readKnownFloorSettings(s)).toMatchObject({ confirmation: false, knownFloor_c: 100000, creditCap_c: 200000 });
         expect(readKnownFloorSettings({ error: 'Not found' })).toBeNull();
+        // The old names are no answer at all.
+        expect(readKnownFloorSettings({ confirmation: false, knownFloor: 1000, creditCap: 2000 })).toBeNull();
         const before = readKnownFloorSettings(s)!;
-        expect(readShapeKnownFloor({ settings: { knownFloor: { value: { on: true, floor: 1500, cap: 3000, capMax: 5000 } } } }, before))
-            .toEqual({ confirmation: true, knownFloor: 1500, creditCap: 3000, creditCapDefault: 2000, creditCapMax: 5000 });
+        expect(readShapeKnownFloor({ settings: { knownFloor: { value: { on: true, floor: 150000, cap: 300000, capMax: 500000 } } } }, before))
+            .toEqual({ confirmation: true, knownFloor_c: 150000, creditCap_c: 300000, creditCapDefault_c: 200000, creditCapMax_c: 500000 });
         expect(readShapeKnownFloor({ error: 'Only an owner of this community can change how it works' }, before)).toBeNull();
     });
 });
@@ -274,7 +281,7 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         expect(payload.password).toBe('pw');
     });
 
-    it('owner can configure known floor numbers and saves { knownFloor: { on, floor, cap } }', async () => {
+    it('owner can configure known floor numbers and saves { knownFloor: { on, floor_c, cap_c } } in whole hundredths', async () => {
         const shape = makeDefaultShape();
         const fetchMock = mockShapeApi(shape);
 
@@ -287,22 +294,26 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         const capInput = screen.getByLabelText(/Cap: the most anyone may owe/i);
         expect(screen.getByTestId('known-floor-hours')).toHaveTextContent('1,000 Beans is about 25 hours');
 
-        fireEvent.change(floorInput, { target: { value: '3000' } });
+        // The boxes start from the shape's figures, as Beans.
+        expect(floorInput).toHaveValue(1000);
+        expect(capInput).toHaveValue(2000);
+        fireEvent.change(floorInput, { target: { value: '3000.50' } });
         fireEvent.change(capInput, { target: { value: '5000' } });
-        expect(screen.getByTestId('known-floor-hours')).toHaveTextContent('3,000 Beans is about 75 hours');
+        expect(screen.getByTestId('known-floor-hours')).toHaveTextContent('3,000.50 Beans is about 75 hours');
 
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
 
         const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
         expect(postCall).toBeDefined();
+        // As config/community-shape-write.ts takes it: `{ on, floor_c, cap_c }` in whole hundredths, never floor/cap.
         expect(JSON.parse(postCall![1].body).changes).toEqual({
-            knownFloor: { on: true, floor: 3000, cap: 5000 },
+            knownFloor: { on: true, floor_c: 300050, cap_c: 500000 },
         });
     });
 
-    it('the voucher budget sits beside the known floor and saves { voucherBudget: 1500 } (V5)', async () => {
-        const shape = makeDefaultShape({ voucherBudget: { value: 1000, configured: 1000, source: 'default', lock: null } });
+    it('the voucher budget sits beside the known floor and saves { voucherBudget: 150000 }, whole hundredths (V5)', async () => {
+        const shape = makeDefaultShape({ voucherBudget: { value: 100000, configured: 100000, source: 'default', lock: null } });
         const fetchMock = mockShapeApi(shape);
 
         render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
@@ -319,11 +330,11 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
 
         const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
-        expect(JSON.parse(postCall![1].body).changes).toEqual({ voucherBudget: 1500 });
+        expect(JSON.parse(postCall![1].body).changes).toEqual({ voucherBudget: 150000 });
     });
 
     it('the members\' credit-line gift sits beside the known floor and saves { memberGift: 0 } to turn it off (G1)', async () => {
-        const shape = makeDefaultShape({ memberGift: { value: 100, configured: 100, source: 'default', lock: null } });
+        const shape = makeDefaultShape({ memberGift: { value: 10000, configured: 10000, source: 'default', lock: null } });
         const fetchMock = mockShapeApi(shape);
 
         render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
@@ -519,7 +530,8 @@ describe('CommunityShapeSection — Audit log', () => {
 
         // Raw key without callsign is shortened
         expect(logBlock).toHaveTextContent('abcdef01… (owner)');
-        expect(logBlock).toHaveTextContent('Floor cap: 2000 → 3000');
+        // The cap's log line is hundredths text, said as Beans: '300050' is 3,000.50.
+        expect(logBlock).toHaveTextContent('Floor cap: 2,000 Beans → 3,000.50 Beans');
     });
 });
 

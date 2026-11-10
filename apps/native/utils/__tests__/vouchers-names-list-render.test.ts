@@ -163,13 +163,13 @@ function openedFor(listKey: Uint8Array, me: (typeof PEOPLE)[Who]) {
     };
 }
 
-/** The node's block (one voucher: Zara, made from her entry) and her card. */
+/** The node's block (one voucher: Zara, made from her entry) and her card. Every figure is whole hundredths of a Bean, as the node sends them. */
 const ZARA = {
     memberPubkey: PEOPLE.voucher.publicKey, callsign: 'zara', source: 'entry', entryId: ID.zara, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
-    stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 0,
-    passedOn: { amount: 50, people: 1, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 },
+    stoppedAt: null, stopReason: null, left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 65000, belowZero: 1, writtenOff: 0,
+    passedOn: { amount_c: 5000, people: 1, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 },
 };
-const BLOCK = { vouchers: [ZARA], settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 } };
+const BLOCK = { vouchers: [ZARA], settings: { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 } };
 const node = vi.hoisted(() => ({ calls: [] as Array<{ method: string; url: string; body: unknown }> }));
 function fakeNode() {
     return vi.fn(async (url: unknown, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
@@ -283,13 +283,15 @@ describe('the names list with vouchers, exactly as the node answers', () => {
         await renderAs('owner');
         await click(buttons('Make a voucher')[0]);
         expect(host.textContent).toContain('Make @Bea a voucher?');
-        expect(host.textContent).toContain('1000 Beans');
+        // Figures from whole hundredths (formatHundredths): 1,000 and more grouped, as on the web.
+        expect(host.textContent).toContain('1,000 Beans');
         await click(host.querySelector('[aria-label="Increase budget by 100"]'));
-        expect(host.textContent).toContain('1100 Beans');
+        expect(host.textContent).toContain('1,100 Beans');
         await click(buttons('Make a voucher').at(-1));
         const posted = node.calls.filter((c) => c.method === 'POST' && c.url === `${NODE}/api/names/vouchers`);
-        expect(posted.map((c) => c.body)).toEqual([{ entryId: ID.mary, amount: 1100 }]);
-        expect(host.textContent).toContain('Made @Bea a voucher with a budget of 1100 Beans.');
+        // The budget is `amount_c`, whole hundredths (engine/vouchers.ts makeVoucher refuses the old `amount` with 400).
+        expect(posted.map((c) => c.body)).toEqual([{ entryId: ID.mary, amount_c: 110000 }]);
+        expect(host.textContent).toContain('Made @Bea a voucher with a budget of 1,100 Beans.');
     });
 
     it('Community health’s Vouchers section names each voucher by @callsign, also one the phone has no member row for', async () => {

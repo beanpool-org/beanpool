@@ -49,7 +49,7 @@ async function main() {
     db.prepare(`INSERT INTO posts (id, author_pubkey, title, description, type, category, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
         postIdOffer, alice, 'Selling goods', 'Offer post description', 'offer', 'goods', new Date().toISOString()
     );
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
         txIdOffer, postIdOffer, bob, alice, 50, 'completed', new Date().toISOString()
     );
 
@@ -71,7 +71,7 @@ async function main() {
     db.prepare(`INSERT INTO posts (id, author_pubkey, title, description, type, category, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
         postIdSeek, alice, 'Seeking help', 'Seek post description', 'seek', 'services', new Date().toISOString()
     );
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
         txIdSeek, postIdSeek, alice, bob, 30, 'completed', new Date().toISOString()
     );
 

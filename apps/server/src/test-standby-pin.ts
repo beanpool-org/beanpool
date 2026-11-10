@@ -240,7 +240,7 @@ async function main(): Promise<void> {
     const admin = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(owner, 'Victor');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Adam', ?, ?, 'TEST')`).run(admin, new Date().toISOString(), owner);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     const { grantNodeRole } = await import('./state-engine.js');
     grantNodeRole(admin, 'admin', owner);
     const keySession = (pk: string, role: 'owner' | 'admin', phone = false): string => {

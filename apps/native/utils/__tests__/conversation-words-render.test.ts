@@ -179,18 +179,20 @@ const DM_MESSAGES = [
     { id: 'm7', senderId: 'kofi-key', text: 'This message was deleted', type: 'removed', metadata: { removed: true }, rawTimestamp: iso(now - 3_000_000), timestamp: '' },
     { id: 'm8', senderId: ME.publicKey, text: 'running late', type: 'text', outgoing: true, sendState: 'failed', rawTimestamp: iso(now - 60_000), timestamp: '' },
 ];
+/** As getConversation answers it: the listing's price and what its deal holds are whole hundredths of a Bean (5 Beans). */
 const DM_CONVERSATION = {
     name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', postId: 'p-ladder', postTitle: 'Borrow a long ladder', postStatus: 'pending',
-    credits: 5, price_type: 'hourly', pendingTxId: 'tx-held', pendingAmount: 5, txBuyerPubkey: ME.publicKey,
+    price_c: 500, price_type: 'hourly', pendingTxId: 'tx-held', pendingAmount_c: 500, txBuyerPubkey: ME.publicKey,
 };
 /**
  * The deals with Kofi as utils/db.ts getDealsBetween hands them over: every row carries its buyer's and seller's keys
- * (NOT NULL columns it always selects), and the chat asks core's dealMoves of them whose step it is (U2).
+ * (NOT NULL columns it always selects), and the chat asks core's dealMoves of them whose step it is (U2). What each holds is
+ * whole hundredths of a Bean (amount_c): 5, 3 and 8 Beans.
  */
 const DM_DEALS = [
-    { txId: 'tx-held', postId: 'p-ladder', postTitle: 'Borrow a long ladder', status: 'pending', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, credits: 5 },
-    { txId: 'tx-eggs', postId: 'p-eggs', postTitle: 'Duck eggs', status: 'pending', buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, credits: 3 },
-    { txId: 'tx-done', postId: 'p-old', postTitle: null, status: 'completed', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, iRated: false, credits: 8 },
+    { txId: 'tx-held', postId: 'p-ladder', postTitle: 'Borrow a long ladder', status: 'pending', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, amount_c: 500 },
+    { txId: 'tx-eggs', postId: 'p-eggs', postTitle: 'Duck eggs', status: 'pending', buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, amount_c: 300 },
+    { txId: 'tx-done', postId: 'p-old', postTitle: null, status: 'completed', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, iRated: false, amount_c: 800 },
 ];
 /** A new group of the member's: only them in it, a node system line, a convenor's removal. */
 const GROUP_CHAT = {
@@ -357,13 +359,13 @@ describe('a direct message in the pseudo-locale: every word came through t() (wo
 describe('a one-off deal held in trust in a chat with no listing of its own (U2 round 2)', () => {
     const standingRow = {
         txId: 'sd-m3', postId: 'p-storage', postTitle: 'Vehicle Storage', status: 'pending', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key',
-        iAmBuyer: true, credits: 50, standing_id: 'sd-1', period_no: 3,
-        standing: JSON.stringify({ phase: 'paid', beans: 50, unit: 'month', max: null, nextDueAt: iso(now + 20 * 86_400_000), startsAt: iso(now - 40 * 86_400_000), shortSince: null, stopped: false }),
+        iAmBuyer: true, amount_c: 5000, standing_id: 'sd-1', period_no: 3,
+        standing: JSON.stringify({ phase: 'paid', beans_c: 5000, unit: 'month', max: null, nextDueAt: iso(now + 20 * 86_400_000), startsAt: iso(now - 40 * 86_400_000), shortSince: null, stopped: false }),
     };
     beforeEach(() => {
         // The consolidated thread with Kofi: no listing of its own, so the chat picks the deal its bar shows from the rows.
         net.answer = node({
-            getConversation: { ...DM_CONVERSATION, postId: null, postTitle: null, postStatus: null, pendingTxId: null, pendingAmount: null, txBuyerPubkey: null },
+            getConversation: { ...DM_CONVERSATION, postId: null, postTitle: null, postStatus: null, pendingTxId: null, pendingAmount_c: null, txBuyerPubkey: null },
             getDealsBetween: [standingRow, ...DM_DEALS],
         });
     });
@@ -545,12 +547,12 @@ describe('message request on the phone (phone-web-parity)', () => {
 describe("a request waiting for the member's answer in the chat's deal strip", () => {
     /** Kofi asks to help with a Need: on a Need the one who asks is the seller; the Need's author is the buyer and answers. */
     const request = (over: Record<string, unknown> = {}) => ({
-        txId: 'tx-ask', postId: 'p-fence', postTitle: 'Paint the fence', status: 'requested', credits: 12, iRated: false,
+        txId: 'tx-ask', postId: 'p-fence', postTitle: 'Paint the fence', status: 'requested', amount_c: 1200, iRated: false,
         buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true,
         postAuthorPublicKey: ME.publicKey, postType: 'need', postRepeatable: 0, postLendable: 0, ...over,
     });
     const only = (...deals: unknown[]) => {
-        net.answer = node({ getDealsBetween: deals, getConversation: { ...DM_CONVERSATION, postId: null, postTitle: null, pendingTxId: null, pendingAmount: null, txBuyerPubkey: null } });
+        net.answer = node({ getDealsBetween: deals, getConversation: { ...DM_CONVERSATION, postId: null, postTitle: null, pendingTxId: null, pendingAmount_c: null, txBuyerPubkey: null } });
     };
     const labels = () => Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label') ?? '');
 

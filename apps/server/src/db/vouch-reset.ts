@@ -17,7 +17,7 @@
  * F or G above zero and the reset refuses, before it writes anything: the boot stops, and the previous release boots the
  * same data untouched.
  *
- * Balances are the stored column (accounts.balance), never getBalance: at boot the ledger isn't loaded, and a read through
+ * Balances are the stored column (accounts.balance_c), never getBalance: at boot the ledger isn't loaded, and a read through
  * it charges demurrage before the treasuries are exempt (memory boot-getbalance-before-exemptions). The line someone keeps
  * without the vouch is the engine's own (getMemberTrustProfile, SQL only, which has no vouch term any more). An
  * enterprise's line never had one (its keepers' pledges), so F counts people only.
@@ -106,7 +106,7 @@ function count(db: Database.Database, sql: string): number {
 export function countVouchReset(db: Database.Database): VouchResetCounts {
     const members = columnsOf(db, 'members');
     const invites = columnsOf(db, 'invite_codes');
-    const hasAccounts = columnsOf(db, 'accounts').has('balance');
+    const hasAccounts = columnsOf(db, 'accounts').has('balance_c');
     const decisions = columnsOf(db, 'decisions');
     const vouchedSql = members.has('elder_vouched_by') ? 'm.elder_vouched_by IS NOT NULL' : '0';
     const person = members.has('is_treasury') ? 'COALESCE(m.is_treasury, 0) = 0' : '1';
@@ -122,13 +122,13 @@ export function countVouchReset(db: Database.Database): VouchResetCounts {
     let wouldLoseCredit = 0;
     if (hasAccounts && members.has('elder_vouched_by')) {
         const owing = db.prepare(`
-            SELECT m.public_key AS pk, a.balance AS balance
+            SELECT m.public_key AS pk, a.balance_c AS balance_c
               FROM members m JOIN accounts a ON a.public_key = m.public_key
-             WHERE ${vouchedSql} AND ${person} AND a.balance < 0`).all() as { pk: string; balance: number }[];
+             WHERE ${vouchedSql} AND ${person} AND a.balance_c < 0`).all() as { pk: string; balance_c: number }[];
         for (const o of owing) {
             // The engine's line, with no vouch term: what this member keeps after the reset.
             const { floor } = getMemberTrustProfile(db, o.pk);
-            if (o.balance < floor) wouldLoseCredit++;
+            if (o.balance_c < floor) wouldLoseCredit++;
         }
     }
 
@@ -139,7 +139,7 @@ export function countVouchReset(db: Database.Database): VouchResetCounts {
         vouchedInvitesRedeemed: invites.has(OLD_VOUCH_INVITE_COLUMN)
             ? count(db, `SELECT COUNT(*) AS n FROM invite_codes WHERE ${OLD_VOUCH_INVITE_COLUMN} IS NOT NULL AND used_by IS NOT NULL`) : 0,
         belowZero: hasAccounts
-            ? count(db, `SELECT COUNT(*) AS n FROM members m JOIN accounts a ON a.public_key = m.public_key WHERE ${person} AND a.balance < 0`) : 0,
+            ? count(db, `SELECT COUNT(*) AS n FROM members m JOIN accounts a ON a.public_key = m.public_key WHERE ${person} AND a.balance_c < 0`) : 0,
         wouldLoseCredit,
         openVoucherDecisions: decisions.has('effect') && decisions.has('status')
             ? count(db, `SELECT COUNT(*) AS n FROM decisions WHERE effect IN ('grant_voucher', 'revoke_voucher') AND ${STILL_LIVE}`) : 0,

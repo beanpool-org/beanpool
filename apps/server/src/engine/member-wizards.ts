@@ -104,10 +104,11 @@ export interface OffboardPreview {
         status: string;
         joinedAt: string;
     };
-    balance: number;
-    commonsBalance: number;
-    costToCommunity: number;
-    projectedCommonsBalance: number;
+    /** Whole hundredths, as every money figure here (`*_c`). */
+    balance_c: number;
+    commonsBalance_c: number;
+    costToCommunity_c: number;
+    projectedCommonsBalance_c: number;
     pendingEscrowsCount: number;
     isSoleOwner: boolean;
     activeMembers: Array<{
@@ -852,7 +853,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
     const settles = removalToSettle(cleanPub);
 
     const balanceInfo = getBalance(cleanPub);
-    const balance = balanceInfo.balance;
+    const balance = balanceInfo.balance_c;
     const commonsBalance = getCommonsBalanceExact();
     const isOwner = isSoleOwner(cleanPub);
 
@@ -880,10 +881,10 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
             status: member.status || 'active',
             joinedAt: member.joinedAt || new Date().toISOString(),
         },
-        balance,
-        commonsBalance,
-        costToCommunity,
-        projectedCommonsBalance,
+        balance_c: balance,
+        commonsBalance_c: commonsBalance,
+        costToCommunity_c: costToCommunity,
+        projectedCommonsBalance_c: projectedCommonsBalance,
         pendingEscrowsCount: pendingEscrows,
         isSoleOwner: isOwner,
         activeMembers,
@@ -996,8 +997,8 @@ export function executeOffboard(
         // prune_zero_balance. The two can only disagree about the sign when the shown figure is 0.00, i.e.
         // under half a cent either way, and that dust is left to `adminPruneUser`, which settles the exact
         // balance itself.
-        const shownBalance = getBalance(cleanPub).balance;
-        const balance = ledger.getAccount(cleanPub).balance;
+        const shownBalance = getBalance(cleanPub).balance_c;
+        const balance = ledger.getAccount(cleanPub).balance_c;
         balanceSettled = balance;
 
         if (shownBalance > 0) {

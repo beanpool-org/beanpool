@@ -82,10 +82,13 @@ const now = Date.now();
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/** Kofi's duck eggs: an Elder's Offer with no photo, a recurring one, as on the map's own test community. */
+/**
+ * Kofi's duck eggs: an Elder's Offer with no photo, a recurring one, as on the map's own test community. The author's tier credit
+ * and the price are whole hundredths of a Bean, as the node sends them (an Elder's least credit, 1,400 Beans; 5 Beans).
+ */
 const EGGS = {
     id: 'p-eggs', type: 'offer', status: 'active', title: 'Fresh duck eggs', category: 'food', repeatable: 1,
-    author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 12000, credits: 5, price_type: 'fixed', photos: [],
+    author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 140000, price_c: 500, price_type: 'fixed', photos: [],
     lat: -28.65, lng: 153.6,
 };
 /** Byron's Saturday market: Marty's own Going on it, a long title and a long place, nobody else has answered. */
@@ -253,8 +256,9 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
         await show({ ...EGGS, author_pubkey: ME.publicKey, author_energy_cycled: 0 });
         expect(q('map-preview-open').textContent).toContain('👤 YOU');
         const COPY = {
-            ...EGGS, id: 'p-copy', title: 'Quince paste', author_pubkey: 'hidden', author_callsign: undefined, author_energy_cycled: 0, credits: 0,
-            shown_from: JSON.stringify({ host: 'byron.beanpool.org', name: 'Mullumbimby', url: 'https://byron.beanpool.org', door: 'ask', price: { amount: 20, unit: 'fixed' } }),
+            ...EGGS, id: 'p-copy', title: 'Quince paste', author_pubkey: 'hidden', author_callsign: undefined, author_energy_cycled: 0, price_c: 0,
+            // Its home price as the node keeps it on a copy (shown_price: whole hundredths and the unit), in the phone's column.
+            shown_from: JSON.stringify({ host: 'byron.beanpool.org', name: 'Mullumbimby', url: 'https://byron.beanpool.org', door: 'ask', price: '2000 fixed' }),
         };
         await show(COPY, { copy: eventCopyOf(COPY) });
         expect(q('map-preview-copy-line').textContent).toBe(copyPriceLine(eventCopyOf(COPY)!));

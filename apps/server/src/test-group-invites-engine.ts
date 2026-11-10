@@ -42,9 +42,9 @@ function main(): void {
     const older = new Date(Date.now() - 3600_000).toISOString();
     const oldest = new Date(Date.now() - 7200_000).toISOString();
 
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`).run(alice, 'alice', now);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`).run(bob, 'bob', now);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`).run(convenor, 'convenor', now);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`).run(alice, 'alice', now);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`).run(bob, 'bob', now);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`).run(convenor, 'convenor', now);
 
     // 1. No invitations
     const emptyInvites = pendingGroupInvites(alice);

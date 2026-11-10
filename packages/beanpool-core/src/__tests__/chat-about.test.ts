@@ -19,7 +19,7 @@ const CONV = 'c0ffee00-1111-4222-8333-444455556666';
 const ctxOf = (me: typeof rob, peer: typeof rob, conversationId = CONV) => ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey, conversationId });
 const keysOf = (me: typeof rob, peer: typeof rob) => ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey });
 
-const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', credits: 6, priceType: 'fixed' };
+const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', price_c: 600, priceType: 'fixed' };
 
 /** A line as the sender's app writes it: the words sealed, the listing sealed beside it in the metadata. */
 function lineAbout(from: typeof rob, to: typeof rob, text: string, post: any, replyToId?: string) {
@@ -34,12 +34,12 @@ function lineAbout(from: typeof rob, to: typeof rob, text: string, post: any, re
 describe('the chip for a listing', () => {
     it('reads "About: title · price" for a priced Offer and a Need, in Beans', () => {
         expect(chatAboutChipWords(aboutOfPost(EGGS)!)).toBe('About: Fresh eggs · 6 Beans');
-        expect(chatAboutChipWords(aboutOfPost({ id: 'n1', type: 'need', title: 'A lift to town', credits: 0 })!)).toBe('About: A lift to town · Free');
-        expect(chatAboutChipWords(aboutOfPost({ id: 'o2', type: 'offer', title: 'Garden help', credits: 25, price_type: 'hourly' })!)).toBe('About: Garden help · 25 Beans an hour');
+        expect(chatAboutChipWords(aboutOfPost({ id: 'n1', type: 'need', title: 'A lift to town', price_c: 0 })!)).toBe('About: A lift to town · Free');
+        expect(chatAboutChipWords(aboutOfPost({ id: 'o2', type: 'offer', title: 'Garden help', price_c: 2500, price_type: 'hourly' })!)).toBe('About: Garden help · 25 Beans an hour');
     });
 
     it('has no price for an event, or a listing the node sent no price for', () => {
-        expect(chatAboutChipWords(aboutOfPost({ id: 'e1', type: 'event', title: 'Seed swap', credits: 0 })!)).toBe('About: Seed swap');
+        expect(chatAboutChipWords(aboutOfPost({ id: 'e1', type: 'event', title: 'Seed swap', price_c: 0 })!)).toBe('About: Seed swap');
         expect(chatAboutChipWords(aboutOfPost({ id: 'o3', type: 'offer', title: 'Honey' })!)).toBe('About: Honey');
     });
 
@@ -51,7 +51,7 @@ describe('the chip for a listing', () => {
     });
 
     it('keeps a very long title short', () => {
-        expect(aboutOfPost({ id: 'o5', type: 'offer', title: 'x'.repeat(500), credits: 1 })!.title.length).toBe(CHAT_ABOUT_TITLE_MAX);
+        expect(aboutOfPost({ id: 'o5', type: 'offer', title: 'x'.repeat(500), price_c: 100 })!.title.length).toBe(CHAT_ABOUT_TITLE_MAX);
     });
 });
 
@@ -132,7 +132,7 @@ describe('the reference, sealed', () => {
     });
 
     it('adds under 700 characters to a line at its longest title (the node counts a line\'s metadata against its 64 KB bound)', () => {
-        const post = { id: 'a'.repeat(36), type: 'offer', title: 'ü'.repeat(500), credits: 6 };
+        const post = { id: 'a'.repeat(36), type: 'offer', title: 'ü'.repeat(500), price_c: 600 };
         const id = newDmMessageId();
         const sealed = sealChatAbout(aboutOfPost(post)!, ctxOf(rob, ana), { senderPubHex: rob.publicKey, messageId: id });
         const added = metadataWithAbout(undefined, sealed).length;
@@ -151,7 +151,7 @@ describe('the card in a bubble', () => {
     const about = { postId: 'post-eggs-1', title: 'Fresh eggs (as the sender saw it)', kind: 'offer' as const };
 
     it('shows the listing\'s own title, kind and price once it is found, not what the sender claimed', () => {
-        const card = chatAboutCard(about, { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8 });
+        const card = chatAboutCard(about, { ...EGGS, title: 'Fresh eggs, a dozen', price_c: 800 });
         expect(card).toMatchObject({ gone: false, title: 'Fresh eggs, a dozen', kindWords: 'Offer', price: '8 Beans', postId: 'post-eggs-1' });
     });
 
@@ -176,7 +176,7 @@ describe('the chip waiting to be sent', () => {
 
     it('is kept per conversation until it is sent or dropped, and a new one replaces it', () => {
         const eggs = aboutOfPost(EGGS)!;
-        const honey = aboutOfPost({ id: 'h1', type: 'offer', title: 'Honey', credits: 9 })!;
+        const honey = aboutOfPost({ id: 'h1', type: 'offer', title: 'Honey', price_c: 900 })!;
         chatAboutDrafts.set('c1', eggs);
         chatAboutDrafts.set('c2', honey);
         expect(chatAboutDrafts.get('c1')).toBe(eggs);

@@ -46,6 +46,8 @@ import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
+import { isHundredths } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
 import { useInPageConfirm } from '../common/InPageConfirm';
@@ -1029,11 +1031,12 @@ export function ApplianceSection({
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Drift</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{Number.isFinite(auditState.result.drift) ? `${auditState.result.drift} beans` : 'not a number'}</div>
+                                    {/* The audit's figures are whole hundredths (engine audit.ts runConservationCheck): said in Beans. */}
+                                    <div className="font-mono text-white mt-0.5 font-bold">{isHundredths(auditState.result.drift) ? `${beansFigure(auditState.result.drift)} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Total Balances</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances === undefined ? '0 beans' : Number.isFinite(auditState.result.sumBalances) ? `${auditState.result.sumBalances} beans` : 'not a number'}</div>
+                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances === undefined ? '0 beans' : isHundredths(auditState.result.sumBalances) ? `${beansFigure(auditState.result.sumBalances)} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Stranded Escrows</span>

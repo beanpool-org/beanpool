@@ -41,7 +41,8 @@ function makeShape(over: { core?: Shape['core']; settings?: Partial<ShapeSetting
         knocks: { value: true, configured: true, source: 'default', lock: null },
         preview: { value: false, configured: false, source: 'server', lock: null },
         beans: { value: true, configured: true, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } },
-        knownFloor: { value: { on: true, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: true, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: null },
+        // The shape reads the known floor in whole hundredths of a Bean (config/community-shape.ts): 100000 is 1,000 Beans.
+        knownFloor: { value: { on: true, floor: 100000, cap: 200000, capMax: 500000 }, configured: { on: true, floor: 100000, cap: 200000, capMax: 500000 }, source: 'default', lock: null },
         decisions: { value: true, configured: true, source: 'default', lock: null },
         shareOutside: { value: true, configured: true, source: 'default', lock: null },
         recoveryCopies: { value: 'vault' as const, configured: 'vault' as const, source: 'default', lock: null },
@@ -105,7 +106,8 @@ describe('CoreWalkthrough helper functions', () => {
                 join: 'members',
                 wordsDoor: undefined,
                 beans: true,
-                knownFloor: { on: true, floor: 1000, cap: 2000 },
+                // The boxes hold the figures as typed Beans text.
+                knownFloor: { on: true, floor: '1000', cap: '2000' },
                 decisions: true,
                 shareOutside: true,
                 recoveryCopies: 'vault',
@@ -169,37 +171,54 @@ describe('CoreWalkthrough helper functions', () => {
             expect(changesFrom(shape, draft)).toEqual({});
         });
 
-        it('detects knownFloor changes when beans are on and unlocked', () => {
+        it('detects knownFloor changes when beans are on and unlocked, and sends them as the node takes them', () => {
             const shape = makeShape();
             const draft = draftFrom(shape);
-            draft.knownFloor = { on: true, floor: 1500, cap: 2500 };
+            draft.knownFloor = { on: true, floor: '1500', cap: '2500.50' };
 
+            // `{ on, floor_c, cap_c }`, whole hundredths (config/community-shape-write.ts), never the old floor/cap keys.
             expect(changesFrom(shape, draft)).toEqual({
-                knownFloor: { on: true, floor: 1500, cap: 2500 },
+                knownFloor: { on: true, floor_c: 150000, cap_c: 250050 },
             });
+        });
+
+        it('sends no knownFloor change when the typed figures are what the shape has', () => {
+            const shape = makeShape();
+            const draft = draftFrom(shape);
+            draft.knownFloor = { on: true, floor: '1000.00', cap: '2000' };
+            expect(changesFrom(shape, draft)).toEqual({});
         });
     });
 
     describe('knownFloorProblem', () => {
         it('returns null when floor is off', () => {
-            expect(knownFloorProblem({ on: false, floor: 9999, cap: 100 })).toBeNull();
+            expect(knownFloorProblem({ on: false, floor: '9999', cap: '100' })).toBeNull();
         });
 
         it('validates floor not exceeding cap', () => {
-            expect(knownFloorProblem({ on: true, floor: 3000, cap: 2500 })).toBe("The known floor can't be more than the cap.");
+            expect(knownFloorProblem({ on: true, floor: '3000', cap: '2500' })).toBe("The known floor can't be more than the cap.");
+            // To the hundredth: 2,500.01 is more than a cap of 2,500.
+            expect(knownFloorProblem({ on: true, floor: '2500.01', cap: '2500' })).toBe("The known floor can't be more than the cap.");
         });
 
         it('validates floor is not negative', () => {
-            expect(knownFloorProblem({ on: true, floor: -10, cap: 2500 })).toBe("The known floor can't be negative.");
+            expect(knownFloorProblem({ on: true, floor: '-10', cap: '2500' })).toBe("The known floor can't be negative.");
         });
 
         it('validates cap bounds (2,000 to 5,000)', () => {
-            expect(knownFloorProblem({ on: true, floor: 500, cap: 1500 })).toBe('The cap must be between 2,000 and 5,000 Beans.');
-            expect(knownFloorProblem({ on: true, floor: 500, cap: 6000 })).toBe('The cap must be between 2,000 and 5,000 Beans.');
+            expect(knownFloorProblem({ on: true, floor: '500', cap: '1500' })).toBe('The cap must be between 2,000 and 5,000 Beans.');
+            expect(knownFloorProblem({ on: true, floor: '500', cap: '6000' })).toBe('The cap must be between 2,000 and 5,000 Beans.');
+            expect(knownFloorProblem({ on: true, floor: '500', cap: '1999.99' })).toBe('The cap must be between 2,000 and 5,000 Beans.');
+        });
+
+        it('refuses typed figures that are not Beans to the cent, in words', () => {
+            expect(knownFloorProblem({ on: true, floor: '1000.505', cap: '3000' })).toBe('Type at most 2 decimals, like 12.5.');
+            expect(knownFloorProblem({ on: true, floor: '1000', cap: '' })).toBe('Type an amount.');
         });
 
         it('returns null for valid configuration', () => {
-            expect(knownFloorProblem({ on: true, floor: 1000, cap: 3000 })).toBeNull();
+            expect(knownFloorProblem({ on: true, floor: '1000', cap: '3000' })).toBeNull();
+            expect(knownFloorProblem({ on: true, floor: '999.50', cap: '2000' })).toBeNull();
         });
     });
 });

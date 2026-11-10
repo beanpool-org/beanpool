@@ -20,7 +20,7 @@ const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote:
     touches: franchise === '1m1v' ? 'member' : 'pool',
     effect: franchise === '1m1v' ? 'freeze_credit' : 'grant_enterprise',
     subject: 'subject',
-    params: franchise === '1m1v' ? null : { amount: 50 },
+    params: franchise === '1m1v' ? null : { amount_c: 5000 },
     franchise,
     status: 'open',
     opensAt: '2026-09-18T00:00:00.000Z',
@@ -181,7 +181,7 @@ describe('DecideSection voting answers', () => {
         card.authorPubkey = 'SYSTEM';
         card.effect = 'remove_member';
         card.title = 'Remove Dave?';
-        card.params = { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, reason: 'Threats in the market chat', commonsPool: 240 };
+        card.params = { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, reason: 'Threats in the market chat', commonsPool_c: 24000 };
         const first = renderDecide(true, [card]);
         const box = screen.getByTestId('pause-vote-box');
         expect(box.textContent).toContain('An admin paused Dave on 22 Oct 2026.');
@@ -258,14 +258,14 @@ describe('DecideSection voting answers', () => {
     it('a removal vote: a voter reads the debt the node sent; anyone else reads that it is for voters only', () => {
         const voter = decisionCard('r1', '1m1v', null);
         voter.effect = 'remove_member';
-        voter.params = { memberName: 'Eve', debt: 12, balance: -12, commonsPool: 300 };
+        voter.params = { memberName: 'Eve', debt_c: 1200, balance_c: -1200, commonsPool_c: 30000 };
         const { unmount } = renderDecide(true, [voter]);
         expect(screen.getByTestId('removal-debt-write-off-line').textContent).toContain("Eve's balance is −12 beans");
         unmount();
 
         const other = decisionCard('r2', '1m1v', null);
         other.effect = 'remove_member';
-        other.params = { memberName: 'Eve', commonsPool: 300 };
+        other.params = { memberName: 'Eve', commonsPool_c: 30000 };
         renderDecide(true, [other]);
         const line = screen.getByTestId('removal-debt-write-off-line').textContent ?? '';
         expect(line).toContain("only the members who can vote in this see Eve's balance");
@@ -283,7 +283,7 @@ describe('DecideSection: a fair vote on removing a member', () => {
         title: 'Remove Dave?',
         description: 'An admin paused Dave on 2026-10-22. Reason given: Took deposits for repairs and never came back',
         subject: 'dave-key',
-        params: { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, commonsPool: 240 },
+        params: { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, commonsPool_c: 24000 },
         proposer: { kind: 'admin', name: 'Ada' },
         ...over,
     });
@@ -545,7 +545,7 @@ describe('DecideSection in preview mode', () => {
             touches: 'pool' as const,
             effect: 'grant_enterprise' as const,
             subject: 'enterprise',
-            params: { amount: 50, subject: 'enterprise' },
+            params: { amount_c: 5000, subject: 'enterprise' },
             franchise: 'quadratic_trade' as const,
             status: 'open' as const,
             opensAt: '2026-04-10T12:00:00.000Z',
@@ -582,7 +582,7 @@ describe('DecideSection in preview mode', () => {
                 decisions={[previewItem]}
                 myPoolVoting={{ voiceCredits: 582, hasCompletedTrade: true }}
                 identity={{ publicKey: 'viewer', privateKey: 'k', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' }}
-                commonsBalance={640}
+                commonsBalance={64000}
                 onRefresh={async () => {}}
                 onOpenPropose={() => {}}
                 canPropose={true}

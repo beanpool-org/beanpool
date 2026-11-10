@@ -29,6 +29,8 @@ function assert(cond: boolean, msg: string): void {
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject };
 const DAY = 86400_000;
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns one into the other. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function keypair(): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -39,19 +41,19 @@ function keypair(): Id {
 function makeMember(callsign: string, balance = 50): Id {
     const id = keypair();
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
-                VALUES (?, ?, ?, 'active', 100)`).run(id.pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
+                VALUES (?, ?, ?, 'active', ?)`).run(id.pubKeyHex, callsign, joinedAt, hc(100));
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, hc(balance));
     return id;
 }
 
 function makeEnterprise(name: string, keepers: Id[], balance = 100): string {
     const ent = keypair().pubKeyHex;
     const created = new Date(Date.now() - 20 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, lifecycle, paused, purpose)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, lifecycle, paused, purpose)
                 VALUES (?, ?, ?, 'active', 1, 0, 0, 'ongoing', 0, 'Test enterprise')`)
         .run(ent, name, created);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(ent, balance);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(ent, hc(balance));
     keepers.forEach((k, i) => {
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, ?, ?)`)
             .run(ent, k.pubKeyHex, i === 0 ? 'lead' : 'keeper', new Date(Date.now() - (10 - i) * DAY).toISOString());
@@ -112,7 +114,7 @@ async function main(): Promise<void> {
     assert(strangerList.status === 404 && strangerList.body?.error === 'Not found', 'Non-keeper list returns 404');
 
     const strangerPropose = await fetchRoute('POST', `/api/enterprise/${ent}/decisions`, {
-        title: 'Stranger Propose', description: 'Desc', effect: 'pay_out', params: { to: recipient.pubKeyHex, amount: 10 },
+        title: 'Stranger Propose', description: 'Desc', effect: 'pay_out', params: { to: recipient.pubKeyHex, amount_c: hc(10) },
     }, stranger);
     assert(strangerPropose.status === 404 && strangerPropose.body?.error === 'Not found', 'Non-keeper propose returns 404');
 
@@ -126,7 +128,7 @@ async function main(): Promise<void> {
         title: 'Pay Recipient',
         description: 'Payment for services',
         effect: 'pay_out',
-        params: { to: recipient.pubKeyHex, amount: 20 },
+        params: { to: recipient.pubKeyHex, amount_c: hc(20) },
     }, k1);
     assert(propRes.status === 200 && propRes.body?.success === true && propRes.body?.decision?.id, 'Keeper proposes decision successfully');
     const decisionId = propRes.body.decision.id;

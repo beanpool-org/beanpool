@@ -14,7 +14,7 @@
  * (statements.ts). A missing table throws at the compile, inside the same try, and nothing is kept.
  */
 import type Database from 'better-sqlite3';
-import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, knownGrantFor, type KnownFloorException } from '@beanpool/core';
+import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, knownGrantFor, shareOf, type KnownFloorException } from '@beanpool/core';
 import { prepared } from './statements.js';
 
 type Db = Database.Database;
@@ -32,8 +32,9 @@ function configValue(db: Db, key: string): string | null {
     }
 }
 
-function wholeBeans(v: string | null): number | null {
-    if (v === null || !/^\d{1,6}$/.test(v)) return null;
+/** A money setting as node_config keeps it: whole hundredths of a Bean, as integer text; anything else is not a figure. */
+function wholeHundredths(v: string | null): number | null {
+    if (v === null || !/^\d{1,9}$/.test(v)) return null;
     return Number(v);
 }
 
@@ -94,14 +95,14 @@ export function confirmationDialFrom(raw: string | null): boolean {
 
 /** The saved cap from its row: within [CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX], else the default. */
 export function savedCreditCapFrom(raw: string | null): number {
-    const v = wholeBeans(raw);
+    const v = wholeHundredths(raw);
     if (v === null || v < CREDIT_CAP_DEFAULT || v > CREDIT_CAP_MAX) return CREDIT_CAP_DEFAULT;
     return v;
 }
 
 /** The known floor from its row, never above `savedCap` (savedCreditCapFrom). */
 export function knownFloorFrom(raw: string | null, savedCap: number): number {
-    const v = wholeBeans(raw);
+    const v = wholeHundredths(raw);
     return Math.min(savedCap, v === null ? KNOWN_FLOOR_DEFAULT : v);
 }
 
@@ -118,9 +119,9 @@ export function isConfirmed(db: Db, pubkey: string): boolean {
 
 export function knownFloorException(db: Db, pubkey: string): KnownFloorException | null {
     try {
-        const row = prepared(db, 'SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pubkey) as
-            { amount: number | null; frozen: number } | undefined;
-        return row ? { amount: row.amount, frozen: row.frozen === 1 } : null;
+        const row = prepared(db, 'SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pubkey) as
+            { amount_c: number | null; frozen: number } | undefined;
+        return row ? { amount: row.amount_c, frozen: row.frozen === 1 } : null;
     } catch {
         return null;
     }
@@ -152,17 +153,17 @@ export const KNOWN_PLEDGE_PREFIX = 'known:';
 /**
  * The known part of a keeper's active pledges, across every enterprise (as recorded, before any shrink of G).
  * `extraPledged` (> 0): a known pledge not yet written, summed in the same SUM after the written rows, where its row would
- * land (the highest rowid in the keeper index). SQLite's SUM over REAL is compensated (3.43+), so SUM(rows) + x in JS is not
- * always the double SUM gives once the row is written: at the cent edge a keeper request's row would say yes and Approve no.
+ * land (the highest rowid in the keeper index), so a keeper request's check and its Approve read the one sum (whole
+ * hundredths, exact either way).
  */
 export function memberKnownPledged(db: Db, pubkey: string, extraPledged = 0): number {
     try {
         const row = (extraPledged > 0
             ? prepared(db,
-                "SELECT COALESCE(SUM(amount), 0) AS total FROM (SELECT amount FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%' UNION ALL SELECT CAST(? AS REAL))",
+                "SELECT COALESCE(SUM(amount_c), 0) AS total FROM (SELECT amount_c FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%' UNION ALL SELECT CAST(? AS INTEGER))",
             ).get(pubkey, extraPledged)
             : prepared(db,
-                "SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
+                "SELECT COALESCE(SUM(amount_c), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
             ).get(pubkey)) as { total: number } | undefined;
         return Number(row?.total || 0);
     } catch {
@@ -216,16 +217,16 @@ export function enterpriseHasKnownPledge(db: Db, enterprisePubkey: string): bool
  */
 export function enterpriseKnownShareOf(db: Db, enterprisePubkey: string, exceptKeeper?: string): number {
     if (!confirmationDialOn(db)) return 0;
-    let rows: { pk: string; amount: number }[];
+    let rows: { pk: string; amount_c: number }[];
     try {
         rows = prepared(db, `
-            SELECT p.keeper AS pk, SUM(p.amount) AS amount
+            SELECT p.keeper AS pk, SUM(p.amount_c) AS amount_c
             FROM enterprise_pledges p
             JOIN members m ON m.public_key = p.keeper
             WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id LIKE 'known:%'
               AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
             GROUP BY p.keeper
-        `).all(enterprisePubkey) as { pk: string; amount: number }[];
+        `).all(enterprisePubkey) as { pk: string; amount_c: number }[];
     } catch {
         return 0;
     }
@@ -234,7 +235,8 @@ export function enterpriseKnownShareOf(db: Db, enterprisePubkey: string, exceptK
         if (r.pk === exceptKeeper) continue;
         const { pledged, counted } = countedKnownPledged(db, r.pk);
         if (pledged <= 0) continue;
-        share += Math.floor(Number(r.amount) * counted / pledged);
+        // Its pledges scaled by counted / pledged, truncated (the keeper keeps the part below a hundredth).
+        share += shareOf(Number(r.amount_c), counted, pledged);
     }
     return share;
 }

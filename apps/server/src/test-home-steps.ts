@@ -130,7 +130,7 @@ async function main() {
     assert(stepsPhotoCleared?.photo === true, 'photo remains true after clearing avatar (never un-ticks)');
 
     // 2c. FirstPost: create offer post -> true, persisted in step_post; delete post -> remains true
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-step-test', 'offer', 'food', 'Fresh basil', 'Grown at home', 5, ?, 1, 'active', NULL)`).run(alice.pubKeyHex);
     const stepsPost = await getHomeSteps(alice);
     assert(stepsPost?.firstPost === true, 'firstPost is true after creating post');
@@ -228,7 +228,7 @@ async function main() {
     // 5a. Young local member who completed all local steps: card stays while young (14 days)
     const grace = makeMember('GraceLocalYoung');
     // Complete local steps: firstOffer, photo, interests, invited
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-grace-local', 'offer', 'food', 'Sourdough', 'Baked fresh', 5, ?, 1, 'active', NULL)`).run(grace.pubKeyHex);
     setMemberPhoto(db, grace.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(grace.pubKeyHex, { interests: ['food', 'garden'] });
@@ -251,7 +251,7 @@ async function main() {
     assert(heidiStepsUndone !== undefined, 'local first-steps card stays after 14 days while steps are undone');
 
     // Once older member finishes all local steps: card ends
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-heidi-local', 'offer', 'food', 'Jam', 'Sweet strawberry jam', 3, ?, 1, 'active', NULL)`).run(heidi.pubKeyHex);
     setMemberPhoto(db, heidi.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(heidi.pubKeyHex, { interests: ['food'] });

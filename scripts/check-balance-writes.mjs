@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fails when a new raw SQL write to accounts.balance appears outside the places that already make one.
+ * Fails when a new raw SQL write to accounts.balance_c (whole hundredths) appears outside the places that already make one.
  *
  * WHY. Beans move through the ledger's own functions (conservingTransaction and the helpers built on it), which check
  * that every debit has its credit. A raw `UPDATE accounts SET balance = …` skips that, and a write that mints or
@@ -26,7 +26,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const BASELINE = {
     // The ledger persisting what it moved: each account's balance written back after a conserving transfer.
-    'apps/server/src/state-engine.ts': 6,
+    'apps/server/src/state-engine.ts': 4,
     // Escrow: holding a buyer's Beans, releasing them to the seller or back, refunding crowdfund pledges.
     'apps/server/src/db/db.ts': 6,
     // A passed Decision's grant, persisted the same way as the ledger's own moves.
@@ -56,8 +56,8 @@ function* files(dir) {
 
 // Within one statement: no `;`, and no quote or backtick that would end the SQL string it sits in.
 const PATTERNS = [
-    /UPDATE\s+accounts\s+SET\b[^;`'"]*?\bbalance\s*=/gi,
-    /ON\s+CONFLICT\b[^;`'"]*?\bDO\s+UPDATE\s+SET\b[^;`'"]*?\bbalance\s*=/gi,
+    /UPDATE\s+accounts\s+SET\b[^;`'"]*?\bbalance_c\s*=/gi,
+    /ON\s+CONFLICT\b[^;`'"]*?\bDO\s+UPDATE\s+SET\b[^;`'"]*?\bbalance_c\s*=/gi,
 ];
 
 const found = {};

@@ -116,14 +116,14 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 30 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
         setMemberPhoto(db, id.pk, TEST_PHOTO);
         return id;
     };
     const alice = member('SentinelAlice');
     const bob = member('SentinelBob');
     const carol = member('SentinelCarol');
-    db.prepare('UPDATE accounts SET balance = ? WHERE public_key = ?').run(BALANCE, alice.pk);
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(BALANCE, alice.pk);
     createPost('offer', 'tools', 'Sentinel ladder to lend', 'Sentinel ladder, described', 5, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
     const outsider = newId();
     const members = [alice, bob, carol];

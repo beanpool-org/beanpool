@@ -40,13 +40,13 @@ const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullum
 
 /** A copy as the node reads it to anyone but its author: `credits` 0, the neutral author, the line's two fields. */
 const copy = {
-    id: 'copy-1', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Fresh this morning', credits: 0, priceType: 'fixed',
+    id: 'copy-1', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Fresh this morning', price_c: 0, priceType: 'fixed',
     status: 'active', active: true, repeatable: false, authorPublicKey: 'hidden', authorCallsign: 'another member', createdAt: new Date().toISOString(),
-    shownCopy: true, shownPrice: '20 fixed',
+    shownCopy: true, shownPrice: '2000 fixed',
     shownFrom: { host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask' },
 };
 /** A plain Offer, which the same page opens with its deal: the control, so "no Accept" below says something. */
-const plain = { ...copy, id: 'plain-1', title: 'Plain loaves', credits: 12, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', shownCopy: undefined, shownPrice: undefined, shownFrom: undefined };
+const plain = { ...copy, id: 'plain-1', title: 'Plain loaves', price_c: 1200, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', shownCopy: undefined, shownPrice: undefined, shownFrom: undefined };
 
 function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f?: any) =>

@@ -38,7 +38,7 @@ const samplePost: MarketplacePost = {
     type: 'offer',
     category: 'tools',
     description: 'A 6m ladder in good condition',
-    credits: 0,
+    price_c: 0,
     priceType: 'fixed',
     authorPublicKey: 'author-pk',
     authorCallsign: 'Bob',

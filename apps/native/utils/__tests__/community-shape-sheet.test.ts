@@ -106,7 +106,8 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         knocks: true,
         privatePreview: true,
         beans: true,
-        knownFloor: 1000,
+        // The node kept the name and sends the floor in whole hundredths of a Bean: 100000 is a floor of 1,000 Beans.
+        knownFloor: 100000,
         dmRequests: true,
         decisions: true,
         probation: true,
@@ -211,7 +212,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         const sheetText = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
 
         it('states it right after the floor, in the numbers features carries, with nothing to tap', async () => {
-            stubRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
+            stubRule({ known: true, knownFloor: 100000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
             await render(createElement(CommunityShapeSheet, { features: { ...FULL_FEATURES, debtLinePct: 50, quietDays: 60 }, visible: true, onClose: vi.fn() }));
             expect(sheetText()).toContain(`(the known floor)${SOURCE}`);
             // The sheet's own two, and the backdrop that puts it away.
@@ -219,7 +220,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         });
 
         it('a tightened line says when it applies, from the public route', async () => {
-            stubRule({ known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
+            stubRule({ known: true, knownFloor: 100000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
             await render(createElement(CommunityShapeSheet, { features: { ...FULL_FEATURES, debtLinePct: 30, quietDays: 60 }, visible: true, onClose: vi.fn() }));
             await vi.waitFor(() => expect(sheetText()).toContain('The line of 30% applies from 16 November.'));
             expect(fetch).toHaveBeenCalledWith('https://node.example/api/community/known-rule', expect.anything());
@@ -263,7 +264,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
                 members: 15,
                 joined7d: 2,
                 tradesThisMonth: 5,
-                commonsPot: 500,
+                commonsPot_c: 50000,
                 listings: 10,
                 eventsSoon: 1,
             },
@@ -297,7 +298,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
                 members: 15,
                 joined7d: 2,
                 tradesThisMonth: 5,
-                commonsPot: 500,
+                commonsPot_c: 50000,
                 listings: 10,
                 eventsSoon: 1,
             },

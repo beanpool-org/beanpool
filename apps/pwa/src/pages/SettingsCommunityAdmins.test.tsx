@@ -39,7 +39,7 @@ vi.mock('../lib/community-copy', async () => {
 const SINCE = '2026-10-29T04:05:06.000Z';
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
 const identity: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me', mnemonic: WORDS };
-const SERVER_RULE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, recoveryCopies: 'server' as const };
+const SERVER_RULE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, recoveryCopies: 'server' as const };
 
 function renderSettings() {
     render(<SettingsPage identity={identity} onIdentityUpdated={() => {}} onBack={() => {}} themePreference="system" onThemePreferenceChange={() => {}} />);

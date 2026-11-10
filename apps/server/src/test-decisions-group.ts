@@ -67,12 +67,13 @@ function keypair(): Id {
     return { pubKeyHex, privateKey };
 }
 
-function makeMember(callsign: string, balance = 50): Id {
+/** A member with 100 Beans of earned credit and `balance` in whole hundredths (5000 is 50 Beans). */
+function makeMember(callsign: string, balance = 5000): Id {
     const id = keypair();
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
-                VALUES (?, ?, ?, 'active', 100)`).run(id.pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
+                VALUES (?, ?, ?, 'active', 10000)`).run(id.pubKeyHex, callsign, joinedAt);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
     return id;
 }
 
@@ -244,8 +245,8 @@ async function main(): Promise<void> {
     // for, and an event; and a member's feed, cached before the close.
     for (const k of [p, q, r]) db.prepare("UPDATE members SET avatar_ref = 'test-photo' WHERE public_key = ?").run(k.pubKeyHex);
     const groupOnly = { audienceScope: 'group' as const, targetGroupId: g3 };
-    const drill = createPost('offer', 'general', 'Guild drill', 'A drill to lend', 5, 'fixed', p.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
-    createPost('offer', 'general', 'Guild ladder', 'A ladder to lend', 5, 'fixed', q.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
+    const drill = createPost('offer', 'general', 'Guild drill', 'A drill to lend', 500, 'fixed', p.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
+    createPost('offer', 'general', 'Guild ladder', 'A ladder to lend', 500, 'fixed', q.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
     const asked = requestPost(drill!.id, q.pubKeyHex);
     const soon = Date.now() + 3 * 86400_000;
     const meet = createPost('event', 'general', 'Guild meet', 'The monthly meet', 0, 'fixed', p.pubKeyHex, -28.55, 153.5, undefined, false, undefined, false,
@@ -297,13 +298,13 @@ async function main(): Promise<void> {
     for (const type of ['offer', 'need', 'poll', 'event'] as const) {
         let err = '', made: unknown = null;
         try {
-            made = createPost(type, 'general', `A ${type} after the close`, `A ${type} posted after the guild closed`, type === 'offer' || type === 'need' ? 5 : 0,
+            made = createPost(type, 'general', `A ${type} after the close`, `A ${type} posted after the guild closed`, type === 'offer' || type === 'need' ? 500 : 0,
                 'fixed', q.pubKeyHex, undefined, undefined, undefined, false, undefined, false, { audienceScope: 'group', targetGroupId: g3 });
         } catch (e: any) { err = e.message; }
         assert(!made && err === GROUP_CLOSED_TO_POSTS, `a closed group takes no new ${type} (got ${made ? 'created' : err})`);
     }
     const httpPost = await signedFetch('POST', '/api/marketplace/posts', { type: 'offer', category: 'general', title: 'Offer after close',
-        description: 'An offer posted after the close.', credits: 3, priceType: 'fixed', authorPublicKey: r.pubKeyHex, audienceScope: 'group', targetGroupId: g3, photos: TEST_PHOTOS }, r);
+        description: 'An offer posted after the close.', price_c: 300, priceType: 'fixed', authorPublicKey: r.pubKeyHex, audienceScope: 'group', targetGroupId: g3, photos: TEST_PHOTOS }, r);
     assert(httpPost.status === 400 && httpPost.body?.error === GROUP_CLOSED_TO_POSTS,
         `nor over HTTP (got ${httpPost.status} ${JSON.stringify(httpPost.body)})`);
     assert(!(db.prepare("SELECT 1 FROM posts WHERE target_group_id = ? AND active = 1").get(g3)), 'the closed guild has no live post');

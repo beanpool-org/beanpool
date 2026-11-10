@@ -124,7 +124,7 @@ function period(id: string, n: number, over: Partial<MarketplaceTransaction> = {
     // I pay Bob 50 Beans a month for Vehicle Storage.
     return {
         id, postId: 'post-storage', postTitle: 'Vehicle Storage', buyerPublicKey: 'my-pubkey', buyerCallsign: 'Alice', sellerPublicKey: 'peer-pubkey',
-        sellerCallsign: 'Bob', credits: 50, status: 'completed', createdAt: START, completedAt: START, ratedByBuyer: false, ratedBySeller: false,
+        sellerCallsign: 'Bob', amount_c: 5000, status: 'completed', createdAt: START, completedAt: START, ratedByBuyer: false, ratedBySeller: false,
         standingId: 'sd-1', periodNo: n, ...over,
     } as MarketplaceTransaction;
 }
@@ -132,7 +132,7 @@ function released(id: string, t: MarketplaceTransaction, at: string): ApiMessage
     return {
         id, conversationId: 'conv-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment of 50 Beans released to the provider.', nonce: '',
         type: 'system', systemType: 'ESCROW_RELEASED' as any, timestamp: at,
-        metadata: JSON.stringify({ amount: 50, postId: t.postId, transactionId: t.id, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
+        metadata: JSON.stringify({ amount_c: 5000, postId: t.postId, transactionId: t.id, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
     };
 }
 
@@ -149,7 +149,7 @@ const holdButtons = () => screen.queryAllByRole('button', { name: /Release|Cance
 describe("the web chat: a standing deal's rows never show Release, Cancel or Hold back (U2, fail-first)", () => {
     it('the current period read as pending (a stale copy) and an older one: no Trust Hold banner, no Release, no Cancel', async () => {
         mockTxs = [
-            period('sd-m3', 3, { status: 'pending', standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingStartsAt: START, standingNextDueAt: '2027-01-09T08:00:00.000Z', createdAt: '2026-12-09T08:00:00.000Z' } as any),
+            period('sd-m3', 3, { status: 'pending', standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month', standingStartsAt: START, standingNextDueAt: '2027-01-09T08:00:00.000Z', createdAt: '2026-12-09T08:00:00.000Z' } as any),
             period('sd-m2', 2, { status: 'pending', createdAt: '2026-11-09T08:00:00.000Z' }),
             period('sd-m1', 1, { ratedByBuyer: true }),
         ];
@@ -165,7 +165,7 @@ describe("the web chat: a standing deal's rows never show Release, Cancel or Hol
     });
 
     it('a one-off deal held in trust still shows its banner with Release and Cancel (the control)', async () => {
-        mockTxs = [period('tx-one', 0, { status: 'pending', standingId: undefined, periodNo: undefined, postTitle: 'Bread', credits: 5 })];
+        mockTxs = [period('tx-one', 0, { status: 'pending', standingId: undefined, periodNo: undefined, postTitle: 'Bread', amount_c: 500 })];
         mockConversations = [{ ...dm, lastSysType: null } as any];
         mockMessagesByConv = { 'conv-1': [] };
         render(<MessagesPage identity={me} />);

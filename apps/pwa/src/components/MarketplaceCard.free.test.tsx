@@ -10,7 +10,7 @@ import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
 
 const post = (over: Record<string, unknown> = {}) => ({
-    id: 'p1', type: 'offer', category: 'food', title: 'Invites to harvest any sort of spray free food', description: 'Come and pick', credits: 0,
+    id: 'p1', type: 'offer', category: 'food', title: 'Invites to harvest any sort of spray free food', description: 'Come and pick', price_c: 0,
     priceType: 'fixed', authorPublicKey: 'a'.repeat(64), authorCallsign: 'Kofi', active: true, status: 'active',
     createdAt: new Date().toISOString(), photos: ['/api/marketplace/posts/p1/photos/0?v=1&k=K'], ...over,
 }) as unknown as MarketplacePost;
@@ -51,20 +51,20 @@ describe('MarketplaceCard: a listing at 0 reads Free', () => {
 
 describe('MarketplaceCard: a listing with a price, or with none sent, is unchanged', () => {
     it.each(LAYOUTS)('%s: 12 with its Beans sign', (viewMode) => {
-        render(<MarketplaceCard post={post({ credits: 12 })} viewMode={viewMode} />);
+        render(<MarketplaceCard post={post({ price_c: 1200 })} viewMode={viewMode} />);
         expect(screen.getByText('12')).toBeInTheDocument();
         expect(screen.getByAltText('B')).toBeInTheDocument();
         expect(screen.queryByText('Free')).toBeNull();
     });
 
     it('an hourly price keeps its unit', () => {
-        render(<MarketplaceCard post={post({ credits: 20, priceType: 'hourly' })} viewMode="list" />);
+        render(<MarketplaceCard post={post({ price_c: 2000, priceType: 'hourly' })} viewMode="list" />);
         expect(screen.getByTestId('listing-list-price')).toHaveTextContent('20');
         expect(screen.getByTestId('listing-list-price')).toHaveTextContent('/hr');
     });
 
     it('a price the node did not send keeps its "?" and is not Free', () => {
-        render(<MarketplaceCard post={post({ credits: undefined })} viewMode="list" />);
+        render(<MarketplaceCard post={post({ price_c: undefined })} viewMode="list" />);
         expect(screen.getByTestId('listing-list-price')).toHaveTextContent('?');
         expect(screen.queryByText('Free')).toBeNull();
     });

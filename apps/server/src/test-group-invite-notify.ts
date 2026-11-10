@@ -65,8 +65,8 @@ function makeMember(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
     const token = `ExponentPushToken[gi-${callsign}-${pubKeyHex.slice(0, 6)}]`;
     registerPushToken(pubKeyHex, token, 'android');
     return { pubKeyHex, privateKey, name: callsign, token };
@@ -277,7 +277,7 @@ async function main(): Promise<void> {
     // ── 6. An invitation wave: the guard stays at its size ─────────────────────────────────────────────────────
     // Straight to the engine, not over HTTPS: the size is what's measured, and 10,000 signed round trips would only be slow.
     const wave = makeGroup('Big Choir', 'invite_only', cleo);
-    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`);
+    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`);
     const many: string[] = [];
     db.transaction(() => {
         for (let i = 0; i < GROUP_INVITE_PUSHES_KEPT + 50; i++) {

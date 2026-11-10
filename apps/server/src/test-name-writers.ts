@@ -98,7 +98,7 @@ function rowAsBefore(callsign: string, visitor: boolean): string {
     const pk = keypair().pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, is_visitor) VALUES (?, ?, ?, ?, ?, ?)`)
         .run(pk, callsign, new Date().toISOString(), visitor ? null : founder.pk, visitor ? null : 'before', visitor ? 1 : 0);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
 
@@ -195,32 +195,32 @@ async function main(): Promise<void> {
     assert(stillOne.length === 1 && stillOne[0] === dasha.pk, `the lookup for "ДАША" still lists the member alone (got ${stillOne.length})`);
 
     console.log('\n— 4. a project\'s and a crowdfund\'s title edits —');
-    const proposed = await call('POST', founder, '/api/commons/projects', { title: 'Seed Library', description: 'Seeds', requestedAmount: 50 });
+    const proposed = await call('POST', founder, '/api/commons/projects', { title: 'Seed Library', description: 'Seeds', requestedAmount_c: 5000 });
     const projectId = proposed.body?.project?.id as string | undefined;
     assert(proposed.status === 200 && !!projectId && nameOf(projectId) === 'Seed Library', `a Commons project is proposed with its title as its name (got ${proposed.status}, "${projectId && nameOf(projectId)}")`);
     if (projectId) {
-        const edit = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'ДАША', description: 'Seeds', requestedAmount: 50 });
+        const edit = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'ДАША', description: 'Seeds', requestedAmount_c: 5000 });
         const row = nameOf(projectId) ?? '';
         assert(edit.status === 200 && foldName(row) !== foldName('Даша') && row === `ДАША-${projectId.slice(0, 6)}`,
             `a Commons project's title edit to "ДАША" names its row "ДАША-<id>", not the member's name (got ${show(edit)}, "${row}")`);
         const commons = (db.prepare(`SELECT value FROM node_config WHERE key = 'commons_projects'`).get() as { value: string }).value;
         assert((JSON.parse(commons) as any[]).find((p) => p.id === projectId)?.title === 'ДАША', `the project keeps the title "ДАША" as typed`);
-        const ascii = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'MARISOL', description: 'Seeds', requestedAmount: 50 });
+        const ascii = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'MARISOL', description: 'Seeds', requestedAmount_c: 5000 });
         assert(ascii.status === 200 && nameOf(projectId) === `MARISOL-${projectId.slice(0, 6)}`,
             `a title edit to "MARISOL" beside "Marisol" saves, with the row "MARISOL-<id>", no database error (got ${show(ascii)}, "${nameOf(projectId)}")`);
-        const back = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'Seed Library Two', description: 'Seeds', requestedAmount: 50 });
+        const back = await call('POST', founder, '/api/commons/projects/update', { projectId, title: 'Seed Library Two', description: 'Seeds', requestedAmount_c: 5000 });
         assert(back.status === 200 && nameOf(projectId) === 'Seed Library Two', `a free title is its row's name again (got "${nameOf(projectId)}")`);
     }
-    const created = await call('POST', founder, '/api/crowdfund/projects', { title: 'Tool Shed', description: 'Tools', goalAmount: 100 });
+    const created = await call('POST', founder, '/api/crowdfund/projects', { title: 'Tool Shed', description: 'Tools', goalAmount_c: 10000 });
     const crowdId = created.body?.project?.id as string | undefined;
     assert(created.status === 200 && !!crowdId && nameOf(crowdId) === 'Tool Shed', `a crowdfund is created with its title as its name (got ${show(created)}, "${crowdId && nameOf(crowdId)}")`);
     if (crowdId) {
-        const edit = await call('POST', founder, '/api/crowdfund/projects/update', { id: crowdId, title: 'даша', description: 'Tools', goalAmount: 100 });
+        const edit = await call('POST', founder, '/api/crowdfund/projects/update', { id: crowdId, title: 'даша', description: 'Tools', goalAmount_c: 10000 });
         const row = nameOf(crowdId) ?? '';
         assert(edit.status === 200 && row === `даша-${crowdId.slice(0, 6)}`, `a crowdfund's title edit to "даша" names its row "даша-<id>" (got ${show(edit)}, "${row}")`);
         // A crowdfund shows its row's name as its title, so it reads as a create on a clash reads (createCrowdfundProject).
         assert(edit.body?.project?.title === row, `the crowdfund reads as "даша-<id>", as a create on a clash does (got "${edit.body?.project?.title}")`);
-        const withDeadline = await call('POST', founder, '/api/crowdfund/projects/update', { id: crowdId, title: 'marisol', description: 'Tools', goalAmount: 100, deadlineAt: null });
+        const withDeadline = await call('POST', founder, '/api/crowdfund/projects/update', { id: crowdId, title: 'marisol', description: 'Tools', goalAmount_c: 10000, deadlineAt: null });
         assert(withDeadline.status === 200 && nameOf(crowdId) === `marisol-${crowdId.slice(0, 6)}`,
             `an edit that also sets the deadline, to "marisol", saves with the row "marisol-<id>", no database error (got ${show(withDeadline)}, "${nameOf(crowdId)}")`);
     }
@@ -248,12 +248,12 @@ async function main(): Promise<void> {
         `a peer naming a taken name, with "VISITOR-<FIRST 8>" held in capitals, makes the row "Visitor-<first 12>" (got "${nameOf(k3) ?? '(no row)'}"${e6 ? `, ${e6}` : ''})`);
 
     console.log('\n— 6. a project\'s suffixed name is checked too —');
-    const shed = await call('POST', founder, '/api/crowdfund/projects', { title: 'Garden Shed', description: 'Shed', goalAmount: 100 });
+    const shed = await call('POST', founder, '/api/crowdfund/projects', { title: 'Garden Shed', description: 'Shed', goalAmount_c: 10000 });
     const shedId = shed.body?.project?.id as string | undefined;
     if (shedId) {
         await join('Rake');
         await join(`Rake-${shedId.slice(0, 6)}`);
-        const rake = await call('POST', founder, '/api/crowdfund/projects/update', { id: shedId, title: 'Rake', description: 'Shed', goalAmount: 100 });
+        const rake = await call('POST', founder, '/api/crowdfund/projects/update', { id: shedId, title: 'Rake', description: 'Shed', goalAmount_c: 10000 });
         assert(rake.status === 200 && nameOf(shedId) === `Rake-${shedId.slice(0, 8)}` && foldsAlone(shedId),
             `with "Rake" and "Rake-<first six>" held, an edit to "Rake" names the row "Rake-<first eight>" (got ${show(rake)}, "${nameOf(shedId)}")`);
     } else assert(false, `a crowdfund is created for the suffix case (got ${show(shed)})`);

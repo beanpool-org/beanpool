@@ -45,7 +45,7 @@ function main(): void {
         // their backing transactions are gone.
         db.prepare("DELETE FROM accounts WHERE public_key LIKE 'escrow\\_%' ESCAPE '\\' OR public_key LIKE 'project\\_%' ESCAPE '\\'").run();
         // Zero every remaining account (members, COMMONS_POOL, genesis/SYSTEM).
-        db.prepare('UPDATE accounts SET balance = 0, last_demurrage_epoch = 0, last_updated_at = ?').run(nowIso);
+        db.prepare('UPDATE accounts SET balance_c = 0, last_demurrage_epoch = 0, last_updated_at = ?').run(nowIso);
         // Reset the conservation baseline so it re-establishes at the clean (~0) sum.
         db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
     })();
@@ -55,7 +55,7 @@ function main(): void {
         posts: (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c,
         transactions: (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c,
         accounts: (db.prepare('SELECT COUNT(*) AS c FROM accounts').get() as { c: number }).c,
-        balanceSum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+        balanceSum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
     };
 
     console.log('✅ SRV-20 ledger cutover complete.');

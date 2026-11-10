@@ -23,7 +23,7 @@ vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
 // The worldwide community as it answers: every showcase feature off, previews on, people asked for, not read whole.
 const GLOBAL_SHOWCASE = vi.hoisted(() => ({
-    memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global',
+    memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
     features: {
         beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true,
         openJoin: true, wordsDoor: true, membersOnDemand: true, nearbyListings: { radiusKm: 250, max: 500 },

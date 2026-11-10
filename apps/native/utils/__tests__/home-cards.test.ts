@@ -69,7 +69,7 @@ const ids = (l: { id: string }[]) => l.map(c => c.id);
 const inst = (...list: string[]) => list.map(id => ({ id, type: id }));
 
 const market = (n: number, cats: string[] = []): HomeCards['market'] => ({
-    items: Array.from({ length: n }, (_, i) => ({ id: `p${i}`, type: i % 2 ? 'need' : 'offer', title: `Listing ${i}`, category: cats[i] ?? 'goods', credits: 10 + i, photoUrl: null })),
+    items: Array.from({ length: n }, (_, i) => ({ id: `p${i}`, type: i % 2 ? 'need' : 'offer', title: `Listing ${i}`, category: cats[i] ?? 'goods', price_c: (10 + i) * 100, photoUrl: null })),
     total14d: n, more: false,
 });
 const events: HomeCards['events'] = { items: [{ id: 'e1', title: 'Seed swap', startsAt: iso(NOW + 24 * H), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: null };
@@ -122,7 +122,7 @@ describe('what each person sees, top down (§3.2)', () => {
             cards: {
                 steps: steps(), events, market: market(3), joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }, { callsign: 'Kofi', avatarUrl: null }] },
                 pulse: { items: [{ id: 'q1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk Studio', category: 'education', url: null }] },
-                beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
+                beans: { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false },
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
@@ -136,7 +136,7 @@ describe('what each person sees, top down (§3.2)', () => {
                 needs: { items: [{ kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal', postId: 'p1', txId: 't1' } }] },
                 events, market: market(4), joined: { count7d: 2, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }] },
                 pulse: { items: [{ id: 'q1', title: 'x', thumbnailUrl: null, platform: 'youtube', callsign: 'y', category: 'food', url: null }] },
-                beans: { balance: 12, room: 212, tier: 'Resident', activated: true, frozen: false },
+                beans: { balance_c: 1200, room_c: 21200, tier: 'Resident', activated: true, frozen: false },
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
@@ -152,7 +152,7 @@ describe('what each person sees, top down (§3.2)', () => {
                 events, market: market(2), decide: { open: 1, soonestClosesAt: iso(NOW + 9 * H), polls: 2, pollsMore: false },
                 groups: { items: [{ id: 'c1', kind: 'group', name: 'Garden Group', unread: 4, muted: false }], total: 1 },
                 pulse: { items: [{ id: 'q1', title: 'x', thumbnailUrl: null, platform: 'youtube', callsign: 'y', category: 'food', url: null }] },
-                beans: { balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false },
+                beans: { balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false },
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
@@ -203,7 +203,7 @@ describe('what each person sees, top down (§3.2)', () => {
     it('a suspended member\'s answer (no community cards) still draws their own and the community card', () => {
         const a = answer({
             me: { ...answer().me!, standing: 'suspended', interests: ['food'] },
-            cards: { beans: { balance: 4, room: 0, tier: 'Newcomer', activated: true, frozen: true }, community: { name: 'M', members: 3 } },
+            cards: { beans: { balance_c: 400, room_c: 0, tier: 'Newcomer', activated: true, frozen: true }, community: { name: 'M', members: 3 } },
         });
         expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['beans', 'community']);
     });
@@ -244,7 +244,7 @@ describe('what each person sees, top down (§3.2)', () => {
 describe('the layout (§4)', () => {
     const full = answer({
         me: { ...answer().me!, interests: ['food'] },
-        cards: { events, market: market(2), beans: { balance: 1, room: 1, tier: 'Resident', activated: true, frozen: false }, community: { name: 'M', members: 9 } },
+        cards: { events, market: market(2), beans: { balance_c: 100, room_c: 100, tier: 'Resident', activated: true, frozen: false }, community: { name: 'M', members: 9 } },
     });
 
     it('a card not in the list is never drawn, nor asked for; `needs` and `community` are always there and can\'t be removed', () => {
@@ -610,7 +610,7 @@ describe('Needs you: the phone\'s own lines and the node\'s, as the header shows
     it("a short standing deal's live line on the phone: the node's deal line still shows, its copy of that standing deal doesn't (U2)", () => {
         const sd = {
             id: 'sd-m1', postId: 'p-storage', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: 'payer', buyerCallsign: 'Marty',
-            sellerPublicKey: ME, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short' as const, standingBeans: 50,
+            sellerPublicKey: ME, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short' as const, standingBeans_c: 5000,
             standingUnit: 'month' as const, standingStartsAt: '2026-08-19T08:00:00.000Z', standingShortSince: iso(NOW - 3 * 24 * H),
         };
         const nodeCopy = { kind: 'deal' as const, count: 1, accent: false, label: "Marty's 50 Beans for Vehicle Storage: 3 days overdue", target: { to: 'deal' as const, postId: 'p-storage', txId: 'sd-m1' } };
@@ -636,17 +636,22 @@ describe('Needs you: the phone\'s own lines and the node\'s, as the header shows
 
 describe('each card\'s words', () => {
     it('Your Beans: own balance only; a new member\'s credit opens with a first trade; tiers are a word, nothing unlocked', () => {
-        expect(beansLines({ balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false }))
+        // The node's figures are whole hundredths of a Bean (balance_c, room_c): −3500 is −35 Beans.
+        expect(beansLines({ balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false }))
             .toEqual({ main: '0 Beans · nothing to repay', sub: 'Your credit opens with a first trade.' });
-        expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false }))
+        expect(beansLines({ balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false }))
             .toEqual({ main: '−35 Beans · room to spend 165', sub: 'Resident' });
-        expect(beansLines({ balance: -210, room: 0, tier: 'Resident', activated: true, frozen: true }).sub).toBe('Spending is paused for now. You can still receive and sell.');
-        for (const b of [beansLines({ balance: 3, room: 3, tier: 'Elder', activated: true, frozen: false })]) {
+        expect(beansLines({ balance_c: -21000, room_c: 0, tier: 'Resident', activated: true, frozen: true }).sub).toBe('Spending is paused for now. You can still receive and sell.');
+        for (const b of [beansLines({ balance_c: 300, room_c: 300, tier: 'Elder', activated: true, frozen: false })]) {
             expect(`${b.main} ${b.sub}`).not.toMatch(/unlock|Ʀ|locked/i);
         }
-        expect(formatBeans(12.5)).toBe('12.5');
-        expect(formatBeans(1234)).toBe('1,234');
-        expect(formatBeans(-0.25)).toBe('−0.25');
+        // core formatHundredths: two decimals unless whole ("12.50", never "12.5"), English grouping, the true minus.
+        expect(formatBeans(1250)).toBe('12.50');
+        expect(formatBeans(123400)).toBe('1,234');
+        expect(formatBeans(-25)).toBe('−0.25');
+        // Not whole hundredths (a float, a string, none): "—", never a number.
+        expect(formatBeans(12.5)).toBe('—');
+        expect(formatBeans(Number.NaN)).toBe('—');
     });
 
     it('the community\'s card: its name and totals; the worldwide community\'s', () => {
@@ -914,7 +919,7 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
         const a = answer({
             profile: 'global', features: GLOBAL.features,
             cards: {
-                beans: { balance: 5, room: 0, tier: 'Newcomer', activated: true, frozen: false },
+                beans: { balance_c: 500, room_c: 0, tier: 'Newcomer', activated: true, frozen: false },
                 deals: { open: 1, waiting: 1, waitingOnMe: null },
                 enterprise: { id: 'x', name: 'T', requests: 1, others: 0 },
                 decide: { open: 2, soonestClosesAt: null, polls: 0, pollsMore: false },
@@ -1410,7 +1415,7 @@ describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
 
 describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (cold-start N2)', () => {
     const need = (id: string, over: Partial<NonNullable<HomeCards['asked']>['items'][number]> = {}) =>
-        ({ id, title: `Need ${id}`, category: 'labour', credits: 20, createdAt: iso(NOW - 2 * H), photoUrl: null, ...over });
+        ({ id, title: `Need ${id}`, category: 'labour', price_c: 2000, createdAt: iso(NOW - 2 * H), photoUrl: null, ...over });
     const asked = (items = [need('n1')]): HomeCards => ({ asked: { items }, community: { name: 'M', members: 9 } });
     const withAsked = layout({ order: [], hidden: [] });
     const onList = { ...withAsked, cards: [...withAsked.cards, { id: 'asked', type: 'asked' }] } as HomeLayout;
@@ -1434,30 +1439,30 @@ describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (col
     });
 
     it('the second line: what the Need pays, then how long ago; Free asks nothing; no Beans, no price; no figure sent, none made up', () => {
-        expect(askedFacts(need('a', { credits: 20 }), true, NOW)).toBe('20 Beans · 2h ago');
-        expect(askedFacts(need('a', { credits: 0, createdAt: iso(NOW - 3 * 24 * H) }), true, NOW)).toBe('Free · 3d ago');
-        expect(askedFacts(need('a', { credits: 40, createdAt: iso(NOW - 30 * 1000) }), true, NOW)).toBe('40 Beans · Just now');
+        expect(askedFacts(need('a', { price_c: 2000 }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { price_c: 0, createdAt: iso(NOW - 3 * 24 * H) }), true, NOW)).toBe('Free · 3d ago');
+        expect(askedFacts(need('a', { price_c: 4000, createdAt: iso(NOW - 30 * 1000) }), true, NOW)).toBe('40 Beans · Just now');
         // Beans are off (the global node): the node sends none and the line says only when.
-        expect(askedFacts(need('a', { credits: undefined }), false, NOW)).toBe('2h ago');
-        expect(askedFacts(need('a', { credits: 20 }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { price_c: undefined }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { price_c: 2000 }), false, NOW)).toBe('2h ago');
         // A node that sent no figure where Beans are on says no price, never "Free".
-        expect(askedFacts(need('a', { credits: undefined }), true, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { price_c: undefined }), true, NOW)).toBe('2h ago');
     });
 
     it('a Need priced by the hour, day, week or month keeps its unit (the Market card\'s own words); a fixed price, Free and no price carry none', () => {
-        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), true, NOW)).toBe('20 Beans /Hr · 2h ago');
-        expect(askedFacts(need('a', { credits: 15, priceType: 'daily' }), true, NOW)).toBe('15 Beans /Dy · 2h ago');
-        expect(askedFacts(need('a', { credits: 90, priceType: 'weekly' }), true, NOW)).toBe('90 Beans /Wk · 2h ago');
-        expect(askedFacts(need('a', { credits: 300, priceType: 'monthly' }), true, NOW)).toBe('300 Beans /Mo · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'hourly' }), true, NOW)).toBe('20 Beans /Hr · 2h ago');
+        expect(askedFacts(need('a', { price_c: 1500, priceType: 'daily' }), true, NOW)).toBe('15 Beans /Dy · 2h ago');
+        expect(askedFacts(need('a', { price_c: 9000, priceType: 'weekly' }), true, NOW)).toBe('90 Beans /Wk · 2h ago');
+        expect(askedFacts(need('a', { price_c: 30000, priceType: 'monthly' }), true, NOW)).toBe('300 Beans /Mo · 2h ago');
         // A fixed price is a total: the line is as it was.
-        expect(askedFacts(need('a', { credits: 20, priceType: 'fixed' }), true, NOW)).toBe('20 Beans · 2h ago');
-        expect(askedFacts(need('a', { credits: 20 }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'fixed' }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000 }), true, NOW)).toBe('20 Beans · 2h ago');
         // Free says Free, never "Free /Hr"; no Beans and no figure draw no unit either.
-        expect(askedFacts(need('a', { credits: 0, priceType: 'hourly' }), true, NOW)).toBe('Free · 2h ago');
-        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), false, NOW)).toBe('2h ago');
-        expect(askedFacts(need('a', { credits: undefined, priceType: 'hourly' }), true, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { price_c: 0, priceType: 'hourly' }), true, NOW)).toBe('Free · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'hourly' }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { price_c: undefined, priceType: 'hourly' }), true, NOW)).toBe('2h ago');
         // A kind this build does not know says no unit rather than a made-up one.
-        expect(askedFacts(need('a', { credits: 20, priceType: 'yearly' }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'yearly' }), true, NOW)).toBe('20 Beans · 2h ago');
     });
 
     it('First steps: the Need line comes after the interests line, once there is an Offer, with the invite line after it', () => {

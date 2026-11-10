@@ -48,7 +48,7 @@ function makeMember(callsign: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, callsign);
     setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
     return pubkey;
 }
 
@@ -69,7 +69,7 @@ async function runTests() {
     adminAssignTreasuryOperator(bakery, alice, 'admin');
     adminAssignTreasuryOperator(bakery, bob, 'admin');
     transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
-    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
+    db.prepare('UPDATE members SET earned_surplus_c = 100 WHERE public_key = ?').run(bakery);
 
     // Enterprise lists an Offer first to satisfy CONTRIBUTION_REQUIRED
     createPost('offer', 'food', 'Bakery bread', 'Daily fresh bread', 5, 'fixed', bakery);

@@ -65,6 +65,8 @@ function jpeg(size: number, seed = 1): Buffer {
     return Buffer.concat([head, body, Buffer.from([0xff, 0xd9])]);
 }
 const dataUrl = (b: Buffer, mime = 'image/jpeg') => `data:${mime};base64,${b.toString('base64')}`;
+/** A goal in Beans as whole hundredths (1 Bean = 100), as a crowdfund's goal is held and sent (`goalAmount_c`). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 type Key = { pk: string; priv: string };
 function newKey(): Key {
@@ -135,13 +137,13 @@ async function seedHeap(a: { convenor: string; member: string; keeper: string })
     }
     se.joinGroup(newest, a.member);
     const photo = dataUrl(jpeg(SMALL_BYTES, 9));
-    const project = db.prepare(`INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 500, NULL, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    const project = db.prepare(`INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ${hc(500)}, NULL, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
     let lastFund = '';
     db.transaction(() => {
         for (let i = 0; i < CROWDFUNDS; i++) {
             const name = `Fund ${i}`;
-            const res = se.createTreasury(name, photo, 0, { purpose: `Fund ${i}'s purpose`, lifecycle: 'bounded', goalAmount: 500, leadKeeperPubkey: a.keeper });
+            const res = se.createTreasury(name, photo, 0, { purpose: `Fund ${i}'s purpose`, lifecycle: 'bounded', goalAmount: hc(500), leadKeeperPubkey: a.keeper });
             project.run(res.publicKey, a.keeper, name, `Fund ${i}'s purpose`, JSON.stringify([photo]), res.publicKey);
             lastFund = res.publicKey;
         }
@@ -366,11 +368,11 @@ async function crowdfundsOnLocal(): Promise<void> {
     console.log('\n— 3. the local profile\'s crowdfunds, made as the apps make them —');
     const [p1, p2, p3] = [21, 22, 23].map((s) => dataUrl(jpeg(8_000, s)));
     // The phone (propose-project.tsx → createEnterpriseApi): its photos, the first as the avatar, to POST /api/enterprise.
-    const phone = await call(base, 'POST', '/api/enterprise', K, { name: 'Phone fund', purpose: 'A roof', lifecycle: 'bounded', goalAmount: 500, photos: [p1, p2], avatar: p1 });
+    const phone = await call(base, 'POST', '/api/enterprise', K, { name: 'Phone fund', purpose: 'A roof', lifecycle: 'bounded', goalAmount_c: hc(500), photos: [p1, p2], avatar: p1 });
     // The web app (ProjectsPage → createEnterprise): one photo, as photos and avatar, to POST /api/treasury.
-    const web = await call(base, 'POST', '/api/treasury', K, { name: 'Web fund', purpose: 'A well', lifecycle: 'bounded', goalAmount: 300, photos: [p2], avatar: p2 });
+    const web = await call(base, 'POST', '/api/treasury', K, { name: 'Web fund', purpose: 'A well', lifecycle: 'bounded', goalAmount_c: hc(300), photos: [p2], avatar: p2 });
     // No app, but a route: up to ten photos of its own.
-    const direct = await call(base, 'POST', '/api/crowdfund/projects', K, { creatorPubkey: K.pk, title: 'Route fund', description: 'A bridge', photos: [p3, p1, p2], goalAmount: 900 });
+    const direct = await call(base, 'POST', '/api/crowdfund/projects', K, { creatorPubkey: K.pk, title: 'Route fund', description: 'A bridge', photos: [p3, p1, p2], goalAmount_c: hc(900) });
     const ids = [phone.body?.publicKey, web.body?.publicKey, direct.body?.project?.id].filter(Boolean) as string[];
     assert(phone.status === 200 && web.status === 200 && direct.status < 300 && ids.length === 3,
         `three crowdfunds made: by the phone's route, the web app's and the crowdfund route (${phone.status}, ${web.status}, ${direct.status} ${direct.text.slice(0, 80)})`);
@@ -409,7 +411,7 @@ async function crowdfundsOnLocal(): Promise<void> {
     const before = { photos: storedPhotos(routeId), avatar: avatarOf(routeId) };
     const listedNow = ((await call(base, 'GET', '/api/crowdfund/projects', K)).body?.projects ?? []) as any[];
     const asOldPhone = (JSON.parse(listedNow.find((p) => p.id === routeId)?.photos ?? '[]') as string[]).map((u) => `${base}${u}`);
-    const edit = (photos: string[]) => call(base, 'POST', '/api/crowdfund/projects/update', K, { id: routeId, creatorPubkey: K.pk, title: 'Route fund', description: 'A bridge, again', photos, goalAmount: 900 });
+    const edit = (photos: string[]) => call(base, 'POST', '/api/crowdfund/projects/update', K, { id: routeId, creatorPubkey: K.pk, title: 'Route fund', description: 'A bridge, again', photos, goalAmount_c: hc(900) });
     const unchanged = await edit(asOldPhone);
     assert(unchanged.status === 200 && asOldPhone.length === 1 && JSON.stringify(storedPhotos(routeId)) === JSON.stringify(before.photos) && avatarOf(routeId) === before.avatar,
         `an old phone's edit sending back the list's URL alone keeps every photo as stored (${unchanged.status}, ${storedPhotos(routeId).length} of ${before.photos.length})`);

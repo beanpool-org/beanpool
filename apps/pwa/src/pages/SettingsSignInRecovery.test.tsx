@@ -123,7 +123,7 @@ describe('Settings: sign-in recovery', () => {
 
     // Vault rethink VR2: a community whose rule is that it keeps no copies says so where the line says where the copy is.
     it("a community that keeps no copies: said with none here, and a copy from before stays until it's removed", async () => {
-        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, recoveryCopies: 'none' as const };
+        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, recoveryCopies: 'none' as const };
         vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
         vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
         renderSettings();
@@ -152,7 +152,7 @@ describe('Settings: sign-in recovery', () => {
     // The same rule on the card a 12-words member sees here (components/OneWayBack.tsx): where this community keeps no
     // copies, its sign-in only lifts the limits, as the phone's add-a-sign-in sheet says.
     it("a community that keeps no copies: the one-way-back card's sign-in promises no copy and no way back", async () => {
-        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const, recoveryCopies: 'none' as const };
+        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const, recoveryCopies: 'none' as const };
         const wordsOnly = { publicKey: 'me-pk', probation: { rules: 'words', keptPosts: 0, ageEndsAt: null }, mute: { muted: false, until: null } } as unknown as api.CommunityStanding;
         const me = vi.spyOn(api, 'getCommunityMe').mockResolvedValue(wordsOnly);
         try {
@@ -289,9 +289,9 @@ describe('Settings: sign-in recovery', () => {
  * (§B.3), as a row of the BEANPOOL group. jsdom serves the page at localhost.
  */
 describe('Settings: on your phone later, and the global community (W1)', () => {
-    const OURS = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+    const OURS = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const,
         addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org', globalCommunityUrl: 'https://global.beanpool.org' };
-    const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, addresses: ['localhost'] };
+    const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, addresses: ['localhost'] };
     const lines = () => Array.from(screen.getByTestId('signin-recovery-phone-later').querySelectorAll('p')).map((p) => p.textContent);
 
     it('at global.beanpool.org, connected: Global community and your 12 words, and Recover with Social; no Global community row', async () => {

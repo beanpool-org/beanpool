@@ -125,7 +125,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?, ?, ?)`)
             .run(pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`, area?.lat ?? null, area?.lng ?? null, area ? new Date().toISOString() : null);
         setMemberPhoto(db, pubKeyHex, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
     /** An Offer made as the engine makes one, then dated: its last change `days` ago, and taken down or paused if asked. */
@@ -188,7 +188,7 @@ async function main() {
     assert(profileLimits().listingArchiveDays === 90, `with nodeProfile.retention = true the archive is 90 days here too (${profileLimits().listingArchiveDays})`);
     const asked = listing(lena, 'Asked for', 1, 150);
     const buyer = member('Bo');
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 0, 'requested')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 0, 'requested')`)
         .run(crypto.randomUUID(), asked, buyer.pubKeyHex, lena.pubKeyHex);
     const optIn = se.archiveStaleListings();
     assert(optIn.archived === 1 && isArchived(lenaOld) && photosOf(lenaOld) === 0, `the 200-day listing is archived, its photos gone (${JSON.stringify(optIn)})`);
@@ -276,9 +276,9 @@ async function main() {
     const waged = listing(ana, 'Waged job', 1, 100);
     const workshop = member('Workshop');
     const claim = crypto.randomUUID();
-    db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount, status) VALUES (?, ?, ?, ?, 40, 'pending')`)
+    db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount_c, status) VALUES (?, ?, ?, ?, 40, 'pending')`)
         .run(claim, workshop.pubKeyHex, ana.pubKeyHex, waged);
-    const raw = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, origin_node)
+    const raw = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, origin_node)
                             VALUES (?, ?, 'general', ?, '', 0, ?, 'active', 1, ?, ?, ?)`);
     const event = `ev-${crypto.randomUUID()}`;
     raw.run(event, 'event', 'Old event', ana.pubKeyHex, ago(100), ago(100), null);

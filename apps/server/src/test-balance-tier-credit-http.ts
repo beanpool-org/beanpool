@@ -51,6 +51,8 @@ let BASE = '';
 const DAY = 86_400_000;
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+/** The story's figures are Beans; the answer's are whole hundredths (`tierCredit_c`, `floor_c`): exact for every figure here. */
+const hc = (beans: number) => Math.round(beans * 100);
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
@@ -65,7 +67,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -106,20 +108,23 @@ function sessionHeaders(pub: string, role: 'owner' | 'admin'): Record<string, st
     return { 'X-Admin-Session': s.sessionId };
 }
 
-/** A member's own signed balance read: tierCredit is there, is `expected`, is the profile's, and the tier is its tier. */
+/**
+ * A member's own signed balance read: tierCredit_c is there, is `expected` Beans (in whole hundredths), is the profile's,
+ * and the tier is its tier; the floor, when given, is `floor` Beans.
+ */
 async function ownRead(who: Id, label: string, expected: number, floor?: number): Promise<any> {
     const r = await call('GET', who, `/api/ledger/balance/${who.pk}`);
     const body = r.body ?? {};
     const profile = getMemberTrustProfile(who.pk);
-    assert(r.status === 200 && typeof body.tierCredit === 'number', `${label}: the own read answers 200 with a tierCredit (${show(r)})`);
-    assert(body.tierCredit === expected, `${label}: tierCredit is ${expected} (got ${body.tierCredit})`);
-    assert(body.tierCredit === profile.tierCredit, `${label}: and equals the engine profile's, ${profile.tierCredit}`);
-    assert(body.tier?.name === tierForCredit(body.tierCredit).name && body.tier?.name === profile.tier.name,
-        `${label}: the answer's tier ${body.tier?.name} is the one ${body.tierCredit} gives (${tierForCredit(body.tierCredit).name}) and the profile's (${profile.tier.name})`);
+    assert(r.status === 200 && typeof body.tierCredit_c === 'number', `${label}: the own read answers 200 with a tierCredit (${show(r)})`);
+    assert(body.tierCredit_c === hc(expected), `${label}: tierCredit is ${expected} (got ${body.tierCredit_c} hundredths)`);
+    assert(body.tierCredit_c === profile.tierCredit, `${label}: and equals the engine profile's, ${profile.tierCredit}`);
+    assert(body.tier?.name === tierForCredit(body.tierCredit_c).name && body.tier?.name === profile.tier.name,
+        `${label}: the answer's tier ${body.tier?.name} is the one ${body.tierCredit_c} hundredths give (${tierForCredit(body.tierCredit_c).name}) and the profile's (${profile.tier.name})`);
     const level = memberLevel(body);
-    assert(level.credit === expected && level.index === tierIndexForName(body.tier?.name),
+    assert(level.credit === hc(expected) && level.index === tierIndexForName(body.tier?.name),
         `${label}: the apps' memberLevel reads ${expected} at ${body.tier?.name} (got ${JSON.stringify(level)})`);
-    if (floor !== undefined) assert(body.floor === floor, `${label}: floor ${floor} (got ${body.floor})`);
+    if (floor !== undefined) assert(body.floor_c === hc(floor), `${label}: floor ${floor} (got ${body.floor_c} hundredths)`);
     return body;
 }
 
@@ -167,8 +172,8 @@ async function main(): Promise<void> {
     const fayFrozen = await ownRead(fay, 'Fay (Steward, whole line frozen)', 600, 0);
     assert(fayFrozen.creditFrozen === true, `Fay's answer says the line is frozen (creditFrozen ${fayFrozen.creditFrozen})`);
     // What the apps would read without the field: the floor alone, 0 trust beside a Steward badge.
-    const fallback = memberLevel({ ...fayFrozen, tierCredit: undefined });
-    assert(fallback.credit !== 600, `without tierCredit the apps would read Fay's trust from floor 0 as ${fallback.credit}, not 600: the field is what keeps it`);
+    const fallback = memberLevel({ ...fayFrozen, tierCredit_c: undefined });
+    assert(fallback.credit !== hc(600), `without tierCredit_c the apps would read Fay's trust from floor 0 as ${fallback.credit}, not 600: the field is what keeps it`);
     await freeze(eli, true);
     await ownRead(eli, 'Eli (Elder, whole line frozen)', 1400, 0);
     await freeze(fay, false);
@@ -194,14 +199,14 @@ async function main(): Promise<void> {
     console.log('── 4. the known floor ──');
     const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
     assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the known floor on (${show(on)})`);
-    createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', 40, 'fixed', kim.pk);
+    createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', hc(40), 'fixed', kim.pk);
     await setTier(kim, 'Resident');
     confirm(kim, ada);
     // Marty, 21 Oct ("Badge counts what they did only"): the known floor is the admins' confirmation, which stays private,
     // so it deepens Kim's line but never her trust figure. Before, tierCredit was the whole line: 1,200, then 500, then 500.
     await ownRead(kim, 'Kim (granted Resident, confirmed, one live offer, known floor 1,000)', 200, -1200);
-    const lower = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, amount: 300 }, adaAdmin);
-    assert(lower.status === 200 && lower.body?.exception?.amount === 300, `an admin lowers Kim's known floor to 300 (${show(lower)})`);
+    const lower = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, amount_c: hc(300) }, adaAdmin);
+    assert(lower.status === 200 && lower.body?.exception?.amount_c === hc(300), `an admin lowers Kim's known floor to 300 (${show(lower)})`);
     await ownRead(kim, 'Kim (known floor lowered to 300)', 200, -500);
     const kf = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, frozen: true }, adaAdmin);
     assert(kf.status === 200 && kf.body?.exception?.frozen === true, `an admin freezes Kim's lowered known floor (${show(kf)})`);
@@ -213,11 +218,11 @@ async function main(): Promise<void> {
     for (const [reader, target] of [[kim, sid], [sid, fay], [ada, eli]] as Array<[Id, Id]>) {
         const r = await call('GET', reader, `/api/ledger/balance/${target.pk}`);
         assert(r.status === 403, `${reader.name} reading ${target.name}'s balance is refused (${show(r)})`);
-        assert(r.body && !('tierCredit' in r.body) && !('tier' in r.body) && !('floor' in r.body),
+        assert(r.body && !('tierCredit_c' in r.body) && !('tier' in r.body) && !('floor_c' in r.body),
             `and the refusal carries no tierCredit, tier or floor (${show(r)})`);
     }
     const unsigned = await call('GET', null, `/api/ledger/balance/${fay.pk}`);
-    assert(unsigned.status === 401 && !('tierCredit' in (unsigned.body ?? {})), `an unsigned read is refused with no tierCredit (${show(unsigned)})`);
+    assert(unsigned.status === 401 && !('tierCredit_c' in (unsigned.body ?? {})), `an unsigned read is refused with no tierCredit (${show(unsigned)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

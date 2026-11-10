@@ -89,7 +89,7 @@ function everyTextFileHolds(dir: string, needle: string): string[] {
 
 const copyBody = (id: string, me: Id, extra: Record<string, unknown> = {}) => ({
     id, type: 'offer', category: 'food', title: 'Tomatoes', description: 'From the garden', authorPublicKey: me.pk,
-    lat: -28.7, lng: 153.5, photos: TEST_PHOTOS, shownPrice: { beans: 20, per: 'fixed' },
+    lat: -28.7, lng: 153.5, photos: TEST_PHOTOS, shownPrice: { price_c: 2000, per: 'fixed' },
     shownFrom: { host: 'secret-valley.example', postId: 'home-1' }, ...extra,
 });
 
@@ -113,16 +113,16 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(lower(made.res.headers.get('access-control-expose-headers')).join() === 'retry-after', 'and so is the wait a 429 asks for, and no other header');
     assert(made.res.headers.get('access-control-allow-credentials') === null, 'with no credentials');
     assert(!made.body?.post?.shownFrom, 'a community the directory does not show has no line');
-    const stored = db.prepare('SELECT shown_from_host, shown_from_post_id, credits, lat, lng FROM posts WHERE id = ?').get(id) as any;
+    const stored = db.prepare('SELECT shown_from_host, shown_from_post_id, price_c, lat, lng FROM posts WHERE id = ?').get(id) as any;
     assert(stored?.shown_from_host === '' && stored?.shown_from_post_id === null, `nothing of where it came from is kept (${JSON.stringify(stored)})`);
-    assert(stored?.credits === 0, 'money stays refused: it holds 0 Beans');
+    assert(stored?.price_c === 0, 'money stays refused: it holds 0 Beans');
     const seen = await signed(member, 'GET', `${POSTS}?id=${id}`);
     assert(seen.res.status === 200 && acao(seen.res) === '*' && seen.body?.[0]?.shownCopy === true, `the read by id (${seen.res.status}, ${acao(seen.res)})`);
     const some = await signed(member, 'GET', `${POSTS}?ids=${id},${crypto.randomUUID()}`);
     assert(some.res.status === 200 && acao(some.res) === '*' && some.body?.length === 1, `the read by ids (${some.res.status}, ${acao(some.res)})`);
-    const edited = await signed(member, 'POST', `${POSTS}/update`, { id, title: 'Ripe tomatoes', credits: 500, authorPublicKey: member.pk });
+    const edited = await signed(member, 'POST', `${POSTS}/update`, { id, title: 'Ripe tomatoes', price_c: 50000, authorPublicKey: member.pk });
     assert(edited.res.status === 200 && acao(edited.res) === '*' && edited.body?.post?.title === 'Ripe tomatoes', `the edit (${edited.res.status} ${JSON.stringify(edited.body?.error ?? '')})`);
-    assert((db.prepare('SELECT credits FROM posts WHERE id = ?').get(id) as any)?.credits === 0, 'an edit from another origin moves no money');
+    assert((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(id) as any)?.price_c === 0, 'an edit from another origin moves no money');
     const again = await signed(member, 'POST', POSTS, copyBody(id, member));
     assert(again.res.status === 400 && again.body?.code === 'post_id_taken' && acao(again.res) === '*', `a create on an id global holds says so in a code a browser can read (${again.res.status} ${again.body?.code}, ${acao(again.res)})`);
     const standing = await signed(member, 'GET', `/api/community/membership/${member.pk}`);
@@ -132,12 +132,12 @@ async function onGlobal(member: Id, db: any): Promise<void> {
 
     console.log('── from another site, only a copy ──');
     const plainId = crypto.randomUUID();
-    const plain = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, credits: 5 });
+    const plain = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, price_c: 500 });
     assert(plain.res.status === 403 && plain.body?.code === 'copy_only', `an ordinary post from another site is refused (${plain.res.status} ${plain.body?.code})`);
     assert(!db.prepare('SELECT 1 FROM posts WHERE id = ?').get(plainId), 'and nothing was stored');
-    const fromNext = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, credits: 5 }, 'https://next.example', 'same-site');
+    const fromNext = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, price_c: 500 }, 'https://next.example', 'same-site');
     assert(fromNext.res.status === 403, `a neighbour under one domain is another origin all the same (${fromNext.res.status})`);
-    const own = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, credits: 0 }, BASE, 'same-origin');
+    const own = await signed(member, 'POST', POSTS, { ...copyBody(plainId, member), shownFrom: undefined, shownPrice: undefined, price_c: 0 }, BASE, 'same-origin');
     assert(own.res.status === 200 && !own.body?.post?.shownCopy, `global's own web app posts as it always has (${own.res.status} ${JSON.stringify(own.body?.error ?? '')})`);
     const noSite = await signed(member, 'POST', `${POSTS}/update`, { id: plainId, title: 'From a script', authorPublicKey: member.pk }, null);
     assert(noSite.res.status === 200, `a phone sends no Origin, and is as it was (${noSite.res.status})`);
@@ -235,7 +235,7 @@ async function onLocal(member: Id): Promise<void> {
     }
     const made = await signed(member, 'POST', POSTS, copyBody(crypto.randomUUID(), member));
     assert(acao(made.res) === null, `a signed create from another origin is not readable there: the browser refuses it (${made.res.status}, ${acao(made.res)})`);
-    const own = await signed(member, 'POST', POSTS, { ...copyBody(crypto.randomUUID(), member), shownFrom: undefined, shownPrice: undefined, credits: 0 }, BASE, 'same-origin');
+    const own = await signed(member, 'POST', POSTS, { ...copyBody(crypto.randomUUID(), member), shownFrom: undefined, shownPrice: undefined, price_c: 0 }, BASE, 'same-origin');
     assert(own.body?.code !== 'copy_only', `its own web app is as it was (${own.res.status})`);
     const unrefused = await signed(member, 'POST', `${POSTS}/update`, { id: 'x', title: 'y', authorPublicKey: member.pk });
     assert(unrefused.body?.code !== 'copy_only', 'the guard never runs here: nothing was opened for it to hold');

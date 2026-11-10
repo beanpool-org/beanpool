@@ -37,7 +37,11 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door:
+ * every balance and total below is read and compared in whole hundredths, exactly, with nothing rounded.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 interface Identity { pub: string; priv: crypto.KeyObject }
 function keypair(): Identity {
@@ -45,27 +49,29 @@ function keypair(): Identity {
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
 }
 
-function seedMember(pk: string, callsign: string, balance: number) {
+function seedMember(pk: string, callsign: string, beans: number) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
+        .run(pk, hc(beans), ledger.getCurrentEpoch());
 }
 
 let seq = 0;
 /** A completed marketplace trade, so the member has earned credit and may make direct sends. */
-function completedTrade(buyer: string, seller: string, credits: number) {
+function completedTrade(buyer: string, seller: string, beans: number) {
     const pid = `pat-post-${seq++}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
-                VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`).run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
-                VALUES (?, ?, ?, ?, ?, 'completed')`).run(`pat-mtx-${seq++}`, pid, buyer, seller, credits);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
+                VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`).run(pid, hc(beans), seller);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
+                VALUES (?, ?, ?, ?, ?, 'completed')`).run(`pat-mtx-${seq++}`, pid, buyer, seller, hc(beans));
 }
 
-const balanceOf = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key=?').get(pk) as any)?.balance ?? 0);
-const nodeTotal = () => r4((db.prepare(
-    `SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
-).get() as any).t + getCommonsBalanceExact());
+/** A balance as the ledger holds it: whole hundredths. */
+const balanceOf = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key=?').get(pk) as any)?.balance_c ?? 0;
+/** Every account but the pot's shadow row, plus the pot: whole hundredths, exact. */
+const nodeTotal = () => (db.prepare(
+    `SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
+).get() as any).t + getCommonsBalanceExact();
 
 /** Every table except logs, metrics and derived indexes, which background work may write at any time.
  *  Filled once the schema exists; a quiet-period check below proves the remainder holds still on its own. */
@@ -79,7 +85,7 @@ function snapshot(): string {
         const rows = db.prepare(`SELECT * FROM ${t}`).all() as any[];
         out[t] = rows.map(r => { const c = { ...r }; delete c.last_active_at; return JSON.stringify(c); }).sort();
     }
-    return JSON.stringify({ tables: out, commons: r4(getCommonsBalanceExact()) });
+    return JSON.stringify({ tables: out, commons: getCommonsBalanceExact() });
 }
 function diffTables(a: string, b: string): string[] {
     const A = JSON.parse(a), B = JSON.parse(b);
@@ -143,7 +149,7 @@ async function main() {
     registerPushToken(victim.pub, 'victim-existing-token', 'android');
     addFriend(victim.pub, other.pub);
     const crowdfundId = crypto.randomUUID();
-    createCrowdfundProject(crowdfundId, third.pub, `Fixture project ${crowdfundId.slice(0, 6)}`, 'fixture', [], 500, null);
+    createCrowdfundProject(crowdfundId, third.pub, `Fixture project ${crowdfundId.slice(0, 6)}`, 'fixture', [], hc(500), null);
     reconcileLedgerFromDb();
 
     PORT = await startHttpsServer(0);
@@ -158,7 +164,7 @@ async function main() {
 
     // Every route whose actor used to be read from the body when authentication was absent.
     const routes: Array<{ method: string; path: string; body: Record<string, unknown> }> = [
-        { method: 'POST', path: '/api/ledger/transfer', body: { from: victim.pub, to: other.pub, amount: 10 } },
+        { method: 'POST', path: '/api/ledger/transfer', body: { from: victim.pub, to: other.pub, amount_c: hc(10) } },
         { method: 'POST', path: '/api/profile/update', body: { publicKey: victim.pub, bio: 'changed by someone else' } },
         { method: 'POST', path: '/api/push-tokens', body: { publicKey: victim.pub, token: 'foreign-token', platform: 'android' } },
         { method: 'DELETE', path: '/api/push-tokens', body: { publicKey: victim.pub, token: 'victim-existing-token' } },
@@ -170,9 +176,9 @@ async function main() {
         { method: 'POST', path: '/api/messages/edit', body: { messageId: msg.id, ...lockedDm(), authorPubkey: victim.pub } },
         { method: 'POST', path: '/api/messages/mark-read', body: { pubkey: victim.pub, conversationId: conv.id } },
         { method: 'POST', path: '/api/messages/react', body: { messageId: msg.id, authorPubkey: victim.pub, emoji: '👍' } },
-        { method: 'POST', path: `/api/crowdfund/projects/${crowdfundId}/pledge`, body: { fromPubkey: victim.pub, amount: 5 } },
-        { method: 'POST', path: '/api/crowdfund/projects', body: { creatorPubkey: victim.pub, title: 'Made in their name', goalAmount: 50 } },
-        { method: 'POST', path: '/api/commons/projects', body: { proposerPubkey: victim.pub, title: 'Proposed in their name', requestedAmount: 50 } },
+        { method: 'POST', path: `/api/crowdfund/projects/${crowdfundId}/pledge`, body: { fromPubkey: victim.pub, amount_c: hc(5) } },
+        { method: 'POST', path: '/api/crowdfund/projects', body: { creatorPubkey: victim.pub, title: 'Made in their name', goalAmount_c: hc(50) } },
+        { method: 'POST', path: '/api/commons/projects', body: { proposerPubkey: victim.pub, title: 'Proposed in their name', requestedAmount_c: hc(50) } },
         { method: 'POST', path: '/api/commons/vote', body: { voterPubkey: victim.pub, projectId: 'none' } },
     ];
 
@@ -181,9 +187,9 @@ async function main() {
         const path = '/api/ledger/transfer';
         for (const variant of caseVariants(path)) {
             const vBefore = balanceOf(victim.pub), oBefore = balanceOf(other.pub), totalBefore = nodeTotal();
-            const res = await send('POST', variant, { from: victim.pub, to: other.pub, amount: 10 });
+            const res = await send('POST', variant, { from: victim.pub, to: other.pub, amount_c: hc(10) });
             const vAfter = balanceOf(victim.pub), oAfter = balanceOf(other.pub), totalAfter = nodeTotal();
-            console.log(`   ${variant}: HTTP ${res.status}; victim ${vBefore} → ${vAfter}, recipient ${oBefore} → ${oAfter}, node total ${totalBefore} → ${totalAfter}`);
+            console.log(`   ${variant}: HTTP ${res.status}; victim ${vBefore} → ${vAfter}, recipient ${oBefore} → ${oAfter}, node total ${totalBefore} → ${totalAfter} (hundredths)`);
             assert(res.status >= 400, `POST ${variant} unsigned is refused (got ${res.status} ${res.error ?? ''})`);
             assert(vAfter === vBefore, `POST ${variant}: the named sender's balance is unchanged (${vBefore} → ${vAfter})`);
             assert(oAfter === oBefore, `POST ${variant}: the recipient's balance is unchanged (${oBefore} → ${oAfter})`);
@@ -225,7 +231,7 @@ async function main() {
     // ── 4. Signed, but by someone else naming the victim as sender: refused, no beans move ───────────────
     {
         const before = snapshot();
-        const res = await send('POST', '/api/ledger/transfer', { from: victim.pub, to: other.pub, amount: 10 }, other);
+        const res = await send('POST', '/api/ledger/transfer', { from: victim.pub, to: other.pub, amount_c: hc(10) }, other);
         assert(res.status === 403, `a transfer signed by another key naming the victim as from → 403 (got ${res.status} ${res.error ?? ''})`);
         assert(diffTables(before, snapshot()).length === 0, 'and nothing changes');
     }
@@ -233,7 +239,7 @@ async function main() {
     // ── 5. Signed by the victim, but on a differently-cased path: still refused, nothing changes ─────────
     for (const variant of caseVariants('/api/ledger/transfer')) {
         const before = snapshot();
-        const res = await send('POST', variant, { to: other.pub, amount: 1 }, victim);
+        const res = await send('POST', variant, { to: other.pub, amount_c: hc(1) }, victim);
         assert(res.status >= 400, `a signed POST ${variant} is refused (got ${res.status} ${res.error ?? ''})`);
         assert(diffTables(before, snapshot()).length === 0, `signed POST ${variant} changes nothing`);
     }
@@ -241,13 +247,13 @@ async function main() {
     // ── 6. Correctly signed requests on the canonical path still work ────────────────────────────────────
     {
         const vBefore = balanceOf(victim.pub), oBefore = balanceOf(other.pub), totalBefore = nodeTotal();
-        const res = await send('POST', '/api/ledger/transfer', { to: other.pub, amount: 7 }, victim);
+        const res = await send('POST', '/api/ledger/transfer', { to: other.pub, amount_c: hc(7) }, victim);
         assert(res.status === 200, `a signed transfer by the sender succeeds (got ${res.status} ${res.error ?? ''})`);
-        assert(balanceOf(victim.pub) === r4(vBefore - 7), `the signer is debited 7 (${vBefore} → ${balanceOf(victim.pub)})`);
-        assert(balanceOf(other.pub) === r4(oBefore + 7), `the recipient is credited 7 (${oBefore} → ${balanceOf(other.pub)})`);
+        assert(balanceOf(victim.pub) === vBefore - hc(7), `the signer is debited 7 (hundredths ${vBefore} → ${balanceOf(victim.pub)})`);
+        assert(balanceOf(other.pub) === oBefore + hc(7), `the recipient is credited 7 (hundredths ${oBefore} → ${balanceOf(other.pub)})`);
         assert(nodeTotal() === totalBefore, `SUM(balances) + Commons is conserved (${totalBefore} → ${nodeTotal()})`);
 
-        const withFrom = await send('POST', '/api/ledger/transfer', { from: victim.pub, to: other.pub, amount: 1 }, victim);
+        const withFrom = await send('POST', '/api/ledger/transfer', { from: victim.pub, to: other.pub, amount_c: hc(1) }, victim);
         assert(withFrom.status === 200, `a signed transfer that also names itself as from succeeds (got ${withFrom.status} ${withFrom.error ?? ''})`);
     }
     {
@@ -286,9 +292,9 @@ async function main() {
     }
     {
         const vBefore = balanceOf(victim.pub), totalBefore = nodeTotal();
-        const r = await send('POST', `/api/crowdfund/projects/${crowdfundId}/pledge`, { amount: 3 }, victim);
+        const r = await send('POST', `/api/crowdfund/projects/${crowdfundId}/pledge`, { amount_c: hc(3) }, victim);
         assert(r.status === 200, `signed crowdfund pledge succeeds (got ${r.status} ${r.error ?? ''})`);
-        assert(balanceOf(victim.pub) === r4(vBefore - 3), `the pledger is debited 3 (${vBefore} → ${balanceOf(victim.pub)})`);
+        assert(balanceOf(victim.pub) === vBefore - hc(3), `the pledger is debited 3 (hundredths ${vBefore} → ${balanceOf(victim.pub)})`);
         assert(nodeTotal() === totalBefore, `SUM(balances) + Commons is conserved by the pledge (${totalBefore} → ${nodeTotal()})`);
     }
 
@@ -319,7 +325,7 @@ async function main() {
             const before = snapshot();
             const ctx: any = {
                 method: 'POST', path: '/api/ledger/transfer', state, request: {},
-                requestBody: { from: victim.pub, to: other.pub, amount: 5 },
+                requestBody: { from: victim.pub, to: other.pub, amount_c: hc(5) },
                 set() {}, get() { return ''; },
             };
             await dispatch(ctx, async () => {});

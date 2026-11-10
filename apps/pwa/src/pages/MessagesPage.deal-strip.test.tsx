@@ -64,7 +64,7 @@ const dm: Conversation = {
 function deal(id: string, over: Partial<MarketplaceTransaction> = {}): MarketplaceTransaction {
     return {
         id, postId: `post-${id}`, postTitle: `Bread ${id}`, buyerPublicKey: 'my-pubkey', buyerCallsign: 'Alice',
-        sellerPublicKey: 'peer-pubkey', sellerCallsign: 'Bob', credits: 5, status: 'pending', createdAt: '2026-10-20T00:00:00Z',
+        sellerPublicKey: 'peer-pubkey', sellerCallsign: 'Bob', amount_c: 500, status: 'pending', createdAt: '2026-10-20T00:00:00Z',
         ratedByBuyer: false, ratedBySeller: false, ...over,
     };
 }
@@ -129,7 +129,7 @@ describe('Chat deal strip: the seller (payee) sees the deal too', () => {
 describe('Chat deal strip: the payer', () => {
     // The phone's action bar (the buyer's Trust Hold banner here) carries the newest held deal; the strip shows the rest.
     it('Release on a card calls complete with THAT deal\'s id, after the same confirm the banner asks', async () => {
-        mockTxs = [deal('tx-new', { createdAt: '2026-10-21T00:00:00Z' }), deal('tx-old', { createdAt: '2026-10-19T00:00:00Z', credits: 7 })];
+        mockTxs = [deal('tx-new', { createdAt: '2026-10-21T00:00:00Z' }), deal('tx-old', { createdAt: '2026-10-19T00:00:00Z', amount_c: 700 })];
         await openChat();
         const card = within(await strip()).getByRole('group', { name: 'Bread tx-old' });
         fireEvent.click(within(card).getByRole('button', { name: 'Release credits for Bread tx-old' }));

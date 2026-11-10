@@ -38,7 +38,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_BACKUPS = path.resolve(process.env.HOME || '', 'projects/beanpool-manager/backups');
-const TOLERANCE = 0.005;   // money is stored as REAL (#125), so exact zero is not a fair test
+
+// Money is whole hundredths of a Bean in INTEGER `*_c` columns (1.4.0, DESIGN-atomic-beans-fable.md), so every sum
+// below is exact: balanced means a sum of exactly 0, and a match means exactly the predicted figure. A database from
+// before whole hundredths has no `balance_c` and reads as unreadable (its money was dropped at the upgrade anyway).
+
+/** Whole hundredths written as Beans, exactly ('-982' is -9.82): no float on the way. */
+function beansText(c) {
+    const a = Math.abs(c);
+    return `${c < 0 ? '-' : ''}${Math.floor(a / 100)}.${String(a % 100).padStart(2, '0')}`;
+}
 
 // The three transaction shapes the broken code left behind. `effect` is what such a row did to the node
 // total when the BROKEN code wrote it: -1 for a bean destroyed, +1 for one minted.
@@ -89,42 +98,43 @@ function auditOne(label, dbFile) {
     };
 
     const row = query(dbFile, `
-        SELECT (SELECT COALESCE(SUM(balance),0) FROM accounts),
-               COALESCE((SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'),0),
+        SELECT (SELECT COALESCE(SUM(balance_c),0) FROM accounts),
+               COALESCE((SELECT balance_c FROM accounts WHERE public_key='COMMONS_POOL'),0),
                (SELECT COUNT(*) FROM members),
                (SELECT COUNT(*) FROM transactions);`);
-    if (row === null) return unreadable('not a BeanPool database, or locked');
+    if (row === null) return unreadable('not a BeanPool database in whole hundredths (1.4.0 or later), or locked');
     const [sum, pool, members, txns] = row.split('|').map(Number);
 
     const matched = [];
     for (const shape of SHAPES) {
-        const r = query(dbFile, `SELECT COUNT(*), COALESCE(SUM(amount),0) FROM transactions WHERE ${shape.where};`);
+        const r = query(dbFile, `SELECT COUNT(*), COALESCE(SUM(amount_c),0) FROM transactions WHERE ${shape.where};`);
         // Fail closed. Defaulting a failed evidence query to zero would report a node clean on the strength
         // of a query that never ran.
         if (r === null) return unreadable(`the evidence query for ${shape.id} failed`);
-        const [n, beans] = r.split('|').map(Number);
-        if (n > 0) matched.push({ ...shape, n, beans });
+        const [n, hundredths] = r.split('|').map(Number);
+        if (n > 0) matched.push({ ...shape, n, hundredths });
     }
 
-    const balanced = Math.abs(sum) < TOLERANCE;
-    const predicted = matched.reduce((t, m) => t + m.effect * m.beans, 0);
+    // Whole hundredths: exact, no tolerance.
+    const balanced = sum === 0;
+    const predicted = matched.reduce((t, m) => t + m.effect * m.hundredths, 0);
     // Only claim repairability when the evidence actually explains the drift, and there is drift to explain.
-    const explained = matched.length > 0 && !balanced && Math.abs(sum - predicted) < TOLERANCE;
+    const explained = matched.length > 0 && !balanced && sum === predicted;
 
     const verdict = balanced ? '✅ balanced' : explained ? '🛑 NEEDS REPAIR' : '⚠️  DRIFT';
     console.log(
         `  ${label.padEnd(16)} members=${String(members).padStart(4)} txns=${String(txns).padStart(5)}` +
-        `  sum=${sum.toFixed(4).padStart(12)}  commons=${pool.toFixed(4).padStart(10)}  ${verdict}`,
+        `  sum=${beansText(sum).padStart(12)}  commons=${beansText(pool).padStart(10)}  ${verdict}`,
     );
     for (const m of matched) {
         const kind = m.effect < 0 ? 'destroyed if bug-era' : 'minted if bug-era';
-        console.log(`  ${' '.repeat(16)} ↳ ${m.id}: ${m.n} row(s), ${m.beans.toFixed(4)} beans ${kind}`);
+        console.log(`  ${' '.repeat(16)} ↳ ${m.id}: ${m.n} row(s), ${beansText(m.hundredths)} beans ${kind}`);
     }
     if (matched.length && balanced) {
         console.log(`  ${' '.repeat(16)} ↳ books balance, so these are post-fix rows behaving correctly`);
     }
     if (matched.length && !balanced && !explained) {
-        console.log(`  ${' '.repeat(16)} ↳ drift ${sum.toFixed(4)} does NOT match the predicted ${predicted.toFixed(4)}`
+        console.log(`  ${' '.repeat(16)} ↳ drift ${beansText(sum)} does NOT match the predicted ${beansText(predicted)}`
             + ' — another cause, do not repair from these rows');
     }
     return { label, sum, balanced, explained, predicted, matched };
@@ -172,15 +182,15 @@ console.log();
 if (needRepair.length) {
     for (const r of needRepair) {
         const verb = r.predicted < 0 ? 'credit the Commons by' : 'debit the Commons by';
-        console.log(`🛑 ${r.label} ran a bug-era Commons path: drift ${r.sum.toFixed(4)} matches the rows.`);
-        console.log(`   Repair = ${verb} ${Math.abs(r.predicted).toFixed(4)}, because that is where the value should have gone.`);
+        console.log(`🛑 ${r.label} ran a bug-era Commons path: drift ${beansText(r.sum)} matches the rows.`);
+        console.log(`   Repair = ${verb} ${beansText(Math.abs(r.predicted))} Beans, because that is where the value should have gone.`);
     }
     console.log('   Do it deliberately, per node, and re-run this afterwards.');
 } else if (results.length) {
     console.log(`✅ None of the ${results.length} audited node(s) shows bug-era damage from #126/#124.`);
 }
 if (drifting.length) {
-    console.log(`⚠️  ${drifting.length} node(s) are out of balance for some OTHER reason: ${drifting.map(r => `${r.label} (${r.sum.toFixed(4)})`).join(', ')}`);
+    console.log(`⚠️  ${drifting.length} node(s) are out of balance for some OTHER reason: ${drifting.map(r => `${r.label} (${beansText(r.sum)})`).join(', ')}`);
     console.log('   Not attributable to #126/#124. Investigate on its own terms rather than repairing blind.');
 }
 if (unreadable.length) {

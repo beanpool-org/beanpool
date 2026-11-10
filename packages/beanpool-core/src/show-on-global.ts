@@ -50,6 +50,7 @@
 import { roundToArea } from './geo.js';
 import type { RepeatPattern } from './event-repeat.js';
 import { t } from './words.js';
+import { isHundredths } from './hundredths.js';
 
 const POSTS_PATH = '/api/marketplace/posts';
 const PREFERENCES_PATH = '/api/members/preferences';
@@ -86,7 +87,8 @@ export interface HomeEvent {
     /** 'event' or absent for an event. */
     type?: string;
     category?: string;
-    credits?: number;
+    /** A listing's price, whole hundredths of a Bean (the node's `price_c`). */
+    price_c?: number;
     priceType?: string;
     originNode?: string | null;
     title: string;
@@ -395,13 +397,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             return {
                 type: home.type, category: home.category, title: home.title, description: home.description ?? '', authorPublicKey: publicKey,
                 lat: roundToArea(Number(home.lat)), lng: roundToArea(Number(home.lng)),
-                shownPrice: { beans: Number(home.credits) || 0, per: home.priceType ?? 'fixed' },
+                shownPrice: { price_c: isHundredths(home.price_c) && home.price_c > 0 ? home.price_c : 0, per: home.priceType ?? 'fixed' },
                 ...tags,
             };
         }
         const { rule, until } = eventRepeatOf(home);
         return {
-            type: 'event', category: 'community', title: home.title, description: home.description ?? '', credits: 0, priceType: 'fixed',
+            type: 'event', category: 'community', title: home.title, description: home.description ?? '', price_c: 0, priceType: 'fixed',
             authorPublicKey: publicKey,
             lat: roundToArea(Number(home.lat)), lng: roundToArea(Number(home.lng)),
             eventStartAt: home.eventStartAt, eventEndAt: home.eventEndAt,
@@ -554,7 +556,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     async function updateCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
         const fields = copyFields(home, identity.publicKey);
         const fetched = firstPhoto(home) !== pair.photo ? await photosOf({ photos: home.photos ?? [] }, pair.home, deps) : null;
-        const { type: _type, credits: _credits, priceType: _priceType, ...kept } = fields;
+        const { type: _type, price_c: _price, priceType: _priceType, ...kept } = fields;
         const { category: _category, ...eventEdit } = kept;
         const edit = isListing(home) ? kept : eventEdit;
         // An edit leaves alone what it doesn't name, and copyFields names nothing there is none of: what was taken off at home is

@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, formatHundredths, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -161,7 +161,8 @@ function ChatScreen({ id }: { id: string }) {
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
-    const [pendingTx, setPendingTx] = useState<{ id: string; amount: number; isPayer: boolean } | null>(null);
+    // `amount_c`: what the deal holds, whole hundredths of a Bean (null when the phone holds no figure for it).
+    const [pendingTx, setPendingTx] = useState<{ id: string; amount_c: number | null; isPayer: boolean } | null>(null);
     const [isDynamicContext, setIsDynamicContext] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
@@ -478,7 +479,8 @@ function ChatScreen({ id }: { id: string }) {
                         title: res.postTitle,
                         status: res.postStatus,
                         priceType: res.price_type,
-                        credits: res.credits
+                        // The listing's price, whole hundredths of a Bean (null: no figure, shown "—").
+                        price_c: res.price_c
                     });
                     setIsDynamicContext(false);
 
@@ -509,7 +511,7 @@ function ChatScreen({ id }: { id: string }) {
                 if (res.pendingTxId && identity.publicKey) {
                     setPendingTx({
                         id: res.pendingTxId,
-                        amount: res.pendingAmount,
+                        amount_c: res.pendingAmount_c ?? null,
                         isPayer: res.txBuyerPubkey === identity.publicKey
                     });
                 } else if (res.postId) {
@@ -940,7 +942,7 @@ function ChatScreen({ id }: { id: string }) {
         // English writes one form for both; a language with more forms has them.
         Alert.alert(
             t('Release Credits'),
-            tn(pendingTx.amount, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.'),
+            tn((pendingTx.amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.', { n: formatHundredths(pendingTx.amount_c) }),
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {
@@ -1059,7 +1061,7 @@ function ChatScreen({ id }: { id: string }) {
         if (selectedDeal) {
             setPendingTx({
                 id: selectedDeal.txId,
-                amount: selectedDeal.credits,
+                amount_c: selectedDeal.amount_c ?? null,
                 isPayer: selectedDeal.iAmBuyer
             });
             setPostContext({
@@ -1067,7 +1069,7 @@ function ChatScreen({ id }: { id: string }) {
                 title: selectedDeal.postTitle || t('Deal'),
                 status: selectedDeal.status || 'pending',
                 priceType: 'fixed',
-                credits: selectedDeal.credits
+                price_c: selectedDeal.amount_c ?? null
             });
         } else {
             setPendingTx(null);
@@ -1082,10 +1084,11 @@ function ChatScreen({ id }: { id: string }) {
         return map;
     }, [deals]);
 
-    const handleReleaseDeal = async (txId: string, amount: number) => {
+    /** `amount_c`: what the deal holds, whole hundredths of a Bean (null: no figure, said "—"). */
+    const handleReleaseDeal = async (txId: string, amount_c: number | null) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert(t('Release Credits'), tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'), [
+        Alert.alert(t('Release Credits'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Release'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
@@ -1560,7 +1563,7 @@ function ChatScreen({ id }: { id: string }) {
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>{dealStateWords(dealStep(localDealRow(d, identity!.publicKey), identity!.publicKey), null)}</Text>
                                 ) : (
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
+                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={formatHundredths(d.amount_c)} style={styles.dealCardMeta} /> }} />
                                     </Text>
                                 )}
                                 {(() => {
@@ -1569,7 +1572,7 @@ function ChatScreen({ id }: { id: string }) {
                                 <View style={styles.dealCardActions}>
                                     {moves?.release && (
                                         <>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.amount_c ?? null)}>
                                                 <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
                                             {moves.cancelHold && (
@@ -1605,9 +1608,10 @@ function ChatScreen({ id }: { id: string }) {
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {/* English writes one form for both; a language with more forms has them. */}
                             {/* Priced at 0 it reads Free (core listing-price.ts), as on every card, whatever the unit. */}
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.credits, null) ?? (postContext.priceType === 'hourly'
-                                ? tn(Number(postContext.credits) || 0, '{n} Beans / hr', '{n} Beans / hr')
-                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans'))}</Text>}
+                            {/* Whole hundredths (price_c): the figure by formatHundredths, "—" for none, never a number made up. */}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.price_c, null) ?? (postContext.priceType === 'hourly'
+                                ? tn((postContext.price_c ?? 0) / 100, '{n} Beans / hr', '{n} Beans / hr', { n: formatHundredths(postContext.price_c) })
+                                : tn((postContext.price_c ?? 0) / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(postContext.price_c) }))}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,
@@ -1645,7 +1649,7 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.text.inverse} style={{ marginRight: 6 }} />
                             <Text style={[styles.inlineActionReleaseText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                 {actionLoading ? t('Processing...') : (
-                                    <Sentence text={t('Release {amount}')} parts={{ amount: <CurrencyDisplay amount={pendingTx.amount} style={styles.inlineActionReleaseText} /> }} />
+                                    <Sentence text={t('Release {amount}')} parts={{ amount: <CurrencyDisplay amount={formatHundredths(pendingTx.amount_c)} style={styles.inlineActionReleaseText} /> }} />
                                 )}
                             </Text>
                         </Pressable>

@@ -29,8 +29,8 @@ function stubNode(info: unknown, handlers: Record<string, () => Response> = {}) 
     }));
 }
 const b64url = (s: string) => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
-const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
+const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
 
 let identity: BeanPoolIdentity;
 beforeEach(async () => {

@@ -16,6 +16,7 @@
  */
 
 import { beansPriceWords } from './event-copy.js';
+import { beans as hundredthsOf } from './hundredths.js';
 import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, pricingItemFor, type PricingCategory, type PricingGuideItem } from './pricing-catalog.js';
 import { starterOffersFor, type StarterDraft } from './starter-offers.js';
 import { t, word } from './words.js';
@@ -101,8 +102,9 @@ export function starterRows(stars: readonly unknown[] | null | undefined, opts: 
         const figure = opts.beans ? starterFigureFor(opts.guide, draft) : null;
         const title = t(draft.title);
         const price = !opts.beans ? null
-            : draft.priceType === 'free' ? beansPriceWords({ beans: 0, per: 'fixed' })
-            : figure !== null ? beansPriceWords({ beans: figure, per: draft.priceType === 'hourly' ? 'hourly' : 'fixed' })
+            : draft.priceType === 'free' ? beansPriceWords({ price_c: 0, per: 'fixed' })
+            // The guide's figure is whole Beans (a hint, never moved; starterFigureFor takes a safe integer only).
+            : figure !== null ? beansPriceWords({ price_c: hundredthsOf(figure), per: draft.priceType === 'hourly' ? 'hourly' : 'fixed' })
             : null;
         return {
             id: draft.id,

@@ -15,8 +15,8 @@ function community(): Database.Database {
             legacy_credit_floor REAL DEFAULT 0);
         CREATE TABLE confirmations (id TEXT PRIMARY KEY, member_pubkey TEXT NOT NULL, entry_id TEXT NOT NULL, confirmed_by TEXT NOT NULL,
             needs_second INTEGER NOT NULL DEFAULT 0, seconded_at DATETIME, revoked_at DATETIME);
-        CREATE TABLE known_floor_exceptions (member_pubkey TEXT PRIMARY KEY, amount INTEGER, frozen INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE enterprise_pledges (id TEXT PRIMARY KEY, keeper TEXT NOT NULL, enterprise TEXT NOT NULL, amount REAL NOT NULL,
+        CREATE TABLE known_floor_exceptions (member_pubkey TEXT PRIMARY KEY, amount_c INTEGER, frozen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE enterprise_pledges (id TEXT PRIMARY KEY, keeper TEXT NOT NULL, enterprise TEXT NOT NULL, amount_c REAL NOT NULL,
             pledged_at DATETIME, released_at DATETIME DEFAULT NULL);
     `);
     for (const pk of ['kim', 'una', 'kai', 'bea', 'co', 'known-co']) db.prepare('INSERT INTO members (public_key) VALUES (?)').run(pk);
@@ -50,8 +50,8 @@ describe('the confirmation dial, on by default', () => {
 
     it("uses the owner's saved cap only while the dial is on", () => {
         const db = community();
-        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '3000');
-        expect(creditCap(db)).toBe(3000);
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '300000');
+        expect(creditCap(db)).toBe(300000);
         setDial(db, 'off');
         expect(creditCap(db)).toBe(CREDIT_CAP_DEFAULT);
     });
@@ -63,7 +63,7 @@ describe('the confirmation dial, on by default', () => {
         expect(memberKnownGrant(db, 'kim')).toBe(0);
         setDial(db, 'on');
         expect(confirmationDialOn(db)).toBe(false);
-        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '3000');
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '300000');
         expect(creditCap(db)).toBe(CREDIT_CAP_DEFAULT);
         configureKnownFloorBeans(() => true);
         expect(confirmationDialOn(db)).toBe(true);
@@ -82,13 +82,13 @@ describe('the confirmation dial, on by default', () => {
 describe("an enterprise's floor with the dial on", () => {
     it('is kept while the enterprise has no known pledge: no confirmation can move it until one is written', () => {
         const db = community();
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('p1', 'bea', 'co', 300)").run();
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('p1', 'bea', 'co', 300)").run();
         const first = getEnterpriseFloor(db, 'co');
         expect(first.floor).toBe(-300);
         expect(getEnterpriseFloor(db, 'co')).toBe(first);
         // A known pledge is written by a pledge, and every pledge clears its enterprise's floor (state-engine.ts).
         db.prepare("INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by) VALUES ('c2', 'kai', 'e2', 'ada')").run();
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('known:1', 'kai', 'co', 400)").run();
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('known:1', 'kai', 'co', 400)").run();
         clearEnterpriseFloorCache(db, 'co');
         expect(getEnterpriseFloor(db, 'co').floor).toBe(-700);
     });
@@ -96,7 +96,7 @@ describe("an enterprise's floor with the dial on", () => {
     it('is read fresh while it has one: a revoked confirmation stops its share at the next read', () => {
         const db = community();
         db.prepare("INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by) VALUES ('c2', 'kai', 'e2', 'ada')").run();
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('known:1', 'kai', 'known-co', 500)").run();
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('known:1', 'kai', 'known-co', 500)").run();
         expect(getEnterpriseFloor(db, 'known-co').floor).toBe(-500);
         db.prepare("UPDATE confirmations SET revoked_at = '2026-10-21T00:00:00Z' WHERE id = 'c2'").run();
         expect(getEnterpriseFloor(db, 'known-co').floor).toBe(0);

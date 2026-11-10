@@ -19,7 +19,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
 
 function stubMemberNode() {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {

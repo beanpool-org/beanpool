@@ -1,6 +1,7 @@
 export interface LedgerAccount {
     id: string; // User or Node ID
-    balance: number;
+    /** Whole hundredths of a Bean (hundredths.ts). */
+    balance_c: Hundredths;
     lastDemurrageEpoch: number; // Unix Epoch (Days since 1970)
 }
 
@@ -11,20 +12,13 @@ export let COMMONS_BALANCE = 0;
  * Restore persisted commons balance on server startup.
  * Without this, COMMONS_BALANCE resets to 0 every restart, silently destroying all accumulated demurrage.
  */
-export function setCommonsBalance(value: number): void {
+export function setCommonsBalance(value: Hundredths): void {
     COMMONS_BALANCE = value;
 }
 
 import { isEscrowAccount, isSyntheticAccount } from './protocol.js';
-import { balanceAfterCirculation } from './circulation.js';
-
-export const TRANSACTION_FEE_RATE = 0.015;
-
-/**
- * Floating-point dust on a synthetic account. Beans are carried to 4dp, so anything under this is
- * arithmetic noise rather than value, and is absorbed into the Commons rather than left stranded.
- */
-export const DUST_THRESHOLD = 1e-6;
+import { circulationChargeOf } from './circulation.js';
+import { feeOf, isHundredths, isMoveAmount, type Hundredths } from './hundredths.js';
 
 /**
  * THE FLOOR FOR AN ESCROW ACCOUNT. An escrow can never pay out more than it holds.
@@ -42,14 +36,10 @@ export const DUST_THRESHOLD = 1e-6;
  * ever, and no matching hold). The federation settlement commit path carries a comment describing the
  * same hazard from the other side.
  *
- * WHY NOT EXACTLY ZERO. A legitimate close-out debits a hold that was itself computed by rounding —
- * `round4(amount + fee)` in, `amount` then `fee` out — so the last debit can land a few units of
- * IEEE-754 noise below zero (order 1e-13) on a settlement that is arithmetically exact. Allowing
- * `DUST_THRESHOLD` of slack keeps those closing to zero while still being 100× smaller than the
- * smallest representable bean (1e-4). The dust is then swept into the Commons by the same
- * `DUST_THRESHOLD` rule below, so it never accumulates.
+ * EXACTLY ZERO. Every figure is whole hundredths (hundredths.ts), so a close-out that debits exactly what was held lands
+ * on 0, never a hair below it: the old float slack (and the dust sweep that cleared it) went with the floats.
  */
-export const ESCROW_FLOOR = -DUST_THRESHOLD;
+export const ESCROW_FLOOR: Hundredths = 0;
 
 /**
  * The effective floor for a debit from `fromId`, given whatever floor the caller asked for.
@@ -63,8 +53,8 @@ function effectiveFloor(fromId: string, requestedFloor: number): number {
 }
 
 /**
- * AN AMOUNT OF BEANS A MOVE MAY CARRY: a finite number, 0 or more. Nothing else — not a numeric string, not NaN, not
- * Infinity, not a negative.
+ * AN AMOUNT A MOVE MAY CARRY: whole hundredths, 0 or more (hundredths.ts isMoveAmount). Nothing else: not a float, not
+ * a numeric string, not NaN, not Infinity, not a negative.
  *
  * WHY EVERY PRIMITIVE ASKS IT (review FABLE-sec-input F1, 2026-10-01, measured). A listing's price edited to "abc"
  * reached `transfer` as a string. Every guard here tests `<`, and NaN compares false against everything, so
@@ -72,23 +62,13 @@ function effectiveFloor(fromId: string, requestedFloor: number): number {
  * the host then wrote as NULL. A `+=` with a string would have concatenated instead. The ledger is the one place every
  * move passes, so it refuses what is not an amount, whatever a caller forgot to check.
  */
-export function isBeanAmount(amount: unknown): amount is number {
-    return typeof amount === 'number' && Number.isFinite(amount) && amount >= 0;
+export function isBeanAmount(amount: unknown): amount is Hundredths {
+    return isMoveAmount(amount);
 }
 
-/**
- * What a member types at a money door (a send, a pledge, a payment to the Commons): at least a cent, in whole cents,
- * within float noise (0.1 + 0.2 is 30 cents; 5e-324 is no cent at all). The node refuses anything else; the apps check
- * first, so the member reads why before anything is sent.
- */
-export function isWholeCents(amount: unknown): amount is number {
-    return typeof amount === 'number' && Number.isFinite(amount) && Math.round(amount * 100) >= 1
-        && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
-}
-
-/** A balance a ledger may hold: a finite number. An account holding anything else moves nothing until an operator looks. */
-function isFiniteBalance(balance: unknown): balance is number {
-    return typeof balance === 'number' && Number.isFinite(balance);
+/** A balance a ledger may hold: whole hundredths. An account holding anything else moves nothing until an operator looks. */
+function isFiniteBalance(balance: unknown): balance is Hundredths {
+    return isHundredths(balance);
 }
 
 /**
@@ -98,7 +78,8 @@ function isFiniteBalance(balance: unknown): balance is number {
  */
 export interface DecayEvent {
     accountId: string;
-    amount: number;
+    /** Whole hundredths, truncated once (circulation.ts circulationChargeOf). */
+    amount: Hundredths;
     epochsPassed: number;
     /** The epoch the account decayed up to — with epochsPassed this identifies the decay deterministically. */
     toEpoch: number;
@@ -108,7 +89,7 @@ export interface DecayEvent {
 export class LedgerManager {
     private accounts: Map<string, LedgerAccount>;
     private decayEvents: DecayEvent[] = [];
-    private readonly DEFAULT_CREDIT_LIMIT = -100; // Legacy fallback — callers should pass dynamic floor
+    private readonly DEFAULT_CREDIT_LIMIT: Hundredths = -10000; // -100 Beans when a caller passes no floor; callers pass the dynamic floor
     private readonly EPOCH_MS = 24 * 60 * 60 * 1000; // 24 hours
     private readonly MAX_PENDING_DECAY_EVENTS = 10_000; // backstop if the host never drains
     private decayCapWarned = false;                     // so hitting the cap logs once, not per read
@@ -192,7 +173,7 @@ export class LedgerManager {
      * Ensures an account starts with 0 balance and the Mutual Credit architecture.
      */
     initializeGenesisAccount(id: string): LedgerAccount {
-        const account = { id, balance: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
+        const account = { id, balance_c: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
         this.accounts.set(id, account);
         return account;
     }
@@ -201,7 +182,7 @@ export class LedgerManager {
         let account = this.accounts.get(id);
         if (!account) {
             // Auto-create new accounts with 0 balance
-            account = { id, balance: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
+            account = { id, balance_c: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
             this.accounts.set(id, account);
         }
 
@@ -230,7 +211,7 @@ export class LedgerManager {
 
         // A balance that is not a finite number (a NULL row loaded as null, a NaN) decays nothing: `NaN <= 0` is false,
         // so it used to fall through and credit the Commons with NaN, spreading one broken account to the pot.
-        if (epochsPassed <= 0 || !isFiniteBalance(account.balance) || account.balance <= 0 || isExempt) {
+        if (epochsPassed <= 0 || !isFiniteBalance(account.balance_c) || account.balance_c <= 0 || isExempt) {
             // Only positive, non-exempt balances decay
             account.lastDemurrageEpoch = currentEpoch;
             return account;
@@ -246,7 +227,7 @@ export class LedgerManager {
         // But demurrage is principal × time × rate, and an interval CANNOT be carried across a change of
         // principal. An account holding 200.005 with a deferred 60-day interval that then receives 10,000
         // gets the whole 60 days charged against 10,200 on the next read. Measured: **465.33 beans**, 4.6% of
-        // the deposit, taken instantly. Against the ~0.0001 that deferring was protecting.
+        // the deposit, taken instantly. Against the sub-hundredth that deferring was protecting.
         //
         // Forfeiting costs at most one sub-threshold decay per read — bounded by the very threshold that
         // says it is not worth recording — and it is conservation-safe by construction: no debit and no
@@ -266,18 +247,18 @@ export class LedgerManager {
         }
 
         const monthsPassed = epochsPassed / 30;
-        const newBalance = this._calculateProgressiveDecay(account.balance, monthsPassed);
-        const decayedAmount = account.balance - newBalance;
+        // Truncated ONCE to whole hundredths (circulation.ts): the holder keeps the part below a hundredth.
+        const decayedAmount = circulationChargeOf(account.balance_c, monthsPassed);
 
-        // Too small to record: forfeit it. The old form credited the Commons anyway and skipped the event,
-        // leaving a credit with no traceable source that `loadState` could not unwind.
-        if (decayedAmount <= 0.0001) {
+        // Below one hundredth: forfeit it (circulationChargeOf gives 0). The old form credited the Commons anyway and
+        // skipped the event, leaving a credit with no traceable source that `loadState` could not unwind.
+        if (decayedAmount < 1 || !Number.isSafeInteger(COMMONS_BALANCE + decayedAmount)) {
             account.lastDemurrageEpoch = currentEpoch;
             return account;
         }
 
         COMMONS_BALANCE += decayedAmount;
-        account.balance = newBalance;
+        account.balance_c -= decayedAmount;
         account.lastDemurrageEpoch = currentEpoch;
         this.decayEvents.push({
             accountId: account.id,
@@ -291,79 +272,66 @@ export class LedgerManager {
     }
 
     /**
-     * Directly calculate decay for a hypothetical value/time without mutating state
+     * The balance a hypothetical account would hold after decaying from `lastDemurrageEpoch` to `currentEpoch`, without
+     * mutating state: the same truncated charge applyDecay takes.
      */
-    calculateDecay(balance: number, lastDemurrageEpoch: number, currentEpoch: number): number {
+    calculateDecay(balance: Hundredths, lastDemurrageEpoch: number, currentEpoch: number): Hundredths {
         if (balance <= 0) return balance;
 
         const epochsPassed = currentEpoch - lastDemurrageEpoch;
         if (epochsPassed <= 0) return balance;
 
-        const monthsPassed = epochsPassed / 30;
-        return this._calculateProgressiveDecay(balance, monthsPassed);
-    }
-
-    /**
-     * Internal helper to calculate progressive decay based on brackets (CIRCULATION_BRACKETS, circulation.ts: the one
-     * copy the Wallets read too)
-     */
-    private _calculateProgressiveDecay(balance: number, monthsPassed: number): number {
-        return balanceAfterCirculation(balance, monthsPassed);
+        return balance - circulationChargeOf(balance, epochsPassed / 30);
     }
 
     /**
      * Transfers funds between nodes using Mutual Credit logic.
      * Participants can go into debt down to the dynamic credit floor.
-     * @param floorOverride - The sender's dynamic credit floor (e.g. -420). If omitted, uses legacy default (-100).
+     * Every figure is whole hundredths. The fee is truncated ONCE here (feeOf) and returned, so the host writes the ledger
+     * row from that value and never recomputes it: `amount` leaves the payer, `amount − fee` reaches the payee, `fee`
+     * reaches the pot, three integers that sum to zero.
+     * @param floorOverride - The sender's dynamic credit floor in hundredths (e.g. -42000). If omitted, -10000 (-100 Beans).
      * @param isFeeExempt - If true, bypasses the transaction fee (e.g., escrow holds, refunds, admin settlements).
+     * @returns `{ ok: true, fee }` when it moved (fee 0 when exempt), `{ ok: false, fee: 0 }` when refused.
      */
-    transfer(fromId: string, toId: string, amount: number, floorOverride?: number, isFeeExempt = false): boolean {
-        // Not an amount (NaN, Infinity, a string, a negative): refused, before anything is read or moved (isBeanAmount).
-        if (!isBeanAmount(amount)) return false;
-        if (amount === 0) return true; // 0-credit transfer is always a no-op success
-        if (fromId === toId) return false;
+    transfer(fromId: string, toId: string, amount: Hundredths, floorOverride?: Hundredths, isFeeExempt = false): { ok: boolean; fee: Hundredths } {
+        const refused = { ok: false, fee: 0 };
+        // Not an amount (a float, NaN, Infinity, a string, a negative): refused, before anything is read or moved.
+        if (!isBeanAmount(amount)) return refused;
+        if (amount === 0) return { ok: true, fee: 0 }; // 0-credit transfer is always a no-op success
+        if (fromId === toId) return refused;
 
         // Apply decays first to ensure accurate balances — this also settles each account's epoch.
         const fromAccount = this.getAccount(fromId);
         const toAccount = this.getAccount(toId);
 
         const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
-        // A NaN floor passes every `<` test below, as a NaN amount did.
-        if (Number.isNaN(floor)) return false;
+        // A NaN floor passes every `<` test below, as a NaN amount did. -Infinity is a synthetic sender's "no floor".
+        if (Number.isNaN(floor)) return refused;
 
         // Mutual Credit: ensure the fromAccount doesn't exceed the credit floor
-        if (fromAccount.balance - amount < floor) {
+        if (fromAccount.balance_c - amount < floor) {
             // Insufficient credit
-            return false;
+            return refused;
         }
 
-        // Calculate transaction fee
-        const fee = isFeeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
+        // The fee, truncated once (feeOf): the half-hundredth stays with the payee, never the Commons.
+        const fee = isFeeExempt ? 0 : feeOf(amount);
         const netAmount = amount - fee;
 
-        // Never a balance that is not a finite number, on either side or in the pot: refused before anything moves. An
-        // account already holding one (a NULL row, a NaN) moves nothing either, so the damage cannot spread.
-        if (!isFiniteBalance(fromAccount.balance) || !isFiniteBalance(toAccount.balance)
-            || !Number.isFinite(fromAccount.balance - amount) || !Number.isFinite(toAccount.balance + netAmount)
-            || !Number.isFinite(COMMONS_BALANCE + fee)) {
-            return false;
+        // Never a balance that is not whole hundredths, on either side or in the pot: refused before anything moves. An
+        // account already holding one (a NULL row, a NaN, a float) moves nothing either, so the damage cannot spread.
+        if (!isFiniteBalance(fromAccount.balance_c) || !isFiniteBalance(toAccount.balance_c) || !isHundredths(COMMONS_BALANCE)
+            || !Number.isSafeInteger(fromAccount.balance_c - amount) || !Number.isSafeInteger(toAccount.balance_c + netAmount)
+            || !Number.isSafeInteger(COMMONS_BALANCE + fee)) {
+            return refused;
         }
 
-        // Execute transfer
-        fromAccount.balance -= amount;
-        toAccount.balance += netAmount;
+        // Execute transfer: three integers that sum to zero.
+        fromAccount.balance_c -= amount;
+        toAccount.balance_c += netAmount;
         if (fee > 0) {
             COMMONS_BALANCE += fee;
-        }
-
-        // #160: Absorb synthetic account floating-point dust (< 1e-6) into COMMONS_BALANCE to preserve total supply conservation
-        if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) > 0 && Math.abs(fromAccount.balance) < DUST_THRESHOLD) {
-            COMMONS_BALANCE += fromAccount.balance;
-            fromAccount.balance = 0;
-        }
-        if (isSyntheticAccount(toId) && fromId !== toId && Math.abs(toAccount.balance) > 0 && Math.abs(toAccount.balance) < DUST_THRESHOLD) {
-            COMMONS_BALANCE += toAccount.balance;
-            toAccount.balance = 0;
         }
 
         // The epoch is not touched here, and does not need to be: `getAccount()` above ran `applyDecay`, which
@@ -374,7 +342,7 @@ export class LedgerManager {
         // That property lives in `applyDecay` rather than being repeated at each mutation site on purpose: the
         // server also adjusts `balance` directly after a `getAccount()` (payFromCommons, the voting-round
         // grant), and stamping here would not have covered those.
-        return true;
+        return { ok: true, fee };
     }
 
     /**
@@ -390,7 +358,7 @@ export class LedgerManager {
      *                      bounded by a member floor (bridge_*). An escrow_* sender is clamped to
      *                      `ESCROW_FLOOR` whatever is passed here, so it can only pay out what it holds.
      */
-    moveToCommons(fromId: string, amount: number, floorOverride?: number): boolean {
+    moveToCommons(fromId: string, amount: Hundredths, floorOverride?: Hundredths): boolean {
         if (!isBeanAmount(amount)) return false;   // as in `transfer()`
         if (amount === 0) return true;
 
@@ -401,13 +369,13 @@ export class LedgerManager {
         const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
         if (Number.isNaN(floor)) return false;
 
-        if (fromAccount.balance - amount < floor) return false;
-        if (!isFiniteBalance(fromAccount.balance) || !Number.isFinite(fromAccount.balance - amount)
-            || !Number.isFinite(COMMONS_BALANCE + amount)) {
+        if (fromAccount.balance_c - amount < floor) return false;
+        if (!isFiniteBalance(fromAccount.balance_c) || !isHundredths(COMMONS_BALANCE) || !Number.isSafeInteger(fromAccount.balance_c - amount)
+            || !Number.isSafeInteger(COMMONS_BALANCE + amount)) {
             return false;
         }
 
-        fromAccount.balance -= amount;
+        fromAccount.balance_c -= amount;
         COMMONS_BALANCE += amount;
         // Epoch already settled by `getAccount()` above — see the note in `transfer()`.
         return true;
@@ -416,7 +384,7 @@ export class LedgerManager {
     /**
      * Deducts funds directly from the global Commons Balance (Demurrage pool).
      */
-    deductFromCommons(amount: number): boolean {
+    deductFromCommons(amount: Hundredths): boolean {
         // `amount <= 0` alone let NaN through (and `COMMONS_BALANCE < NaN` is false), so the pot became NaN.
         if (!isBeanAmount(amount) || amount === 0 || !isFiniteBalance(COMMONS_BALANCE) || COMMONS_BALANCE < amount) {
             return false;

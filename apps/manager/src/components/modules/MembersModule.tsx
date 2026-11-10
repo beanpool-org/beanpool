@@ -14,6 +14,7 @@ import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { LoadMoreRow } from '../../lib/node-data-pages';
 import type { NodeDataCounts } from '../../lib/node-client';
+import { beansFigure, parseBeans, beansRefusalText } from '../../lib/beans';
 import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 
 export interface MemberItem {
@@ -29,8 +30,8 @@ export interface MemberItem {
     standing?: string;
     role?: string;
     nodeRole?: MemberNodeRole | null;
+    /** The member's granted credit, whole hundredths of a Bean under its old name (server engine members.ts: earned_credit_c). */
     earnedCredit?: number;
-    earned_credit?: number;
     canOperate?: boolean;
     can_operate?: boolean;
     isOperator?: boolean;
@@ -211,7 +212,8 @@ export function getMemberTier(m: MemberItem | null | undefined): string {
     if (m.standing && m.standing !== 'Citizen' && m.standing !== 'FROZEN') return m.standing;
     if (m.role && m.role !== 'Citizen') return m.role;
 
-    const earned = typeof m.earnedCredit === 'number' ? m.earnedCredit : (typeof m.earned_credit === 'number' ? m.earned_credit : 0);
+    // Whole hundredths, as the node sends it and as core's thresholds count (TIER_LEVELS: 1,400 Beans is 140000).
+    const earned = typeof m.earnedCredit === 'number' ? m.earnedCredit : 0;
     const byCredit = tierForCredit(earned).name;   // the node's own thresholds (@beanpool/core)
     if (byCredit !== 'Newcomer') return byCredit;
 
@@ -419,7 +421,10 @@ export function MembersModule({
                 : 'data:image/svg+xml,' + encodeURIComponent(
                     `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">${newTreasuryAvatar || '🏛️'}</text></svg>`
                 );
-            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword, tfaToken);
+            // The credit line as typed, in Beans, to whole hundredths: the node takes `creditLine_c` (none typed: 0).
+            const line = newTreasuryCredit.trim() ? parseBeans(newTreasuryCredit) : { ok: true as const, value: 0 };
+            if (!line.ok) throw new Error(`Deficit credit line: ${beansRefusalText(line.refusal)}`);
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine_c: line.value }, adminPassword, tfaToken);
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
@@ -437,10 +442,13 @@ export function MembersModule({
         if (offerPhotos.length === 0) return;
         setSeedingOffer(true);
         try {
+            // The price as typed, in Beans, to whole hundredths: the node takes `price_c` (12 Beans is 1200).
+            const price = parseBeans(offerCredits);
+            if (!price.ok) throw new Error(`Price: ${beansRefusalText(price.refusal)}`);
             await seedTreasuryOffer(activeNodeUrl, offerTreasury.publicKey, {
                 title: offerTitle.trim(),
                 category: offerCategory,
-                credits: Number(offerCredits) || 0,
+                price_c: price.value,
                 photos: offerPhotos,
                 description: offerDescription.trim(),
                 repeatable: true
@@ -603,7 +611,7 @@ export function MembersModule({
                                     <div className="min-w-0">
                                         <div className="font-bold text-white text-xs truncate">{t.name}</div>
                                         <div className="text-[11px] text-nature-400 font-mono">
-                                            {t.balance} 🫘 · Limit: {t.creditLine} 🫘 · {t.liveOffers} offer(s)
+                                            {beansFigure(t.balance_c)} 🫘 · Limit: {beansFigure(t.creditLine_c)} 🫘 · {t.liveOffers} offer(s)
                                         </div>
                                     </div>
                                 </div>
@@ -798,7 +806,7 @@ export function MembersModule({
                                                                     className="px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 bg-amber-950/80 text-amber-200 border-amber-800/80"
                                                                     title="An admin changed this member's known floor"
                                                                 >
-                                                                    {knownFloorMarks[pubkey].frozen ? 'Known floor frozen' : `Known floor ${(knownFloorMarks[pubkey].amount ?? 0).toLocaleString('en')}`}
+                                                                    {knownFloorMarks[pubkey].frozen ? 'Known floor frozen' : `Known floor ${beansFigure(knownFloorMarks[pubkey].amount_c)}`}
                                                                 </span>
                                                             )}
                                                             {m.platform && m.platform !== 'unknown' && (
@@ -1118,6 +1126,7 @@ export function MembersModule({
                                 <label className="block text-nature-300 font-semibold mb-1">Deficit Credit Line (Beans):</label>
                                 <input
                                     type="number"
+                                    step="0.01"
                                     placeholder="200"
                                     value={newTreasuryCredit}
                                     onChange={(e) => setNewTreasuryCredit(e.target.value)}
@@ -1179,6 +1188,7 @@ export function MembersModule({
                                 <label className="block text-nature-300 font-semibold mb-1">Price (Beans):</label>
                                 <input
                                     type="number"
+                                    step="0.01"
                                     placeholder="12"
                                     value={offerCredits}
                                     onChange={(e) => setOfferCredits(e.target.value)}

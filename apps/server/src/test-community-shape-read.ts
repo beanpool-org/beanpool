@@ -53,6 +53,12 @@ type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; headers: Headers };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
 const DAY = 86_400_000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths: exact for
+ * every figure here, each being whole Beans. The known floor's keys keep their names (`knownFloor`, the shape's
+ * `floor`/`cap`), their values whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -116,7 +122,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                     VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
         setMemberPhoto(db, id.pk, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     function sessionHeaders(pub: string, role: 'owner' | 'admin' | 'moderator'): Record<string, string> {
@@ -196,8 +202,9 @@ async function main(): Promise<void> {
     const ROWS = {
         none: { door: null, confirmation: null, known_floor: null, credit_cap: null },
         admins: { door: 'admins', confirmation: 'off', known_floor: null, credit_cap: null },
-        // A row the node can't read as a door reads as any member; a floor and a cap of the owner's own.
-        bad: { door: 'everyone', confirmation: null, known_floor: '1500', credit_cap: '3000' },
+        // A row the node can't read as a door reads as any member; a floor and a cap of the owner's own (1500 and 3000 Beans,
+        // the rows' text in whole hundredths).
+        bad: { door: 'everyone', confirmation: null, known_floor: String(hc(1500)), credit_cap: String(hc(3000)) },
     } as const;
     const OVERRIDE_SETS: Record<string, boolean>[] = [
         {},
@@ -346,10 +353,10 @@ async function main(): Promise<void> {
         tally.check('knownFloor.value is the known floor\'s readers', isDeepStrictEqual(S.knownFloor.value,
             { on: confirmationDialOn(db), floor: knownFloor(db), cap: savedCreditCap(db), capMax: CREDIT_CAP_MAX }), () => `${label()} ${JSON.stringify(S.knownFloor.value)}`);
         tally.check('knownFloor.value is what GET /api/local/admin/known-floor answers', S.knownFloor.value.on === kf.confirmation
-            && S.knownFloor.value.floor === kf.knownFloor && S.knownFloor.value.cap === kf.creditCap && S.knownFloor.value.capMax === kf.creditCapMax, label);
+            && S.knownFloor.value.floor === kf.knownFloor_c && S.knownFloor.value.cap === kf.creditCap_c && S.knownFloor.value.capMax === kf.creditCapMax_c, label);
         const r = ROWS[st.rows];
         tally.check('knownFloor.configured is the stored rows', S.knownFloor.configured.on === (r.confirmation !== 'off')
-            && S.knownFloor.configured.floor === kf.knownFloor && S.knownFloor.configured.cap === kf.creditCap
+            && S.knownFloor.configured.floor === kf.knownFloor_c && S.knownFloor.configured.cap === kf.creditCap_c
             && S.knownFloor.source === (r.confirmation || r.known_floor || r.credit_cap ? 'owner' : 'default'), label);
         let floorRefused: string | null = null;
         try {
@@ -438,7 +445,7 @@ async function main(): Promise<void> {
     await matrix(false);
     // The ledger moves, once and for good, as a member's first trade moves it.
     clearState();
-    se.transfer('genesis', sam.pk, 5, 'the ledger moves', 'direct', true);
+    se.transfer('genesis', sam.pk, hc(5), 'the ledger moves', 'direct', true);
     np.forgetLedgerHistory();
     assert(np.ledgerHistory() !== null, 'the ledger has moved');
     await matrix(true);
@@ -472,16 +479,17 @@ async function main(): Promise<void> {
     for (let i = 0; i < 55; i++) insertShapeLine.run(founder.pk, 'owner', 'join', 'members', 'admins', null, at(200 - i));
     insertShapeLine.run(founder.pk, 'owner', 'join', 'admins', 'members', 'Summer visitors', at(3));
     const insertFloorLine = db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    insertFloorLine.run(crypto.randomBytes(16).toString('hex'), founder.pk, 'known_floor', null, '1000', '1500', at(2));
+    // The known floor's values in whole hundredths, as the node writes them: 1000 Beans to 1500.
+    insertFloorLine.run(crypto.randomBytes(16).toString('hex'), founder.pk, 'known_floor', null, String(hc(1000)), String(hc(1500)), at(2));
     // Neither of these is the community's shape: one member's exception, and the health panel's line.
-    insertFloorLine.run(crypto.randomBytes(16).toString('hex'), ada.pk, 'exception_raised', sam.pk, 'default', '1200', at(1));
+    insertFloorLine.run(crypto.randomBytes(16).toString('hex'), ada.pk, 'exception_raised', sam.pk, 'default', String(hc(1200)), at(1));
     insertFloorLine.run(crypto.randomBytes(16).toString('hex'), founder.pk, 'health_debt_line', null, '50', '60', at(1));
     const logged = readShape();
     const newestId = (db.prepare('SELECT MAX(id) AS id FROM community_settings_log').get() as { id: number }).id;
     assert(logged.version === newestId && newestId === 56, `version is the newest community_settings_log id (${logged.version})`);
     assert(logged.log.length === 50, `the log keeps the newest 50 lines (${logged.log.length})`);
     const [first, second] = logged.log;
-    assert(first?.kept === 'known_floor_log' && first.setting === 'knownFloor.floor' && first.from === '1000' && first.to === '1500' && first.actor === founder.pk,
+    assert(first?.kept === 'known_floor_log' && first.setting === 'knownFloor.floor' && first.from === String(hc(1000)) && first.to === String(hc(1500)) && first.actor === founder.pk,
         `newest first: the known floor's community line, as a known-floor change (${JSON.stringify(first)})`);
     assert(second?.kept === 'community_settings_log' && second.setting === 'join' && second.from === 'admins' && second.to === 'members'
         && second.note === 'Summer visitors' && second.actorRole === 'owner' && second.actorCallsign === founder.name,
@@ -609,7 +617,7 @@ async function main(): Promise<void> {
         const features = after.me?.features ?? {};
         const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
         const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
-        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
+        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: hc(1000), debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
             `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);
         // Who decides a removal (removal jury J3): a member's answers say it beside the features, never in them
@@ -617,7 +625,7 @@ async function main(): Promise<void> {
         assert(after.me?.removalDecider === 'automatic' && after.homeRemovalDecider === 'automatic',
             `${label}: a member's /api/community/me and /api/home say who decides a removal beside the features: automatic, the default (${after.me?.removalDecider}, ${after.homeRemovalDecider})`);
         if (expectsFloor) {
-            assert(features.knownFloor === 1000 && features.debtLinePct === 50 && features.quietDays === 60, `${label}: knownFloor is 1000 for member, with the rule's two lines beside it`);
+            assert(features.knownFloor === hc(1000) && features.debtLinePct === 50 && features.quietDays === 60, `${label}: knownFloor is 1000 for member, with the rule's two lines beside it`);
         } else {
             assert(!('knownFloor' in features), `${label}: no knownFloor when dial or beans off`);
         }
@@ -647,12 +655,12 @@ async function main(): Promise<void> {
         setState({ profile: 'local', overrides, rows: 'none', preview: false, heldBack: 'named', hatch: '', ledger: false });
         const guestView = overrides.guestListingsOnly === true;
         const nodeKeys = Object.keys({ ...np.getNodeFeatures(), door: getDoor() }).sort();
-        assert(np.getNodeFeatures().beans && confirmationDialOn(db) && knownFloor(db) === 1000, `${view}: Beans and the dial are on, so a member has a floor to be told`);
+        assert(np.getNodeFeatures().beans && confirmationDialOn(db) && knownFloor(db) === hc(1000), `${view}: Beans and the dial are on, so a member has a floor to be told`);
 
         // A reader who reads as a member: the floor, and the node's own features beside it.
         for (const path of ['/api/community/me', '/api/home']) {
             const r = await call('GET', sam, path);
-            assert(r.status === 200 && r.body?.features?.knownFloor === 1000
+            assert(r.status === 200 && r.body?.features?.knownFloor === hc(1000)
                 && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays'].sort()),
                 `${view}: an active member's ${path} carries knownFloor 1000 beside the node's features (${show(r)})`);
             assert(r.body?.removalDecider === 'automatic', `${view}: and says who decides a removal beside them, automatic (${show(r)})`);
@@ -696,7 +704,7 @@ async function main(): Promise<void> {
         `with no copy yet it says so, and reads its own rows: what a promotion would run with (${noCopy.copiedAt}, ${noCopy.settings.join.value})`);
     const copied = keepMainServerCommunitySettings({
         localConfig: { communityName: 'Riverside Commons' },
-        nodeConfig: { door: 'admins', confirmation: 'off', known_floor: '1200', credit_cap: '2500' },
+        nodeConfig: { door: 'admins', confirmation: 'off', known_floor: String(hc(1200)), credit_cap: String(hc(2500)) },
         directory: { publishLocation: false, publishMembers: true, publishContactEmail: true, publishContactPhone: false, publishHealth: false, directoryPushIntervalHours: 6 },
     }, '2026-10-23T08:00:00.000Z');
     assert(copied.kept, 'the main server\'s settings are kept, as a copy brings them');
@@ -708,7 +716,7 @@ async function main(): Promise<void> {
     assert(fromCopy.standby === true && fromCopy.copiedAt === '2026-10-23T08:00:00.000Z', `it says it is a standby, and when its copy is from (${fromCopy.copiedAt})`);
     assert(fromCopy.settings.join.value === 'admins' && fromCopy.settings.join.configured === 'admins' && fromCopy.settings.join.source === 'owner',
         `who can join is the copy's, only admins, though its own row says any member (${fromCopy.settings.join.value}; own door row ${own.door})`);
-    assert(isDeepStrictEqual(fromCopy.settings.knownFloor.value, { on: false, floor: 1200, cap: 2500, capMax: CREDIT_CAP_MAX }),
+    assert(isDeepStrictEqual(fromCopy.settings.knownFloor.value, { on: false, floor: hc(1200), cap: hc(2500), capMax: CREDIT_CAP_MAX }),
         `the known floor is the copy's: off, 1,200, cap 2,500 (${JSON.stringify(fromCopy.settings.knownFloor.value)}; own dial row ${own.confirmation})`);
     assert(fromCopy.settings.shareLocation.value === false && fromCopy.settings.shareEmail.value === true && fromCopy.settings.shareHealth.value === false,
         `what the directory is sent is the copy's (location ${fromCopy.settings.shareLocation.value}; its own ${own.location})`);

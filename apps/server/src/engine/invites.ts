@@ -144,7 +144,7 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     db.transaction(() => {
         if (replacing && boundEntry) revokeInvitesOnEntryInside(inviterPubkey, boundEntry);
         if (replacing && vouchAsked) vouch = checkInviteVouch(inviterPubkey, vouchAmount);
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount, voucher_level) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount_c, voucher_level_c) VALUES (?, ?, ?, ?, ?, ?, ?)`)
             .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch, level);
         if (vouch) holdForInvite(inviterPubkey, code, vouch);
         if (level && boundEntry) promiseInviteVoucher(inviterPubkey, boundEntry, level);
@@ -177,7 +177,7 @@ export const INVITE_REVOKE_WORDS = {
 };
 
 /** An invite row as a revoke reads it. */
-interface RevokedRow { code: string; created_by: string; issued_by: string | null; vouch_amount: number | null; names_entry_id: string | null; voucher_level: number | null }
+interface RevokedRow { code: string; created_by: string; issued_by: string | null; vouch_amount_c: number | null; names_entry_id: string | null; voucher_level_c: number | null }
 
 /** What a revoke did: how many invites went, how much vouch came back to a budget, and whether a promised voucher budget ended. Never the code. */
 export interface RevokeOutcome { revoked: number; returned: number; promiseEnded: boolean }
@@ -190,9 +190,9 @@ export interface RevokeOutcome { revoked: number; returned: number; promiseEnded
  */
 function revokeRowInside(revoker: string, row: RevokedRow): { returned: number; promiseEnded: boolean } {
     const holder = row.issued_by || row.created_by;
-    const returned = row.vouch_amount ? returnHoldOnRevoke(holder, row.code, revoker) : 0;
-    const promiseEnded = !!row.names_entry_id && row.voucher_level != null;
-    if (promiseEnded) endPromiseOnRevoke(revoker, row.names_entry_id!, row.voucher_level!);
+    const returned = row.vouch_amount_c ? returnHoldOnRevoke(holder, row.code, revoker) : 0;
+    const promiseEnded = !!row.names_entry_id && row.voucher_level_c != null;
+    if (promiseEnded) endPromiseOnRevoke(revoker, row.names_entry_id!, row.voucher_level_c!);
     // A revoke runs on a main server only (assertPlainTablesWritable), so the tombstone is always written.
     const gone = deletePlainRows('invite_codes', 'code = ? AND used_by IS NULL', row.code);
     // Read in this same transaction as unused, so it is: anything else is a fault, and nothing commits.
@@ -201,7 +201,7 @@ function revokeRowInside(revoker: string, row: RevokedRow): { returned: number; 
 }
 
 const selectRevokable = (code: string) => db.prepare(
-    'SELECT code, created_by, issued_by, vouch_amount, names_entry_id, voucher_level, used_by FROM invite_codes WHERE code = ?',
+    'SELECT code, created_by, issued_by, vouch_amount_c, names_entry_id, voucher_level_c, used_by FROM invite_codes WHERE code = ?',
 ).get(code) as (RevokedRow & { used_by: string | null }) | undefined;
 
 /** Inside generateInvite's transaction (`replace: true`): every live invite on the entry revoked by the replacer. */
@@ -279,7 +279,7 @@ export function adminGenerateInvite(
     const createdAt = new Date().toISOString();
 
     db.transaction(() => {
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by, vouch_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by, vouch_amount_c) VALUES (?, ?, ?, ?, ?, ?, ?)`)
           .run(code, adminPubkey, createdAt, genesisType, intendedFor || null, issuedBy || null, vouch);
         if (vouch && issuedBy) holdForInvite(issuedBy, code, vouch);
     })();
@@ -438,13 +438,13 @@ export function redeemInvite(
         if (!m) return null;
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         // The joiner's kept notice is their record of it: a member this new has no socket open and no push token yet.
-        const voucher = invite.names_entry_id && invite.voucher_level != null
-            ? landInviteVoucher(invite.created_by, invite.names_entry_id, publicKey, invite.voucher_level, outcome)
+        const voucher = invite.names_entry_id && invite.voucher_level_c != null
+            ? landInviteVoucher(invite.created_by, invite.names_entry_id, publicKey, invite.voucher_level_c, outcome)
             : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ?, voucher_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, voucher?.outcome ?? null, code);
         const voucherMaker = invite.issued_by || invite.created_by;
-        if (invite.vouch_amount) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount);
+        if (invite.vouch_amount_c) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount_c);
         return m;
     })();
     if (!member) {
@@ -456,9 +456,9 @@ export function redeemInvite(
     if (genesisType !== 'standard') {
         const earnedCredit = getGenesisEarnedCredit(genesisType);
         if (earnedCredit > 0) {
-            db.prepare("UPDATE members SET earned_credit = ? WHERE public_key = ?").run(earnedCredit, publicKey);
+            db.prepare("UPDATE members SET earned_credit_c = ? WHERE public_key = ?").run(earnedCredit, publicKey);
             const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - earnedCredit);
-            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit: ${earnedCredit})`);
+            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit_c: ${earnedCredit})`);
         }
     }
 

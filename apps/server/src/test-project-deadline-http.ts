@@ -39,6 +39,8 @@ let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
+/** The story's figures are Beans; a goal in a body is whole hundredths, `goalAmount_c` (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 // The sentence Marty's decision asks for (9 Oct), pinned here word for word.
 const PAST = "A project's deadline can't be in the past.";
 
@@ -59,7 +61,7 @@ function makeMember(): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, `Member${++made}`);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -140,21 +142,21 @@ async function main(): Promise<void> {
     for (const [i, { value, error }] of refused.entries()) {
         const before = projectCount();
         const res = await signedPost('/api/enterprise', {
-            name: `Refused Garden ${i + 1}`, purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount: 100, deadlineAt: value,
+            name: `Refused Garden ${i + 1}`, purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount_c: hc(100), deadlineAt: value,
         }, makeMember());
         assert(res.status === 400 && res.error === error,
             `/api/enterprise refuses deadlineAt ${show(value)} with a 400 and a plain sentence (got ${res.status} ${res.error ?? ''})`);
         assert(projectCount() === before, `...and stores no project for ${show(value)}`);
     }
     const viaTreasury = await signedPost('/api/treasury', {
-        name: 'Treasury Garden', lifecycle: 'bounded', goalAmount: 100, deadlineAt: 'garbage 1',
+        name: 'Treasury Garden', lifecycle: 'bounded', goalAmount_c: hc(100), deadlineAt: 'garbage 1',
     }, makeMember());
     assert(viaTreasury.status === 400 && viaTreasury.error === PROJECT_DEADLINE_FORMAT_ERROR,
         `/api/treasury, the same handler, refuses it too (got ${viaTreasury.status} ${viaTreasury.error ?? ''})`);
     for (const [i, { value, stored, label }] of accepted.entries()) {
         // Enterprise names are unique on a node.
         const res = await signedPost('/api/enterprise', {
-            name: `Bounded Garden ${i + 1}`, purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount: 100, deadlineAt: value,
+            name: `Bounded Garden ${i + 1}`, purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount_c: hc(100), deadlineAt: value,
         }, makeMember());
         const key = res.body?.publicKey;
         const rows = key ? storedDeadlines(key) : { project: 'none', member: 'none' };
@@ -170,7 +172,7 @@ async function main(): Promise<void> {
     for (const { value, error } of refused) {
         const before = projectCount();
         const res = await signedPost('/api/crowdfund/projects', {
-            title: 'Crowdfunded Shed', description: 'A shed', goalAmount: 100, deadlineAt: value,
+            title: 'Crowdfunded Shed', description: 'A shed', goalAmount_c: hc(100), deadlineAt: value,
         }, someone);
         assert(res.status === 400 && res.error === error,
             `crowdfund create refuses deadlineAt ${show(value)} with a 400 and a plain sentence (got ${res.status} ${res.error ?? ''})`);
@@ -178,7 +180,7 @@ async function main(): Promise<void> {
     }
     for (const { value, stored, label } of accepted) {
         const res = await signedPost('/api/crowdfund/projects', {
-            title: 'Crowdfunded Shed', description: 'A shed', goalAmount: 100, deadlineAt: value,
+            title: 'Crowdfunded Shed', description: 'A shed', goalAmount_c: hc(100), deadlineAt: value,
         }, makeMember());
         const id = res.body?.project?.id;
         const rows = id ? storedDeadlines(id) : { project: 'none', member: 'none' };
@@ -190,12 +192,12 @@ async function main(): Promise<void> {
     console.log('── 3. POST /api/crowdfund/projects/update ──');
     const owner = makeMember();
     const made1 = await signedPost('/api/crowdfund/projects', {
-        title: 'Edited Shed', description: 'A shed', goalAmount: 100, deadlineAt: inSeven,
+        title: 'Edited Shed', description: 'A shed', goalAmount_c: hc(100), deadlineAt: inSeven,
     }, owner);
     const projectId = made1.body?.project?.id as string;
     assert(made1.status === 200 && !!projectId, `a project to edit is made (got ${made1.status} ${made1.error ?? ''})`);
     const update = (deadline: Record<string, unknown>) => signedPost('/api/crowdfund/projects/update', {
-        id: projectId, title: 'Edited Shed', description: 'A shed', goalAmount: 100, ...deadline,
+        id: projectId, title: 'Edited Shed', description: 'A shed', goalAmount_c: hc(100), ...deadline,
     }, owner);
     for (const { value, error } of refused) {
         const res = await update({ deadlineAt: value });
@@ -227,7 +229,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(twoDaysAgo, projectId);
     db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(twoDaysAgo, projectId);
     const expiredEdit = await signedPost('/api/crowdfund/projects/update', {
-        id: projectId, title: 'Edited Shed, renamed', description: 'A shed', goalAmount: 100,
+        id: projectId, title: 'Edited Shed, renamed', description: 'A shed', goalAmount_c: hc(100),
     }, owner);
     rows = storedDeadlines(projectId);
     const title = (db.prepare('SELECT title FROM projects WHERE id = ?').get(projectId) as { title: string } | undefined)?.title;

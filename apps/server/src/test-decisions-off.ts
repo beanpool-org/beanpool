@@ -103,11 +103,11 @@ async function main() {
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit_c, last_active_at)
                     VALUES (?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
             .run(pk, callsign, joined, joined, new Date().toISOString());
         setMemberPhoto(db, pk, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return { pk, privateKey, callsign };
     };
     const olga = member('Olga'), alice = member('Alice'), bob = member('Bob'), carol = member('Carol'), dave = member('Dave');
@@ -123,7 +123,7 @@ async function main() {
     // which the wash rule counts for nothing (engine trust.ts qualifiedTradeValue).
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * DAY).toISOString(), bob.pk, carol.pk);
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), bob.pk, carol.pk, tradedAt, tradedAt);
 
     // A Decision already on this node, as if opened before the switch went off.

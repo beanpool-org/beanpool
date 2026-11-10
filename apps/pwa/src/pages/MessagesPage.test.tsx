@@ -880,7 +880,7 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         return screen.findByRole('dialog');
     };
     const nodeSays = (features: Record<string, unknown>) => {
-        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: features.beans === false ? 'global' : 'local', features } as never);
+        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: features.beans === false ? 'global' : 'local', features } as never);
         onTestFinished(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => { throw new Error('offline'); }); });
     };
 

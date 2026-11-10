@@ -38,7 +38,7 @@
 // The same attribution gives an unfunded project's backers their Beans back a week after its end date
 // (engine/unfunded-pledges.ts): who is owed what from an escrow is worked out one way, here.
 
-import { DUST_THRESHOLD, isSyntheticAccount } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -47,7 +47,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 /** What one backer gets back: the sum of their stranded pledges, net of anything already sent back to them. */
 export interface StrandedPledgeReturn {
     backer: string;
-    amount: number;
+    amount_c: number;
     /** The pledge rows (transactions.id) this amount is made of. */
     pledgeIds: string[];
 }
@@ -57,7 +57,7 @@ interface StrandedBase {
     title: string;
     status: string;
     escrow: string;
-    /** What the escrow holds now (accounts.balance). */
+    /** What the escrow holds now (accounts.balance_c). */
     held: number;
 }
 
@@ -77,8 +77,8 @@ interface EscrowRow {
     id: string;
     from_pubkey: string;
     to_pubkey: string;
-    amount: number;
-    tax_fee: number | null;
+    amount_c: number;
+    fee_c: number | null;
     project_id: string | null;
 }
 
@@ -88,18 +88,19 @@ export interface StrandedPledgeLedger {
     conservingTransaction: <T>(fn: () => T) => T;
 }
 
-const near = (a: number, b: number) => Math.abs(a - b) <= DUST_THRESHOLD;
+/** Whole hundredths: the same figure, exactly. */
+const near = (a: number, b: number) => a === b;
 
 /** Every project that isn't ACTIVE and whose escrow holds more than dust, with who is owed what or why nobody can be. Reads only. */
 export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
     const projects = db.prepare(`
-        SELECT p.id, p.title, p.status, a.balance
+        SELECT p.id, p.title, p.status, a.balance_c
         FROM projects p
         JOIN accounts a ON a.public_key = 'escrow_' || p.id
-        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance > ?
+        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance_c > 0
         ORDER BY p.id
-    `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance: number }[];
-    return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance)));
+    `).all() as { id: string; title: string | null; status: string | null; balance_c: number }[];
+    return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c)));
 }
 
 /**
@@ -161,7 +162,7 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
     // Oldest first. A pledge and the sweep it triggers share a millisecond, so the row order breaks the tie: the sweep is
     // written after its pledge, in the same transaction (db.ts pledgeToProject).
     const rows = db.prepare(`
-        SELECT id, from_pubkey, to_pubkey, amount, tax_fee, project_id
+        SELECT id, from_pubkey, to_pubkey, amount_c, fee_c, project_id
         FROM transactions
         WHERE from_pubkey = ? OR to_pubkey = ?
         ORDER BY timestamp ASC, rowid ASC
@@ -170,8 +171,8 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
     let running = 0;
     let lastZero = -1;
     rows.forEach((r, i) => {
-        if (r.to_pubkey === escrow) running += Number(r.amount) - Number(r.tax_fee || 0);
-        if (r.from_pubkey === escrow) running -= Number(r.amount);
+        if (r.to_pubkey === escrow) running += Number(r.amount_c) - Number(r.fee_c || 0);
+        if (r.from_pubkey === escrow) running -= Number(r.amount_c);
         if (near(running, 0)) lastZero = i;
     });
     if (!near(running, held)) {
@@ -184,23 +185,23 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
             if (r.project_id !== projectId || isSyntheticAccount(r.from_pubkey)) {
                 return stop(`transaction ${r.id} put Beans into it that are not a member's pledge to this project`);
             }
-            const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount: 0, pledgeIds: [] };
-            o.amount += Number(r.amount) - Number(r.tax_fee || 0);
+            const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount_c: 0, pledgeIds: [] as string[] };
+            o.amount_c += Number(r.amount_c) - Number(r.fee_c || 0);
             o.pledgeIds.push(r.id);
             owed.set(r.from_pubkey, o);
         } else {
             const o = owed.get(r.to_pubkey);
             if (!o) return stop(`transaction ${r.id} paid Beans out of it to someone who had not pledged since it last stood at 0`);
-            o.amount -= Number(r.amount);
+            o.amount_c -= Number(r.amount_c);
         }
     }
 
     const returns: StrandedPledgeReturn[] = [];
     for (const o of owed.values()) {
-        if (o.amount < -DUST_THRESHOLD) return stop(`more went back to ${o.backer} than they pledged`);
-        if (o.amount > DUST_THRESHOLD) returns.push(o);
+        if (o.amount_c < 0) return stop(`more went back to ${o.backer} than they pledged`);
+        if (o.amount_c > 0) returns.push(o);
     }
-    const total = returns.reduce((s, o) => s + o.amount, 0);
+    const total = returns.reduce((s, o) => s + o.amount_c, 0);
     if (returns.length === 0 || !near(total, held)) {
         return stop(`the pledges since it last stood at 0 come to ${total}, but it holds ${held}`);
     }
@@ -231,23 +232,23 @@ export function returnStrandedPledges(ledger: StrandedPledgeLedger): { returned:
     for (const s of found) {
         if (!s.ok) {
             left++;
-            console.error(`[Pledges] LEFT FOR THE OPERATOR: ${s.escrow} (project "${s.title}", ${s.status}) holds ${s.held} Beans pledged after its goal, not returned: ${s.reason}.`);
+            console.error(`[Pledges] LEFT FOR THE OPERATOR: ${s.escrow} (project "${s.title}", ${s.status}) holds ${formatHundredths(s.held, 'en')} Beans pledged after its goal, not returned: ${s.reason}.`);
             continue;
         }
         const memo = `Pledge returned: "${s.title}" had already reached its goal, so this pledge never reached it`;
         try {
             ledger.conservingTransaction(() => {
                 for (const o of s.returns) {
-                    const txn = ledger.transfer(s.escrow, o.backer, o.amount, memo, 'escrow', true);
-                    if (!txn) throw new Error(`the ledger refused to return ${o.amount} to ${o.backer}`);
+                    const txn = ledger.transfer(s.escrow, o.backer, o.amount_c, memo, 'escrow', true);
+                    if (!txn) throw new Error(`the ledger refused to return ${o.amount_c} to ${o.backer}`);
                     // The row names the project, as the delete path's refunds do: the project's history shows it went back.
                     db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
                 }
-                const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
-                db.prepare('UPDATE projects SET current_amount = MAX(0, current_amount - ?) WHERE id = ?').run(total, s.projectId);
+                const total = s.returns.reduce((sum, o) => sum + o.amount_c, 0);
+                db.prepare('UPDATE projects SET current_amount_c = MAX(0, current_amount_c - ?) WHERE id = ?').run(total, s.projectId);
             });
             returned++;
-            const lines = s.returns.map((o) => `${o.amount} to ${o.backer} (${o.pledgeIds.join(', ')})`).join('; ');
+            const lines = s.returns.map((o) => `${o.amount_c} to ${o.backer} (${o.pledgeIds.join(', ')})`).join('; ');
             console.log(`[Pledges] Returned the pledges stranded in ${s.escrow} (project "${s.title}", ${s.status}): ${lines}.`);
         } catch (e: any) {
             left++;

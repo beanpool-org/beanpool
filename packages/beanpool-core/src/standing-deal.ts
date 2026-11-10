@@ -22,7 +22,8 @@
 
 import { randomBytes } from '@noble/hashes/utils.js';
 import { audienceOf, signedRequestBytes, toBase64, type Signer } from './request-signing.js';
-import { formatNumber, t, tn } from './words.js';
+import { t, tn } from './words.js';
+import { formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
 
 /** The two periods a standing deal runs by. */
 export type StandingPeriodUnit = 'week' | 'month';
@@ -61,10 +62,9 @@ export function standingUnitOf(priceType: string | null | undefined): StandingPe
  * the month is free) has nothing to hold each period, and its authorisation could not name 0 Beans (isStandingAuthorisation,
  * the node's checkStandingStart), so it stays the one-off deal of 0 Beans it was before S2 (round 2 of #3000).
  */
-export function standingUnitForListing(priceType: string | null | undefined, price: number | string | null | undefined): StandingPeriodUnit | null {
+export function standingUnitForListing(priceType: string | null | undefined, price: Hundredths | null | undefined): StandingPeriodUnit | null {
     const unit = standingUnitOf(priceType);
-    const beans = typeof price === 'string' ? Number(price) : price;
-    return unit && typeof beans === 'number' && Number.isFinite(beans) && beans > 0 ? unit : null;
+    return unit && isHundredths(price) && price > 0 ? unit : null;
 }
 
 const WEEK_MS = 7 * 86_400_000;
@@ -137,8 +137,11 @@ export function standingGraceEndsAt(startsAt: string | number, unit: StandingPer
 
 // ── The authorisation (§6) ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** The first line of every standing authorisation: its format. */
-export const STANDING_AUTH_VERSION = 'beanpool-standing-v1';
+/**
+ * The first line of every standing authorisation: its format. v2 carries the amount as whole hundredths of a Bean, an
+ * integer (DESIGN-atomic-beans-fable.md §1), so no v1 text (Beans to the cent) parses.
+ */
+export const STANDING_AUTH_VERSION = 'beanpool-standing-v2';
 
 /** What the payer agrees to, once, when a standing deal starts (and again when they extend it). */
 export interface StandingAuthorisation {
@@ -150,8 +153,8 @@ export interface StandingAuthorisation {
     listingId: string;
     /** Who is paid: the listing's author on an Offer, the helper on a Need. 64 lower-case hex. */
     payee: string;
-    /** Beans per period, to the cent. */
-    beansPerPeriod: number;
+    /** Per period, whole hundredths of a Bean (above 0). */
+    beansPerPeriod_c: Hundredths;
     unit: StandingPeriodUnit;
     /** How many periods, or null for until one of them stops it. */
     maxPeriods: number | null;
@@ -166,14 +169,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /** A host in the one form apps sign (lower case, no port, no trailing dot), or a bracketed IPv6 address. */
 const HOST = /^(?=.{1,253}$)(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])$/;
 const NONCE = /^[A-Za-z0-9_-]{8,128}$/;
-const BEANS_2DP = /^(0|[1-9]\d{0,8})\.\d{2}$/;
+/** The amount line: whole hundredths, above 0, at most 11 digits, no leading zero. */
+const HUNDREDTHS_LINE = /^[1-9]\d{0,10}$/;
 /** The largest number of periods one authorisation may name (about 19 years of months). */
 export const STANDING_MAX_PERIODS = 240;
 
-/** Beans per period as the text writes them: to the cent, always two places. */
-export function standingBeansText(beans: number): string {
-    return (Math.round(beans * 100) / 100).toFixed(2);
-}
 
 /** Whether a start is written exactly as toISOString writes it (one spelling per instant, so the text is canonical). */
 function isCanonicalIso(s: string): boolean {
@@ -188,8 +188,7 @@ export function isStandingAuthorisation(a: StandingAuthorisation): boolean {
         && typeof a.standingId === 'string' && SAFE_ID.test(a.standingId)
         && typeof a.listingId === 'string' && SAFE_ID.test(a.listingId)
         && typeof a.payee === 'string' && HEX64.test(a.payee)
-        && typeof a.beansPerPeriod === 'number' && Number.isFinite(a.beansPerPeriod) && a.beansPerPeriod > 0
-        && BEANS_2DP.test(standingBeansText(a.beansPerPeriod)) && Number(standingBeansText(a.beansPerPeriod)) === a.beansPerPeriod
+        && isHundredths(a.beansPerPeriod_c) && a.beansPerPeriod_c > 0 && HUNDREDTHS_LINE.test(String(a.beansPerPeriod_c))
         && (a.unit === 'week' || a.unit === 'month')
         && (a.maxPeriods === null || (Number.isInteger(a.maxPeriods) && a.maxPeriods >= 1 && a.maxPeriods <= STANDING_MAX_PERIODS))
         && typeof a.startsAt === 'string' && isCanonicalIso(a.startsAt)
@@ -208,7 +207,7 @@ export function standingAuthorisationText(a: StandingAuthorisation): string {
         a.standingId,
         a.listingId,
         a.payee,
-        standingBeansText(a.beansPerPeriod),
+        String(a.beansPerPeriod_c),
         a.unit,
         a.maxPeriods === null ? 'open' : String(a.maxPeriods),
         a.startsAt,
@@ -226,13 +225,13 @@ export function parseStandingAuthorisation(text: unknown): StandingAuthorisation
     const lines = text.split('\n');
     if (lines.length !== 10 || lines[0] !== STANDING_AUTH_VERSION) return null;
     const [, host, standingId, listingId, payee, beans, unit, max, startsAt, nonce] = lines;
-    if (!BEANS_2DP.test(beans)) return null;
+    if (!HUNDREDTHS_LINE.test(beans)) return null;
     if (unit !== 'week' && unit !== 'month') return null;
     let maxPeriods: number | null;
     if (max === 'open') maxPeriods = null;
     else if (/^[1-9]\d{0,3}$/.test(max)) maxPeriods = Number(max);
     else return null;
-    const a: StandingAuthorisation = { host, standingId, listingId, payee, beansPerPeriod: Number(beans), unit, maxPeriods, startsAt, nonce };
+    const a: StandingAuthorisation = { host, standingId, listingId, payee, beansPerPeriod_c: Number(beans), unit, maxPeriods, startsAt, nonce };
     if (!isStandingAuthorisation(a)) return null;
     return standingAuthorisationText(a) === text ? a : null;
 }
@@ -244,7 +243,8 @@ export function standingPaymentPayload(standingId: string, periodNo: number): st
 
 // ── The words, one set for both apps and the node's notices ─────────────────────────────────────────────────────────
 
-const n2 = (n: number) => formatNumber(Math.round(n * 100) / 100);
+/** A figure in the words: whole hundredths (formatHundredths). */
+const n2 = (c: Hundredths) => formatHundredths(c);
 
 /**
  * Every sentence a member reads about a standing deal. Amounts are numbers (formatted here); names, titles and dates come
@@ -427,17 +427,17 @@ function uuidOf(b: Uint8Array): string {
 
 /**
  * The authorisation's fields for a take-up, both apps: a fresh standing deal id (a UUID) and nonce, the start as
- * toISOString writes it, and Beans to the cent. `rand` is for tests.
+ * toISOString writes it, and the amount in whole hundredths. `rand` is for tests.
  */
 export function standingFieldsFor(
-    input: { listingId: string; payee: string; beansPerPeriod: number; unit: StandingPeriodUnit; maxPeriods: number | null; startsAt: number },
+    input: { listingId: string; payee: string; beansPerPeriod_c: Hundredths; unit: StandingPeriodUnit; maxPeriods: number | null; startsAt: number },
     rand: (n: number) => Uint8Array = randomBytes,
 ): StandingAuthorisationFields {
     return {
         standingId: uuidOf(rand(16)),
         listingId: input.listingId,
         payee: input.payee,
-        beansPerPeriod: Math.round(input.beansPerPeriod * 100) / 100,
+        beansPerPeriod_c: input.beansPerPeriod_c,
         unit: input.unit,
         maxPeriods: input.maxPeriods,
         startsAt: new Date(input.startsAt).toISOString(),
@@ -480,15 +480,15 @@ export function standingStartAt(now: number, daysAhead: number): number {
 }
 
 /**
- * The Beans a member can pay now, from the node's balance read (GET /api/ledger/balance): their balance less their usable
- * floor (the floor their live Offers unlock; the earned floor when the read has none). Null when the read isn't there, so a
- * take-up whose room is unknown is never disabled by a guess (the node still checks).
+ * The Beans a member can pay now, in whole hundredths, from the node's balance read (GET /api/ledger/balance): their
+ * balance less their usable floor (the floor their live Offers unlock; the earned floor when the read has none). Exact:
+ * whole hundredths subtract without rounding. Null when the read isn't there (or isn't whole hundredths), so a take-up whose
+ * room is unknown is never disabled by a guess (the node still checks).
  */
-export function standingRoomOf(b: { balance?: number | null; floor?: number | null; usableFloor?: number | null } | null | undefined): number | null {
-    if (!b || typeof b.balance !== 'number' || !Number.isFinite(b.balance)) return null;
-    const floor = typeof b.usableFloor === 'number' && Number.isFinite(b.usableFloor) ? b.usableFloor
-        : typeof b.floor === 'number' && Number.isFinite(b.floor) ? b.floor : 0;
-    return Math.round((b.balance - floor) * 100) / 100;
+export function standingRoomOf(b: { balance_c?: number | null; floor_c?: number | null; usableFloor_c?: number | null } | null | undefined): Hundredths | null {
+    if (!b || !isHundredths(b.balance_c)) return null;
+    const floor = isHundredths(b.usableFloor_c) ? b.usableFloor_c : isHundredths(b.floor_c) ? b.floor_c : 0;
+    return b.balance_c - floor;
 }
 
 /** Every line of the take-up screen (design §3), one set for both apps. `day` writes a date as the app does ("9 Nov"). */
@@ -537,7 +537,7 @@ export interface StandingDealRow {
     standingId?: string | null;
     periodNo?: number | null;
     standingPhase?: StandingPhase | null;
-    standingBeans?: number | null;
+    standingBeans_c?: number | null;
     standingUnit?: StandingPeriodUnit | null;
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string | null;
@@ -598,7 +598,7 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
     if (!tx.standingId || (phase !== 'paid' && phase !== 'short') || (unit !== 'week' && unit !== 'month')) return null;
     const payer = tx.buyerPublicKey === actingAs;
     if (!payer && tx.sellerPublicKey !== actingAs) return null;
-    const beans = Number(tx.standingBeans ?? 0);
+    const beans = (isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : 0);
     const payeeName = tx.sellerCallsign || t('A member');
     const payerName = tx.buyerCallsign || t('A member');
     const next = tx.standingNextDueAt || new Date(now).toISOString();
@@ -634,7 +634,7 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
 export function standingStopConfirm(tx: StandingDealRow, actingAs: string, day: (iso: string) => string) {
     const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
     const payer = tx.buyerPublicKey === actingAs;
-    const beans = Number(tx.standingBeans ?? 0);
+    const beans = (isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : 0);
     const short = shortPeriodOf(tx);
     const next = tx.standingNextDueAt || new Date().toISOString();
     return {
@@ -696,7 +696,7 @@ export function standingNeedsLine(tx: StandingDealRow, me: string, now: number, 
     const payer = tx.buyerPublicKey === me;
     if (!payer && tx.sellerPublicKey !== me) return null;
     const title = tx.postTitle || t('A standing deal');
-    const beans = n2(Number(tx.standingBeans ?? 0));
+    const beans = n2((isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : 0));
     const until = day(short.graceEndsAt);
     const days = Math.max(0, Math.floor((now - Date.parse(short.dueAt)) / 86_400_000));
     let label: string;

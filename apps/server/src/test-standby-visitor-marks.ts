@@ -58,7 +58,7 @@ async function child(): Promise<void> {
             // A member, as the doors write one (an inviter and a code).
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                         VALUES (?, 'Mo', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'INV-MO')`).run(a.member, genesis);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.member);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.member);
             return true;
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {

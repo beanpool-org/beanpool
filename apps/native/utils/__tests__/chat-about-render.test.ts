@@ -47,7 +47,8 @@ import { ChatBubble } from '../../components/chat/ChatBubble';
 import { makeChatStyles } from '../../components/chat/styles';
 import { lightColors, darkColors } from '../../constants/colors';
 
-const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', credits: 6, price_type: 'fixed' };
+// The phone's own row: its price in whole hundredths of a Bean (posts.price_c).
+const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', price_c: 600, price_type: 'fixed' };
 const about = { postId: 'post-eggs-1', title: 'Fresh eggs', kind: 'offer' as const };
 const LONG = 'Pottery course for beginners: wheel, glazing and two firings, all materials and a cup of tea included';
 
@@ -71,7 +72,7 @@ describe.each([['light' as const], ['dark' as const]])('the card in a bubble (%s
 
     it('shows the listing\'s own kind, title and price, and a tap opens the listing', () => {
         const opened: string[] = [];
-        const dom = draw(createElement(ChatAboutCard, { about, live: { ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
+        const dom = draw(createElement(ChatAboutCard, { about, live: { ...EGGS, title: 'Fresh eggs, a dozen', price_c: 800, priceType: 'fixed' }, isMe: false, onOpen: (id: string) => opened.push(id) }));
         const card = dom.querySelector('[data-testid="chat-about-card"]') as HTMLElement;
         expect(card.textContent).toBe('OfferFresh eggs, a dozen8 Beans');
         // Named by what it shows (WCAG 2.5.3: no label of its own to differ from the visible words); the sentence is its hint.

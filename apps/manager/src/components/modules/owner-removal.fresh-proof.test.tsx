@@ -19,7 +19,7 @@ const STEP_UP = { error: 'Press Manage on your phone again, then make this chang
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const PREVIEW = {
     member: { publicKey: owner, callsign: 'anna', status: 'active', joinedAt: '2026-01-01' },
-    balance: 0, commonsBalance: 300, costToCommunity: 0, projectedCommonsBalance: 300, pendingEscrowsCount: 0, isSoleOwner: false,
+    balance_c: 0, commonsBalance_c: 30000, costToCommunity_c: 0, projectedCommonsBalance_c: 30000, pendingEscrowsCount: 0, isSoleOwner: false,
     activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'ben' }],
 };
 
@@ -53,7 +53,7 @@ describe('Prune branch with an owner in it (S4a)', () => {
     const root = { publicKey: owner, callsign: 'anna' };
     // The node's figures for the branch are in before Confirm can be pressed (PruneBranchModal).
     const press = async () => {
-        render(<PruneBranchModal rootMember={root} loadFigures={() => Promise.resolve({ members: 1, badDebt: 0, surplus: 0, net: 0 })} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', undefined, code).then(() => {})} onClose={() => {}} />);
+        render(<PruneBranchModal rootMember={root} loadFigures={() => Promise.resolve({ members: 1, badDebt_c: 0, surplus_c: 0, net_c: 0 })} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', undefined, code).then(() => {})} onClose={() => {}} />);
         fireEvent.change(screen.getByPlaceholderText(/Type "anna" to confirm/i), { target: { value: 'anna' } });
         await waitFor(() => expect(screen.getByRole('button', { name: /Prune Entire Branch/i })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: /Prune Entire Branch/i }));

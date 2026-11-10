@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { enterpriseCardStatus } from '../enterprise-card';
 
-const base = { balance: 35.82, liveOffers: 2, goalAmount: null, currentAmount: null, lifecycle: 'ongoing', status: 'active', paused: false, keepers: [] };
+// Every figure whole hundredths of a Bean, as the node's /api/treasuries row sends them (`*_c`).
+const base = { balance_c: 3582, liveOffers: 2, goalAmount_c: null, currentAmount_c: null, lifecycle: 'ongoing', status: 'active', paused: false, keepers: [] };
 const twoKeepers = [{ pubkey: 'a', callsign: 'A', role: 'lead' }, { pubkey: 'b', callsign: 'B', role: 'keeper' }];
 
 describe('enterpriseCardStatus — what the Commons card says', () => {
@@ -39,7 +40,7 @@ describe('enterpriseCardStatus — what the Commons card says', () => {
     });
 
     it('FUNDED still shows beside a state badge', () => {
-        const s = enterpriseCardStatus({ ...base, goalAmount: 100, currentAmount: 100, status: 'completed' });
+        const s = enterpriseCardStatus({ ...base, goalAmount_c: 10000, currentAmount_c: 10000, status: 'completed' });
         expect(s.stateBadge).toBe('closed');
         expect(s.showKindBadge).toBe(true);
     });
@@ -49,11 +50,15 @@ describe('enterpriseCardStatus — what the Commons card says', () => {
     });
 
     it('a goal reached is funded; one short is a project', () => {
-        expect(enterpriseCardStatus({ ...base, goalAmount: 100, currentAmount: 100 }).kindBadge).toBe('funded');
-        const short = enterpriseCardStatus({ ...base, goalAmount: 100, currentAmount: 40 });
+        expect(enterpriseCardStatus({ ...base, goalAmount_c: 10000, currentAmount_c: 10000 }).kindBadge).toBe('funded');
+        const short = enterpriseCardStatus({ ...base, goalAmount_c: 10000, currentAmount_c: 4000 });
         expect(short.kindBadge).toBe('project');
         expect(short.isFunded).toBe(false);
-        expect(short.currentRaised).toBe(40);
+        // Raised, whole hundredths: 40 Beans.
+        expect(short.currentRaised).toBe(4000);
+        // One hundredth short of the goal is not funded; the goal to the hundredth is.
+        expect(enterpriseCardStatus({ ...base, goalAmount_c: 4925, currentAmount_c: 4924 }).isFunded).toBe(false);
+        expect(enterpriseCardStatus({ ...base, goalAmount_c: 4925, currentAmount_c: 4925 }).isFunded).toBe(true);
     });
 
     it('singular wording for one offer and one keeper', () => {

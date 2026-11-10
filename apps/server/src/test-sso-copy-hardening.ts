@@ -184,7 +184,7 @@ function addOwner(): Owner {
     const callsign = `hard${++seq}-${key.pk.slice(0, 6)}`;
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(key.pk, callsign);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key.pk);
     return { key, seedHex: seed.toString('hex'), callsign };
 }
 

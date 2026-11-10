@@ -75,9 +75,9 @@ function throws(fn: () => unknown, re: RegExp, msg: string): void {
 }
 
 const nodeTotal = () => {
-    const accRows = db.prepare("SELECT SUM(balance) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
+    const accRows = db.prepare("SELECT SUM(balance_c) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
     const accSum = accRows?.total || 0;
-    return Math.round((accSum + getCommonsBalanceExact()) * 10000) / 10000;
+    return accSum + getCommonsBalanceExact();
 };
 
 function makeMember(callsign: string): string {
@@ -88,7 +88,7 @@ function makeMember(callsign: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, uniqueCallsign);
     setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     return pubkey;
 }
 
@@ -104,19 +104,19 @@ async function main() {
     const charlie = makeMember('charlie'); // Alternate buyer/seller
 
     // Seed initial balances from genesis
-    transfer('genesis', alice, 500, 'seed alice', 'direct', true);
-    transfer('genesis', bob, 500, 'seed bob', 'direct', true);
-    transfer('genesis', charlie, 500, 'seed charlie', 'direct', true);
+    transfer('genesis', alice, 50000, 'seed alice', 'direct', true);
+    transfer('genesis', bob, 50000, 'seed bob', 'direct', true);
+    transfer('genesis', charlie, 50000, 'seed charlie', 'direct', true);
 
     const initialTotal = nodeTotal();
     assert(initialTotal === 0, `Initial ledger sums to zero (got ${initialTotal})`);
 
     const initialAudit = runLedgerAudit();
-    assert(initialAudit.ok === true && Math.abs(initialAudit.drift) < 0.0001 && initialAudit.strandedEscrows === 0, 'Initial ledger audit is clean (0 drift, 0 stranded escrows)');
+    assert(initialAudit.ok === true && initialAudit.drift === 0 && initialAudit.strandedEscrows === 0, 'Initial ledger audit is clean (0 drift, 0 stranded escrows)');
 
     // Alice and Charlie list an Offer first to satisfy CONTRIBUTION_REQUIRED
-    createPost('offer', 'services', 'Garden Weeding', '2 hours garden weeding', 20, 'fixed', alice);
-    createPost('offer', 'services', 'Mowing', 'Lawn mowing service', 25, 'fixed', charlie);
+    createPost('offer', 'services', 'Garden Weeding', '2 hours garden weeding', 2000, 'fixed', alice);
+    createPost('offer', 'services', 'Mowing', 'Lawn mowing service', 2500, 'fixed', charlie);
 
     // 2. Setup Marketplace Post and Stalled Escrow
     const firewoodPost = createPost(
@@ -124,7 +124,7 @@ async function main() {
         'goods',
         '1 Cord Split Ironbark Firewood',
         'Well seasoned ironbark firewood ready to burn',
-        100,
+        10000,
         'fixed',
         bob
     );
@@ -134,7 +134,7 @@ async function main() {
     const tx1 = acceptPost(firewoodPost!.id, alice);
     assert(Boolean(tx1?.id), 'Alice accepted post and locked escrow');
     assert(tx1.status === 'pending', 'Escrow transaction status is pending');
-    assert(getBalance(`escrow_${tx1.id}`).balance === 100, 'Escrow account holds 100 BEAN');
+    assert(getBalance(`escrow_${tx1.id}`).balance_c === 10000, 'Escrow account holds 100 BEAN');
     assert(nodeTotal() === initialTotal, 'Ledger SUM(balances)+COMMONS_POOL is unchanged after escrow lock');
 
     // 3. Test getEscrowDisputes filtering by days stuck
@@ -179,8 +179,8 @@ async function main() {
 
     // 5. Outcome 1: release_to_seller
     console.log('\n--- Testing Outcome 1: release_to_seller ---');
-    const bobBalBefore1 = getBalance(bob).balance;
-    const aliceBalBefore1 = getBalance(alice).balance;
+    const bobBalBefore1 = getBalance(bob).balance_c;
+    const aliceBalBefore1 = getBalance(alice).balance_c;
     const commonsBefore1 = getCommonsBalanceExact();
     const ledgerTotalBefore1 = nodeTotal();
 
@@ -189,16 +189,16 @@ async function main() {
     });
 
     assert(resolvedTx1.status === 'completed', 'Transaction status marked completed');
-    assert(getBalance(`escrow_${tx1.id}`).balance === 0, 'Escrow account drained to exactly 0');
-    assert(getBalance(bob).balance === Math.round((bobBalBefore1 + 98.5) * 100) / 100, 'Seller Bob received 98.50 BEAN payout (100 minus 1.5% fee)');
-    assert(getBalance(alice).balance === aliceBalBefore1, 'Buyer Alice received 0 refund');
-    assert(Math.round((getCommonsBalanceExact() - commonsBefore1) * 100) / 100 === 1.5, 'Commons pool received 1.50 BEAN fee');
+    assert(getBalance(`escrow_${tx1.id}`).balance_c === 0, 'Escrow account drained to exactly 0');
+    assert(getBalance(bob).balance_c === bobBalBefore1 + 9850, 'Seller Bob received 98.50 BEAN payout (100 minus 1.5% fee)');
+    assert(getBalance(alice).balance_c === aliceBalBefore1, 'Buyer Alice received 0 refund');
+    assert(getCommonsBalanceExact() - commonsBefore1 === 150, 'Commons pool received 1.50 BEAN fee');
 
     // Conservation assertion after Outcome 1
     assert(nodeTotal() === ledgerTotalBefore1, 'SUM(balances)+COMMONS_POOL is unchanged before and after release_to_seller');
     assert(nodeTotal() === 0, 'Ledger total sums to zero after release_to_seller');
     const audit1 = runLedgerAudit();
-    assert(audit1.ok === true && Math.abs(audit1.drift) < 0.0001 && audit1.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 1');
+    assert(audit1.ok === true && audit1.drift === 0 && audit1.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 1');
 
     // Database row verification: acting admin recorded
     const dbRow1 = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(tx1.id) as any;
@@ -236,16 +236,16 @@ async function main() {
         'food',
         'Raw Honey 5kg Tub',
         'Pure bush honey from local hives',
-        60,
+        6000,
         'fixed',
         bob
     );
     const tx2 = acceptPost(honeyPost!.id, charlie);
-    assert(getBalance(`escrow_${tx2.id}`).balance === 60, 'Escrow holds 60 BEAN');
+    assert(getBalance(`escrow_${tx2.id}`).balance_c === 6000, 'Escrow holds 60 BEAN');
     db.prepare(`UPDATE marketplace_transactions SET created_at = datetime('now', '-8 days') WHERE id = ?`).run(tx2.id);
 
-    const charlieBalBefore2 = getBalance(charlie).balance;
-    const bobBalBefore2 = getBalance(bob).balance;
+    const charlieBalBefore2 = getBalance(charlie).balance_c;
+    const bobBalBefore2 = getBalance(bob).balance_c;
     const commonsBefore2 = getCommonsBalanceExact();
     const ledgerTotalBefore2 = nodeTotal();
 
@@ -254,16 +254,16 @@ async function main() {
     });
 
     assert(resolvedTx2.status === 'cancelled', 'Transaction status marked cancelled on refund');
-    assert(getBalance(`escrow_${tx2.id}`).balance === 0, 'Escrow account drained to exactly 0');
-    assert(getBalance(charlie).balance === Math.round((charlieBalBefore2 + 60) * 100) / 100, 'Buyer Charlie received 100% full refund (60 BEAN fee-free)');
-    assert(getBalance(bob).balance === bobBalBefore2, 'Seller Bob received 0 payout');
-    assert(Math.round((getCommonsBalanceExact() - commonsBefore2) * 100) / 100 === 0, 'Commons pool received 0 fee on buyer refund');
+    assert(getBalance(`escrow_${tx2.id}`).balance_c === 0, 'Escrow account drained to exactly 0');
+    assert(getBalance(charlie).balance_c === charlieBalBefore2 + 6000, 'Buyer Charlie received 100% full refund (60 BEAN fee-free)');
+    assert(getBalance(bob).balance_c === bobBalBefore2, 'Seller Bob received 0 payout');
+    assert(getCommonsBalanceExact() - commonsBefore2 === 0, 'Commons pool received 0 fee on buyer refund');
 
     // Conservation assertion after Outcome 2
     assert(nodeTotal() === ledgerTotalBefore2, 'SUM(balances)+COMMONS_POOL is unchanged before and after refund_to_buyer');
     assert(nodeTotal() === 0, 'Ledger total sums to zero after refund_to_buyer');
     const audit2 = runLedgerAudit();
-    assert(audit2.ok === true && Math.abs(audit2.drift) < 0.0001 && audit2.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 2');
+    assert(audit2.ok === true && audit2.drift === 0 && audit2.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 2');
 
     // Database row verification: acting admin recorded
     const dbRow2 = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(tx2.id) as any;
@@ -288,22 +288,22 @@ async function main() {
 
     // 7. Outcome 3: split (50/50)
     console.log('\n--- Testing Outcome 3: split 50/50 ---');
-    // Test with odd credit amount (75 BEAN) to test fractional rounding conservation
+    // 75 Beans (7,500 hundredths) split by core halves(): 3,750 each; the seller's half pays the fee, truncated (feeOf(3750) = 56)
     const toolPost = createPost(
         'offer',
         'tools',
         'Post Hole Digger Rental',
         'Mechanical post hole digger for fencing',
-        75,
+        7500,
         'fixed',
         bob
     );
     const tx3 = acceptPost(toolPost!.id, alice);
-    assert(getBalance(`escrow_${tx3.id}`).balance === 75, 'Escrow holds 75 BEAN');
+    assert(getBalance(`escrow_${tx3.id}`).balance_c === 7500, 'Escrow holds 75 BEAN');
     db.prepare(`UPDATE marketplace_transactions SET created_at = datetime('now', '-12 days') WHERE id = ?`).run(tx3.id);
 
-    const aliceBalBefore3 = getBalance(alice).balance;
-    const bobBalBefore3 = getBalance(bob).balance;
+    const aliceBalBefore3 = getBalance(alice).balance_c;
+    const bobBalBefore3 = getBalance(bob).balance_c;
     const commonsBefore3 = getCommonsBalanceExact();
     const ledgerTotalBefore3 = nodeTotal();
 
@@ -317,16 +317,16 @@ async function main() {
     });
 
     assert(resolvedTx3.status === 'completed', 'Transaction status marked completed on split');
-    assert(getBalance(`escrow_${tx3.id}`).balance === 0, 'Escrow account drained to exactly 0');
-    assert(getBalance(alice).balance === Math.round((aliceBalBefore3 + 37.5) * 100) / 100, 'Buyer Alice received 37.50 BEAN (50% refund fee-free)');
-    assert(getBalance(bob).balance === Math.round((bobBalBefore3 + 36.94) * 100) / 100, 'Seller Bob received 36.94 BEAN (50% minus 1.5% fee)');
-    assert(Math.round((getCommonsBalanceExact() - commonsBefore3) * 100) / 100 === 0.56, 'Commons pool received 0.56 BEAN fee');
+    assert(getBalance(`escrow_${tx3.id}`).balance_c === 0, 'Escrow account drained to exactly 0');
+    assert(getBalance(alice).balance_c === aliceBalBefore3 + 3750, 'Buyer Alice received 37.50 BEAN (50% refund fee-free)');
+    assert(getBalance(bob).balance_c === bobBalBefore3 + 3694, 'Seller Bob received 36.94 BEAN (50% minus 1.5% fee)');
+    assert(getCommonsBalanceExact() - commonsBefore3 === 56, 'Commons pool received 0.56 BEAN fee');
 
     // Conservation assertion after Outcome 3
     assert(nodeTotal() === ledgerTotalBefore3, 'SUM(balances)+COMMONS_POOL is unchanged before and after split');
     assert(nodeTotal() === 0, 'Ledger total sums to zero after split');
     const audit3 = runLedgerAudit();
-    assert(audit3.ok === true && Math.abs(audit3.drift) < 0.0001 && audit3.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 3');
+    assert(audit3.ok === true && audit3.drift === 0 && audit3.strandedEscrows === 0, 'Conservation audit passed with 0 drift and 0 stranded escrows after Outcome 3');
 
     // Database row verification: acting admin recorded
     const dbRow3 = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(tx3.id) as any;
@@ -366,7 +366,7 @@ async function main() {
     );
 
     // Missing or whitespace authSigner fails closed
-    const mowerPost = createPost('offer', 'tools', 'Mower', 'Lawn mower', 40, 'fixed', bob);
+    const mowerPost = createPost('offer', 'tools', 'Mower', 'Lawn mower', 4000, 'fixed', bob);
     const tx4 = acceptPost(mowerPost!.id, alice);
     throws(
         () => resolveEscrowDispute(tx4.id, 'release_to_seller', ''),
@@ -531,7 +531,7 @@ async function main() {
         assert(dbRow4.dispute_resolved_by === 'pk_guardian_admin_99', 'DB dispute_resolved_by recorded pk_guardian_admin_99');
 
         // F. Authenticated POST under password auth attributes acting admin to 'owner:password'
-        const chainsawPost = createPost('offer', 'tools', 'Chainsaw', 'Chainsaw rental', 50, 'fixed', bob);
+        const chainsawPost = createPost('offer', 'tools', 'Chainsaw', 'Chainsaw rental', 5000, 'fixed', bob);
         const tx5 = acceptPost(chainsawPost!.id, charlie);
         const passwordResolve = await fetch(`${baseUrl}/api/local/admin/disputes/${tx5.id}/resolve`, {
             method: 'POST',
@@ -549,9 +549,9 @@ async function main() {
 
         // G. Tab counts come from the server and agree whichever tab is asked for.
         //    One held deal and one ordinary finished deal (never disputed) are added first.
-        const ladderPost = createPost('offer', 'tools', 'Ladder', 'Ladder loan', 5, 'fixed', bob);
+        const ladderPost = createPost('offer', 'tools', 'Ladder', 'Ladder loan', 500, 'fixed', bob);
         acceptPost(ladderPost!.id, charlie);
-        const kayakPost = createPost('offer', 'tools', 'Kayak', 'Kayak loan', 5, 'fixed', bob);
+        const kayakPost = createPost('offer', 'tools', 'Kayak', 'Kayak loan', 500, 'fixed', bob);
         const txDone = acceptPost(kayakPost!.id, charlie);
         const done = completePostTransaction(txDone!.id, txDone!.buyerPublicKey);
         assert(done?.status === 'completed', 'Ordinary deal completed without any admin ruling');
@@ -584,7 +584,7 @@ async function main() {
         // Final conservation check
         assert(nodeTotal() === 0, 'Final ledger total sums to zero');
         const finalAudit = runLedgerAudit();
-        assert(finalAudit.ok === true && Math.abs(finalAudit.drift) < 0.0001 && finalAudit.strandedEscrows === 0, 'Final conservation audit passed (0 drift, 0 stranded escrows)');
+        assert(finalAudit.ok === true && finalAudit.drift === 0 && finalAudit.strandedEscrows === 0, 'Final conservation audit passed (0 drift, 0 stranded escrows)');
     } finally {
         server.close();
     }

@@ -27,7 +27,7 @@ export interface MakeVoucherSheetProps {
     anchorUrl: string;
     identity: BeanPoolIdentity;
     candidates: VoucherCandidates | null | undefined;
-    /** The community's default budget (the block's settings.voucherBudget): where the stepper starts. */
+    /** The community's default budget (the block's settings.voucherBudget, whole hundredths of a Bean): where the stepper starts. */
     defaultBudget: number | null | undefined;
     /** Names opened from the names list on this phone, by entry id. */
     names?: ReadonlyMap<string, string>;

@@ -44,7 +44,7 @@ const PHOTO = '/api/marketplace/posts/offer-eggs/photos/0?k=abc';
 
 /** The enterprise's Offer, with a photo: written by the enterprise, listed by a keeper. */
 const eggs = {
-    id: 'offer-eggs', type: 'offer', category: 'food', title: 'Dozen eggs', description: 'Laid this week', credits: 6, priceType: 'fixed',
+    id: 'offer-eggs', type: 'offer', category: 'food', title: 'Dozen eggs', description: 'Laid this week', price_c: 600, priceType: 'fixed',
     status: 'active', active: true, repeatable: true, authorPublicKey: ENT, authorCallsign: 'Mullum Eggs', createdAt: TODAY, photos: [PHOTO],
     audienceScope: 'public',
 };
@@ -58,7 +58,7 @@ function stubNode(posts: unknown[], keeperOf: string[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false, keeperOf } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false, keeperOf } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);
@@ -108,7 +108,7 @@ describe("a keeper editing their enterprise's listing on the web", () => {
 
         await waitFor(() => expect(update).toHaveBeenCalled());
         expect(update).toHaveBeenCalledWith('offer-eggs', ME, {
-            type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', credits: 6, priceType: 'fixed',
+            type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', price_c: 600, priceType: 'fixed',
             repeatable: true, photos: [PHOTO],
         });
         await waitFor(() => expect(screen.getByRole('heading', { name: /Dozen free-range eggs/ })).toBeInTheDocument());
@@ -200,7 +200,7 @@ describe("a keeper editing their enterprise's listing on the web", () => {
 
     describe('leaving a listing ends its edit: the form never opens on the next one holding the first\'s words (review of #2663)', () => {
         const lemons = { ...eggs, title: 'Lemons', tags: ['food.fruit.lemon'] };
-        const jam = { ...eggs, id: 'offer-jam', title: 'Plum jam', description: 'Last summer', credits: 9, photos: [] };
+        const jam = { ...eggs, id: 'offer-jam', title: 'Plum jam', description: 'Last summer', price_c: 900, photos: [] };
         const props = { identity, isMember: true, onPostOpened: () => {}, transactions: [] };
 
         /** Lemons open at its Edit form, with words typed, and the next listing ready. */

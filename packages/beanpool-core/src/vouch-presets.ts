@@ -13,51 +13,54 @@
  *   is never above VOUCHER_BUDGET_MAX (§10 rule 3).
  * - **A member's credit-line gift** (slice G1) is at most MEMBER_GIFT_MAX, the community's setting 0 (off) to it.
  *
- * Nothing here is a Bean: a budget is what a voucher may give as credit line, never a balance.
+ * Nothing here is a Bean: a budget is what a voucher may give as credit line, never a balance. Every figure is still
+ * WHOLE HUNDREDTHS (hundredths.ts; Marty's Q3, 10 Nov 2026), like a balance, so no comparison ever mixes units: the
+ * presets read 25, 50, 75, 100 and are 2500, 5000, 7500, 10000.
  */
 
-import { formatNumber, t, word } from './words.js';
+import { t, word } from './words.js';
+import { beans, formatHundredths, isHundredths, HUNDREDTHS_PER_BEAN, type Hundredths } from './hundredths.js';
 
-export const VOUCH_PRESETS = [25, 50, 75, 100] as const;
-export type VouchPreset = (typeof VOUCH_PRESETS)[number];
+export const VOUCH_PRESETS: readonly Hundredths[] = [beans(25), beans(50), beans(75), beans(100)];
+export type VouchPreset = Hundredths;
 
 /**
  * An owner's picks (Marty, 9 Nov): the same four, and 200 and 500. Nobody else may vouch 200 or 500. An owner vouches with
  * no budget limit: every vouch is still a line in their allocation ledger, but never drawn from a budget.
  */
-export const OWNER_VOUCH_PRESETS = [25, 50, 75, 100, 200, 500] as const;
-export type OwnerVouchPreset = (typeof OWNER_VOUCH_PRESETS)[number];
+export const OWNER_VOUCH_PRESETS: readonly Hundredths[] = [beans(25), beans(50), beans(75), beans(100), beans(200), beans(500)];
+export type OwnerVouchPreset = Hundredths;
 
 /** The most one voucher's vouches for one person come to, first vouch and raises together. */
-export const VOUCH_MAX = 100;
+export const VOUCH_MAX: Hundredths = beans(100);
 /** The same for an owner's vouches: one 500, or smaller ones raised to it. */
-export const OWNER_VOUCH_MAX = 500;
+export const OWNER_VOUCH_MAX: Hundredths = beans(500);
 
 /** At most this many vouchers' vouches count for one person. An owner's vouch is never refused by it (it may top them up). */
 export const VOUCHES_PER_PERSON = 3;
 
 /** The most every vouch for one person comes to: three vouchers at 100 (Marty, 9 Nov) ... */
-export const PERSON_VOUCH_MAX = 300;
+export const PERSON_VOUCH_MAX: Hundredths = beans(300);
 /** ... and once an owner has vouched for them (or is vouching now), 500. */
-export const PERSON_VOUCH_MAX_WITH_OWNER = 500;
+export const PERSON_VOUCH_MAX_WITH_OWNER: Hundredths = beans(500);
 
-export const VOUCHER_BUDGET_MIN = 100;
-export const VOUCHER_BUDGET_MAX = 2000;
-export const VOUCHER_BUDGET_STEP = 100;
+export const VOUCHER_BUDGET_MIN: Hundredths = beans(100);
+export const VOUCHER_BUDGET_MAX: Hundredths = beans(2000);
+export const VOUCHER_BUDGET_STEP: Hundredths = beans(100);
 /** What an appointment is prefilled with until the owner sets the community's own (node_config `voucher_budget`). */
-export const VOUCHER_BUDGET_DEFAULT = 1000;
+export const VOUCHER_BUDGET_DEFAULT: Hundredths = beans(1000);
 
-export const MEMBER_GIFT_DEFAULT = 100;
-export const MEMBER_GIFT_MAX = VOUCH_MAX;
+export const MEMBER_GIFT_DEFAULT: Hundredths = beans(100);
+export const MEMBER_GIFT_MAX: Hundredths = VOUCH_MAX;
 
-/** Whether `n` is one of the vouch presets: the only amounts a vouch may be. */
+/** Whether `n` is one of the vouch presets (hundredths): the only amounts a vouch may be. */
 export function isVouchPreset(n: unknown): n is VouchPreset {
-    return typeof n === 'number' && (VOUCH_PRESETS as readonly unknown[]).includes(n);
+    return isHundredths(n) && VOUCH_PRESETS.includes(n);
 }
 
-/** Whether `n` is one of an owner's vouch presets (25 to 500): the only amounts an owner's vouch may be. */
+/** Whether `n` is one of an owner's vouch presets (25 to 500 Beans, in hundredths): the only amounts an owner's vouch may be. */
 export function isOwnerVouchPreset(n: unknown): n is OwnerVouchPreset {
-    return typeof n === 'number' && (OWNER_VOUCH_PRESETS as readonly unknown[]).includes(n);
+    return isHundredths(n) && OWNER_VOUCH_PRESETS.includes(n);
 }
 
 /** The presets a voucher picks from: an owner's six, or everyone else's four. */
@@ -86,14 +89,14 @@ export function personVouchMax(ownerVouched: boolean): number {
     return ownerVouched ? PERSON_VOUCH_MAX_WITH_OWNER : PERSON_VOUCH_MAX;
 }
 
-/** Whether `n` is a budget level: a whole number from 100 to 2,000 in steps of 100. */
-export function isBudgetLevel(n: unknown): n is number {
-    return typeof n === 'number' && Number.isInteger(n) && n >= VOUCHER_BUDGET_MIN && n <= VOUCHER_BUDGET_MAX && n % VOUCHER_BUDGET_STEP === 0;
+/** Whether `n` is a budget level: 100 to 2,000 Beans in steps of 100, in hundredths. */
+export function isBudgetLevel(n: unknown): n is Hundredths {
+    return isHundredths(n) && n >= VOUCHER_BUDGET_MIN && n <= VOUCHER_BUDGET_MAX && n % VOUCHER_BUDGET_STEP === 0;
 }
 
-/** Whether `n` is a member's credit-line gift setting: a whole number from 0 (off) to MEMBER_GIFT_MAX. */
-export function isMemberGiftSetting(n: unknown): n is number {
-    return typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= MEMBER_GIFT_MAX;
+/** Whether `n` is a member's credit-line gift setting: a whole number of Beans (in hundredths) from 0 (off) to MEMBER_GIFT_MAX. */
+export function isMemberGiftSetting(n: unknown): n is Hundredths {
+    return isHundredths(n) && n >= 0 && n <= MEMBER_GIFT_MAX && n % HUNDREDTHS_PER_BEAN === 0;
 }
 
 export const VOUCH_PRESET_WORDS = {
@@ -197,23 +200,23 @@ export const raiseVouchFor = (name: string) => t(VOUCH_PRESET_WORDS.raiseVouchFo
 export const invitedBy = (name: string) => t(VOUCH_PRESET_WORDS.invitedBy, { name });
 export const ledgerVouchedBy = (name: string) => t(VOUCH_PRESET_WORDS.ledgerVouchedBy, { name });
 /**
- * The Ledger's one line for a member's vouches (GET /api/ledger/balance `vouchedBy`, one row per voucher, oldest first):
- * "Your credit line: 200, vouched by @marty"; with more than one voucher, the total once and each voucher's part,
- * "Your credit line: 300 · vouched by @marty 200, @olive 100". Null when nobody vouched. Never one "Your credit line" per
- * voucher: two of those read as two different lines, neither of them the whole.
+ * The Ledger's one line for a member's vouches (GET /api/vouchers/me `vouchedBy`, one row per voucher, oldest first, each
+ * `amount_c` in whole hundredths): "Your credit line: 200, vouched by @marty"; with more than one voucher, the total once
+ * and each voucher's part, "Your credit line: 300 · vouched by @marty 200, @olive 100". Null when nobody vouched. Never one
+ * "Your credit line" per voucher: two of those read as two different lines, neither of them the whole.
  */
-export function ledgerCreditLine(vouchedBy: readonly { callsign: string; amount: number }[] | null | undefined): string | null {
-    const rows = (vouchedBy ?? []).filter((v) => v && typeof v.amount === 'number' && Number.isFinite(v.amount));
+export function ledgerCreditLine(vouchedBy: readonly { callsign: string; amount_c: Hundredths }[] | null | undefined): string | null {
+    const rows = (vouchedBy ?? []).filter((v) => v && isHundredths(v.amount_c));
     if (rows.length === 0) return null;
-    if (rows.length === 1) return t(VOUCH_PRESET_WORDS.ledgerCreditLine, { name: rows[0].callsign, amount: formatNumber(rows[0].amount) });
-    const items = rows.map((v) => t(VOUCH_PRESET_WORDS.ledgerCreditLineVoucher, { name: v.callsign, amount: formatNumber(v.amount) }));
+    if (rows.length === 1) return t(VOUCH_PRESET_WORDS.ledgerCreditLine, { name: rows[0].callsign, amount: formatHundredths(rows[0].amount_c) });
+    const items = rows.map((v) => t(VOUCH_PRESET_WORDS.ledgerCreditLineVoucher, { name: v.callsign, amount: formatHundredths(v.amount_c) }));
     const vouchers = items.slice(1).reduce((list, item) => t(VOUCH_PRESET_WORDS.ledgerCreditLineList, { list, item }), items[0]);
-    // Summed in hundredths, so 0.1 + 0.2 reads 0.3.
-    const total = rows.reduce((sum, v) => sum + Math.round(v.amount * 100), 0) / 100;
-    return t(VOUCH_PRESET_WORDS.ledgerCreditLineMany, { total: formatNumber(total), vouchers });
+    // Whole hundredths add exactly.
+    const total = rows.reduce((sum, v) => sum + v.amount_c, 0);
+    return t(VOUCH_PRESET_WORDS.ledgerCreditLineMany, { total: formatHundredths(total), vouchers });
 }
-export const ledgerBudget = (left: number, total: number) =>
-    t(VOUCH_PRESET_WORDS.ledgerBudget, { left: formatNumber(left), total: formatNumber(total) });
+export const ledgerBudget = (left: Hundredths, total: Hundredths) =>
+    t(VOUCH_PRESET_WORDS.ledgerBudget, { left: formatHundredths(left), total: formatHundredths(total) });
 
 /**
  * Whether the vouch control shows on an invite: only when the node says this member is a voucher.
@@ -224,7 +227,8 @@ export function offersInviteVouch(voucher?: boolean | null): boolean {
 
 export interface HistoryLineLike {
     kind: string;
-    amount: number;
+    /** Whole hundredths, signed as the allocation ledger keeps them. */
+    amount_c: Hundredths;
     actor?: string;
     actorCallsign?: string | null;
     at?: string;
@@ -238,7 +242,7 @@ export interface HistoryLineLike {
  * Format a budget history line into plain words without raw enums or 64-hex keys (design §3).
  */
 export function formatHistoryLine(h: HistoryLineLike): string {
-    const absAmount = formatNumber(Math.abs(h.amount));
+    const absAmount = formatHundredths(Math.abs(h.amount_c));
     const name = h.actorCallsign || '';
     const personName = h.person?.callsign || '';
 
@@ -279,7 +283,7 @@ export function formatHistoryLine(h: HistoryLineLike): string {
                 ? t(VOUCH_PRESET_WORDS.stopBy, { amount: absAmount, name })
                 : t(VOUCH_PRESET_WORDS.stop, { amount: absAmount });
         default:
-            return t(VOUCH_PRESET_WORDS.beans, { amount: `${h.amount >= 0 ? '+' : '−'}${absAmount}` });
+            return t(VOUCH_PRESET_WORDS.beans, { amount: `${h.amount_c >= 0 ? '+' : '−'}${absAmount}` });
     }
 }
 

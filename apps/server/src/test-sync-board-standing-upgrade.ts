@@ -146,7 +146,7 @@ async function main() {
         pref.run(ben.pubKeyHex, 'false');
         // With search keywords, as every listing posted has them: the boot's keyword backfill writes (and so stamps) a row
         // that has none (state-engine.ts backfillSearchKeywords).
-        const post = d.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+        const post = d.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                                 VALUES (?, 'offer', 'food', ?, '', 5, ?, 'active', 1, ?, ?, lower(?))`);
         for (const [who, key, title] of [['hana', hana.pubKeyHex, 'Lemons'], ['farm', farm, 'Eggs'], ['ben', ben.pubKeyHex, 'Bread'], ['olly', olly.pubKeyHex, 'Firewood']]) {
             offers[who] = crypto.randomUUID();

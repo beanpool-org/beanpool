@@ -41,7 +41,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.spyOn(api, 'getBalance').mockResolvedValue({
-            balance: 50,
+            balance_c: 5000,
             keeperOf: [],
         } as any);
         vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
@@ -50,15 +50,15 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                 name: 'Community Eggs',
                 status: 'active',
                 paused: false,
-                balance: 100,
+                balance_c: 10000,
             },
             period: { since: null, until: null },
             summary: {
                 totalIncome: 0,
                 totalSpend: 0,
                 netChange: 0,
-                startingBalance: 100,
-                endingBalance: 100,
+                startingBalance: 10000,
+                endingBalance: 10000,
                 transactionCount: 0,
             },
             entries: [],
@@ -71,10 +71,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
-                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 0 },
             ],
             posts: [],
             flow: [],
@@ -105,10 +105,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
 
     it('a project says Leader and Collaborators, never keeper, bounded or treasury (group decisions pick 8)', async () => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue({
-            publicKey: 'project-roof-pubkey', name: 'New Roof', status: 'active', paused: false, balance: 100, lifecycle: 'bounded', goalAmount: 500,
+            publicKey: 'project-roof-pubkey', name: 'New Roof', status: 'active', paused: false, balance_c: 10000, lifecycle: 'bounded', goalAmount_c: 50000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
-                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 0 },
             ],
             posts: [], flow: [],
         } as any);
@@ -127,11 +127,11 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
                 // Older payloads carry the key as pubkey rather than publicKey.
-                { pubkey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 },
+                { pubkey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 0 },
             ],
             posts: [],
             flow: [],
@@ -164,8 +164,8 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
-            keepers: [{ publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 }],
+            balance_c: 10000,
+            keepers: [{ publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 0 }],
             posts: [],
             flow: [],
         });
@@ -181,10 +181,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50, suspended: true },
-                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0, suspended: false },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000, suspended: true },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 0, suspended: false },
             ],
             posts: [],
             flow: [],
@@ -211,10 +211,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
-            availableToBack: 80,
+            balance_c: 10000,
+            availableToBack_c: 8000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
             ],
             posts: [],
             flow: [],
@@ -226,7 +226,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                 id: 'req-1',
                 enterprisePubkey: 'enterprise-eggs-pubkey',
                 memberPubkey: 'applicant-charlie-pubkey',
-                pledgedBacking: 30,
+                pledgedBacking: 3000,
                 status: 'pending',
                 createdAt: new Date().toISOString(),
             },
@@ -251,8 +251,28 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         fireEvent.click(submitBtn);
 
         await waitFor(() => {
-            expect(requestSpy).toHaveBeenCalledWith('enterprise-eggs-pubkey', 30);
+            expect(requestSpy).toHaveBeenCalledWith('enterprise-eggs-pubkey', 3000); // 30 Beans typed, sent as whole hundredths
         });
+    });
+
+    it('a backing pledge is the node\'s whole hundredths (its answer keeps the key pledgedBacking): 4925 reads 49.25 🫘', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'enterprise-eggs-pubkey', name: 'Community Eggs', status: 'active', paused: false, balance_c: 10000,
+            isLeadOrSoleKeeperOrAdmin: true,
+            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 }],
+            keeperRequests: [{
+                id: 'req-charlie', enterprisePubkey: 'enterprise-eggs-pubkey', memberPubkey: 'applicant-charlie-pubkey', callsign: 'Charlie',
+                pledgedBacking: 4925, status: 'pending', createdAt: new Date().toISOString(),
+            }],
+            posts: [],
+            flow: [],
+        });
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, keeperOf: ['enterprise-eggs-pubkey'] } as any);
+        render(<TreasuryDetailPage identity={mockLeadIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />);
+        await openManage();
+        expect(await screen.findByText(/Asking to join as keepers \(1\)/i)).toBeInTheDocument();
+        expect(screen.getByText('49.25 🫘')).toBeInTheDocument();
+        expect(screen.queryByText(/4925|49\.3\b/)).toBeNull();
     });
 
     it('renders pending keeper requests panel for lead keeper and handles approve and decline', async () => {
@@ -261,10 +281,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             isLeadOrSoleKeeperOrAdmin: true,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
             ],
             keeperRequests: [
                 {
@@ -272,7 +292,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                     enterprisePubkey: 'enterprise-eggs-pubkey',
                     memberPubkey: 'applicant-charlie-pubkey',
                     callsign: 'Charlie',
-                    pledgedBacking: 25,
+                    pledgedBacking: 2500,
                     status: 'pending',
                     createdAt: new Date().toISOString(),
                 },
@@ -282,13 +302,13 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         };
         vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
         vi.spyOn(api, 'getBalance').mockResolvedValue({
-            balance: 100,
+            balance_c: 10000,
             keeperOf: ['enterprise-eggs-pubkey'],
         } as any);
 
         const approveSpy = vi.spyOn(api, 'approveKeeperRequest').mockResolvedValue({
             success: true,
-            backing: 25,
+            backing_c: 2500,
             applied: true,
             change: null,
         });
@@ -336,7 +356,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
     it('tells the lead keeper in words whether each applicant can back their pledge, with no figure of their standing', async () => {
         const row = (id: string, callsign: string, canBackPledge?: boolean) => ({
             id, enterprisePubkey: 'enterprise-eggs-pubkey', memberPubkey: `${id}-pubkey`, callsign,
-            pledgedBacking: 25, status: 'pending' as const, createdAt: new Date().toISOString(),
+            pledgedBacking: 2500, status: 'pending' as const, createdAt: new Date().toISOString(),
             ...(canBackPledge === undefined ? {} : { canBackPledge }),
         });
         vi.spyOn(api, 'getTreasury').mockResolvedValue({
@@ -344,15 +364,15 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             isLeadOrSoleKeeperOrAdmin: true,
-            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 }],
+            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 }],
             // Dana's row is from a node too old to send canBackPledge: no line, never "undefined".
             keeperRequests: [row('req-charlie', 'Charlie', true), row('req-erin', 'Erin', false), row('req-dana', 'Dana')],
             posts: [],
             flow: [],
         });
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, keeperOf: ['enterprise-eggs-pubkey'] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, keeperOf: ['enterprise-eggs-pubkey'] } as any);
 
         const { container } = render(
             <TreasuryDetailPage identity={mockLeadIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />
@@ -374,11 +394,11 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             name: 'Community Eggs',
             status: 'active',
             paused: false,
-            balance: 100,
+            balance_c: 10000,
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
-                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 20 },
-                { publicKey: 'keeper-charlie-pubkey', callsign: 'Charlie', role: 'keeper', backing: 10 },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000 },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing_c: 2000 },
+                { publicKey: 'keeper-charlie-pubkey', callsign: 'Charlie', role: 'keeper', backing_c: 1000 },
             ],
             leadInactivity: {
                 leadPubkey: 'lead-alice-pubkey',
@@ -402,7 +422,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         };
         vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
         vi.spyOn(api, 'getBalance').mockResolvedValue({
-            balance: 50,
+            balance_c: 5000,
             keeperOf: ['enterprise-eggs-pubkey'],
         } as any);
 
@@ -464,12 +484,12 @@ describe('Enterprise map pin (keeper control)', () => {
         name: 'Community Eggs',
         status: 'active',
         paused: false,
-        balance: 100,
+        balance_c: 10000,
         lat: null,
         lng: null,
         keepers: [
-            { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50, suspended: false },
-            { publicKey: bobPublicKey, callsign: 'Bob', role: 'keeper', backing: 10, suspended: false },
+            { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000, suspended: false },
+            { publicKey: bobPublicKey, callsign: 'Bob', role: 'keeper', backing_c: 1000, suspended: false },
         ],
         posts: [],
         flow: [],
@@ -481,12 +501,12 @@ describe('Enterprise map pin (keeper control)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
-            enterprise: { publicKey: ENTERPRISE, name: 'Community Eggs', status: 'active', paused: false, balance: 100 },
+            enterprise: { publicKey: ENTERPRISE, name: 'Community Eggs', status: 'active', paused: false, balance_c: 10000 },
             period: { since: null, until: null },
-            summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 100, endingBalance: 100, transactionCount: 0 },
+            summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 10000, endingBalance: 10000, transactionCount: 0 },
             entries: [],
         } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [ENTERPRISE] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: [ENTERPRISE] } as any);
         vi.spyOn(identityLib, 'loadIdentity').mockResolvedValue(bob);
         fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
             if (String(url).endsWith(`/api/enterprise/${ENTERPRISE}/location`)) {
@@ -527,9 +547,9 @@ describe('Enterprise map pin (keeper control)', () => {
 
     it('does not offer the control to a member who is not a keeper', async () => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue(enterprise({
-            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50, suspended: false }],
+            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000, suspended: false }],
         }));
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: ['some-other-enterprise'] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: ['some-other-enterprise'] } as any);
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
@@ -544,8 +564,8 @@ describe('Enterprise map pin (keeper control)', () => {
         // keeperOf checks only the operator switch, not account status, so it can still name this enterprise.
         vi.spyOn(api, 'getTreasury').mockResolvedValue(enterprise({
             keepers: [
-                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50, suspended: false },
-                { publicKey: bobPublicKey, callsign: 'Bob', role: 'keeper', backing: 10, suspended: true },
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing_c: 5000, suspended: false },
+                { publicKey: bobPublicKey, callsign: 'Bob', role: 'keeper', backing_c: 1000, suspended: true },
             ],
         }));
 

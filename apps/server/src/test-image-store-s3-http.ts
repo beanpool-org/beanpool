@@ -235,7 +235,7 @@ async function main(): Promise<void> {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(author);
     setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const photoA = makePhoto('a');
     const photoB = makePhoto('b');
     const post = createPost('offer', 'food', 'Sourdough', 'Baked this morning', 3, 'fixed', author, undefined, undefined,

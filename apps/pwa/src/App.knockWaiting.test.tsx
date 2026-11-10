@@ -13,7 +13,7 @@ import React from 'react';
 
 const info = vi.hoisted(() => ({ features: { shareOutside: true } as Record<string, unknown> }));
 vi.mock('./lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: info.features })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: info.features })),
     joinInFlight: vi.fn(async () => false),
 }));
 vi.mock('./components/GuestLobby', () => ({ GuestLobby: () => <div data-testid="guest-lobby" /> }));

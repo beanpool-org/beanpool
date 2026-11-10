@@ -62,7 +62,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
     // ── 5. The old way, which is the bug ─────────────────────────────────────────────────────
     console.log('\n── 5. Naming the enterprise in the body (the bug) ──');
     const oldWay = await signedFetch('POST', '/api/marketplace/posts', {
-        type: 'event', category: 'community', title: 'Hall working bee', credits: 0, priceType: 'fixed',
+        type: 'event', category: 'community', title: 'Hall working bee', price_c: 0, priceType: 'fixed',
         authorPublicKey: enterprise, lat: -28.55, lng: 153.5, eventStartAt: inHours(30),
     }, keeper);
     assert(oldWay.status === 403 && oldWay.error === 'Signature validation failed',
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
     // ── 7. A member's own event is unchanged ─────────────────────────────────────────────────
     console.log("\n── 7. A member's own event ──");
     const own = await signedFetch('POST', '/api/marketplace/posts', {
-        type: 'event', category: 'community', title: 'Creek swim', credits: 0, priceType: 'fixed',
+        type: 'event', category: 'community', title: 'Creek swim', price_c: 0, priceType: 'fixed',
         authorPublicKey: stranger.pubKeyHex, lat: -28.55, lng: 153.5, eventStartAt: inHours(30), photos: [PHOTO],
     }, stranger);
     assert(own.status === 200 && own.body?.success === true,

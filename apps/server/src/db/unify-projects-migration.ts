@@ -55,7 +55,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                 }
                 const desc = p.description || '';
                 const purpose = desc || p.title;
-                const goal = p.goal_amount != null ? Number(p.goal_amount) : null;
+                const goal = p.goal_amount_c != null ? Number(p.goal_amount_c) : null;
                 const deadline = p.deadline_at || null;
                 const status = (p.status || 'ACTIVE').toLowerCase();
                 const createdAt = p.created_at || new Date().toISOString();
@@ -71,8 +71,8 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         targetDb.prepare(`
                             INSERT INTO members (
                                 public_key, callsign, joined_at, status,
-                                is_treasury, earned_credit, earned_surplus,
-                                purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
+                                is_treasury, earned_credit_c, earned_surplus_c,
+                                purpose, goal_amount_c, deadline_at, lifecycle, paused, updated_at
                             ) VALUES (?, ?, ?, ?, 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
                         `).run(
                             enterprisePubkey, callsign, createdAt, status,
@@ -85,7 +85,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                 is_treasury = 1,
                                 lifecycle = COALESCE(lifecycle, 'bounded'),
                                 purpose = COALESCE(purpose, ?),
-                                goal_amount = COALESCE(goal_amount, ?),
+                                goal_amount_c = COALESCE(goal_amount_c, ?),
                                 deadline_at = COALESCE(deadline_at, ?),
                                 status = COALESCE(status, ?),
                                 updated_at = ?
@@ -95,7 +95,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
 
                     // Ensure account exists
                     targetDb.prepare(
-                        "INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)"
+                        "INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)"
                     ).run(enterprisePubkey);
 
                     if (p.creator_pubkey) {
@@ -153,7 +153,8 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         const callsign = getUniqueCallsign(prop.title, enterprisePubkey);
                         const desc = prop.description || '';
                         const purpose = desc || prop.title;
-                        const goal = prop.requestedAmount != null ? Number(prop.requestedAmount) : null;
+                        // Money is whole hundredths now and an old figure is never carried across (no conversion code): no goal.
+                        const goal = null;
                         const status = (prop.status || 'proposed').toLowerCase();
                         const createdAt = prop.createdAt || new Date().toISOString();
 
@@ -167,8 +168,8 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                 targetDb.prepare(`
                                     INSERT INTO members (
                                         public_key, callsign, joined_at, status,
-                                        is_treasury, earned_credit, earned_surplus,
-                                        purpose, goal_amount, lifecycle, paused, updated_at
+                                        is_treasury, earned_credit_c, earned_surplus_c,
+                                        purpose, goal_amount_c, lifecycle, paused, updated_at
                                     ) VALUES (?, ?, ?, ?, 1, 0, 0, ?, ?, 'bounded', 0, ?)
                                 `).run(
                                     enterprisePubkey, callsign, createdAt, status,
@@ -180,7 +181,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                         is_treasury = 1,
                                         lifecycle = COALESCE(lifecycle, 'bounded'),
                                         purpose = COALESCE(purpose, ?),
-                                        goal_amount = COALESCE(goal_amount, ?),
+                                        goal_amount_c = COALESCE(goal_amount_c, ?),
                                         status = COALESCE(status, ?),
                                         updated_at = ?
                                     WHERE public_key = ?
@@ -188,7 +189,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                             }
 
                             targetDb.prepare(
-                                "INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)"
+                                "INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)"
                             ).run(enterprisePubkey);
 
                             if (prop.proposerPubkey) {

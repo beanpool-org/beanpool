@@ -121,7 +121,7 @@ function makeMember(daysAgo: number): Id {
     const id = newKey();
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`)
         .run(id.pubKeyHex, `nonce-cap-${++members}`, new Date(Date.now() - daysAgo * DAY).toISOString());
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
     return id;
 }
 /** A member joined today who holds a node role (`owner` or `moderator`): established by the role alone. */

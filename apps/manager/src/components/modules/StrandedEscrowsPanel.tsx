@@ -8,15 +8,13 @@ import {
     type StrandedEscrowItem,
     type StrandedEscrowsResponse,
 } from '../../lib/node-client';
+import { isHundredths } from '@beanpool/core';
 import { nodeCredential } from '../../lib/profiles';
+import { beansText as beans } from '../../lib/beans';
 
 // The server's bounds (engine/escrow-write-off.ts); it checks them again.
 const REASON_MIN = 10;
 const REASON_MAX = 300;
-
-function beans(n: number): string {
-    return `${Number(n.toFixed(4))} Beans`;
-}
 
 function day(ts: string | null | undefined): string {
     if (!ts) return '—';
@@ -47,8 +45,8 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
     const [openId, setOpenId] = useState<string | null>(null);
     const [reason, setReason] = useState('');
     const [confirmDeficit, setConfirmDeficit] = useState(false);
-    // The Commons can move between listing and writing off; the server's figures then replace the listed ones.
-    const [serverDeficit, setServerDeficit] = useState<{ commonsBalance: number; commonsAfter: number } | null>(null);
+    // The Commons can move between listing and writing off; the server's figures (whole hundredths) then replace the listed ones.
+    const [serverDeficit, setServerDeficit] = useState<{ commonsBalance_c: number; commonsAfter_c: number } | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
@@ -82,14 +80,14 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                 activeNode.url, escrow.escrowId, reason.trim(), confirmDeficit,
                 nodeCredential(activeNode), getTfaSessionToken(activeNode.id),
             );
-            setDone(`Wrote off ${beans(res.amount)} from the Commons for trade ${res.tradeId.slice(0, 8)}. The Commons now reads ${beans(res.commonsAfter)}.`);
+            setDone(`Wrote off ${beans(res.amount_c)} from the Commons for trade ${res.tradeId.slice(0, 8)}. The Commons now reads ${beans(res.commonsAfter_c)}.`);
             open(null);
             await load();
             await onWrittenOff();
         } catch (e: unknown) {
             if (e instanceof StrandedEscrowWriteOffError && e.code === 'deficit_unconfirmed'
-                && typeof e.commonsBalance === 'number' && typeof e.commonsAfter === 'number') {
-                setServerDeficit({ commonsBalance: e.commonsBalance, commonsAfter: e.commonsAfter });
+                && isHundredths(e.commonsBalance_c) && isHundredths(e.commonsAfter_c)) {
+                setServerDeficit({ commonsBalance_c: e.commonsBalance_c, commonsAfter_c: e.commonsAfter_c });
                 setConfirmDeficit(false);
             }
             setFormError(e instanceof Error ? e.message : 'Write-off failed');
@@ -118,9 +116,9 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
 
             {data && data.eligibleCount > 0 && (
                 <div className="text-xs text-nature-400">
-                    The Commons reads <span className="font-mono text-white">{beans(data.commonsBalance)}</span>.
+                    The Commons reads <span className="font-mono text-white">{beans(data.commonsBalance_c)}</span>.
                     Writing off all {data.eligibleCount} would leave it at{' '}
-                    <span className={`font-mono ${data.commonsAfterAll < 0 ? 'text-amber-300' : 'text-white'}`}>{beans(data.commonsAfterAll)}</span>.
+                    <span className={`font-mono ${data.commonsAfterAll_c < 0 ? 'text-amber-300' : 'text-white'}`}>{beans(data.commonsAfterAll_c)}</span>.
                 </div>
             )}
             {data && data.eligibleCount > 0 && isStandby && (
@@ -132,20 +130,20 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
 
             {escrows.map(e => {
                 const isOpen = openId === e.escrowId;
-                const commonsNow = serverDeficit?.commonsBalance ?? data?.commonsBalance ?? 0;
-                const commonsAfter = serverDeficit?.commonsAfter ?? e.writeOff.commonsAfter ?? commonsNow + e.balance;
-                // Whether there is a deficit is the server's call, made on the exact figures. The ones it sends are
-                // rounded to the cent, so a Commons short by less than a cent reads 0 after, yet still needs the
-                // confirmation: a deficit refusal, or the listing's own flag, decides it — never the rounded figure.
+                // Whole hundredths, exact: the Commons after is the server's figure, or the Commons now plus this (negative) escrow.
+                const commonsNow = serverDeficit?.commonsBalance_c ?? data?.commonsBalance_c ?? 0;
+                const commonsAfter = serverDeficit?.commonsAfter_c ?? e.writeOff.commonsAfter_c ?? commonsNow + e.balance_c;
+                // Whether there is a deficit is the server's call: a deficit refusal, or the listing's own flag, decides it,
+                // never a figure the panel worked out. A Commons short by one hundredth still asks for the confirmation.
                 const deficit = serverDeficit !== null || e.writeOff.wouldDeficit;
-                const afterText = deficit && commonsAfter >= 0 ? 'just under 0 Beans' : beans(commonsAfter);
+                const afterText = beans(commonsAfter);
                 const reasonOk = reason.trim().length >= REASON_MIN;
                 const reasonId = `write-off-reason-${e.escrowId}`;
                 return (
                     <div key={e.escrowId} className="p-4 rounded-xl bg-nature-950 border border-nature-800 text-xs space-y-2">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                             <span className="font-mono text-nature-300 break-all" title={e.escrowId}>escrow_{e.tradeId.slice(0, 8)}…</span>
-                            <span className={`font-mono font-bold ${e.balance < 0 ? 'text-red-400' : 'text-white'}`}>{beans(e.balance)}</span>
+                            <span className={`font-mono font-bold ${e.balance_c < 0 ? 'text-red-400' : 'text-white'}`}>{beans(e.balance_c)}</span>
                         </div>
                         <div className="text-nature-400">
                             {e.trade
@@ -219,7 +217,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                                         disabled={submitting || !reasonOk || (deficit && !confirmDeficit)}
                                         className="px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                                     >
-                                        {submitting ? 'Writing off…' : `Write off ${beans(-e.balance)} from the Commons`}
+                                        {submitting ? 'Writing off…' : `Write off ${beans(-e.balance_c)} from the Commons`}
                                     </button>
                                     <button
                                         onClick={() => open(null)}

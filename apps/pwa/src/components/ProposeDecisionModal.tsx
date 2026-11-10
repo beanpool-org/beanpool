@@ -5,7 +5,7 @@ import {
     type DecisionEffect,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, t, word, type WordKey } from '@beanpool/core';
+import { keeperWords, amountRefusalWords, isAmbiguousAmount, parseHundredths, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
     onCreated: () => void;
     identity: BeanPoolIdentity | null;
     /** Not read since removal by vote S3: it fed the removal's debt line, and a removal is no longer proposed here. */
+    /** The Commons pot, whole hundredths of a Bean. */
     commonsBalance: number;
     members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
@@ -149,19 +150,19 @@ export function ProposeDecisionModal({
 
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
-            // The language's decimal mark (core parseAmount): fr "12,5" is 12.5; "1.000", which could be a thousand, is refused
-            // in words that say so. The node's cents rule decides the decimals, as before.
-            const read = parseAmount(grantAmount, undefined, ANY_DECIMALS);
+            // The language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250; "1.000", which could
+            // be a thousand, is refused in words that say so. The node takes the grant as params.amount_c (decisions-engine.ts).
+            const read = parseHundredths(grantAmount);
             if (!read.ok && isAmbiguousAmount(read.refusal)) {
                 setError(amountRefusalWords(read.refusal));
                 return;
             }
-            const amount = read.ok ? read.value : NaN;
-            if (!amount || amount <= 0) {
+            const amount_c = read.ok ? read.value : NaN;
+            if (!amount_c || amount_c <= 0) {
                 setError(t('Please enter a valid positive grant amount in Beans.'));
                 return;
             }
-            params = { amount };
+            params = { amount_c };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
                 setError(t('Please pick the project or enterprise, or enter its public key.'));

@@ -27,7 +27,7 @@ import {
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
-import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout } from '@beanpool/core';
+import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -135,11 +135,12 @@ function conversationDate(iso: string): string {
 }
 
 /**
- * A trade line's amount for tn(): a number, written the language's way; anything else the node sent, exactly as given
- * (`{ n }` in the values wins over the count).
+ * A trade line's amount for tn(), from the node's whole hundredths (the system line's `amount_c`, engine/escrow.ts): the count
+ * in Beans picks the form, `{ n }` is the figure as every figure is written (formatHundredths). Null for no amount, 0 or
+ * anything that is not whole hundredths: the line then says it without a figure.
  */
-function tradeAmount(amount: unknown): { n: number; values?: { n: string } } {
-    return typeof amount === 'number' ? { n: amount } : { n: Number(amount), values: { n: String(amount) } };
+function tradeAmount(amount_c: unknown): { n: number; values: { n: string } } | null {
+    return isHundredths(amount_c) && amount_c > 0 ? { n: amount_c / 100, values: { n: formatHundredths(amount_c) } } : null;
 }
 
 interface Props {
@@ -159,8 +160,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         if (msg.metadata) metaObj = JSON.parse(msg.metadata);
     } catch {}
 
-    const amount = metaObj?.amount ?? '';
-    const sum = tradeAmount(amount);
+    const sum = tradeAmount(metaObj?.amount_c);
 
     const getSellerPublicKey = (postId?: string) => {
         if (!postId) return undefined;
@@ -171,7 +171,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     };
 
     if (msg.systemType === 'ESCROW_FUNDED') {
-        return amount ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
+        return sum ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
     }
 
     if (msg.systemType === 'ESCROW_RELEASED') {
@@ -180,9 +180,9 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         
         const isSeller = sellerPubkey === myPubkey;
         if (isSeller) {
-            return amount ? tn(sum.n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', sum.values) : t('Payment of Beans released to you.');
+            return sum ? tn(sum.n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', sum.values) : t('Payment of Beans released to you.');
         } else {
-            return amount ? tn(sum.n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', sum.values) : t('Payment of Beans released to the provider.');
+            return sum ? tn(sum.n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', sum.values) : t('Payment of Beans released to the provider.');
         }
     }
 
@@ -807,8 +807,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     const [actionLoading, setActionLoading] = useState(false);
 
-    async function handleReleaseCredits(txId: string, amount: number) {
-        if (!confirm(tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'))) return;
+    /** `amount_c`: the deal's whole hundredths (tx.amount_c), asked about as every figure is written. */
+    async function handleReleaseCredits(txId: string, amount_c: number) {
+        if (!confirm(tn(amount_c / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }))) return;
         setActionLoading(true);
         try {
             await completeMarketplaceTransaction(txId, identity.publicKey);
@@ -2377,7 +2378,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             showsBeans={beansOn}
                             busy={actionLoading}
                             onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
-                            onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
+                            onRelease={tx => handleReleaseCredits(tx.id, tx.amount_c)}
                             onCancel={tx => handleCancelCredits(tx.id)}
                             onReview={tx => onNavigate?.('marketplace-review', tx.id)}
                         />
@@ -2420,7 +2421,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             }}>
                                 <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
                                     <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                        {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
+                                        {tn(pendingTx.amount_c / 100, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans', { n: formatHundredths(pendingTx.amount_c) })}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                         {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
@@ -2429,7 +2430,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 {isBuyer ? (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
                                         <button
-                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.amount_c)}
                                             disabled={actionLoading}
                                             style={{
                                                 background: 'var(--bp-commit-fill)',

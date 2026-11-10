@@ -285,7 +285,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     running: false,
                     result: {
                         ok: data.ok,
-                        // A drift of Infinity arrives as null (JSON): kept as null, said as "not a number", never 0.
+                        // Every figure is whole hundredths of a Bean under its old name (engine audit.ts runConservationCheck);
+                        // a drift that isn't a number arrives as null (JSON): kept as null, said as "not a number", never 0.
                         drift: typeof data.drift === 'number' ? data.drift : null,
                         sumBalances: data.sumBalances,
                         baseline: data.baseline,

@@ -8,9 +8,11 @@
  *
  *   1. an equivalence table, in-process: for each state (clean, frozen, no room, own debt by various amounts and exactly at
  *      the edge, granted credit, the dial off, an exception or a frozen known floor, a pledge in another enterprise,
- *      fractional known pledges at the cent edge) the row's canBackPledge is exactly whether Approve goes through
- *   1b. the same at the cent edge for random cent-valued known pledges (2–4 written, one asked): SQLite's SUM over REAL is
- *      compensated, so the row must sum the ask in SQL as Approve's re-check does (#1640 review F1)
+ *      fractional known pledges at the cent edge and one hundredth past it) the row's canBackPledge is exactly whether
+ *      Approve goes through
+ *   1b. the same at the cent edge for random cent-valued known pledges (2–4 written, one asked). Once a float SUM (SQLite's
+ *      compensated, JS's not) could tip a cent edge either way (#1640 review F1); in whole hundredths the sums are exact, so
+ *      at the edge every set fits: Approve goes through each time and the row says so
  *   2. over real HTTPS, through the real middleware: with a TEMP trigger refusing any write to enterprise_pledges, the
  *      requests list and the enterprise read answer 200 with the same answers
  *   3. with a second connection holding the write lock, both GETs answer 200 at once (no busy wait)
@@ -56,6 +58,12 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; ms: number };
 const show = (r: Res) => `${r.status} in ${r.ms.toFixed(0)} ms ${JSON.stringify(r.body)?.slice(0, 160)}`;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -67,7 +75,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -76,9 +84,13 @@ function confirm(member: Id, by: Id): void {
         .run(crypto.randomBytes(16).toString('hex'), member.pk, crypto.randomBytes(16).toString('hex'), by.pk);
 }
 
-/** The member buys something: the beans go into a purchase's escrow. */
+/** The member buys something: the hundredths go into a purchase's escrow. */
+function spendC(from: Id, hundredths: number): boolean {
+    return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, hundredths, 'a purchase', 'escrow', true);
+}
+/** The same, a figure in Beans. */
 function spend(from: Id, beans: number): boolean {
-    return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, beans, 'a purchase', 'escrow', true);
+    return spendC(from, hc(beans));
 }
 
 // The dial is on with no row (Marty, 21 Oct: "Yes, on by default"); the owner switching it off writes 'off'.
@@ -109,8 +121,9 @@ async function call(method: string, id: Id | null, path: string): Promise<Res> {
 
 type Case = {
     name: string;
+    /** In Beans. */
     pledge: number;
-    /** Before the request: the state the applicant asks from. */
+    /** Before the request: the state the applicant asks from (`grant`: their known grant, in Beans). */
     before?: (a: Id, grant: number) => void;
     /** After the request (a freeze or the dial off would refuse the request itself). */
     after?: (a: Id, grant: number) => void;
@@ -136,18 +149,19 @@ async function main(): Promise<void> {
     const freshApplicant = (): { a: Id; ent: string; grant: number } => {
         n++;
         const a = makeMember(`App${n}`);
-        createPost('offer', 'produce', `App${n} mends nets`, 'Nets', 20, 'fixed', a.pk);
+        createPost('offer', 'produce', `App${n} mends nets`, 'Nets', hc(20), 'fixed', a.pk);
         confirm(a, lead);
         const ent = createTreasury(`Loft ${n} ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
-        return { a, ent, grant: memberKnownGrant(db, a.pk) };
+        return { a, ent, grant: beansOf(memberKnownGrant(db, a.pk)) };
     };
-    /** A known pledge in another enterprise, bound through the same request + Approve. */
-    const keepElsewhere = (a: Id, amount: number): void => {
+    /** A known pledge in another enterprise (in Beans), bound through the same request + Approve. */
+    const keepElsewhere = (a: Id, beans: number): void => {
         const other = createTreasury(`Other ${a.name} ${crypto.randomBytes(2).toString('hex')}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
-        const r = requestToJoinEnterprise(other, a.pk, amount);
+        const r = requestToJoinEnterprise(other, a.pk, hc(beans));
         approveKeeperRequest(r.id, lead.pk);
     };
-    const half = (g: number) => Math.floor(g / 2);
+    /** Half a grant in Beans, to the hundredth below. */
+    const half = (g: number) => beansOf(Math.floor(hc(g) / 2));
     const cases: Case[] = [
         { name: 'clean, a small pledge', pledge: 5, expect: true },
         { name: 'clean, no pledge', pledge: 0, expect: true },
@@ -155,9 +169,9 @@ async function main(): Promise<void> {
         { name: 'frozen after asking', pledge: 5, after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'frozen after asking, no pledge', pledge: 0, after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'no room: known floor lowered by an exception', pledge: 100,
-          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 50, 0, ?)').run(a.pk, lead.pk), expect: false },
+          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, ?, 0, ?)').run(a.pk, hc(50), lead.pk), expect: false },
         { name: 'no room: known floor frozen by an exception', pledge: 100,
-          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, NULL, 1, ?)').run(a.pk, lead.pk), expect: false },
+          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, NULL, 1, ?)').run(a.pk, lead.pk), expect: false },
         { name: 'no room: the dial turned off', pledge: 100, after: () => setDial(false), expect: false },
         { name: 'own debt well inside the line', pledge: 400, before: a => { spend(a, 100); }, expect: true },
         { name: 'own debt one bean short of the edge', pledge: 400, before: (a, g) => { spend(a, g - 400 - 1); }, expect: true },
@@ -168,9 +182,9 @@ async function main(): Promise<void> {
         { name: 'own debt and frozen', pledge: 400, before: (a, g) => { spend(a, g - 100); },
           after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'granted credit 100, debt at the edge', pledge: 300,
-          before: (a, g) => { db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300); }, expect: true },
+          before: (a, g) => { db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(100), a.pk); spend(a, g - 300); }, expect: true },
         { name: 'granted credit 100, debt past the edge (100 deeper)', pledge: 300,
-          before: (a, g) => { db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300 + 100 + 1); }, expect: false },
+          before: (a, g) => { db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(100), a.pk); spend(a, g - 300 + 100 + 1); }, expect: false },
         { name: 'a known pledge of 200 elsewhere, at the edge', pledge: 250,
           before: (a, g) => { keepElsewhere(a, 200); spend(a, g - 200 - 250); }, expect: true },
         { name: 'a known pledge of 200 elsewhere, past the edge', pledge: 250,
@@ -178,17 +192,21 @@ async function main(): Promise<void> {
         { name: 'a known pledge made elsewhere after asking leaves no room', pledge: 400,
           after: a => { keepElsewhere(a, 200); }, expect: false },
         { name: 'own debt then the dial off', pledge: 400, before: (a, g) => { spend(a, g - 400); }, after: () => setDial(false), expect: false },
-        // #1640 review F1: SUM(193.86, 113.78) + 1.03 in JS is not the double SQLite's compensated SUM gives with the 1.03 row
-        // written. Approve's re-check reads the SQL sum (floor -691.3299999999999), so it refuses; the row must say so too.
-        { name: 'known pledges 193.86 + 113.78 elsewhere, ask 1.03, debt at the cent edge (#1640 F1)', pledge: 1.03,
-          before: (a, g) => { keepElsewhere(a, 193.86); keepElsewhere(a, 113.78); spend(a, (g * 100 - 19386 - 11378 - 103) / 100); }, expect: false },
+        // #1640 review F1 was float dust: SUM(193.86, 113.78) + 1.03 in JS was not the double SQLite's compensated SUM gave, so
+        // at the cent edge Approve's re-check read the floor as -691.3299999999999 and refused, and the row had to say so too.
+        // In whole hundredths every sum is exact: at the cent edge the pledges fit to the hundredth and Approve goes through,
+        // one hundredth deeper it refuses, and the row says the same each time.
+        { name: 'known pledges 193.86 + 113.78 elsewhere, ask 1.03, debt exactly at the cent edge (#1640 F1, exact in hundredths)', pledge: 1.03,
+          before: (a, g) => { keepElsewhere(a, 193.86); keepElsewhere(a, 113.78); spendC(a, hc(g) - 19386 - 11378 - 103); }, expect: true },
+        { name: 'known pledges 193.86 + 113.78 elsewhere, ask 1.03, debt one hundredth past the cent edge', pledge: 1.03,
+          before: (a, g) => { keepElsewhere(a, 193.86); keepElsewhere(a, 113.78); spendC(a, hc(g) - 19386 - 11378 - 103 + 1); }, expect: false },
     ];
     for (const c of cases) {
         setDial(true);
         const { a, ent, grant } = freshApplicant();
         if (c.name.includes('whole known room')) c.pledge = half(grant);
         c.before?.(a, grant);
-        const req = requestToJoinEnterprise(ent, a.pk, c.pledge);
+        const req = requestToJoinEnterprise(ent, a.pk, hc(c.pledge));
         c.after?.(a, grant);
         const row = getKeeperRequests(ent, 'pending').find(r => r.id === req.id);
         let approved = false, refusal = '';
@@ -212,36 +230,39 @@ async function main(): Promise<void> {
     };
     const cents = (max: number) => 1 + Math.floor(random() * max);
     const elsewhere = createTreasury(`Elsewhere ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
-    const writeKnown = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+    const writeKnown = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                                    VALUES (?, ?, ?, ?, ?, NULL)`);
     let agree = 0, yes = 0, no = 0;
     const disagreements: string[] = [];
     for (let i = 0; i < RUNS; i++) {
         const { a, ent, grant } = freshApplicant();
-        // Up to 4 written known pledges of at most 100.00 and an ask of at most 100.00: inside half of a grant of 1,000.
+        // Up to 4 written known pledges of at most 100.00 and an ask of at most 100.00: inside half of a grant of 1,000. Each
+        // figure is whole hundredths, as the ledger holds it.
         const written = Array.from({ length: 2 + Math.floor(random() * 3) }, () => cents(10_000));
         const ask = cents(10_000);
-        for (const c of written) writeKnown.run(`known:${crypto.randomUUID()}`, a.pk, elsewhere, c / 100, new Date().toISOString());
-        const edge = grant * 100 - written.reduce((x, y) => x + y, 0) - ask;
-        spend(a, edge / 100);
-        const req = requestToJoinEnterprise(ent, a.pk, ask / 100);
+        for (const c of written) writeKnown.run(`known:${crypto.randomUUID()}`, a.pk, elsewhere, c, new Date().toISOString());
+        const edge = hc(grant) - written.reduce((x, y) => x + y, 0) - ask;
+        spendC(a, edge);
+        const req = requestToJoinEnterprise(ent, a.pk, ask);
         const row = getKeeperRequests(ent, 'pending').find(r => r.id === req.id)?.canBackPledge;
         let approved = false;
         try { approved = approveKeeperRequest(req.id, lead.pk).applied === true; } catch { /* a refusal */ }
         if (row === approved) agree++;
-        else disagreements.push(`[${written.map(c => c / 100).join(', ')}] + ${ask / 100}, debt ${edge / 100}: row ${row}, Approve ${approved}`);
+        else disagreements.push(`[${written.map(beansOf).join(', ')}] + ${beansOf(ask)}, debt ${beansOf(edge)}: row ${row}, Approve ${approved}`);
         if (approved) yes++; else no++;
     }
     assert(agree === RUNS, `seed ${SEED}: the row agrees with Approve in ${agree}/${RUNS} random sets at the cent edge `
         + `(Approve ${yes} yes, ${no} no)${disagreements.length ? `; first: ${disagreements.slice(0, 3).join('; ')}` : ''}`);
+    // What the float dust once decided either way: in whole hundredths a set exactly at its edge always fits.
+    assert(yes === RUNS && no === 0, `seed ${SEED}: exactly at the cent edge every set fits and Approve goes through (${yes} yes, ${no} no)`);
 
     // ── 2–5. over HTTPS: the GETs never write ─────────────────────────────────────────────────────
     const { a: bea, ent: solo, grant: beaGrant } = freshApplicant();
     const { a: cal } = freshApplicant();
-    requestToJoinEnterprise(solo, bea.pk, 400);
-    requestToJoinEnterprise(solo, cal.pk, 5);
+    requestToJoinEnterprise(solo, bea.pk, hc(400));
+    requestToJoinEnterprise(solo, cal.pk, hc(5));
     spend(bea, beaGrant - 400 + 1);
-    assert(getAvailableBacking(bea.pk) >= 400, 'precondition: Bea has room for 400 on paper, her own debt is past the edge');
+    assert(getAvailableBacking(bea.pk) >= hc(400), 'precondition: Bea has room for 400 on paper, her own debt is past the edge');
     const list = () => call('GET', lead, `/api/enterprise/${solo}/keepers/requests?status=pending`);
     const detail = () => call('GET', lead, `/api/enterprise/${solo}`);
     const answers = (r: Res) => Object.fromEntries([...(r.body?.requests ?? []), ...(r.body?.keeperRequests ?? [])]

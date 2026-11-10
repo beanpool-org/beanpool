@@ -42,6 +42,8 @@ const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
 
 let testsRun = 0;
 let testsPassed = 0;
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths. */
+const hc = (beans: number) => Math.round(beans * 100);
 function testAssert(cond: boolean, msg: string): void {
     testsRun++;
     if (cond) {
@@ -96,27 +98,27 @@ async function runTests() {
 
     popDb.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'creator', ?)`).run(creatorPubkey, now);
     popDb.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'backer', ?)`).run(backerPubkey, now);
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(creatorPubkey);
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(backerPubkey);
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(creatorPubkey, hc(1000));
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(backerPubkey, hc(1000));
 
     // Seed an unmigrated row in projects
     const legacyProjectId = 'proj_' + crypto.randomUUID();
     popDb.prepare(`
-        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, created_at, updated_at)
-        VALUES (?, ?, 'Build Solar Kiln', 'Dry timber with solar heat', ?, 500, '2026-12-31T00:00:00.000Z', 'ACTIVE', ?, ?)
-    `).run(legacyProjectId, creatorPubkey, JSON.stringify(['https://example.com/kiln.jpg']), now, now);
+        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, created_at, updated_at)
+        VALUES (?, ?, 'Build Solar Kiln', 'Dry timber with solar heat', ?, ?, '2026-12-31T00:00:00.000Z', 'ACTIVE', ?, ?)
+    `).run(legacyProjectId, creatorPubkey, JSON.stringify(['https://example.com/kiln.jpg']), hc(500), now, now);
 
     // Seed a transaction referencing projects(id)
     const txId = 'pledge_tx_' + crypto.randomUUID();
     const escrowPubkey = `escrow_${legacyProjectId}`;
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(escrowPubkey);
-    popDb.prepare(`UPDATE accounts SET balance = balance - 50 WHERE public_key = ?`).run(backerPubkey);
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(escrowPubkey, hc(50));
+    popDb.prepare(`UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?`).run(hc(50), backerPubkey);
     popDb.prepare(`
-        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
-        VALUES (?, ?, ?, 50, 'Seed pledge', ?)
-    `).run(txId, backerPubkey, escrowPubkey, legacyProjectId);
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id)
+        VALUES (?, ?, ?, ?, 'Seed pledge', ?)
+    `).run(txId, backerPubkey, escrowPubkey, hc(50), legacyProjectId);
 
-    // Seed unmigrated Commons proposals in node_config
+    // Seed unmigrated Commons proposals in node_config: a blob from before whole hundredths, its requestedAmount in Beans.
     const legacyPropId = 'prop_' + crypto.randomUUID();
     const commonsProposals = [
         {
@@ -152,7 +154,7 @@ async function runTests() {
     testAssert(!!projectEnterprise, 'Enterprise member row created for project');
     testAssert(projectEnterprise.is_treasury === 1, 'Project enterprise has is_treasury = 1');
     testAssert(projectEnterprise.lifecycle === 'bounded', 'Project enterprise has lifecycle = bounded');
-    testAssert(projectEnterprise.goal_amount === 500, 'Project enterprise has goal_amount = 500');
+    testAssert(projectEnterprise.goal_amount_c === hc(500), `Project enterprise has goal_amount_c = 500 Beans (${projectEnterprise.goal_amount_c})`);
     testAssert(projectEnterprise.purpose === 'Dry timber with solar heat', 'Project enterprise purpose matches description');
     const projectPhoto = popDb.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(legacyProjectId) as { photo: string } | undefined;
     testAssert(projectPhoto?.photo === 'https://example.com/kiln.jpg' && projectEnterprise.avatar_ref !== null,
@@ -172,7 +174,8 @@ async function runTests() {
     testAssert(!!proposalEnterprise, 'Enterprise member row created for commons proposal');
     testAssert(proposalEnterprise.is_treasury === 1, 'Commons proposal enterprise has is_treasury = 1');
     testAssert(proposalEnterprise.lifecycle === 'bounded', 'Commons proposal enterprise has lifecycle = bounded');
-    testAssert(proposalEnterprise.goal_amount === 300, 'Commons proposal enterprise has goal_amount = 300');
+    // The blob's requestedAmount is a Beans figure from before whole hundredths: never carried across (no conversion code).
+    testAssert(proposalEnterprise.goal_amount_c === null, `Commons proposal enterprise carries no goal: the old Beans figure (300) is not converted (${proposalEnterprise.goal_amount_c})`);
     testAssert(proposalEnterprise.purpose === 'Plant 20 fruit trees at the common grounds', 'Commons proposal enterprise purpose matches');
 
     // Verify node_config commons_projects marked migrated
@@ -201,7 +204,7 @@ async function runTests() {
     initStateEngine();
     reconcileLedgerFromDb();
 
-    const sumBefore = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
+    const sumBefore = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) as s FROM accounts').get() as any).s;
 
     const testCreator = 'creator_' + crypto.randomUUID().slice(0, 12);
     const testBacker = 'backer_' + crypto.randomUUID().slice(0, 12);
@@ -210,20 +213,20 @@ async function runTests() {
     const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator, 'cr_' + testCreator.slice(8, 16));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker, 'bk_' + testBacker.slice(8, 16));
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`).run(testCreator, nowEpoch);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 500, ?)`).run(testBacker, nowEpoch);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(testCreator, hc(100), nowEpoch);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(testBacker, hc(500), nowEpoch);
     reconcileLedgerFromDb();
 
     // Create crowdfund project (goal = 200)
     const projectTitle = 'Community Tool Shed ' + testProject.slice(5, 11);
-    createCrowdfundProject(testProject, testCreator, projectTitle, 'Shared workshop tools', ['https://example.com/shed.png'], 200, null);
+    createCrowdfundProject(testProject, testCreator, projectTitle, 'Shared workshop tools', ['https://example.com/shed.png'], hc(200), null);
 
     // Verify getters return unified enterprise
     const cfProjects = getCrowdfundProjects();
     const foundProject = cfProjects.find(p => p.id === testProject);
     testAssert(!!foundProject, 'getCrowdfundProjects returns newly created project');
     testAssert(foundProject?.title === projectTitle, 'Project title matches');
-    testAssert(foundProject?.goal_amount === 200, 'Project goal amount matches');
+    testAssert(foundProject?.goal_amount_c === hc(200), `Project goal amount matches (${foundProject?.goal_amount_c})`);
 
     const singleProject = getCrowdfundProject(testProject);
     testAssert(singleProject?.id === testProject, 'getCrowdfundProject(id) returns project');
@@ -235,53 +238,53 @@ async function runTests() {
 
     // Pledge partial amount (100 < 200)
     const pledge1TxId = 'pledge_1_' + crypto.randomUUID();
-    pledgeToProject(pledge1TxId, testProject, testBacker, 100, 'Halfway pledge');
+    pledgeToProject(pledge1TxId, testProject, testBacker, hc(100), 'Halfway pledge');
     reconcileLedgerFromDb();
 
-    testAssert(getBalance(testBacker).balance === 400, 'Backer debited 100 beans (500 -> 400)');
-    testAssert(getBalance(`escrow_${testProject}`).balance === 100, 'Escrow holds 100 beans');
-    testAssert(getBalance(testCreator).balance === 100, 'Creator personal balance untouched (still 100)');
-    testAssert(getBalance(testProject).balance === 0, 'Enterprise balance not yet released (0)');
+    testAssert(getBalance(testBacker).balance_c === hc(400), 'Backer debited 100 beans (500 -> 400)');
+    testAssert(getBalance(`escrow_${testProject}`).balance_c === hc(100), 'Escrow holds 100 beans');
+    testAssert(getBalance(testCreator).balance_c === hc(100), 'Creator personal balance untouched (still 100)');
+    testAssert(getBalance(testProject).balance_c === 0, 'Enterprise balance not yet released (0)');
 
     // Pledge remaining amount to trigger goal reach (100 + 100 >= 200)
     const pledge2TxId = 'pledge_2_' + crypto.randomUUID();
-    pledgeToProject(pledge2TxId, testProject, testBacker, 100, 'Goal-reaching pledge');
+    pledgeToProject(pledge2TxId, testProject, testBacker, hc(100), 'Goal-reaching pledge');
     reconcileLedgerFromDb();
 
     // Verify auto-sweep behavior:
     // Escrow is fully drained to 0, enterprise account is credited with 200 beans (Slice 3: pledges land in enterprise account)
-    testAssert(getBalance(testBacker).balance === 300, 'Backer debited to 300');
-    testAssert(getBalance(`escrow_${testProject}`).balance === 0, 'Escrow balance fully drained to 0');
-    testAssert(getBalance(testCreator).balance === 100, 'Creator personal balance untouched (remains 100)');
-    testAssert(getBalance(testProject).balance === 200, 'Enterprise account credited with 200 beans');
+    testAssert(getBalance(testBacker).balance_c === hc(300), 'Backer debited to 300');
+    testAssert(getBalance(`escrow_${testProject}`).balance_c === 0, 'Escrow balance fully drained to 0');
+    testAssert(getBalance(testCreator).balance_c === hc(100), 'Creator personal balance untouched (remains 100)');
+    testAssert(getBalance(testProject).balance_c === hc(200), 'Enterprise account credited with 200 beans');
 
     // Verify sweep transaction was recorded to enterprise account
     const sweepTx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(`sweep_${pledge2TxId}`) as any;
     testAssert(!!sweepTx, 'Sweep transaction recorded');
     testAssert(sweepTx.to_pubkey === testProject, 'Sweep transaction to_pubkey is the enterprise account');
-    testAssert(sweepTx.amount === 200, 'Sweep transaction amount is 200');
+    testAssert(sweepTx.amount_c === hc(200), `Sweep transaction amount is 200 (${sweepTx.amount_c} hundredths)`);
 
     // Verify current_amount does not double-count sweeps (Comment 1)
     const singleProjectAfter = getCrowdfundProject(testProject);
-    testAssert(singleProjectAfter?.current_amount === 200, 'current_amount does not double-count sweeps (exactly 200, not 400)');
+    testAssert(singleProjectAfter?.current_amount_c === hc(200), `current_amount does not double-count sweeps (exactly 200, not 400) (${singleProjectAfter?.current_amount_c})`);
 
     // Verify Commons proposal can receive direct pledges via fallback (Comment 5)
-    const commonsProp = createProject(testCreator, 'Solar Battery Initiative', 'Power backup', 150);
+    const commonsProp = createProject(testCreator, 'Solar Battery Initiative', 'Power backup', hc(150));
     testAssert(!!commonsProp, 'Commons proposal created successfully');
     if (!commonsProp) throw new Error('createProject returned null');
     const propPledgeTxId = 'pledge_prop_' + crypto.randomUUID();
-    pledgeToProject(propPledgeTxId, commonsProp.id, testBacker, 50, 'Pledge to commons proposal');
+    pledgeToProject(propPledgeTxId, commonsProp.id, testBacker, hc(50), 'Pledge to commons proposal');
     reconcileLedgerFromDb();
-    testAssert(getBalance(`escrow_${commonsProp.id}`).balance === 50, 'Escrow holds 50 beans for commons proposal');
+    testAssert(getBalance(`escrow_${commonsProp.id}`).balance_c === hc(50), 'Escrow holds 50 beans for commons proposal');
     const commonsPropProject = getCrowdfundProject(commonsProp.id);
-    testAssert(commonsPropProject?.current_amount === 50, 'Bounded commons proposal resolves in getCrowdfundProject with current_amount 50');
+    testAssert(commonsPropProject?.current_amount_c === hc(50), `Bounded commons proposal resolves in getCrowdfundProject with current_amount 50 (${commonsPropProject?.current_amount_c})`);
 
     // Verify ledger conservation
-    const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
-    testAssert(Math.abs(sumAfter - (sumBefore + 600)) < 1e-9, 'Ledger conservation strictly preserved (delta = seeded 600)');
+    const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) as s FROM accounts').get() as any).s;
+    testAssert(sumAfter - sumBefore === hc(600), `Ledger conservation strictly preserved (delta = seeded 600) (Δ ${sumAfter - sumBefore} hundredths)`);
 
     // Test deleteProject does not resurrect in getAllProjects
-    const delProj = createProject(testCreator, 'Delete Me Project', 'Will be pruned', 100);
+    const delProj = createProject(testCreator, 'Delete Me Project', 'Will be pruned', hc(100));
     testAssert(!!delProj && getAllProjects().some(p => p.id === delProj.id), 'Created project visible in getAllProjects');
     const delSuccess = deleteProject(testCreator, delProj!.id);
     testAssert(delSuccess, 'deleteProject succeeded');

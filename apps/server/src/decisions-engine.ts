@@ -46,11 +46,11 @@ import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, GROUP_KIND_CIRCLE, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, GROUP_KIND_CIRCLE, fitsTextLimit, formatHundredths, isHundredths, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
 import { standingParts } from './engine/auto-moderation.js';
 import { BURST } from './engine/burst-cleanup.js';
-import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR, noteKeeperLeftProject } from './db/db.js';
+import { db, writeTombstone, noteKeeperLeftProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
@@ -396,9 +396,10 @@ export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | '
 /**
  * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
  * opens (createDecision), so its voters can weigh them. Balances are private (Marty, 2026-09-28): those voters see them,
- * inside that Decision only (decisionForReader), and nobody else does.
+ * inside that Decision only (decisionForReader), and nobody else does. The keys are the ones removalBalanceParams writes:
+ * whole hundredths, named `*_c`. A key here that the params don't carry hides nothing, so this list follows that function.
  */
-const MEMBER_BALANCE_PARAMS = ['balance', 'debt'] as const;
+const MEMBER_BALANCE_PARAMS = ['balance_c', 'debt_c'] as const;
 
 function carriesMemberBalance(params: unknown): params is Record<string, unknown> {
     return !!params && typeof params === 'object'
@@ -413,8 +414,8 @@ function branchParamsWithout(params: Record<string, any>, keepFor: string | null
     const { branchDebt: _total, ...rest } = params;
     const branch = (params.branch as BranchEntry[]).map(e => {
         if (!e || typeof e !== 'object') return e;
-        const { balance, debt, replyHiddenBy: _by, ...kept } = e;
-        return e.pubkey === keepFor ? { ...kept, balance, debt } : kept;
+        const { balance_c, debt_c, replyHiddenBy: _by, ...kept } = e;
+        return e.pubkey === keepFor ? { ...kept, balance_c, debt_c } : kept;
     });
     return { ...rest, branch };
 }
@@ -438,7 +439,7 @@ export function publicDecision(decision: Decision): PublicDecision {
     let shown: PublicDecision = rest;
     if (rest.params && typeof rest.params === 'object'
         && ('suspendedBy' in rest.params || 'pausedBy' in rest.params || carriesMemberBalance(rest.params))) {
-        const { suspendedBy: _suspendedBy, pausedBy: _pausedBy, balance: _balance, debt: _debt, ...params } = rest.params;
+        const { suspendedBy: _suspendedBy, pausedBy: _pausedBy, balance_c: _balance, debt_c: _debt, ...params } = rest.params;
         shown = { ...rest, params: Array.isArray(params.branch) ? branchParamsWithout(params, null) : params };
     }
     if (decision.effect !== 'remove_member' || decision.scopeKind !== 'community') return shown;
@@ -542,7 +543,7 @@ export function decisionForAdmin(decision: Decision, reader: string | null | und
         const { branchDebt: _total, ...rest } = decision.params;
         const branch = (decision.params.branch as BranchEntry[]).map(e => {
             if (!e || typeof e !== 'object' || e.pubkey === reader) return e;
-            const { balance: _b, debt: _d, ...kept } = e;
+            const { balance_c: _b, debt_c: _d, ...kept } = e;
             return kept;
         });
         return { ...decision, params: { ...rest, branch }, balanceHidden: true };
@@ -693,8 +694,8 @@ export function isPauseVote(decision: Pick<Decision, 'effect' | 'authorPubkey' |
 export interface BranchEntry {
     pubkey: string;
     name: string;
-    balance?: number;
-    debt?: number;
+    balance_c?: number;
+    debt_c?: number;
     reply?: string;
     repliedAt?: string;
     replyHiddenAt?: string;
@@ -1013,7 +1014,7 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
 /**
  * Check if a member is eligible to author a decision (§3.2, §10):
  * - Active member, not frozen, not treasury.
- * - Qualified trade value > 0, or node admin. A trust badge (members.earned_credit) is no standing: badges unlock nothing.
+ * - Qualified trade value > 0, or node admin. A trust badge (members.earned_credit_c) is no standing: badges unlock nothing.
  * - Max 1 open community decision per author; an enterprise's keepers' vote is that enterprise's, not this (§2.1).
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
@@ -1043,7 +1044,7 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
     if (frozenRow?.credit_frozen === 1) return { ok: false, error: word('Member credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprises cannot propose decisions') };
 
-    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit, which
+    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit_c, which
     // adminSetTier and genesis invites write): badges are recognition and unlock nothing (Marty, 23 Oct).
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
@@ -1104,7 +1105,9 @@ export function hasCompletedTrade(pubkey: string): boolean {
  * qualifiedTradeValue, rounded to cents. A fresh allowance on every pool Decision, never a shared budget.
  */
 export function getVoiceCredits(pubkey: string): number {
-    return Math.round(engine.qualifiedTradeValue(db, pubkey) * 100) / 100;
+    // Voice credits are a count of Beans of value traded (vote weights, decision_votes.credits_used), never money: the
+    // value is whole hundredths, so its Beans are it over 100. Casting N votes costs N², as before.
+    return engine.qualifiedTradeValue(db, pubkey) / 100;
 }
 
 /**
@@ -1155,14 +1158,9 @@ export interface CommonsGrantCap {
     capCents: number;
 }
 
-/** Whole cents, rounded down, so the cap a member is shown is always one the rule accepts. The 1e-6 absorbs float noise. */
-function floorCents(beans: number): number {
-    return Math.floor(beans * 100 + 1e-6);
-}
-
+/** A figure in these English words (whole hundredths, never below 0 shown as negative): formatHundredths. */
 function beansText(cents: number): string {
-    const s = (Math.abs(cents) / 100).toFixed(2);
-    return s.endsWith('.00') ? s.slice(0, -3) : s;
+    return formatHundredths(Math.abs(cents), 'en');
 }
 
 /**
@@ -1186,8 +1184,8 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
     // (the code's ISO-8601, and SQLite datetime()'s 'YYYY-MM-DD HH:MM:SS', see parseDbTime).
     const row = db.prepare(`
         SELECT
-            COALESCE(SUM(CASE WHEN to_pubkey = 'COMMONS_POOL' THEN amount ELSE 0 END), 0) AS into_pool,
-            COALESCE(SUM(COALESCE(tax_fee, 0)), 0) AS fees
+            COALESCE(SUM(CASE WHEN to_pubkey = 'COMMONS_POOL' THEN amount_c ELSE 0 END), 0) AS into_pool,
+            COALESCE(SUM(COALESCE(fee_c, 0)), 0) AS fees
         FROM transactions
         WHERE timestamp >= @cutoffDay
           AND julianday(timestamp) > julianday(@cutoff)
@@ -1197,8 +1195,9 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
         cutoff: cutoff.toISOString(),
         asOf: asOf.toISOString(),
     }) as { into_pool: number; fees: number };
-    const heldCents = floorCents(getCommonsBalanceExact());
-    const inflowCents = floorCents(Number(row.into_pool) + Number(row.fees));
+    // Whole hundredths already: the pot and every row's amount_c and fee_c.
+    const heldCents = getCommonsBalanceExact();
+    const inflowCents = Number(row.into_pool) + Number(row.fees);
     return { heldCents, inflowCents, capCents: heldCents + inflowCents };
 }
 
@@ -1223,16 +1222,15 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
  * cent would be paid as it is and land in a hardship shield rounded to a cent (state-engine.ts sweepRepayment).
  */
 function assertGrantWithinCap(params: any): void {
-    const amount = Number(params?.amount);
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
+    // Whole hundredths above 0 (the params' amount_c): anything else could never be paid.
+    const amount = params?.amount_c;
+    if (!isHundredths(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
     // While the pot is unknown there is no cap to measure against: NaN or Infinity made both tests below false, and a
     // grant of any size was opened for a vote (#1465 re-review, NB-1). Refused in the pause words, and nothing is written.
     if (potIsUnknown()) throw new CommonsPotUnknownError();
     const cap = commonsGrantCap();
     // Fails closed: a cap that isn't a finite number refuses, never lets through.
-    if (!Number.isFinite(cap.capCents) || cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
-    // After the cap: a sliver of a Bean against a cap of 0 keeps the cap's answer, which says what the most is.
-    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
+    if (!isHundredths(cap.capCents) || cap.capCents <= 0 || amount > cap.capCents) throw new Error(grantCapRefusal(cap));
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────
@@ -1246,15 +1244,15 @@ export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's de
  * removal by vote S3), so its voters can weigh it: their name, balance and any debt, and what the Commons holds, from the
  * ledger. The balance and the debt go to those voters and the member only (decisionForReader).
  */
-export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
+export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt_c: number; commonsPool_c: number; balance_c: number } {
     const member = getMember(subjectPubkey);
-    const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
-    const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(subjectPubkey)?.balance ?? 0);
+    const accRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance_c: number } | undefined;
+    const memberBalance = accRow !== undefined ? accRow.balance_c : (getBalance(subjectPubkey)?.balance_c ?? 0);
     return {
         memberName: member?.callsign || nameGiven || subjectPubkey.slice(0, 8),
-        debt: memberBalance < 0 ? Math.abs(memberBalance) : 0, // Authoritatively computed from ledger
-        commonsPool: Math.round(getCommonsBalanceExact()), // Authoritatively computed from ledger
-        balance: memberBalance,
+        debt_c: memberBalance < 0 ? Math.abs(memberBalance) : 0, // Authoritatively computed from ledger, whole hundredths
+        commonsPool_c: getCommonsBalanceExact(), // Authoritatively computed from ledger, whole hundredths
+        balance_c: memberBalance,
     };
 }
 
@@ -1762,12 +1760,12 @@ export function preflightAssert(decision: Decision): {
         if (!enterprise || !enterprise.isTreasury) {
             return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
         }
-        const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
+        const amount = decision.params?.amount_c;
+        if (!isHundredths(amount) || amount <= 0) {
             return { status: 'blocked', reason: 'Invalid grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact().toFixed(2)}` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(amount, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -1777,12 +1775,12 @@ export function preflightAssert(decision: Decision): {
         if (!recipient || recipient.status === 'pruned' || recipient.isTreasury) {
             return { status: 'void', reason: 'Invalid or missing hardship recipient member' };
         }
-        const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
+        const amount = decision.params?.amount_c;
+        if (!isHundredths(amount) || amount <= 0) {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact().toFixed(2)}` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(amount, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -1799,13 +1797,13 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
         }
         const entAccount = ledger.getAccount(decision.subject);
-        const deficit = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+        const deficit = entAccount && entAccount.balance_c < 0 ? Math.abs(entAccount.balance_c) : 0;
         // A deficit that isn't a finite number is a corrupted balance, not one to queue and wait on for 90 days.
-        if (!Number.isFinite(deficit)) {
+        if (!isHundredths(deficit)) {
             return { status: 'blocked', reason: 'Invalid enterprise deficit' };
         }
         if (deficit > 0 && getCommonsBalanceExact() < deficit) {
-            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${deficit}, available ${getCommonsBalanceExact().toFixed(2)}` };
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${formatHundredths(deficit, 'en')}, available ${formatHundredths(getCommonsBalanceExact(), 'en')}` };
         }
     }
 
@@ -2080,24 +2078,24 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'grant_enterprise': {
-                    const amount = Number(decision.params.amount);
+                    const amount = Number(decision.params.amount_c);
                     const entPubkey = decision.subject!;
                     if (!ledger.deductFromCommons(amount)) {
                         throw new Error('Insufficient commons funds during grant execution');
                     }
                     const account = ledger.getAccount(entPubkey);
-                    account.balance += amount;
+                    account.balance_c += amount;
                     db.prepare(`
-                        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(public_key) DO UPDATE SET
-                            balance = excluded.balance,
+                            balance_c = excluded.balance_c,
                             last_demurrage_epoch = excluded.last_demurrage_epoch,
                             last_updated_at = excluded.last_updated_at
-                    `).run(entPubkey, account.balance, account.lastDemurrageEpoch, now);
+                    `).run(entPubkey, account.balance_c, account.lastDemurrageEpoch, now);
 
                     db.prepare(`
-                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), entPubkey, amount, `Commons grant: ${decision.title.slice(0, 80)}`, now, authSigner);
 
@@ -2106,29 +2104,29 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'grant_hardship': {
-                    const amount = Number(decision.params.amount);
+                    const amount = Number(decision.params.amount_c);
                     const memberPubkey = decision.subject!;
                     if (!ledger.deductFromCommons(amount)) {
                         throw new Error('Insufficient commons funds during hardship execution');
                     }
                     const account = ledger.getAccount(memberPubkey);
-                    account.balance += amount;
+                    account.balance_c += amount;
                     db.prepare(`
-                        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(public_key) DO UPDATE SET
-                            balance = excluded.balance,
+                            balance_c = excluded.balance_c,
                             last_demurrage_epoch = excluded.last_demurrage_epoch,
                             last_updated_at = excluded.last_updated_at
-                    `).run(memberPubkey, account.balance, account.lastDemurrageEpoch, now);
+                    `).run(memberPubkey, account.balance_c, account.lastDemurrageEpoch, now);
 
                     db.prepare(`
-                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), memberPubkey, amount, `Hardship grant: ${decision.title.slice(0, 80)}`, now, authSigner);
                     // A member working off a debt keeps the grant: the next payment they receive sweeps only what it
                     // brought (state-engine.ts sweepRepayment), not this.
-                    db.prepare(`UPDATE names_debts SET hardship_held = ROUND(hardship_held + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
+                    db.prepare(`UPDATE names_debts SET hardship_held_c = ROUND(hardship_held_c + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
                         .run(amount, memberPubkey);
 
                     persistDecayEvents();
@@ -2142,19 +2140,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'write_off_deficit': {
                     const entPubkey = decision.subject!;
                     const entAccount = ledger.getAccount(entPubkey);
-                    if (entAccount && entAccount.balance < 0) {
-                        const deficit = Math.abs(entAccount.balance);
+                    if (entAccount && entAccount.balance_c < 0) {
+                        const deficit = Math.abs(entAccount.balance_c);
                         if (!ledger.deductFromCommons(deficit)) {
                             throw new Error('Insufficient commons funds to write off deficit');
                         }
-                        entAccount.balance = 0;
+                        entAccount.balance_c = 0;
                         db.prepare(`
-                            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                            INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                             VALUES (?, 0, ?, ?)
-                            ON CONFLICT(public_key) DO UPDATE SET balance = 0, last_updated_at = excluded.last_updated_at
+                            ON CONFLICT(public_key) DO UPDATE SET balance_c = 0, last_updated_at = excluded.last_updated_at
                         `).run(entPubkey, entAccount.lastDemurrageEpoch, now);
                         db.prepare(`
-                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                             VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                         `).run(crypto.randomUUID(), entPubkey, deficit, `Deficit write-off: ${decision.title.slice(0, 80)}`, now, authSigner);
                         persistDecayEvents();
@@ -2167,13 +2165,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     // reaches its credit line), with the trade fee; the ledger line carries this Decision's signer.
                     const ent = decision.scopeId!;
                     const to = decision.subject!;
-                    const amount = floorCents(Number(decision.params.amount)) / 100;
+                    const amount = Number(decision.params.amount_c);
                     const wage = isEnterpriseKeeper(ent, to);
                     const txn = transfer(ent, to, amount, decision.title, 'direct', false, { signer: authSigner, decisionPayOut: true });
-                    if (!txn) throw new Error(`The enterprise could not pay ${beansText(amount * 100)} Beans now`);
+                    if (!txn) throw new Error(`The enterprise could not pay ${beansText(amount)} Beans now`);
                     // A wage comes out of earned surplus (Rules 5 and 6), as a deferred wage claim's does.
                     if (wage) {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?').run(amount, ent);
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?').run(amount, ent);
                     }
                     touchedEnterprises.push(ent);
                     touchedProfiles.push(to);
@@ -3068,7 +3066,7 @@ function branchVoteWords(params: Record<string, any>): { title: string; descript
 
 /** What the accounts on a branch's list owe together: what the Commons would absorb if the vote removes them. */
 function branchDebtOf(branch: BranchEntry[]): number {
-    return branch.reduce((sum, e) => sum + (typeof e?.debt === 'number' && Number.isFinite(e.debt) ? e.debt : 0), 0);
+    return branch.reduce((sum, e) => sum + (typeof e?.debt_c === 'number' && Number.isSafeInteger(e.debt_c) ? e.debt_c : 0), 0);
 }
 
 // ── Pause branch (removal by vote S5: design §3.5, §2 row 7, Q5) ────────────────────────────────
@@ -3206,8 +3204,8 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
                 if (chain) throw new PauseRefusedError(chain);
             }
             const branch: BranchEntry[] = listed.map(a => {
-                const { balance, debt } = removalBalanceParams(a.pubkey);
-                return { pubkey: a.pubkey, name: a.name, balance, debt };
+                const { balance_c, debt_c } = removalBalanceParams(a.pubkey);
+                return { pubkey: a.pubkey, name: a.name, balance_c, debt_c };
             });
             const established = accounts.filter(a => a.leftOff === 'established');
             // Who decides it, by the community's rule, as one member's removal (chooseRemovalDecider): under a jury rule, one
@@ -3222,7 +3220,7 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
                 root: { pubkey: rootPubkey, name: rootName },
                 branch,
                 branchDebt: branchDebtOf(branch),
-                commonsPool: Math.round(getCommonsBalanceExact()),
+                commonsPool_c: getCommonsBalanceExact(),
                 established: established.map(a => ({ pubkey: a.pubkey, name: a.name })),
             };
             for (const a of listed) setUserStatusRow(a.pubkey, 'disabled', { actor, how: 'suspended' });
@@ -4521,8 +4519,10 @@ export function tickDecisions(asOfTime?: number): {
         if (top.effect === 'write_off_deficit' && top.subject) {
             const entAccount = ledger.getAccount(top.subject);
             // No deficit left is 0: the write-off completes without moving anything.
-            requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
-            if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
+            requiredAmount = entAccount && entAccount.balance_c < 0 ? Math.abs(entAccount.balance_c) : 0;
+            // The same question preflight asks (isHundredths): a deficit that isn't whole hundredths is a corrupted balance,
+            // handed to preflight to block now rather than held in the one slot waiting for funds.
+            if (!isHundredths(requiredAmount)) unusable = `deficit ${requiredAmount}`;
         } else {
             let parsed: any = {};
             try {
@@ -4530,9 +4530,9 @@ export function tickDecisions(asOfTime?: number): {
             } catch (e: any) {
                 unusable = `params unreadable: ${e?.message || e}`;
             }
-            requiredAmount = Number(parsed?.amount);
-            if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
-                unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
+            requiredAmount = Number(parsed?.amount_c);
+            if (!unusable && !(isHundredths(parsed?.amount_c) && requiredAmount > 0)) {
+                unusable = `amount_c ${String(parsed?.amount_c).slice(0, 40)}`;
             }
         }
 
@@ -4593,10 +4593,10 @@ export class ScopedNotFoundError extends Error {
     constructor() { super('Not found'); }
 }
 
-interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus: number | null }
+interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus_c: number | null }
 
 function enterpriseRow(pubkey: string): EnterpriseRow | null {
-    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
+    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus_c FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
     return r && r.is_treasury ? r : null;
 }
 
@@ -4812,24 +4812,24 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
     let params: Record<string, unknown> | null = null;
     if (opts.effect === 'pay_out') {
         const to = typeof opts.params?.to === 'string' ? opts.params.to : '';
-        // A number only: "40", true or [5] is the wrong shape, never read as one.
-        const cents = typeof opts.params?.amount === 'number' ? floorCents(opts.params.amount) : NaN;
+        // Whole hundredths only (amount_c): "4000", 40.5, true or [5] is the wrong shape, never read as one.
+        const cents = isHundredths(opts.params?.amount_c) ? opts.params.amount_c : NaN;
         if (!Number.isFinite(cents) || cents <= 0) throw new Error(word('A pay-out needs an amount in Beans above 0.'));
         if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error(word('Name a member or an enterprise of this community to pay.'));
         const recipient = getMember(to);
         if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error(word('Name a member or an enterprise of this community to pay.'));
         if (recipient.status === 'completed') throw new Error(RECIPIENT_WOUND_UP);
         if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
-        const held = floorCents(getBalance(opts.scopeId).balance);
+        const held = getBalance(opts.scopeId).balance_c;
         if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
-        if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+        if (isEnterpriseKeeper(opts.scopeId, to) && cents > Math.max(0, Number(ent.earned_surplus_c) || 0)) {
             throw new Error(tr('Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {surplus} Beans now.',
-                { surplus: beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) }));
+                { surplus: beansText(Math.max(0, Number(ent.earned_surplus_c) || 0)) }));
         }
         const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
         // The recipient is the subject, so a re-key mid-vote moves it with every other subject (engine/key-move.ts).
         subject = to;
-        params = { amount: cents / 100, ...(memo ? { memo } : {}) };
+        params = { amount_c: cents, ...(memo ? { memo } : {}) };
     } else {
         subject = typeof opts.subject === 'string' ? opts.subject : null;
         if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error(word('Name a keeper on this enterprise’s roll.'));
@@ -4949,11 +4949,11 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
         // Here, not by transfer's throw inside the conserving transaction (validation before the transaction).
         if (recipient.status === 'completed') return { status: 'void', reason: RECIPIENT_WOUND_UP };
         if (to === decision.authorPubkey) return { status: 'blocked', reason: PAY_SELF_REFUSAL };
-        const cents = floorCents(Number(decision.params?.amount));
+        const cents = isHundredths(decision.params?.amount_c) ? decision.params.amount_c : NaN;
         if (!Number.isFinite(cents) || cents <= 0) return { status: 'blocked', reason: 'Invalid pay-out amount' };
-        const held = floorCents(getBalance(decision.scopeId!).balance);
+        const held = getBalance(decision.scopeId!).balance_c;
         if (held < cents) return { status: 'blocked', reason: `The enterprise holds ${beansText(Math.max(0, held))} Beans now, less than the ${beansText(cents)} voted` };
-        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > Math.max(0, Number(ent.earned_surplus_c) || 0)) {
             return { status: 'blocked', reason: WAGE_NEEDS_SURPLUS };
         }
         return { status: 'ok' };

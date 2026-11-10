@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -51,8 +51,9 @@ function dealDate(iso: string | null | undefined): string {
 }
 
 /** A Beans amount on a card, the language's way (English as before: String(n)); anything else as it came. */
+/** A deal's amount (whole hundredths) as every figure is written; anything else as it came. */
 function beans(n: unknown): string {
-    return typeof n === 'number' ? formatNumber(n) : n === null || n === undefined ? '' : String(n);
+    return typeof n === 'number' ? formatHundredths(n) : n === null || n === undefined ? '' : String(n);
 }
 
 interface Props extends LocalCommunityWays {
@@ -452,7 +453,7 @@ export function MyDealsModal({
                                                             </div>
                                                             <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                                 <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                    {isBuyer ? '- ' : '+ '}{beans(item.credits)}
+                                                                    {isBuyer ? '- ' : '+ '}{beans(item.amount_c)}
                                                                 </span>
                                                                 <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                             </div>
@@ -552,7 +553,7 @@ export function MyDealsModal({
                                                         </div>
                                                         <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                             <span className={`font-black text-sm whitespace-nowrap shrink-0 ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                {isBuyer ? '- ' : '+ '}{beans(item.credits)}
+                                                                {isBuyer ? '- ' : '+ '}{beans(item.amount_c)}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
@@ -677,7 +678,7 @@ export function MyDealsModal({
                                                         </div>
                                                         <div className="flex items-center">
                                                             <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
-                                                                {beans(item.credits ?? '?')}
+                                                                {beans(item.price_c ?? '?')}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
@@ -746,7 +747,7 @@ export function MyDealsModal({
                                                     </span>
                                                     <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                         <span className="font-black text-sm text-indigo-500 dark:text-indigo-300 whitespace-nowrap shrink-0">
-                                                            {beans(item.credits ?? '?')}
+                                                            {beans(item.price_c ?? '?')}
                                                         </span>
                                                         <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                     </div>

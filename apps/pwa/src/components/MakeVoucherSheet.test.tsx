@@ -23,7 +23,7 @@ describe('MakeVoucherSheet (web, I5)', () => {
     });
 
     it('two sections from the node and nobody else; no stepper until someone is picked; no balance', () => {
-        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={100000} onClose={() => {}} onMade={() => {}} />);
         const dialog = screen.getByRole('dialog', { name: 'Make someone a voucher' });
         expect(within(dialog).getByTestId('make-voucher-admins')).toHaveTextContent('Admins · no names-list entry needed');
         expect(within(dialog).getByTestId('make-voucher-confirmed')).toHaveTextContent('Confirmed on the names list');
@@ -34,46 +34,47 @@ describe('MakeVoucherSheet (web, I5)', () => {
     });
 
     it('a committee admin is sent no admins: no Admins heading; nobody at all says so in one sentence', () => {
-        const { unmount } = render(<MakeVoucherSheet candidates={{ admins: [], confirmed: CANDIDATES.confirmed, adminsOffered: false }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        const { unmount } = render(<MakeVoucherSheet candidates={{ admins: [], confirmed: CANDIDATES.confirmed, adminsOffered: false }} defaultBudget={100000} onClose={() => {}} onMade={() => {}} />);
         expect(screen.queryByTestId('make-voucher-admins')).toBeNull();
         expect(screen.getAllByTestId('make-voucher-confirmed-row')).toHaveLength(1);
         unmount();
-        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: true }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: true }} defaultBudget={100000} onClose={() => {}} onMade={() => {}} />);
         expect(screen.getByTestId('make-voucher-nobody')).toHaveTextContent('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
     });
 
     it('a committee admin with nobody confirmed waiting is not told every admin is a voucher: only an owner makes an admin one (review, 10 Nov)', () => {
-        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: false }} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        render(<MakeVoucherSheet candidates={{ admins: [], confirmed: [], adminsOffered: false }} defaultBudget={100000} onClose={() => {}} onMade={() => {}} />);
         const line = screen.getByTestId('make-voucher-nobody').textContent ?? '';
         expect(line).toBe('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
         expect(line).not.toMatch(/every admin/i);
     });
 
-    it('an admin picked: the stepper starts at the community default, Make sends { memberPubkey } and the level', async () => {
+    it('an admin picked: the stepper starts at the community default, Make sends { memberPubkey } and the level (whole hundredths)', async () => {
         const onMade = vi.fn();
-        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={800} onClose={() => {}} onMade={onMade} />);
+        // The node's default budget is whole hundredths: 800 Beans.
+        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={80000} onClose={() => {}} onMade={onMade} />);
         fireEvent.click(screen.getByTestId('make-voucher-admin-row'));
         expect(screen.getByTestId('make-voucher-amount')).toHaveTextContent('Budget: 800 Beans');
         fireEvent.click(screen.getByRole('button', { name: 'Increase budget' }));
         expect(screen.getByTestId('make-voucher-amount')).toHaveTextContent('Budget: 900 Beans');
         expect(screen.getByTestId('make-voucher-go')).toHaveTextContent('Make @Ike a voucher');
         fireEvent.click(screen.getByTestId('make-voucher-go'));
-        await waitFor(() => expect(api.makeVoucher).toHaveBeenCalledWith({ memberPubkey: IKE }, 900));
+        await waitFor(() => expect(api.makeVoucher).toHaveBeenCalledWith({ memberPubkey: IKE }, 90000));
         await waitFor(() => expect(onMade).toHaveBeenCalled());
         expect(screen.getByRole('status')).toHaveTextContent('@Ike is a voucher now, with a budget of 900 Beans.');
     });
 
     it('a confirmed name picked: Make sends its entry id', async () => {
-        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={1000} onClose={() => {}} onMade={() => {}} />);
+        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={100000} onClose={() => {}} onMade={() => {}} />);
         fireEvent.click(screen.getByTestId('make-voucher-confirmed-row'));
         fireEvent.click(screen.getByTestId('make-voucher-go'));
-        await waitFor(() => expect(api.makeVoucher).toHaveBeenCalledWith({ entryId: LIZ_ENTRY }, 1000));
+        await waitFor(() => expect(api.makeVoucher).toHaveBeenCalledWith({ entryId: LIZ_ENTRY }, 100000));
     });
 
     it('the node refuses: its words shown, nothing told as made', async () => {
         vi.mocked(api.makeVoucher).mockRejectedValue(new Error('Only an owner makes an admin a voucher or stops an admin’s budget.'));
         const onMade = vi.fn();
-        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={1000} onClose={() => {}} onMade={onMade} />);
+        render(<MakeVoucherSheet candidates={CANDIDATES} defaultBudget={100000} onClose={() => {}} onMade={onMade} />);
         fireEvent.click(screen.getByTestId('make-voucher-admin-row'));
         fireEvent.click(screen.getByTestId('make-voucher-go'));
         expect(await screen.findByRole('alert')).toHaveTextContent('Only an owner makes an admin a voucher or stops an admin’s budget.');

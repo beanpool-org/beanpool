@@ -25,8 +25,9 @@
  *    - Two-Person Rule: actor attempting to gift departing balance to self rejected with 403 / TWO_PERSON_RULE
  *    - Negative balance -> write_off_commons: formal debt write-off against Commons pool, member pruned, zero-sum conserved
  *    - Zero balance -> prune_zero_balance: member pruned, zero-sum conserved
- *    - Balances that are not whole cents (a real 7-Bean sale leaves 6.895, shown as 6.90): donate and gift
- *      settle the EXACT balance, and dust that shows as 0.00 still offboards with prune_zero_balance
+ *    - Balances after a real sale (a 7-Bean sale leaves the seller 6.90: the 1.5% fee is truncated once and the
+ *      half-hundredth stays with the seller): donate and gift settle the exact balance the wizard shows; there is no
+ *      dust (a fraction of a hundredth cannot be sent), and the smallest balance, 0.01, settles like any other
  * 4. HTTP API Endpoints:
  *    - GET /api/local/admin/members/:pubkey/rekey/status (401 unauth, 200 auth)
  *    - POST /api/local/admin/members/:pubkey/rekey/issue-code (401 unauth, 200 auth)
@@ -143,10 +144,20 @@ async function throwsAsync(fn: () => Promise<unknown>, re: RegExp, msg: string):
     }
 }
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
+/** A member's balance in Beans, as getBalance answers it (whole hundredths). */
+const bal = (pk: string) => beansOf(getBalance(pk).balance_c);
+
+/** The whole node in hundredths, exact: every account but the pot's shadow row, plus the pot. */
 const nodeTotal = () => {
-    const accRows = db.prepare("SELECT SUM(balance) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
+    const accRows = db.prepare("SELECT SUM(balance_c) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
     const accSum = accRows?.total || 0;
-    return Math.round((accSum + getCommonsBalanceExact()) * 10000) / 10000;
+    return accSum + getCommonsBalanceExact();
 };
 
 function generateValidPubkey(): string {
@@ -168,7 +179,7 @@ function makeMember(callsign: string, pubkey?: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pk, uniqueCallsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
 
@@ -179,7 +190,7 @@ async function main() {
     initStateEngine();
 
     const initialTotal = nodeTotal();
-    assert(initialTotal === 0, 'Initial ledger total is conserved (0.0000)');
+    assert(initialTotal === 0, 'Initial ledger total is conserved (exactly 0)');
 
     // =========================================================================
     // PART 1: RE-KEYING FLOW (LOST PHONE) & ATOMIC TRANSFER
@@ -197,26 +208,26 @@ async function main() {
     makeMember('bob', bobKey);
 
     // Give Alice a balance of 150 beans and Bob 50 beans
-    transfer('genesis', oldAliceKey, 150, 'seed alice', 'direct', true);
-    transfer('genesis', bobKey, 50, 'seed bob', 'direct', true);
+    transfer('genesis', oldAliceKey, hc(150), 'seed alice', 'direct', true);
+    transfer('genesis', bobKey, hc(50), 'seed bob', 'direct', true);
 
-    assert(getBalance(oldAliceKey).balance === 150, 'Alice has 150 beans balance before re-keying');
+    assert(bal(oldAliceKey) === 150, 'Alice has 150 beans balance before re-keying');
     assert(nodeTotal() === 0, 'Ledger total is 0 after seeding Alice and Bob');
 
     // Populate various tables to test row transfers across consumers
     // 1. Posts: Alice created a post (also satisfies CONTRIBUTION_REQUIRED)
-    const alicePost = createPost('offer', 'produce', 'Organic Honey', 'Fresh honey from the hives', 25, 'fixed', oldAliceKey);
+    const alicePost = createPost('offer', 'produce', 'Organic Honey', 'Fresh honey from the hives', hc(25), 'fixed', oldAliceKey);
     assert(Boolean(alicePost?.id), 'Alice created a honey offer post');
 
     // 2. Marketplace trade & Transactions: Alice buys coffee from Bob
-    const bobOffer = createPost('offer', 'produce', 'Roast Coffee', 'Fresh roast beans', 20, 'fixed', bobKey);
+    const bobOffer = createPost('offer', 'produce', 'Roast Coffee', 'Fresh roast beans', hc(20), 'fixed', bobKey);
     const mktTx = acceptPost(bobOffer!.id, oldAliceKey);
     completePostTransaction(mktTx.id, oldAliceKey);
-    assert(getBalance(oldAliceKey).balance === 130, 'Alice balance 130 after paying Bob');
+    assert(bal(oldAliceKey) === 130, 'Alice balance 130 after paying Bob');
 
     // 3. Direct transfer: Alice now has earned trust and sends 10 beans tip to Bob
-    transfer(oldAliceKey, bobKey, 10, 'alice coffee tip to bob', 'direct', false);
-    assert(getBalance(oldAliceKey).balance === 120, 'Alice balance 120 after tip to Bob');
+    transfer(oldAliceKey, bobKey, hc(10), 'alice coffee tip to bob', 'direct', false);
+    assert(bal(oldAliceKey) === 120, 'Alice balance 120 after tip to Bob');
 
     // 3. Node roles: Alice has moderator role
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'moderator', ?)").run(oldAliceKey, operatorPubkey);
@@ -249,10 +260,11 @@ async function main() {
     db.prepare("INSERT OR REPLACE INTO treasury_operators (member_pubkey, treasury_pubkey, granted_by) VALUES (?, ?, ?)").run(oldAliceKey, treasuryPub, operatorPubkey);
 
     // 10. Deferred wage claims
-    db.prepare("INSERT INTO deferred_wage_claims (id, keeper_pubkey, enterprise_pubkey, amount) VALUES (?, ?, ?, 40)").run(
+    db.prepare("INSERT INTO deferred_wage_claims (id, keeper_pubkey, enterprise_pubkey, amount_c) VALUES (?, ?, ?, ?)").run(
         'dwc_' + crypto.randomBytes(6).toString('hex'),
         oldAliceKey,
-        bobKey
+        bobKey,
+        hc(40)
     );
 
     // 11. Decisions and votes
@@ -261,10 +273,11 @@ async function main() {
     db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support) VALUES (?, ?, 1)").run(decId, oldAliceKey);
 
     // 12. Enterprise pledges
-    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES (?, ?, ?, 50)").run(
+    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, ?)").run(
         'plg_' + crypto.randomBytes(6).toString('hex'),
         oldAliceKey,
-        bobKey
+        bobKey,
+        hc(50)
     );
 
     // 13. Social recovery shares (Alice as guardian for Bob)
@@ -284,9 +297,9 @@ async function main() {
     // 15. Transaction with immutable cryptographic authorship
     const txSignedId = 'tx_' + crypto.randomBytes(6).toString('hex');
     db.prepare(`
-        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer, auth_signature, auth_payload)
-        VALUES (?, ?, ?, 5, 'coffee', datetime('now'), ?, 'sig_bytes', 'payload_bytes')
-    `).run(txSignedId, oldAliceKey, bobKey, oldAliceKey);
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer, auth_signature, auth_payload)
+        VALUES (?, ?, ?, ?, 'coffee', datetime('now'), ?, 'sig_bytes', 'payload_bytes')
+    `).run(txSignedId, oldAliceKey, bobKey, hc(5), oldAliceKey);
 
     // 16. Alice came in through the open door: her sign-in account's record (engine/open-join.ts)
     db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, 'google', 'alice-join-hash', ?, NULL)")
@@ -307,7 +320,7 @@ async function main() {
         .run(strangerKey, knockStamp, oldAliceKey, knockStamp, knockStamp);
 
     // 19. Bob addressed a post to Alice alone, and gave her a task: who may read it (engine/posts.ts) and who does it
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to)
                 VALUES ('bob-to-alice', 'request', 'produce', 'Spare jars?', 'For the honey', 0, ?, 'direct', ?, ?)`)
         .run(bobKey, oldAliceKey, oldAliceKey);
 
@@ -413,11 +426,11 @@ async function main() {
     assert(Boolean(newMember?.callsign.includes('alice')), 'Callsign preserved under new key');
 
     // 3. Balance moved to new key and conserved
-    const aliceNewBalance = getBalance(newAliceKey).balance;
+    const aliceNewBalance = bal(newAliceKey);
     assert(aliceNewBalance === 120, `New Alice key holds exactly 120 beans (got ${aliceNewBalance})`);
     assert(nodeTotal() === 0, 'Zero-sum ledger conservation holds after re-keying');
     const auditRekey = runLedgerAudit();
-    assert(auditRekey.ok === true && Math.abs(auditRekey.drift) < 0.0001, 'runLedgerAudit passes with 0 drift');
+    assert(auditRekey.ok === true && auditRekey.drift === 0, 'runLedgerAudit passes with 0 drift');
 
     // 4. Consumers updated:
     // Posts
@@ -607,24 +620,24 @@ async function main() {
     // Member 1: Positive balance -> Donate to Commons
     const charlieKey = generateValidPubkey();
     makeMember('charlie', charlieKey);
-    transfer('genesis', charlieKey, 75, 'seed charlie', 'direct', true);
-    assert(getBalance(charlieKey).balance === 75, 'Charlie has 75 beans balance');
+    transfer('genesis', charlieKey, hc(75), 'seed charlie', 'direct', true);
+    assert(bal(charlieKey) === 75, 'Charlie has 75 beans balance');
     assert(nodeTotal() === 0, 'Zero-sum before Charlie offboard preview');
 
     const previewCharlie = getOffboardPreview(charlieKey);
-    assert(previewCharlie.balance === 75, 'Charlie preview shows 75 beans balance');
-    assert(previewCharlie.costToCommunity === 0, 'Charlie costToCommunity is 0 for positive balance');
-    assert(previewCharlie.projectedCommonsBalance === previewCharlie.commonsBalance + 75, 'projectedCommonsBalance increases by 75 on donation');
+    assert(previewCharlie.balance_c === hc(75), 'Charlie preview shows 75 beans balance');
+    assert(previewCharlie.costToCommunity_c === 0, 'Charlie costToCommunity is 0 for positive balance');
+    assert(previewCharlie.projectedCommonsBalance_c === previewCharlie.commonsBalance_c + hc(75), 'projectedCommonsBalance increases by 75 on donation');
     assert(previewCharlie.isSoleOwner === false, 'Charlie is not sole owner');
 
     // Execute offboarding: donate_to_commons
     const offboardCharlieRes = executeOffboard(charlieKey, { resolution: 'donate_to_commons' }, operatorPubkey);
     assert(offboardCharlieRes.success === true, 'Charlie offboarded with donate_to_commons');
-    assert(getBalance(charlieKey).balance === 0, 'Charlie balance is 0 after offboarding');
+    assert(getBalance(charlieKey).balance_c === 0, 'Charlie balance is 0 after offboarding');
     assert(getMember(charlieKey)?.status === 'pruned', 'Charlie member status set to pruned');
     assert(nodeTotal() === 0, 'Zero-sum conserved after Charlie donation offboarding');
     const auditCharlie = runLedgerAudit();
-    assert(auditCharlie.ok === true && Math.abs(auditCharlie.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after donation');
+    assert(auditCharlie.ok === true && auditCharlie.drift === 0, 'runLedgerAudit passes with 0 drift after donation');
 
     // REGRESSION TEST (Item 1): Double-click / Idempotency check:
     // Calling executeOffboard a second time on already-pruned member is an idempotent no-op returning the first result.
@@ -633,7 +646,7 @@ async function main() {
     assert(secondCallRes.success === true, 'Second offboard call succeeds idempotently');
     assert(secondCallRes.memberPubkey === charlieKey.toLowerCase(), 'Second call returns memberPubkey');
     assert(secondCallRes.resolution === 'donate_to_commons', 'Second call returns original resolution');
-    assert(secondCallRes.balanceSettled === 75, 'Second call returns original balanceSettled (75)');
+    assert(secondCallRes.balanceSettled === hc(75), 'Second call returns original balanceSettled (75, in hundredths)');
     const commonsAfterSecond = getCommonsBalanceExact();
     assert(commonsAfterSecond === commonsAfterFirst, 'Commons pool moved exactly once after two calls in a row');
     assert(nodeTotal() === 0, 'Zero-sum conserved after second idempotent call');
@@ -641,8 +654,8 @@ async function main() {
     // Member 2: Positive balance -> Gift to Member + Two-Person Rule Check
     const daveKey = generateValidPubkey();
     makeMember('dave', daveKey);
-    transfer('genesis', daveKey, 60, 'seed dave', 'direct', true);
-    assert(getBalance(daveKey).balance === 60, 'Dave has 60 beans balance');
+    transfer('genesis', daveKey, hc(60), 'seed dave', 'direct', true);
+    assert(bal(daveKey) === 60, 'Dave has 60 beans balance');
 
     // Test Two-Person Rule: Operator attempting to gift Dave's balance to operatorPubkey must fail with 403 / TWO_PERSON_RULE
     try {
@@ -672,7 +685,7 @@ async function main() {
     const ordinaryAdminTx = transfer(
         daveKey,
         bobKey,
-        10,
+        hc(10),
         'ordinary admin-signed transfer without offboardOverride',
         'direct',
         false,
@@ -681,48 +694,48 @@ async function main() {
     assert(ordinaryAdminTx === null, 'Ordinary admin-signed transfer is blocked by the earned-credit trust gate');
 
     // Now execute valid gift to Bob (different from operator)
-    const bobBalanceBefore = getBalance(bobKey).balance;
+    const bobBalanceBefore = getBalance(bobKey).balance_c;
     const offboardDaveRes = executeOffboard(
         daveKey,
         { resolution: 'gift_to_member', giftRecipientPubkey: bobKey },
         operatorPubkey
     );
     assert(offboardDaveRes.success === true, 'Dave offboarded with gift_to_member');
-    assert(getBalance(daveKey).balance === 0, 'Dave balance is 0 after gifting');
-    assert(getBalance(bobKey).balance === bobBalanceBefore + 60, `Bob balance credited with Dave's 60 beans (now ${getBalance(bobKey).balance})`);
+    assert(getBalance(daveKey).balance_c === 0, 'Dave balance is 0 after gifting');
+    assert(getBalance(bobKey).balance_c === bobBalanceBefore + hc(60), `Bob balance credited with Dave's 60 beans (now ${bal(bobKey)})`);
     assert(getMember(daveKey)?.status === 'pruned', 'Dave member status set to pruned');
     assert(nodeTotal() === 0, 'Zero-sum conserved after Dave gift offboarding');
     const auditDave = runLedgerAudit();
-    assert(auditDave.ok === true && Math.abs(auditDave.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after gift');
+    assert(auditDave.ok === true && auditDave.drift === 0, 'runLedgerAudit passes with 0 drift after gift');
 
     // Member 3: Negative balance -> Formal Write-off against Commons
     const eveKey = generateValidPubkey();
     makeMember('eve', eveKey);
     // Seed Eve in debt of -45 beans balanced by Commons pool
-    db.prepare('UPDATE accounts SET balance = -45 WHERE public_key = ?').run(eveKey);
-    setCommonsBalance(getCommonsBalanceExact() + 45);
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(-45), eveKey);
+    setCommonsBalance(getCommonsBalanceExact() + hc(45));
     persistCommonsBalance();
     reconcileLedgerFromDb();
-    assert(getBalance(eveKey).balance === -45, 'Eve has negative balance -45 beans');
+    assert(bal(eveKey) === -45, 'Eve has negative balance -45 beans');
     assert(nodeTotal() === 0, 'Zero-sum before Eve offboarding');
 
     // Preview negative balance
     const previewEve = getOffboardPreview(eveKey);
-    assert(previewEve.balance === -45, 'Eve preview shows -45 beans');
-    assert(previewEve.costToCommunity === 45, 'Eve preview shows costToCommunity of 45 beans');
-    assert(previewEve.projectedCommonsBalance === previewEve.commonsBalance - 45, 'projectedCommonsBalance decreases by 45');
+    assert(previewEve.balance_c === hc(-45), 'Eve preview shows -45 beans');
+    assert(previewEve.costToCommunity_c === hc(45), 'Eve preview shows costToCommunity of 45 beans');
+    assert(previewEve.projectedCommonsBalance_c === previewEve.commonsBalance_c - hc(45), 'projectedCommonsBalance decreases by 45');
 
     // Offboard Eve: write_off_commons
     const commonsBeforeEve = getCommonsBalanceExact();
     const offboardEveRes = executeOffboard(eveKey, { resolution: 'write_off_commons' }, operatorPubkey);
     assert(offboardEveRes.success === true, 'Eve offboarded with write_off_commons');
-    assert(getBalance(eveKey).balance === 0, 'Eve balance restored to 0 via write-off');
+    assert(getBalance(eveKey).balance_c === 0, 'Eve balance restored to 0 via write-off');
     assert(getMember(eveKey)?.status === 'pruned', 'Eve member status set to pruned');
     const commonsAfterEve = getCommonsBalanceExact();
-    assert(Math.abs(commonsAfterEve - (commonsBeforeEve - 45)) < 0.0001, 'Commons pool covered the 45 bean deficit');
+    assert(commonsAfterEve === commonsBeforeEve - hc(45), 'Commons pool covered the 45 bean deficit');
     assert(nodeTotal() === 0, 'Zero-sum conserved after Eve debt write-off');
     const auditEve = runLedgerAudit();
-    assert(auditEve.ok === true && Math.abs(auditEve.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after debt write-off');
+    assert(auditEve.ok === true && auditEve.drift === 0, 'runLedgerAudit passes with 0 drift after debt write-off');
 
     // Member 4: Sole Owner Protection
     // Create sole owner member and confirm offboarding is rejected
@@ -750,9 +763,9 @@ async function main() {
     makeMember('escrow_buyer', escrowBuyerKey);
     const escrowTxId = 'mptx_' + crypto.randomBytes(6).toString('hex');
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-        VALUES (?, 'dummy_post', ?, ?, 15, 'pending', datetime('now'))
-    `).run(escrowTxId, escrowBuyerKey, bobKey);
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+        VALUES (?, 'dummy_post', ?, ?, ?, 'pending', datetime('now'))
+    `).run(escrowTxId, escrowBuyerKey, bobKey, hc(15));
 
     const previewEscrow = getOffboardPreview(escrowBuyerKey);
     assert(previewEscrow.pendingEscrowsCount === 1, 'getOffboardPreview detects 1 pending escrow');
@@ -769,9 +782,9 @@ async function main() {
     // Also assert requested trade status blocks offboarding
     const requestedTxId = 'escrow_tx_req_' + Date.now();
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-        VALUES (?, 'dummy_post_req', ?, ?, 20, 'requested', datetime('now'))
-    `).run(requestedTxId, escrowBuyerKey, bobKey);
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+        VALUES (?, 'dummy_post_req', ?, ?, ?, 'requested', datetime('now'))
+    `).run(requestedTxId, escrowBuyerKey, bobKey, hc(20));
 
     const previewRequested = getOffboardPreview(escrowBuyerKey);
     assert(previewRequested.pendingEscrowsCount === 1, 'getOffboardPreview detects 1 open requested deal');
@@ -801,78 +814,79 @@ async function main() {
     // in transferring the stale amount and stranding residual beans on the pruned member account.
     const concurrentMemberKey = generateValidPubkey();
     makeMember('concurrent_user', concurrentMemberKey);
-    transfer('genesis', concurrentMemberKey, 50, 'initial seed', 'direct', true);
-    assert(getBalance(concurrentMemberKey).balance === 50, 'Concurrent member initial balance is 50 beans');
+    transfer('genesis', concurrentMemberKey, hc(50), 'initial seed', 'direct', true);
+    assert(bal(concurrentMemberKey) === 50, 'Concurrent member initial balance is 50 beans');
 
     // Interleaved credit arrives before transaction executes
-    transfer('genesis', concurrentMemberKey, 30, 'concurrent credit', 'direct', true);
-    assert(getBalance(concurrentMemberKey).balance === 80, 'Concurrent member balance is updated to 80 beans');
+    transfer('genesis', concurrentMemberKey, hc(30), 'concurrent credit', 'direct', true);
+    assert(bal(concurrentMemberKey) === 80, 'Concurrent member balance is updated to 80 beans');
 
     const offboardConcurrentRes = executeOffboard(
         concurrentMemberKey,
         { resolution: 'donate_to_commons' },
         operatorPubkey
     );
-    assert(offboardConcurrentRes.balanceSettled === 80, 'executeOffboard settled the live 80 beans (not stale 50)');
-    assert(getBalance(concurrentMemberKey).balance === 0, 'Departing member account balance is 0 after offboard');
+    assert(offboardConcurrentRes.balanceSettled === hc(80), 'executeOffboard settled the live 80 beans (not stale 50)');
+    assert(getBalance(concurrentMemberKey).balance_c === 0, 'Departing member account balance is 0 after offboard');
     assert(getMember(concurrentMemberKey)?.status === 'pruned', 'Departing member status set to pruned');
     assert(nodeTotal() === 0, 'Zero-sum ledger conservation holds after live balance settlement');
     const auditConcurrent = runLedgerAudit();
-    assert(auditConcurrent.ok === true && Math.abs(auditConcurrent.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after concurrent settlement');
+    assert(auditConcurrent.ok === true && auditConcurrent.drift === 0, 'runLedgerAudit passes with 0 drift after concurrent settlement');
 
-    // Members 8-11: balances that are NOT whole cents, which is what an ordinary sale leaves. The 1.5% fee on a
-    // completed 7-Bean sale leaves the seller 6.895, which getBalance() shows as 6.90. The wizard used to settle
-    // that ROUNDED figure: debiting 6.90 from 6.895 breaks the floor of 0, so the donation was refused and the
-    // whole offboarding aborted (#1099 made the refusal throw), and a gift was refused the same way. Every
-    // balance offboarded above is a whole number, which is how it went unseen.
-    const exact = (pk: string) => ledger.getAccount(pk).balance;
-    const rowSum = () => (db.prepare('SELECT SUM(balance) AS total FROM accounts').get() as any).total as number;
+    // Members 8-11: balances an ordinary sale leaves. The 1.5% fee on a completed 7-Bean sale is 10.5 hundredths; it is
+    // truncated ONCE to 0.10 and the half-hundredth stays with the seller, who ends up with exactly 6.90. Under float
+    // Beans this was 6.895, shown as 6.90, and the wizard settled the ROUNDED figure: debiting 6.90 from 6.895 broke the
+    // floor of 0, so the donation was refused and the whole offboarding aborted (#1099 made the refusal throw), and a
+    // gift was refused the same way. With whole hundredths the figure the wizard shows is the exact one, and it settles
+    // that whole figure, in one move.
+    const exact = (pk: string) => ledger.getAccount(pk).balance_c;
+    const rowSum = () => (db.prepare('SELECT SUM(balance_c) AS total FROM accounts').get() as any).total as number;
     const offboardError = (fn: () => unknown): string => {
         try { fn(); return ''; } catch (e: any) { return e.message || String(e); }
     };
-    // A real sale, not a seeded balance: the seller ends up with price minus the 1.5% fee.
+    // A real sale, not a seeded balance: the seller ends up with price minus the 1.5% fee, truncated once.
     const sellerAfterSale = (label: string, price: number): string => {
         const seller = makeMember(`${label}_seller`);
         const buyer = makeMember(`${label}_buyer`);
-        transfer('genesis', buyer, 20, `seed ${label} buyer`, 'direct', true);
-        createPost('offer', 'produce', `${label} buyer listing`, 'Satisfies the contribution rule', 5, 'fixed', buyer);
-        const offer = createPost('offer', 'produce', `${label} jam`, 'A jar of jam', price, 'fixed', seller);
+        transfer('genesis', buyer, hc(20), `seed ${label} buyer`, 'direct', true);
+        createPost('offer', 'produce', `${label} buyer listing`, 'Satisfies the contribution rule', hc(5), 'fixed', buyer);
+        const offer = createPost('offer', 'produce', `${label} jam`, 'A jar of jam', hc(price), 'fixed', seller);
         const deal = acceptPost(offer!.id, buyer);
         completePostTransaction(deal.id, buyer);
         return seller;
     };
 
-    // Member 8: half-cent balance -> donate_to_commons
+    // Member 8: the seller's 6.90 after a 7-Bean sale -> donate_to_commons
     const jamDonorKey = sellerAfterSale('jam_donor', 7);
     const jamDonorExact = exact(jamDonorKey);
-    assert(Math.abs(jamDonorExact - 6.895) < 1e-9, `the 7-Bean sale left the seller 6.895 exactly (got ${jamDonorExact})`);
-    assert(getOffboardPreview(jamDonorKey).balance === 6.9, 'the wizard preview still shows the rounded 6.90');
+    assert(jamDonorExact === hc(6.9), `the 7-Bean sale left the seller exactly 6.90: the 10.5-hundredth fee truncated to 0.10, the half-hundredth stays with the seller (got ${beansOf(jamDonorExact)})`);
+    assert(getOffboardPreview(jamDonorKey).balance_c === jamDonorExact, 'the wizard preview shows that same exact 6.90 (no rounded figure)');
     const commonsBeforeJamDonor = getCommonsBalanceExact();
     const rowSumBeforeJamDonor = rowSum();
     let jamDonorRes: ReturnType<typeof executeOffboard> | null = null;
     const jamDonorErr = offboardError(() => {
         jamDonorRes = executeOffboard(jamDonorKey, { resolution: 'donate_to_commons' }, operatorPubkey);
     });
-    assert(jamDonorErr === '', `a half-cent balance offboards with donate_to_commons (error: "${jamDonorErr}")`);
-    assert(jamDonorRes!.balanceSettled === jamDonorExact, `balanceSettled is the exact 6.895 (got ${jamDonorRes!.balanceSettled})`);
-    assert(getMember(jamDonorKey)?.status === 'pruned', 'the half-cent donor is pruned');
-    assert(exact(jamDonorKey) === 0, `the half-cent donor holds exactly 0 afterwards (got ${exact(jamDonorKey)})`);
-    const jamDonorRow = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(jamDonorKey) as any;
-    assert(jamDonorRow?.balance === 0, `and so does their account row (got ${jamDonorRow?.balance})`);
-    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeJamDonor - jamDonorExact) < 1e-9,
-        `the Commons rose by exactly 6.895 (rose by ${getCommonsBalanceExact() - commonsBeforeJamDonor})`);
-    const jamDonorMoves = db.prepare("SELECT amount, memo FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'").all(jamDonorKey) as any[];
-    assert(jamDonorMoves.length === 1 && jamDonorMoves[0].amount === jamDonorExact && /^Donation to Commons/.test(jamDonorMoves[0].memo),
-        `the whole 6.895 went as ONE donation, not a donation plus a confiscated remainder (got ${JSON.stringify(jamDonorMoves)})`);
-    assert(Math.abs(rowSum() - rowSumBeforeJamDonor) < 1e-9, 'SUM(balances) is unchanged by the half-cent donation');
-    assert(nodeTotal() === 0, 'Zero-sum conserved after the half-cent donation');
+    assert(jamDonorErr === '', `the 6.90 balance offboards with donate_to_commons (error: "${jamDonorErr}")`);
+    assert(jamDonorRes!.balanceSettled === jamDonorExact, `balanceSettled is the exact 6.90 (got ${jamDonorRes!.balanceSettled} hundredths)`);
+    assert(getMember(jamDonorKey)?.status === 'pruned', 'the 6.90 donor is pruned');
+    assert(exact(jamDonorKey) === 0, `the 6.90 donor holds exactly 0 afterwards (got ${exact(jamDonorKey)})`);
+    const jamDonorRow = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(jamDonorKey) as any;
+    assert(jamDonorRow?.balance_c === 0, `and so does their account row (got ${jamDonorRow?.balance_c})`);
+    assert(getCommonsBalanceExact() - commonsBeforeJamDonor === jamDonorExact,
+        `the Commons rose by exactly 6.90 (rose by ${getCommonsBalanceExact() - commonsBeforeJamDonor} hundredths)`);
+    const jamDonorMoves = db.prepare("SELECT amount_c, memo FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'").all(jamDonorKey) as any[];
+    assert(jamDonorMoves.length === 1 && jamDonorMoves[0].amount_c === jamDonorExact && /^Donation to Commons/.test(jamDonorMoves[0].memo),
+        `the whole 6.90 went as ONE donation, not a donation plus a confiscated remainder (got ${JSON.stringify(jamDonorMoves)})`);
+    assert(rowSum() === rowSumBeforeJamDonor, 'SUM(balances) is unchanged by the 6.90 donation');
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the 6.90 donation');
     const auditJamDonor = runLedgerAudit();
-    assert(auditJamDonor.ok === true && Math.abs(auditJamDonor.drift) < 0.0001, `runLedgerAudit passes with 0 drift after the half-cent donation (drift ${auditJamDonor.drift})`);
+    assert(auditJamDonor.ok === true && auditJamDonor.drift === 0, `runLedgerAudit passes with 0 drift after the 6.90 donation (drift ${auditJamDonor.drift})`);
 
-    // Member 9: half-cent balance -> gift_to_member, under the key-based auth the gift branch requires
+    // Member 9: the seller's 6.90 -> gift_to_member, under the key-based auth the gift branch requires
     const jamGifterKey = sellerAfterSale('jam_gifter', 7);
     const jamGifterExact = exact(jamGifterKey);
-    assert(Math.abs(jamGifterExact - 6.895) < 1e-9, `the second 7-Bean sale also left 6.895 (got ${jamGifterExact})`);
+    assert(jamGifterExact === hc(6.9), `the second 7-Bean sale also left exactly 6.90 (got ${beansOf(jamGifterExact)})`);
     const jamRecipientKey = makeMember('jam_recipient');
     const commonsBeforeJamGift = getCommonsBalanceExact();
     const rowSumBeforeJamGift = rowSum();
@@ -880,44 +894,52 @@ async function main() {
     const jamGiftErr = offboardError(() => {
         jamGiftRes = executeOffboard(jamGifterKey, { resolution: 'gift_to_member', giftRecipientPubkey: jamRecipientKey }, operatorPubkey);
     });
-    assert(jamGiftErr === '', `a half-cent balance offboards with gift_to_member (error: "${jamGiftErr}")`);
-    assert(jamGiftRes!.balanceSettled === jamGifterExact, `the gift reports the exact 6.895 settled (got ${jamGiftRes!.balanceSettled})`);
-    assert(exact(jamRecipientKey) === jamGifterExact, `the recipient received exactly 6.895 (got ${exact(jamRecipientKey)})`);
-    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeJamGift) < 1e-9, 'the Commons is untouched by a fee-free gift of the whole balance');
-    assert(getMember(jamGifterKey)?.status === 'pruned' && exact(jamGifterKey) === 0, 'the half-cent gifter is pruned holding exactly 0');
-    assert(Math.abs(rowSum() - rowSumBeforeJamGift) < 1e-9, 'SUM(balances) is unchanged by the half-cent gift');
-    assert(nodeTotal() === 0, 'Zero-sum conserved after the half-cent gift');
+    assert(jamGiftErr === '', `the 6.90 balance offboards with gift_to_member (error: "${jamGiftErr}")`);
+    assert(jamGiftRes!.balanceSettled === jamGifterExact, `the gift reports the exact 6.90 settled (got ${jamGiftRes!.balanceSettled} hundredths)`);
+    assert(exact(jamRecipientKey) === jamGifterExact, `the recipient received exactly 6.90 (got ${beansOf(exact(jamRecipientKey))})`);
+    assert(getCommonsBalanceExact() === commonsBeforeJamGift, 'the Commons is untouched by a fee-free gift of the whole balance');
+    assert(getMember(jamGifterKey)?.status === 'pruned' && exact(jamGifterKey) === 0, 'the 6.90 gifter is pruned holding exactly 0');
+    assert(rowSum() === rowSumBeforeJamGift, 'SUM(balances) is unchanged by the 6.90 gift');
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the 6.90 gift');
     const auditJamGift = runLedgerAudit();
-    assert(auditJamGift.ok === true && Math.abs(auditJamGift.drift) < 0.0001, `runLedgerAudit passes with 0 drift after the half-cent gift (drift ${auditJamGift.drift})`);
+    assert(auditJamGift.ok === true && auditJamGift.drift === 0, `runLedgerAudit passes with 0 drift after the 6.90 gift (drift ${auditJamGift.drift})`);
 
-    // Member 10: the other direction, exact ABOVE the rounded figure. A 7.33 sale leaves 7.22005, shown as 7.22.
-    // Settling 7.22 succeeded, and the prune then confiscated the 0.00005 left behind, so the recipient was
-    // quietly short-changed. They must receive the whole balance.
+    // Member 10: a fee that is not a half. A 7.33 sale's fee is 10.995 hundredths, truncated once to 0.10, so the seller
+    // keeps 7.23 (under float Beans: 7.22005, shown as 7.22, and settling 7.22 left 0.00005 for the prune to confiscate,
+    // quietly short-changing the recipient). The figure shown is the exact one, and the recipient receives all of it.
     const plumGifterKey = sellerAfterSale('plum_gifter', 7.33);
     const plumGifterExact = exact(plumGifterKey);
-    assert(plumGifterExact > getBalance(plumGifterKey).balance, `the 7.33 sale leaves more than the rounded figure (${plumGifterExact} vs ${getBalance(plumGifterKey).balance})`);
+    assert(plumGifterExact === hc(7.23) && getBalance(plumGifterKey).balance_c === plumGifterExact,
+        `the 7.33 sale leaves the seller exactly 7.23 (fee truncated to 0.10, the remainder stays with the seller), and the balance shown is that same figure (${plumGifterExact} vs ${getBalance(plumGifterKey).balance_c})`);
     const plumRecipientKey = makeMember('plum_recipient');
     const plumGiftErr = offboardError(() =>
         executeOffboard(plumGifterKey, { resolution: 'gift_to_member', giftRecipientPubkey: plumRecipientKey }, operatorPubkey));
-    assert(plumGiftErr === '', `the 7.22005 balance offboards with gift_to_member (error: "${plumGiftErr}")`);
-    assert(exact(plumRecipientKey) === plumGifterExact, `the recipient received the whole ${plumGifterExact}, not the rounded 7.22 (got ${exact(plumRecipientKey)})`);
-    assert(nodeTotal() === 0, 'Zero-sum conserved after the above-rounding gift');
+    assert(plumGiftErr === '', `the 7.23 balance offboards with gift_to_member (error: "${plumGiftErr}")`);
+    assert(exact(plumRecipientKey) === plumGifterExact, `the recipient received the whole ${beansOf(plumGifterExact)} (got ${beansOf(exact(plumRecipientKey))})`);
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the 7.23 gift');
 
-    // Member 11: dust that SHOWS as 0.00. The wizard picks its resolution from the figure it shows, so it sends
-    // prune_zero_balance here, and that has to keep working: the prune settles the dust itself.
+    // Member 11: there is no dust. Under float Beans a 0.004 balance SHOWED as 0.00, the wizard sent prune_zero_balance for
+    // it, and the prune settled the dust. A balance is now whole hundredths: a fraction of a hundredth cannot be sent at
+    // all, and the smallest balance there is, 0.01, shows as 0.01. It is settled like any positive balance: the zero-balance
+    // prune is refused for it, and a donation settles exactly 0.01.
     const dustKey = makeMember('dust');
-    transfer('genesis', dustKey, 0.004, 'seed dust', 'direct', true);
-    assert(getOffboardPreview(dustKey).balance === 0, 'a 0.004 balance shows as 0.00 in the wizard preview');
+    assert(transfer('genesis', dustKey, 0.4, 'seed a fraction of a hundredth', 'direct', true) === null && exact(dustKey) === 0,
+        'a fraction of a hundredth (0.004 Beans) cannot be sent: no dust arrives');
+    transfer('genesis', dustKey, 1, 'seed the smallest balance', 'direct', true);
+    assert(getOffboardPreview(dustKey).balance_c === 1 && exact(dustKey) === 1, 'the smallest balance, 0.01, shows as exactly 0.01 in the wizard preview');
+    const dustPruneErr = offboardError(() => executeOffboard(dustKey, { resolution: 'prune_zero_balance' }, operatorPubkey));
+    assert(/Positive balance requires/.test(dustPruneErr) && getMember(dustKey)?.status === 'active' && exact(dustKey) === 1,
+        `prune_zero_balance is refused for 0.01, and nothing moves (error: "${dustPruneErr}")`);
     const commonsBeforeDust = getCommonsBalanceExact();
     let dustRes: ReturnType<typeof executeOffboard> | null = null;
     const dustErr = offboardError(() => {
-        dustRes = executeOffboard(dustKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
+        dustRes = executeOffboard(dustKey, { resolution: 'donate_to_commons' }, operatorPubkey);
     });
-    assert(dustErr === '', `a balance that shows as 0.00 still offboards with prune_zero_balance (error: "${dustErr}")`);
-    assert(getMember(dustKey)?.status === 'pruned' && exact(dustKey) === 0, 'the dust member is pruned holding exactly 0');
-    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeDust - 0.004) < 1e-9, 'the 0.004 of dust went to the Commons');
-    assert(dustRes!.balanceSettled === 0.004, `and balanceSettled reports it (got ${dustRes!.balanceSettled})`);
-    assert(nodeTotal() === 0, 'Zero-sum conserved after the dust prune');
+    assert(dustErr === '', `the 0.01 balance offboards with donate_to_commons (error: "${dustErr}")`);
+    assert(getMember(dustKey)?.status === 'pruned' && exact(dustKey) === 0, 'the 0.01 member is pruned holding exactly 0');
+    assert(getCommonsBalanceExact() - commonsBeforeDust === 1, 'the 0.01 went to the Commons');
+    assert(dustRes!.balanceSettled === 1, `and balanceSettled reports it (got ${dustRes!.balanceSettled} hundredths)`);
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the 0.01 donation');
 
     // =========================================================================
     // PART 3: HTTP API ENDPOINTS (ADMIN & COMMUNITY)
@@ -993,7 +1015,7 @@ async function main() {
         // Test Member Grace for HTTP tests
         const graceOldKey = generateValidPubkey();
         makeMember('grace', graceOldKey);
-        transfer('genesis', graceOldKey, 90, 'seed grace', 'direct', true);
+        transfer('genesis', graceOldKey, hc(90), 'seed grace', 'direct', true);
 
         // 1. Unauthenticated calls rejected with 401
         const unauthRekeyStatus = await fetch(`${baseUrl}/api/local/admin/members/${graceOldKey}/rekey/status`);
@@ -1083,7 +1105,7 @@ async function main() {
         const reenrollData = await reenrollRes.json();
         assert(reenrollData.success === true, 'Re-enrolment by the admin\'s bind succeeded');
         assert(reenrollData.newPubkey === graceNewKey, 'Re-enrolment returned newPubkey');
-        assert(getBalance(graceNewKey).balance === 90, 'Grace balance of 90 beans accessible under new key');
+        assert(bal(graceNewKey) === 90, 'Grace balance of 90 beans accessible under new key');
 
         // 5. Authenticated Offboard Preview
         const previewRes = await fetch(`${baseUrl}/api/local/admin/members/${graceNewKey}/offboard/preview`, {
@@ -1093,8 +1115,8 @@ async function main() {
         });
         assert(previewRes.status === 200, 'GET offboard preview returns 200');
         const previewData = await previewRes.json();
-        assert(previewData.balance === 90, 'Preview shows 90 beans balance');
-        assert(previewData.costToCommunity === 0, 'costToCommunity is 0');
+        assert(previewData.balance_c === hc(90), 'Preview shows 90 beans balance');
+        assert(previewData.costToCommunity_c === 0, 'costToCommunity is 0');
         assert(Array.isArray(previewData.activeMembers), 'activeMembers list returned');
         assert(previewData.activeMembers.length === 0, 'Password-only admin receives empty activeMembers list (privacy leak prevented)');
 
@@ -1154,12 +1176,12 @@ async function main() {
         assert(offboardRes.status === 200, 'POST offboard with donate_to_commons returns 200');
         const offboardData = await offboardRes.json();
         assert(offboardData.success === true, 'Offboarding response success: true');
-        assert(getBalance(graceNewKey).balance === 0, 'Grace balance is 0 after offboarding');
+        assert(getBalance(graceNewKey).balance_c === 0, 'Grace balance is 0 after offboarding');
 
         // Final ledger audit across everything
-        assert(nodeTotal() === 0, 'Final ledger total sums to exactly zero (0.0000)');
+        assert(nodeTotal() === 0, 'Final ledger total sums to exactly zero');
         const finalAudit = runLedgerAudit();
-        assert(finalAudit.ok === true && Math.abs(finalAudit.drift) < 0.0001 && finalAudit.strandedEscrows === 0, 'Final conservation audit passed (0 drift, 0 stranded escrows)');
+        assert(finalAudit.ok === true && finalAudit.drift === 0 && finalAudit.strandedEscrows === 0, 'Final conservation audit passed (0 drift, 0 stranded escrows)');
     } finally {
         server.close();
     }

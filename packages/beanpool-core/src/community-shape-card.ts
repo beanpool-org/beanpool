@@ -4,6 +4,7 @@
  * and handles an old node that says nothing (produces no line).
  */
 import { formatCount, formatDate, t, tn, word } from './words.js';
+import { formatHundredths } from './hundredths.js';
 import { removalDeciderLine } from './jury-card.js';
 
 export interface CommunityShapeFeatures {
@@ -150,7 +151,7 @@ export function knownRuleLine(lines: KnownRuleLines | null | undefined): string 
 export function joinRuleLines(rule: KnownRuleLines & { knownFloor?: number } | null | undefined): string[] {
     const line = knownRuleLine(rule);
     if (!line || typeof rule?.knownFloor !== 'number') return [];
-    return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(rule.knownFloor) }), line];
+    return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatHundredths(rule.knownFloor) }), line];
 }
 
 /** "The line of 30% applies from 16 November.", one per line waiting out its notice (design §4). */
@@ -218,7 +219,7 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
 
     // 4. Known floor (only drawn when present, i.e. dial and beans are on)
     if (typeof features?.knownFloor === 'number') {
-        lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(features.knownFloor) }));
+        lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatHundredths(features.knownFloor) }));
         const rule = knownRuleLine(features);
         if (rule) lines.push(rule, ...waitingLineSentences(waiting));
     }

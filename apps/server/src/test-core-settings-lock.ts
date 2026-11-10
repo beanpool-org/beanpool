@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
             .run(id.pk, name, ago(30 * DAY));
         setMemberPhoto(db, id.pk, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     /** A key session: a computer's, or the phone's Manage hand-off (whose unlock is now). */
@@ -348,18 +348,19 @@ async function main(): Promise<void> {
     }
     await provenChange('Beans, from the phone', { beans: false }, asPhone(), {}, 'beans', /Beans \(on → off\)/);
     await provenChange('Beans back on', { beans: true }, asPhone(), {}, 'beans', /Beans \(off → on\)/);
-    await refusedClean('the known floor, its floor alone, from a computer', () => post({ changes: { knownFloor: { floor: 1300 } } }, asComputer()), 403, 'phone_required');
-    await refusedClean('the known floor, its cap alone, from a computer', () => post({ changes: { knownFloor: { cap: 3000 } } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the known floor, its floor alone, from a computer', () => post({ changes: { knownFloor: { floor_c: 130000 } } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the known floor, its cap alone, from a computer', () => post({ changes: { knownFloor: { cap_c: 300000 } } }, asComputer()), 403, 'phone_required');
     await refusedClean('the known floor, its dial alone, from a computer', () => post({ changes: { knownFloor: { on: false } } }, asComputer()), 403, 'phone_required');
-    await provenChange('the known floor, floor and cap, from the phone', { knownFloor: { floor: 1300, cap: 3000 } }, asPhone(), {}, 'knownFloor',
-        /Known floor for confirmed members, the floor \(\d+ → 1300\); Known floor for confirmed members, the cap \(\d+ → 3000\)/);
+    await provenChange('the known floor, floor and cap, from the phone', { knownFloor: { floor_c: 130000, cap_c: 300000 } }, asPhone(), {}, 'knownFloor',
+        // The owners' alert names the change in Beans (a thousands comma allowed), as members' notice does: never hundredths.
+        /Known floor for confirmed members, the floor \([\d,]+ → 1,?300\); Known floor for confirmed members, the cap \([\d,]+ → 3,?000\)/);
     await refusedClean("where members' copies go, from a computer", () => post({ changes: { recoveryCopies: 'none' } }, asComputer()), 403, 'phone_required');
     await provenChange("where members' copies go, from the phone", { recoveryCopies: 'none' }, asPhone(), {}, 'recoveryCopies', /\(vault → none\)/);
-    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 1500 } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 150000 } }, asComputer()), 403, 'phone_required');
     nMark = noticeMark();
-    await provenChange('the voucher budget, from the phone', { voucherBudget: 1500 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1000 → 1500\)/);
+    await provenChange('the voucher budget, from the phone', { voucherBudget: 150000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1,?000 → 1,?500\)/);
     assert(noticesSince(nMark).some((x) => /budget for each voucher is now 1,500 Beans/.test(x.body)), 'voucher budget changed, and members are told');
-    await provenChange('the voucher budget back to 1000', { voucherBudget: 1000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1500 → 1000\)/);
+    await provenChange('the voucher budget back to 1000', { voucherBudget: 100000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1,?500 → 1,?000\)/);
     {
         // Two Core settings in one request: one proof, a core.unlock line before each.
         const m = logMark();
@@ -400,7 +401,7 @@ async function main(): Promise<void> {
     await refusedClean('a pause beside a Core change', () => post({ changes: { join: 'paused', decisions: true } }, asPhone()), 400, 'one_kind_per_request');
     for (const [setting, to, door, core] of [
         ['join', 'paused', 'members', false], ['join', 'members', 'members', false], ['join', 'admins', 'members', true],
-        ['join', 'members', 'admins', true], ['knownFloor.cap', '3000', 'members', true], ['probation', 'on', 'members', false],
+        ['join', 'members', 'admins', true], ['knownFloor.cap', '300000', 'members', true], ['probation', 'on', 'members', false],
         ['removalDecider', 'everyone', 'members', false], ['listed', 'off', 'members', false], ['wordsDoor', 'on', 'members', true],
     ] as const) {
         assert(isCoreChange(setting, to, door) === core, `isCoreChange(${setting} → ${to}, door ${door}) is ${core}`);

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     GROUP_DECISIONS_NOTE, GROUP_SOMEONE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
     joinPolicyLabel, type GroupChoice, type GroupJoinPolicy, type GroupPerson,
-    beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
+    beansHeld, checkPayOutAmount, isHundredths, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, votesOnlyWords, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
     t, tn,
@@ -36,9 +36,9 @@ export interface EnterpriseDecisionsProps {
     myPubkey: string | null;
     /** The enterprise's keepers as its detail lists them; suspended ones are off the roll. */
     keepers: Array<{ publicKey: string; callsign?: string; role?: string; suspended?: boolean }>;
-    /** What it holds now, in Beans. */
+    /** What it holds now, whole hundredths of a Bean (the detail's balance_c). */
     balance: number;
-    /** What it has earned above its costs (the detail's earnedSurplus): the most it can pay a keeper. Null when not known. */
+    /** What it has earned above its costs, whole hundredths (the detail's earnedSurplus_c): the most it can pay a keeper. Null when not known. */
     earnedSurplus?: number | null;
     lifecycle?: string | null;
     /** Bumped by the screen on focus or a pull, to read again. */
@@ -222,7 +222,8 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
     const choices = rollChoices(effect, roll, me);
     const person = choices.find(p => p.pubkey === who) ?? null;
     // Everyone the form offers is a keeper on the roll, so every pay-out is a wage: capped at the earned surplus too.
-    const wageSurplus = typeof earnedSurplus === 'number' && Number.isFinite(earnedSurplus) ? earnedSurplus : null;
+    // Whole hundredths, as core's pay-out checks read them; a surplus that isn't one is left to the node.
+    const wageSurplus = isHundredths(earnedSurplus) ? earnedSurplus : null;
     const amount = effect === 'pay_out' ? checkPayOutAmount(amountText, balance, wageSurplus) : null;
     const amountError = amount && 'error' in amount && amountText.trim() ? amount.error : null;
     const ready = !!person && title.trim().length > 0 && why.trim().length >= 10 && (effect !== 'pay_out' || (!!amount && 'amount' in amount));
@@ -233,7 +234,8 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
         setError(null);
         try {
             await proposeEnterpriseDecision(treasuryKey, effect === 'pay_out' && amount && 'amount' in amount
-                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount: amount.amount } }
+                // The node takes a pay-out's figure as params.amount_c, whole hundredths (decisions-engine.ts): the old `amount` refused.
+                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount_c: amount.amount } }
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e: any) {
@@ -280,7 +282,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                                     value={amountText} onChangeText={setAmountText} keyboardType="decimal-pad" placeholder="40"
                                     placeholderTextColor={colors.text.muted} style={s.input} accessibilityLabel={t('Amount in Beans')}
                                 />
-                                <Text style={s.note}>{tn(Number(beansHeld(balance)), 'It holds {n} Beans now.', 'It holds {n} Beans now.')}</Text>
+                                <Text style={s.note}>{tn(Math.max(0, balance) / 100, 'It holds {n} Beans now.', 'It holds {n} Beans now.', { n: beansHeld(balance) })}</Text>
                                 {amountError && <Text style={s.error}>{amountError}</Text>}
                                 {amount && 'amount' in amount && person && <Text style={s.fee}>{payOutFeeWords(amount.amount, person.name)}</Text>}
                                 <Text style={s.note}>{wageNoteWords(wageSurplus, lifecycle)}</Text>

@@ -306,7 +306,7 @@ async function part3Http() {
     {
         const owner = keyPair();
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'BrakeOwner2', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(owner.pub);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(owner.pub);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(owner.pub);
         grantNodeRole(owner.pub, 'owner', 'SYSTEM');
         // Close A for a few minutes (the steps below take longer than a 2 s wait).
         for (let i = 0; i < SOURCE_FREE_FAILURES + 8; i++) notePasswordFailure(A);
@@ -330,7 +330,7 @@ async function part3Http() {
         setNodeRoleBreakGlassHash(owner.pub, hashBreakGlassCode(code));
         const helper = keyPair();
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'BrakeHelper', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(helper.pub);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(helper.pub);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(helper.pub);
         const bgElsewhere = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': code, ...viaTunnel(A) } });
         assert(bgElsewhere.status === 429, `the code from the braked address on any other route gets the brake's 429, as a wrong password does (got ${bgElsewhere.status})`);
         const bg = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(A) }, body: { memberPubkey: helper.pub, role: 'admin' } });

@@ -22,8 +22,9 @@
  *  5. No late-added column may be referenced by schema.sql (static).
  *  6. The tables that actually broke (posts, members, abuse_reports), booted for real.
  *  8. group_members gains the 'removed' status (compared with the fresh install's indexes).
- *  8e. standing_deals: the phases paid, short, ended (an ended row kept as it was; a live old-phase row left alone).
- *  accounts.balance NOT NULL, fresh or upgraded.
+ *  8e. standing_deals: the phases paid, short, ended; 1.2.37's table (REAL Beans, old phases) dropped whole by the
+ *      hundredths step and made again, its rows not carried.
+ *  accounts.balance_c NOT NULL, fresh or upgraded (an old REAL balance dropped unread by the hundredths step).
  *  Members' photos out of their rows, killed part way, stopped part way, and on a standby.
  * Each reads the fresh install of 1, so they stay together.
  *
@@ -48,6 +49,20 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const legacySettlementsDdl = (withoutColumns: string[]) => legacyDdl('settlements', withoutColumns);
+/**
+ * The settlements table as a node from before whole hundredths held it: its money REAL Beans in `amount` and `fee`
+ * (schema.sql's `amount_c` and `fee_c` lines put back as they were then), less `withoutColumns`. To the hundredths step
+ * (db/hundredths-step.ts) it is a money record table: dropped whole, and schema.sql makes it again in the new shape.
+ */
+const oldMoneySettlementsDdl = (withoutColumns: string[]): string => {
+    const ddl = legacySettlementsDdl(withoutColumns.includes('fee') ? [...withoutColumns, 'fee_c'] : withoutColumns)
+        .replace(/\n(\s*)amount_c\s+INTEGER NOT NULL CHECK \(amount_c > 0\),/, '\n$1amount          REAL NOT NULL CHECK (amount > 0),')
+        .replace(/\n(\s*)fee_c\s+INTEGER NOT NULL DEFAULT 0 CHECK \(fee_c >= 0\),/, '\n$1fee             REAL NOT NULL DEFAULT 0 CHECK (fee >= 0),');
+    if (!/\bamount\s+REAL\b/.test(ddl) || /_c\b/.test(ddl) || /\bfee\s+REAL\b/.test(ddl) === withoutColumns.includes('fee')) {
+        throw new Error(`the old settlements fixture no longer matches schema.sql's money lines: ${ddl}`);
+    }
+    return ddl;
+};
 
 runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Schema upgrade checks (fresh shape) PASSED.', async () => {
     // ── 1. A fresh install, for the shape everything else is compared against ────────────────────
@@ -61,10 +76,11 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         'and creates the step-3b settlement columns');
 
     // ── 2. The step-3a shape — the one that actually broke ────────────────────────────────────────
-    // 3a is on main, so this is not hypothetical: it is every node that has run main.
+    // 3a is on main, so this is not hypothetical: it is every node that has run main. Its money was REAL Beans in `amount`
+    // (whole hundredths came later), so the hundredths step drops it whole and schema.sql makes it again.
     const step3aDir = tmp('step3a');
     const step3aDb = new Database(path.join(step3aDir, 'state.db'));
-    step3aDb.exec(legacySettlementsDdl(['seller_pubkey', 'fee', 'reserved_until', 'receipt_payload']));
+    step3aDb.exec(oldMoneySettlementsDdl(['seller_pubkey', 'fee', 'reserved_until', 'receipt_payload']));
     assert(!columns(step3aDb, 'settlements').includes('reserved_until'),
         'a step-3a database genuinely lacks reserved_until');
     step3aDb.close();
@@ -83,10 +99,13 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
     // ── 3. Partial upgrades, because a node can be at any point in the sequence ───────────────────
     // Each column arrived in a different commit, and a node may have been restarted between any two of
     // them. Dropping them one at a time catches an ordering bug that only bites a specific vintage.
+    // `fee` came as REAL Beans, before whole hundredths: a node missing it holds its money in REAL `amount`, a money record
+    // table to the hundredths step, dropped whole and made again by schema.sql, so it gains `fee_c` and loses `amount`.
+    // The other three still arrive by their ALTERs, on a table in the new shape.
     for (const missing of ['receipt_payload', 'reserved_until', 'fee', 'seller_pubkey']) {
         const dir = tmp(`partial-${missing}`);
         const d = new Database(path.join(dir, 'state.db'));
-        d.exec(legacySettlementsDdl([missing]));
+        d.exec(missing === 'fee' ? oldMoneySettlementsDdl(['fee']) : legacySettlementsDdl([missing]));
         d.close();
 
         const result = bootInto(dir);
@@ -94,7 +113,10 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
 
         const check = new Database(path.join(dir, 'state.db'), { readonly: true });
-        assert(columns(check, 'settlements').includes(missing), `and gains ${missing}`);
+        if (missing === 'fee') {
+            assert(JSON.stringify(columns(check, 'settlements')) === JSON.stringify(freshColumns),
+                `and gains fee_c, its old REAL amount gone: exactly a fresh install's columns (${columns(check, 'settlements').join(',')})`);
+        } else assert(columns(check, 'settlements').includes(missing), `and gains ${missing}`);
         check.close();
         fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -244,8 +266,9 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
     //                   the pre-fix image dies with `no such column: status` and the fixed one boots.
     const LEGACY_SHAPES: Record<string, string[]> = {
         posts: ['updated_at', 'search_keywords', 'price_type', 'cash_also_needed'],
-        // (The three vouch columns were here until the vouching reset dropped them: R0, db/vouch-reset.ts.)
-        members: ['earned_credit', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate', 'credit_frozen'],
+        // (The three vouch columns were here until the vouching reset dropped them: R0, db/vouch-reset.ts.) earned_credit_c:
+        // whole hundredths since 1.4.0, which the hundredths step adds to a members table without it.
+        members: ['earned_credit_c', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate', 'credit_frozen'],
         abuse_reports: ['status', 'updated_at', 'target_pulse_item_id'],
     };
     for (const [table, missing] of Object.entries(LEGACY_SHAPES)) {
@@ -458,18 +481,21 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
     }
 
     // ── 8e. standing_deals: each period paid at its start (DESIGN-standing-deals-upfront, Marty 10 Nov 2026) ───────────
-    // The phase CHECK becomes ('paid', 'short', 'ended') and held_back_reason goes, so db.ts rebuilds the table. Every
-    // node that ran 1.2.37 holds the old shape, and an ended row is kept there for every standing deal it ever had (one
-    // cancelled is 'ended' with reason 'cancelled'): the copy keeps each as it was, never mapped. A live row in an old
-    // phase is refused by the new CHECK, so the rebuild leaves the table as it was and the node still boots.
+    // The phase CHECK became ('paid', 'short', 'ended') and held_back_reason went. Every node that ran 1.2.37 holds the old
+    // shape, its money REAL Beans in `beans_per_period`: since whole hundredths (Marty, 10 Nov 2026: "wipe and redo by
+    // hand") standing_deals is a money record table to the hundredths step (db/hundredths-step.ts), dropped whole, its rows
+    // with it (an ended one and a live one in an old phase alike: none read, mapped or ended), and schema.sql makes it again
+    // in the new shape. The node boots either way, and says by count what it dropped.
     console.log("\n--- 8e. Legacy standing_deals with the held/due/held_back phases ---");
     {
         const dir = tmp('legacy-standing-deals');
         assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
         const oldDdl = legacyDdl('standing_deals', [])
+            .replace(/\n(\s*)beans_per_period_c INTEGER NOT NULL CHECK \(beans_per_period_c > 0\),/, '\n$1beans_per_period REAL NOT NULL,')
             .replace("CHECK (phase IN ('paid', 'short', 'ended'))", "CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended'))")
             .replace(/(\n\s*short_since TEXT,)/, '$1\n    held_back_reason TEXT,');
-        assert(oldDdl.includes("'held_back'") && oldDdl.includes('held_back_reason TEXT'), "the fixture DDL is 1.2.37's: the old phase CHECK and held_back_reason");
+        assert(oldDdl.includes("'held_back'") && oldDdl.includes('held_back_reason TEXT') && oldDdl.includes('beans_per_period REAL NOT NULL') && !oldDdl.includes('beans_per_period_c'),
+            "the fixture DDL is 1.2.37's: the old phase CHECK, held_back_reason, and its money REAL Beans in beans_per_period");
         const at = '2026-11-09T15:30:00.000Z';
         const sd = (d: Database.Database, id: string, phase: string, ended: boolean) =>
             d.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase,
@@ -481,71 +507,55 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         const tableSql = (d: Database.Database) => (d.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'standing_deals'").get() as any).sql as string;
         const triggers = (d: Database.Database) => (d.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'standing_deals' ORDER BY name").all() as any[]).map((r) => r.name).join(',');
 
-        // The node runs with foreign keys off (db.ts); so does each fixture write.
-        let d = new Database(path.join(dir, 'state.db'));
+        // The node runs with foreign keys off (db.ts); so does each fixture write. The rest of the fixture is the current
+        // schema, so this table alone is in the old shape.
+        const d = new Database(path.join(dir, 'state.db'));
         d.pragma('foreign_keys = OFF');
         d.exec(`DROP TABLE standing_deals; ${oldDdl}`);
         sd(d, 'sd-ended', 'ended', true);
-        const before = d.prepare("SELECT * FROM standing_deals WHERE id = 'sd-ended'").get() as any;
+        sd(d, 'sd-held', 'held', false);
         d.close();
         const result = bootInto(dir);
-        assert(result.ok && /Rebuilt standing_deals/.test(result.output), 'the node from 1.2.37 boots and rebuilds the table');
+        assert(result.ok && /Old money was dropped, not converted: rows removed: [^;]*\bstanding_deals 2\b/.test(result.output),
+            `the node from 1.2.37 boots, and its log says the step dropped standing_deals' 2 rows (${result.output.split('\n').filter((l) => /hundredths/.test(l)).join(' | ')})`);
         if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
         const after = new Database(path.join(dir, 'state.db'));
         after.pragma('foreign_keys = OFF');
         assert(tableSql(after).includes("CHECK (phase IN ('paid', 'short', 'ended'))") && !tableSql(after).includes("'held_back'"), 'its phase CHECK is the new one');
         assert(JSON.stringify(columns(after, 'standing_deals')) === JSON.stringify(columns(freshDb, 'standing_deals')),
-            `ending with exactly a fresh install's columns, held_back_reason gone (got ${columns(after, 'standing_deals').join(',')})`);
-        const kept = after.prepare("SELECT * FROM standing_deals WHERE id = 'sd-ended'").get() as any;
-        const { held_back_reason: _gone, ...wanted } = before;
-        assert(JSON.stringify(kept) === JSON.stringify(wanted), `the ended row kept as it was, reason 'cancelled' and its times included (got ${JSON.stringify(kept)})`);
+            `ending with exactly a fresh install's columns: beans_per_period_c, held_back_reason gone (got ${columns(after, 'standing_deals').join(',')})`);
+        const left = (after.prepare('SELECT COUNT(*) AS n FROM standing_deals').get() as { n: number }).n;
+        assert(left === 0, `no row carried across: the ended one and the live one in an old phase both dropped, none read or mapped (${left} left)`);
         assert(JSON.stringify(indexes(after, 'standing_deals')) === JSON.stringify(indexes(freshDb, 'standing_deals')), 'its indexes are a fresh install\'s');
         assert(triggers(after) === triggers(freshDb) && triggers(after).length > 0, `and so are its triggers (${triggers(after)})`);
-        // The new shape has no held_back_reason, so these rows are written without it.
-        const sdNew = (id: string, phase: string) => after.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period,
+        // The new shape has no held_back_reason, and its money is whole hundredths (5000 is 50 Beans).
+        const sdNew = (id: string, phase: string) => after.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period_c,
                 period_unit, starts_at, phase, periods_done, next_due_at, auth_signer, auth_signature, auth_payload)
-            VALUES (?, 'post-1', ?, ?, 50, 'month', ?, ?, 1, '2026-12-09T15:30:00.000Z', ?, 'sig', 'text')`).run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, 'aa'.repeat(32));
+            VALUES (?, 'post-1', ?, ?, 5000, 'month', ?, ?, 1, '2026-12-09T15:30:00.000Z', ?, 'sig', 'text')`).run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, 'aa'.repeat(32));
         let paid = true;
         try { sdNew('sd-new', 'paid'); } catch (e: any) { paid = false; console.error(e?.message); }
         let held = true;
         try { sdNew('sd-old', 'held'); } catch (e: any) { held = !/CHECK constraint failed/.test(e?.message || ''); }
-        assert(paid && !held, "the rebuilt table takes phase 'paid' and its CHECK refuses 'held'");
+        assert(paid && !held, "the new table takes phase 'paid' and its CHECK refuses 'held'");
         after.close();
-        assert(!/Rebuilt standing_deals/.test(bootInto(dir).output), 'a second boot does not rebuild again');
-
-        // A live row in an old phase: nothing at boot reads, maps or ends it; the rebuild fails, is logged, and leaves it.
-        // (bootInto returns a good boot's stdout only, and the refusal is a console.error: this boot prints it to stdout.)
-        d = new Database(path.join(dir, 'state.db'));
-        d.pragma('foreign_keys = OFF');
-        d.exec(`DROP TABLE standing_deals; ${oldDdl}`);
-        sd(d, 'sd-held', 'held', false);
-        d.close();
-        const refused = bootInto(dir, {}, `
-            console.error = (...a) => console.log(...a);
-            const { initSchema } = await import(${JSON.stringify(DB_TS_PATH)});
-            initSchema();
-            console.log('BOOT_OK');
-        `);
-        assert(refused.ok && /Failed to rebuild standing_deals/.test(refused.output) && !/Rebuilt standing_deals/.test(refused.output),
-            'a node holding a live row in an old phase still boots, and says the rebuild failed');
-        const left = new Database(path.join(dir, 'state.db'), { readonly: true });
-        const heldRow = left.prepare("SELECT phase, held_back_reason, updated_at FROM standing_deals WHERE id = 'sd-held'").get() as any;
-        assert(tableSql(left).includes("'held_back'") && heldRow?.phase === 'held' && heldRow?.updated_at === at,
-            'the table and the row are left as they were (no conversion)');
-        left.close();
+        const again = bootInto(dir);
+        assert(again.ok && !/Old money was dropped/.test(again.output), 'a second boot runs no step again');
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
-    // ── accounts.balance NOT NULL (review FABLE-sec-input F1, 2026-10-01) ─────────────────────────
+    // ── accounts.balance_c NOT NULL (review FABLE-sec-input F1, 2026-10-01; whole hundredths since 1.4.0) ────────────────
     // better-sqlite3 binds NaN as NULL, and the column was nullable, so a NaN balance was written as NULL without a word.
-    // A fresh install declares it NOT NULL; a node whose table predates that is rebuilt at boot, unless a balance there
-    // is already not a number, which stops the migration with the account named rather than a value guessed for it.
+    // A fresh install declares accounts.balance_c NOT NULL. A node from before whole hundredths holds REAL Beans in a
+    // nullable `balance`: the hundredths step (db/hundredths-step.ts; Marty, 10 Nov 2026: "wipe and redo by hand") drops
+    // that column unread whatever it holds (a figure, a NULL, text: nothing is read, scaled or guessed) and adds balance_c
+    // NOT NULL at 0. Every row is kept, stamps and epochs too, and the boot log counts the figures it dropped.
     {
-        console.log('\n— accounts.balance is NOT NULL, fresh or upgraded, and a broken row stops the upgrade —');
+        console.log('\n— accounts.balance_c is NOT NULL, fresh or upgraded; an old balance is dropped unread —');
         const balanceNotNull = (d: Database.Database) =>
-            ((d.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as any)?.nn ?? 0) === 1;
+            ((d.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance_c'`).get() as any)?.nn ?? 0) === 1;
+        const oldBalance = (d: Database.Database) => !!d.prepare(`SELECT 1 FROM pragma_table_info('accounts') WHERE name = 'balance'`).get();
         const f = new Database(path.join(freshDir, 'state.db'), { readonly: true });
-        assert(balanceNotNull(f), 'a fresh install declares accounts.balance NOT NULL');
+        assert(balanceNotNull(f) && !oldBalance(f), 'a fresh install declares accounts.balance_c NOT NULL, and has no old balance column');
         f.close();
 
         const LEGACY_ACCOUNTS = `CREATE TABLE accounts (
@@ -555,7 +565,7 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
             last_demurrage_epoch INTEGER DEFAULT 0
         );
         CREATE INDEX idx_accounts_last_updated_at ON accounts(last_updated_at);`;
-        // console.error is where the migration speaks; the boot script sends it to stdout, which bootInto returns.
+        // console.error is where a migration speaks; the boot script sends it to stdout, which bootInto returns.
         const loudBoot = `
             console.error = (...a) => console.log(...a);
             const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
@@ -571,49 +581,52 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         };
         const rowsOf = (dir: string) => {
             const d = new Database(path.join(dir, 'state.db'), { readonly: true });
-            const out = { notNull: balanceNotNull(d), rows: d.prepare(`SELECT public_key, balance, typeof(balance) AS t, last_updated_at, last_demurrage_epoch FROM accounts WHERE public_key LIKE 'acct_%' ORDER BY public_key`).all() as any[], index: indexes(d, 'accounts') };
+            const out = {
+                notNull: balanceNotNull(d), old: oldBalance(d), index: indexes(d, 'accounts'),
+                rows: d.prepare(`SELECT public_key, balance_c, typeof(balance_c) AS t, last_updated_at, last_demurrage_epoch FROM accounts WHERE public_key LIKE 'acct_%' ORDER BY public_key`).all() as any[],
+            };
             d.close();
             return out;
         };
+        const stepLine = (output: string) => output.split('\n').filter((l) => /Old money was dropped/.test(l)).join(' | ');
 
-        // A clean legacy table: rebuilt, every row kept exactly.
+        // A legacy table holding figures: the old column goes, every row is kept at 0, the column NOT NULL.
         const cleanDir = tmp('accounts-legacy');
         plantLegacy(cleanDir, [['acct_a', 12.5], ['acct_b', -3], ['acct_c', 0]]);
         const cleanBoot = bootInto(cleanDir, {}, loudBoot);
         const clean = rowsOf(cleanDir);
-        assert(cleanBoot.ok && clean.notNull, `a node whose accounts table predates NOT NULL boots and ends up NOT NULL (${cleanBoot.ok ? 'booted' : cleanBoot.output.split('\n').slice(-5).join(' | ')})`);
-        assert(JSON.stringify(clean.rows.map((r) => [r.public_key, r.balance, r.last_updated_at, r.last_demurrage_epoch])) === JSON.stringify([
-            ['acct_a', 12.5, '2026-09-30T00:00:00.000Z', 7], ['acct_b', -3, '2026-09-30T00:00:00.000Z', 7], ['acct_c', 0, '2026-09-30T00:00:00.000Z', 7]]),
-        `every row it held is kept as it was, stamps and epochs too (${JSON.stringify(clean.rows)})`);
+        assert(cleanBoot.ok && clean.notNull && !clean.old,
+            `a node whose accounts table holds REAL Beans boots and ends up with balance_c NOT NULL, its old balance gone (${cleanBoot.ok ? 'booted' : cleanBoot.output.split('\n').slice(-5).join(' | ')})`);
+        const at = '2026-09-30T00:00:00.000Z';
+        assert(JSON.stringify(clean.rows.map((r) => [r.public_key, r.balance_c, r.t, r.last_updated_at, r.last_demurrage_epoch])) === JSON.stringify([
+            ['acct_a', 0, 'integer', at, 7], ['acct_b', 0, 'integer', at, 7], ['acct_c', 0, 'integer', at, 7]]),
+        `every row it held is kept, stamps and epochs too, each balance 0: the old figure dropped, never scaled (${JSON.stringify(clean.rows)})`);
+        assert(/figures set to 0 or none: [^;]*\baccounts\.balance 2\b/.test(cleanBoot.output),
+            `and the boot log counts the 2 figures it dropped, the 0 not among them (${stepLine(cleanBoot.output)})`);
         assert(clean.index.includes('idx_accounts_last_updated_at'), `and it keeps the delta backup's index (${JSON.stringify(clean.index)})`);
         let refusedNull = false;
         try {
             const w = new Database(path.join(cleanDir, 'state.db'));
-            try { w.prepare(`INSERT INTO accounts (public_key, balance) VALUES ('acct_nan', ?)`).run(NaN); } catch { refusedNull = true; }
+            try { w.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES ('acct_nan', ?)`).run(NaN); } catch { refusedNull = true; }
             w.close();
         } catch { /* reported by the assert */ }
         assert(refusedNull, 'the upgraded table refuses a NaN balance (bound as NULL)');
-        assert(bootInto(cleanDir).ok && rowsOf(cleanDir).notNull, 'booting it again is a no-op');
+        const cleanAgain = bootInto(cleanDir, {}, loudBoot);
+        assert(cleanAgain.ok && rowsOf(cleanDir).notNull && !/Old money was dropped/.test(cleanAgain.output), 'booting it again is a no-op');
         fs.rmSync(cleanDir, { recursive: true, force: true });
 
-        // A planted NULL (a buyer's balance after the F1 probe) and text: the migration stops, names them, and changes nothing.
+        // A planted NULL (a buyer's balance after the F1 probe) and text: nothing reads them now. The old column goes as it
+        // is, so the node boots, keeps each row at 0 and stops for nothing.
         const brokenDir = tmp('accounts-broken');
         plantLegacy(brokenDir, [['acct_a', 12.5], ['acct_nulled', null], ['acct_texted', 'abc']]);
         const brokenBoot = bootInto(brokenDir, {}, loudBoot);
         const broken = rowsOf(brokenDir);
-        assert(brokenBoot.ok, `a node holding a NULL balance still boots (${brokenBoot.ok ? 'booted' : brokenBoot.output.split('\n').slice(-5).join(' | ')})`);
-        assert(!broken.notNull && broken.rows.length === 3 && broken.rows[1].balance === null && broken.rows[2].balance === 'abc',
-            `but its table is NOT rebuilt and no value is guessed: the NULL and the text are still there (${JSON.stringify(broken.rows)})`);
-        assert(/MIGRATION STOPPED/.test(brokenBoot.output) && brokenBoot.output.includes('acct_nulled') && brokenBoot.output.includes('acct_texted')
-            && /2 account row\(s\) hold a balance that is not a finite number/.test(brokenBoot.output),
-            `and the boot log says so loudly, naming each account (${brokenBoot.output.split('\n').filter((l) => /\[DB\]|STOPPED/.test(l)).slice(0, 6).join(' | ')})`);
-        // Once an operator has set them, the next boot makes the column NOT NULL.
-        const fix = new Database(path.join(brokenDir, 'state.db'));
-        fix.prepare(`UPDATE accounts SET balance = 0 WHERE public_key IN ('acct_nulled', 'acct_texted')`).run();
-        fix.close();
-        const fixedBoot = bootInto(brokenDir, {}, loudBoot);
-        assert(fixedBoot.ok && rowsOf(brokenDir).notNull && /accounts\.balance is now NOT NULL \(3 account row/.test(fixedBoot.output),
-            `after the operator sets them, the next boot makes the column NOT NULL (${fixedBoot.output.split('\n').filter((l) => /accounts\.balance/.test(l)).join(' | ')})`);
+        assert(brokenBoot.ok && broken.notNull && !broken.old,
+            `a node holding a NULL and a text balance boots and ends up NOT NULL, its old column gone (${brokenBoot.ok ? 'booted' : brokenBoot.output.split('\n').slice(-5).join(' | ')})`);
+        assert(broken.rows.length === 3 && broken.rows.every((r) => r.balance_c === 0 && r.t === 'integer' && r.last_updated_at === at && r.last_demurrage_epoch === 7),
+            `each of its rows kept at 0, stamps and epochs too: no value read or guessed (${JSON.stringify(broken.rows)})`);
+        assert(!/MIGRATION STOPPED/.test(brokenBoot.output) && /figures set to 0 or none: [^;]*\baccounts\.balance 2\b/.test(brokenBoot.output),
+            `nothing stops the boot, and the log counts 2 figures dropped, the NULL being none (${stepLine(brokenBoot.output)})`);
         fs.rmSync(brokenDir, { recursive: true, force: true });
     }
 

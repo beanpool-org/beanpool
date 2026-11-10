@@ -10,7 +10,8 @@ const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test'
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 const HEALTH = {
-    totals: { beansInCirculation: 4200, sumOfCredit: 4200, sumOfDebt: 3900, membersInDebit: 7, commonsPot: 300, tradesThisMonth: 41 },
+    // As engine/community-health.ts communityTotals sends them: the money figures whole hundredths of a Bean, in `*_c` fields.
+    totals: { beansInCirculation_c: 420000, sumOfCredit_c: 389950, sumOfDebt_c: 390000, membersInDebit: 7, commonsPot_c: 30050, tradesThisMonth: 41 },
     settings: { debtLinePct: 50, quietDays: 60 }, known: true,
     log: [
         { id: 'l2', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'offboard_preview', subject: 'k'.repeat(64), subjectCallsign: 'Kim', at: '2026-10-04T07:00:00.000Z' },
@@ -76,11 +77,21 @@ describe('CommunityHealthPanel', () => {
         render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
         const panel = await screen.findByTestId('community-health-panel');
         expect(panel).toHaveTextContent('Debt owed (all balances below 0)3,900 Beans');
+        // To the cent, never rounded to a whole Bean, never 100 times over.
+        expect(panel).toHaveTextContent('Credit held (all balances above 0)3,899.50 Beans');
+        expect(panel).toHaveTextContent('Commons pot300.50 Beans');
+        expect(panel).toHaveTextContent('Beans in circulation4,200 Beans');
         expect(panel).toHaveTextContent('Members in debit7');
         expect(panel).toHaveTextContent('Trades this month41');
         expect(screen.getByTestId('health-log')).toHaveTextContent('Ada opened it on');
         expect(screen.getByTestId('health-log')).toHaveTextContent("Ada saw Kim's balance while removing them on");
         expect(panel.textContent).not.toMatch(/Ʀ|csv|export/i);
+    });
+
+    it('reads only the node\'s *_c totals: an answer in the old names is not read as figures', async () => {
+        expect(readHealth({ ...HEALTH, totals: { beansInCirculation: 4200, sumOfCredit: 4200, sumOfDebt: 3900, membersInDebit: 7, commonsPot: 300, tradesThisMonth: 41 } })).toBeNull();
+        expect(readHealth({ ...HEALTH, totals: { ...HEALTH.totals, sumOfDebt_c: 3900.5 } })).toBeNull();
+        expect(readHealth(HEALTH)?.totals).toMatchObject({ sumOfCredit_c: 389950, sumOfDebt_c: 390000, commonsPot_c: 30050 });
     });
 
     it('lists the looks at trades and alerts apart from the balance looks, each with its own words', async () => {

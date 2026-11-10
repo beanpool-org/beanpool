@@ -189,7 +189,7 @@ async function main(): Promise<void> {
     const memberKey = crypto.randomBytes(32).toString('hex');
     db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
         .run(memberKey, 'Mia', new Date().toISOString(), owner, 'TEST');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
     putPushTokenRow(memberKey, 'ExponentPushToken[rename-main-name]', 'android');
 
     const session = (phone = false) => {

@@ -37,15 +37,15 @@ async function promotedInPlaceRunsMainServer(world: World, root: string): Promis
     try {
         const at = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
         const decision = conn.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status,
-                opens_at, closes_at, created_at, updated_at) VALUES (?, ?, ?, 'Seeded', 'pool', 'grant_hardship', ?, '{"amount":1}', '1m1v', ?, ?, ?, ?, ?)`);
+                opens_at, closes_at, created_at, updated_at) VALUES (?, ?, ?, 'Seeded', 'pool', 'grant_hardship', ?, '{"amount_c":1}', '1m1v', ?, ?, ?, ?, ?)`);
         decision.run('seed-open', world.anna, 'An expired vote', world.ben, 'open', at(8), at(1), at(8), at(8));
         decision.run('seed-passed', world.ben, 'A passed hardship grant', world.ben, 'passed', at(9), at(2), at(9), at(2));
-        conn.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey) VALUES ('seed-post', 'offer', 'food', 'Eggs', 'Fresh eggs', 1, ?)`)
+        conn.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES ('seed-post', 'offer', 'food', 'Eggs', 'Fresh eggs', 1, ?)`)
             .run(world.anna);
-        conn.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        conn.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                       VALUES ('seed-tx', 'seed-post', ?, ?, 1, 'requested', ?)`).run(world.ben, world.anna, at(10));
         // A settled deal's escrow left at zero, which a main server's boot sweeps (state-engine.ts sweepSettledEscrowAccounts).
-        conn.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('escrow_seed-settled', 0, 0)").run();
+        conn.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('escrow_seed-settled', 0, 0)").run();
     } finally {
         conn.close();
     }

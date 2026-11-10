@@ -65,7 +65,6 @@
   "A new project needs an id nothing else has": "Yeni bir projenin başka hiçbir şeyin kullanmadığı bir kimliğe ihtiyacı var",
   "A pay-out needs an amount in Beans above 0.": "Bir ödeme için Fasulye cinsinden 0'dan büyük bir miktar gerekir.",
   "A pending request already exists for this enterprise": "Bu girişim için zaten bekleyen bir istek var",
-  "A positive amount is required": "Pozitif bir miktar gerekli",
   "A post can have at most {n} photos": "Bir gönderide en fazla {n} fotoğraf olabilir",
   "A post can have at most {n} photos. Take one off to add another.": "Bir gönderide en fazla {n} fotoğraf olabilir. Başka bir tane eklemek için birini kaldır.",
   "A project can have at most 10 photos": "Bir projede en fazla 10 fotoğraf olabilir",

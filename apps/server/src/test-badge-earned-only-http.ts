@@ -52,6 +52,13 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (the balance answer's `*_c`, the engine profile's floor,
+ * known grant and tier credit, a card's badge credit). `hc` turns a Beans figure into hundredths at the door and `beansOf`
+ * turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -63,7 +70,7 @@ function makeMember(name: string, invitedBy = 'genesis'): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY), invitedBy);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -71,7 +78,7 @@ function makeEnterprise(name: string, keepers: Id[]): string {
     const pk = keypair(name).pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     setMemberPhoto(db, pk, AVATAR);
     for (const k of keepers) {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(pk, k.pk);
@@ -86,13 +93,13 @@ function confirm(member: Id, by: Id): void {
         .run(crypto.randomBytes(16).toString('hex'), member.pk, crypto.randomBytes(16).toString('hex'), by.pk);
 }
 
-/** A completed marketplace (escrow) trade, the only thing that earns trust: `seller` sold `buyer` goods worth `credits`. */
-function soldTo(seller: Id, buyer: Id, credits: number): void {
+/** A completed marketplace (escrow) trade, the only thing that earns trust: `seller` sold `buyer` goods worth `beans`. */
+function soldTo(seller: Id, buyer: Id, beans: number): void {
     const postId = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'produce', 'Sold', 'Sold', ?, ?, 'completed')`)
-        .run(postId, credits, seller.pk);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
-        .run(crypto.randomUUID(), postId, buyer.pk, seller.pk, credits);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'produce', 'Sold', 'Sold', ?, ?, 'completed')`)
+        .run(postId, hc(beans), seller.pk);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
+        .run(crypto.randomUUID(), postId, buyer.pk, seller.pk, hc(beans));
 }
 
 function resetLimits(): void {
@@ -138,7 +145,7 @@ async function main(): Promise<void> {
     const dialRow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null;
     assert(confirmationDialOn(db) && dialRow() === null, `before the owner touches it, the dial reads on with no row (${dialRow()})`);
     const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
-    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true && on.body?.shape?.settings?.knownFloor?.value?.floor === 1000,
+    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true && on.body?.shape?.settings?.knownFloor?.value?.floor === hc(1000),
         `the owner turns the dial on, the known floor at its default 1,000 (${show(on)})`);
     assert(dialRow() === null, `and turning it on writes no row: the default (${dialRow()})`);
 
@@ -148,7 +155,7 @@ async function main(): Promise<void> {
         const board = await call('GET', vic, '/api/marketplace/posts');
         return (Array.isArray(board.body) ? board.body : board.body?.posts ?? []).find((p: any) => p.id === postId);
     };
-    const offer = (who: Id) => createPost('offer', 'produce', `${who.name} mends bikes`, 'Bike repairs', 40, 'fixed', who.pk)!.id;
+    const offer = (who: Id) => createPost('offer', 'produce', `${who.name} mends bikes`, 'Bike repairs', hc(40), 'fixed', who.pk)!.id;
 
     // ── 1. a confirmed member with no trades: their own answer ───────────────────────────────────
     console.log('── 1. a confirmed member, no trades: their own answer ──');
@@ -159,14 +166,14 @@ async function main(): Promise<void> {
     const niaOffer = offer(nia);
     const cleoOwn = await balanceOf(cleo);
     // The limit is unchanged: these are the numbers the code gave before the badge stopped counting the known grant.
-    assert(cleoOwn.status === 200 && cleoOwn.body?.floor === -1000 && cleoOwn.body?.usableFloor === -1000 && cleoOwn.body?.knownGrant === 1000
+    assert(cleoOwn.status === 200 && cleoOwn.body?.floor_c === -hc(1000) && cleoOwn.body?.usableFloor_c === -hc(1000) && cleoOwn.body?.knownGrant_c === hc(1000)
         && cleoOwn.body?.activated === true,
         `Cleo's limit is the known floor's: floor -1,000, usable -1,000 on one live offer, known grant 1,000 (${show(cleoOwn)})`);
     // Marty, 21 Oct: the badge counts what she did. She has done nothing yet, so she is a Newcomer with 0 trust behind it.
-    assert(cleoOwn.body?.tier?.name === 'Newcomer' && cleoOwn.body?.tierCredit === 0,
-        `her badge is Newcomer with tierCredit 0, not the Steward 1,000 of confirmation gave (${cleoOwn.body?.tier?.name}, ${cleoOwn.body?.tierCredit})`);
+    assert(cleoOwn.body?.tier?.name === 'Newcomer' && cleoOwn.body?.tierCredit_c === 0,
+        `her badge is Newcomer with tierCredit 0, not the Steward 1,000 of confirmation gave (${cleoOwn.body?.tier?.name}, ${cleoOwn.body?.tierCredit_c})`);
     const cleoProfile = getMemberTrustProfile(cleo.pk);
-    assert(cleoProfile.tier.name === 'Newcomer' && cleoProfile.tierCredit === 0 && cleoProfile.floor === -1000 && cleoProfile.knownGrant === 1000
+    assert(cleoProfile.tier.name === 'Newcomer' && cleoProfile.tierCredit === 0 && cleoProfile.floor === -hc(1000) && cleoProfile.knownGrant === hc(1000)
         && cleoProfile.otherAllowance === 0 && cleoProfile.earnedCredit === 0 && cleoProfile.knownFrozen === false && cleoProfile.creditFrozen === false,
         `the engine profile agrees: Newcomer, tierCredit 0, floor -1,000, known grant 1,000 (${JSON.stringify({ ...cleoProfile, stats: undefined })})`);
 
@@ -180,8 +187,8 @@ async function main(): Promise<void> {
         && cleoSeen.body?.earnedCredit === niaSeen.body?.earnedCredit && JSON.stringify(cleoSeen.body?.risk) === JSON.stringify(niaSeen.body?.risk),
         `and exactly what he reads for Nia, unconfirmed: the same tier, Trust Points and risk (${JSON.stringify(cleoSeen.body?.risk)}; ${JSON.stringify(niaSeen.body?.risk)})`);
     const numbersIn = (v: unknown): number[] => typeof v === 'number' ? [v] : v && typeof v === 'object' ? Object.values(v).flatMap(numbersIn) : [];
-    assert(!numbersIn(cleoSeen.body).includes(1000) && !/known|confirm/i.test(Object.keys(cleoSeen.body ?? {}).join(',')),
-        `nothing in her profile is the 1,000 or names a confirmation (${numbersIn(cleoSeen.body).join(', ')})`);
+    assert(!numbersIn(cleoSeen.body).includes(hc(1000)) && !numbersIn(cleoSeen.body).includes(1000) && !/known|confirm/i.test(Object.keys(cleoSeen.body ?? {}).join(',')),
+        `nothing in her profile is the 1,000 (in hundredths or in Beans) or names a confirmation (${numbersIn(cleoSeen.body).join(', ')})`);
     const cleoCard = await cardOf(cleoOffer);
     const niaCard = await cardOf(niaOffer);
     assert(cleoCard?.authorEnergyCycled === 0 && tierForCredit(cleoCard.authorEnergyCycled).name === 'Newcomer',
@@ -209,17 +216,17 @@ async function main(): Promise<void> {
         soldTo(seller, makeMember(`${n} buyer 1`), 500);
         soldTo(seller, makeMember(`${n} buyer 2`), 500);
     }
-    const earned = earnedCreditFromValue(1000);
+    const earned = earnedCreditFromValue(hc(1000));
     const tessOwn = await balanceOf(tess);
     const umaOwn = await balanceOf(uma);
-    assert(earned === 320 && tessOwn.body?.earnedCredit === earned && umaOwn.body?.earnedCredit === earned,
-        `each sold 500 to two buyers and earned ${earned} (Tess ${tessOwn.body?.earnedCredit}, Uma ${umaOwn.body?.earnedCredit})`);
-    assert(tessOwn.body?.tier?.name === 'Resident' && tessOwn.body?.tierCredit === earned && umaOwn.body?.tier?.name === 'Resident' && umaOwn.body?.tierCredit === earned,
-        `both are Residents on ${earned} trust, not Tess a Steward on 1,320 (Tess ${tessOwn.body?.tier?.name} ${tessOwn.body?.tierCredit}, Uma ${umaOwn.body?.tier?.name} ${umaOwn.body?.tierCredit})`);
+    assert(earned === hc(320) && tessOwn.body?.earnedCredit_c === earned && umaOwn.body?.earnedCredit_c === earned,
+        `each sold 500 to two buyers and earned ${beansOf(earned)} (hundredths: Tess ${tessOwn.body?.earnedCredit_c}, Uma ${umaOwn.body?.earnedCredit_c})`);
+    assert(tessOwn.body?.tier?.name === 'Resident' && tessOwn.body?.tierCredit_c === earned && umaOwn.body?.tier?.name === 'Resident' && umaOwn.body?.tierCredit_c === earned,
+        `both are Residents on ${beansOf(earned)} trust, not Tess a Steward on 1,320 (Tess ${tessOwn.body?.tier?.name} ${tessOwn.body?.tierCredit_c}, Uma ${umaOwn.body?.tier?.name} ${umaOwn.body?.tierCredit_c})`);
     // The limits are what they were: Tess's holds her known floor on top of what she earned.
-    assert(tessOwn.body?.floor === -1320 && tessOwn.body?.usableFloor === -1200 && tessOwn.body?.knownGrant === 1000
-        && umaOwn.body?.floor === -320 && umaOwn.body?.usableFloor === -200 && umaOwn.body?.knownGrant === 0,
-        `only the limits differ: Tess -1,320 (usable -1,200), Uma -320 (usable -200) (${tessOwn.body?.floor}/${tessOwn.body?.usableFloor}, ${umaOwn.body?.floor}/${umaOwn.body?.usableFloor})`);
+    assert(tessOwn.body?.floor_c === -hc(1320) && tessOwn.body?.usableFloor_c === -hc(1200) && tessOwn.body?.knownGrant_c === hc(1000)
+        && umaOwn.body?.floor_c === -hc(320) && umaOwn.body?.usableFloor_c === -hc(200) && umaOwn.body?.knownGrant_c === 0,
+        `only the limits differ: Tess -1,320 (usable -1,200), Uma -320 (usable -200) (hundredths: ${tessOwn.body?.floor_c}/${tessOwn.body?.usableFloor_c}, ${umaOwn.body?.floor_c}/${umaOwn.body?.usableFloor_c})`);
     const tessSeen = await profileOf(tess.pk);
     const umaSeen = await profileOf(uma.pk);
     assert(tessSeen.body?.tier?.name === 'Resident' && JSON.stringify(tessSeen.body?.tier) === JSON.stringify(umaSeen.body?.tier)
@@ -228,13 +235,13 @@ async function main(): Promise<void> {
     // Neither freeze moves her badge either: the known line was never in it.
     const kf = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: tess.pk, frozen: true }, owner);
     const tessFrozen = await balanceOf(tess);
-    assert(kf.status === 200 && tessFrozen.body?.knownFrozen === true && tessFrozen.body?.floor === -earned
-        && tessFrozen.body?.tier?.name === 'Resident' && tessFrozen.body?.tierCredit === earned,
-        `her known floor frozen: floor -${earned}, still a Resident on ${earned} (${show(tessFrozen)})`);
-    const raised = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: tess.pk, amount: 1600 }, owner);
+    assert(kf.status === 200 && tessFrozen.body?.knownFrozen === true && tessFrozen.body?.floor_c === -earned
+        && tessFrozen.body?.tier?.name === 'Resident' && tessFrozen.body?.tierCredit_c === earned,
+        `her known floor frozen: floor -${beansOf(earned)}, still a Resident on ${beansOf(earned)} (${show(tessFrozen)})`);
+    const raised = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: tess.pk, amount_c: hc(1600) }, owner);
     const tessRaised = await balanceOf(tess);
-    assert(raised.status === 200 && tessRaised.body?.floor === -1920 && tessRaised.body?.tier?.name === 'Resident' && tessRaised.body?.tierCredit === earned,
-        `raised to 1,600: floor -1,920, still a Resident on ${earned}, not an Elder (${tessRaised.body?.floor}, ${tessRaised.body?.tier?.name})`);
+    assert(raised.status === 200 && tessRaised.body?.floor_c === -hc(1920) && tessRaised.body?.tier?.name === 'Resident' && tessRaised.body?.tierCredit_c === earned,
+        `raised to 1,600: floor -1,920, still a Resident on ${beansOf(earned)}, not an Elder (${tessRaised.body?.floor_c}, ${tessRaised.body?.tier?.name})`);
 
     // ── 4. an enterprise: a keeper's known pledge deepens its line, never its badge ─────────────
     console.log('── 4. enterprises ──');
@@ -243,12 +250,12 @@ async function main(): Promise<void> {
     const pat = makeMember('Pat');           // unconfirmed keeper, nothing to pledge
     const knownCo = makeEnterprise('Known Co', [kai]);
     const plainCo = makeEnterprise('Plain Co', [pat]);
-    pledgeEnterpriseBacking(knownCo, kai.pk, 500);
+    pledgeEnterpriseBacking(knownCo, kai.pk, hc(500));
     const knownPledge = db.prepare("SELECT id FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL").all(knownCo) as { id: string }[];
     assert(knownPledge.length === 1 && knownPledge[0].id.startsWith('known:'), `Kai's 500 is a known pledge (${JSON.stringify(knownPledge)})`);
     const knownCoTrust = getMemberTrustProfile(knownCo);
     const plainCoTrust = getMemberTrustProfile(plainCo);
-    assert(getEnterpriseUnderlyingFloor(knownCo).floor === -500 && knownCoTrust.floor === -500,
+    assert(getEnterpriseUnderlyingFloor(knownCo).floor === -hc(500) && knownCoTrust.floor === -hc(500),
         `Known Co's line is what it was: -500 from Kai's known pledge (${getEnterpriseUnderlyingFloor(knownCo).floor}, ${knownCoTrust.floor})`);
     assert(knownCoTrust.tier.name === 'Newcomer' && knownCoTrust.tierCredit === 0
         && knownCoTrust.tier.name === plainCoTrust.tier.name && knownCoTrust.tierCredit === plainCoTrust.tierCredit,
@@ -256,20 +263,20 @@ async function main(): Promise<void> {
     // An ordinary pledge (from a keeper's earned credit) still counts towards an enterprise's badge; the known one beside it does not.
     const dee = makeMember('Dee');
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(knownCo, dee.pk);
-    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)').run(crypto.randomUUID(), dee.pk, knownCo, 300, ago(DAY));
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, ?, ?)').run(crypto.randomUUID(), dee.pk, knownCo, hc(300), ago(DAY));
     clearEnterpriseFloorCache(db);
     const mixed = getMemberTrustProfile(knownCo);
-    assert(mixed.floor === -800 && mixed.tier.name === 'Resident' && mixed.tierCredit === 300,
+    assert(mixed.floor === -hc(800) && mixed.tier.name === 'Resident' && mixed.tierCredit === hc(300),
         `with Dee's ordinary 300 beside it: line -800, badge Resident on 300, not Steward on 800 (${mixed.floor}, ${mixed.tier.name}, ${mixed.tierCredit})`);
-    const coCard = createPost('offer', 'produce', 'Known Co sells jam', 'Jam', 10, 'fixed', knownCo);
+    const coCard = createPost('offer', 'produce', 'Known Co sells jam', 'Jam', hc(10), 'fixed', knownCo);
     if (coCard) {
         const seen = await cardOf(coCard.id);
-        assert(seen?.authorEnergyCycled === 200, `its card carries Resident's 200, not Steward's 600 (${seen?.authorEnergyCycled})`);
+        assert(seen?.authorEnergyCycled === hc(200), `its card carries Resident's 200, not Steward's 600 (hundredths: ${seen?.authorEnergyCycled})`);
     }
     // With the dial off there is no known pledge to leave out: the badge is the line, as before.
     const off = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
     const offCo = getMemberTrustProfile(knownCo);
-    assert(off.status === 200 && offCo.floor === -300 && offCo.tierCredit === 300 && offCo.tier.name === 'Resident',
+    assert(off.status === 200 && offCo.floor === -hc(300) && offCo.tierCredit === hc(300) && offCo.tier.name === 'Resident',
         `the dial off: Known Co's line and badge are both Dee's 300 (${offCo.floor}, ${offCo.tierCredit}, ${offCo.tier.name})`);
 
     console.log(`\n${passed}/${run} passed`);

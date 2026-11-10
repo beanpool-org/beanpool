@@ -66,6 +66,7 @@ import { newListingCategory } from '../engine/shops.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, livePinIds, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT } from '../money-body.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
 import { FREE_TAGS_MAX, POST_ID_TAKEN_CODE, SEARCH_TAGS_MAX, TAG_ID_PATTERN, freeTagRefusal, freeTagStored, word } from '@beanpool/core';
 
@@ -786,8 +787,14 @@ router.post('/api/marketplace/posts', async (ctx) => {
     // A member's copy holds only what a copy may (engine/event-copy.ts); every other post is the body as it came.
     const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
+    const { id, type, category, title, description, price_c, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
         lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } = requestBody;
+    // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them.
+    if ((ctx as any).requestBody && 'credits' in (ctx as any).requestBody) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+        return;
+    }
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
@@ -851,7 +858,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             type, category || newListingCategory(shopId) || 'other', title, description || '',
             // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
             // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
-            Number(credits) || 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            price_c ?? 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
@@ -994,6 +1001,12 @@ router.post('/api/marketplace/posts/takes-questions', async (ctx) => {
 router.post('/api/marketplace/posts/update', async (ctx) => {
     try {
         const { id, authorPublicKey, ...updates } = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): an edit with the old `credits` is refused, never ignored.
+        if ('credits' in updates) {
+            ctx.status = 400;
+            ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+            return;
+        }
         if (!id || !authorPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'id and authorPublicKey are required' };

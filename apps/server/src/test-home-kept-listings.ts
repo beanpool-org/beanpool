@@ -91,7 +91,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?, ?, ?, ?)`)
             .run(pubKeyHex, callsign, joined, `INV-${callsign.toUpperCase()}`, area.lat, area.lng, joined);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
 
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
         n++;
         resetGatewayRateLimit();
         const r = await request('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', credits: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place, ...body,
+            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', price_c: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
         if (!id) throw new Error(`could not post: ${r.status} ${r.error}`);
@@ -309,7 +309,8 @@ async function main(): Promise<void> {
 
     console.log('── 4. The author\'s trust ──');
     {
-        db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(authorT.pubKeyHex);
+        // 400 Beans of earned credit: 40000 hundredths.
+        db.prepare('UPDATE members SET earned_credit_c = 40000 WHERE public_key = ?').run(authorT.pubKeyHex);
         bumpPostsVersion();
         const expected = tierForCredit(se.getMemberTrustProfile(authorT.pubKeyHex).tierCredit).minCredit;
         resetGatewayRateLimit();

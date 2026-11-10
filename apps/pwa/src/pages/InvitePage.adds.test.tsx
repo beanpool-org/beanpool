@@ -26,10 +26,10 @@ vi.mock('../lib/api', async (importOriginal) => {
         myNodeRoleOnce: vi.fn(async () => 'owner'),
         getMyVouching: vi.fn(async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         })),
     };
@@ -37,7 +37,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true },
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true },
     })),
 }));
 
@@ -93,7 +93,7 @@ describe('InvitePage: the names-list rows, switched off on the web, and what a t
         localStorage.clear();
         vi.mocked(myNodeRoleOnce).mockResolvedValue('owner');
         vi.mocked(communityInfoOnce).mockResolvedValue({
-            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true },
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true },
         } as never);
     });
 
@@ -198,7 +198,7 @@ describe('InvitePage: the names-list rows, switched off on the web, and what a t
     it('an admin sees them too, even one who is not a voucher (no presets)', async () => {
         vi.mocked(myNodeRoleOnce).mockResolvedValue('admin');
         vi.mocked(getMyVouching).mockResolvedValueOnce({
-            voucher: false, presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [],
+            voucher: false, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000, vouchedBy: [],
         });
         await renderPage();
 
@@ -225,7 +225,7 @@ describe('InvitePage: the names-list rows, switched off on the web, and what a t
 
     it('an owner on a node that keeps no names list (the global profile) sees nothing new', async () => {
         vi.mocked(communityInfoOnce).mockResolvedValue({
-            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { invites: true, beans: true },
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { invites: true, beans: true },
         } as never);
         await renderPage();
 
@@ -279,7 +279,7 @@ describe('InvitePage: the names-list rows, switched off on the web, and what a t
         fireEvent.click(screen.getByTestId('invite-vouch-50'));
         fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
         await waitFor(() => expect(generateInvite).toHaveBeenCalledTimes(1));
-        expect(generateInvite).toHaveBeenCalledWith(IDENTITY.publicKey, undefined, 50);
+        expect(generateInvite).toHaveBeenCalledWith(IDENTITY.publicKey, undefined, 5000); // 50 Beans, whole hundredths
         // No extra argument: the web sends no names-list entry and no voucher level.
         expect(vi.mocked(generateInvite).mock.calls[0]).toHaveLength(3);
     });

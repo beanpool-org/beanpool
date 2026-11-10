@@ -446,6 +446,10 @@ run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
 run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 
+# No float comes back into the money code (DESIGN-atomic-beans-fable.md T10): no REAL money column in schema.sql, no
+# toFixed, * 100) / 100, dust threshold, old fee rate or Number(amount) in a money file. Instant.
+run_check "no_float_money" node --test scripts/no-float-money.test.mjs
+
 # The website follows the visitor's light or dark setting (Marty, 15 Oct 2026). Its every colour is in style.css's two
 # sets, and each light value is its role in core's brand-colours.ts (it reads core's dist, so it starts once build has
 # finished; instant). Then every page in headless Chromium, both themes, 320 and 1280 px: words under 4.5:1 (3:1 large)

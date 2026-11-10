@@ -55,6 +55,12 @@ type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; headers: Headers };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 const DAY = 86_400_000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths: exact for
+ * every figure here. The known floor's change is `{ on, floor_c, cap_c }` in whole hundredths (community-shape-write.ts),
+ * and the node writes its log lines' values as whole hundredths too.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -97,7 +103,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, is_treasury)
                     VALUES (?, ?, ?, 'genesis', 'TEST', ?, ?, ?)`).run(id.pk, name, ago(30 * DAY), extra.status ?? 'active', extra.visitor ? 1 : 0, extra.treasury ? 1 : 0);
         setMemberPhoto(db, id.pk, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     function sessionHeaders(pub: string, role: 'owner' | 'admin' | 'moderator'): Record<string, string> {
@@ -360,15 +366,15 @@ async function main(): Promise<void> {
     assert(beansOff.status === 200 && !np.getNodeFeatures().beans && !np.getProfileSwitches().escrow,
         `a local community whose ledger never moved switches Beans off, escrow with them (${show(beansOff)})`);
     assert(isDeepStrictEqual(toldEach(nMark), [SENT('Beans are off, so there are no prices, sends or credit here.')]), 'and its members are told');
-    await refusedClean('the known floor with no Beans (beans_off)', () => change({ knownFloor: { floor: 1300 } }), 409, 'beans_off', lockWhy(readShape(), 'knownFloor'));
+    await refusedClean('the known floor with no Beans (beans_off)', () => change({ knownFloor: { floor_c: hc(1300) } }), 409, 'beans_off', lockWhy(readShape(), 'knownFloor'));
     await refusedClean('the known floor\'s dial with no Beans (beans_off)', () => change({ knownFloor: { on: true } }), 409, 'beans_off');
     nMark = noticeMark();
-    const beansBack = await change({ beans: true, knownFloor: { floor: 1300 } });
-    assert(beansBack.status === 200 && np.getNodeFeatures().beans && knownFloorSettings().knownFloor === 1300 && knownFloorSettings().confirmation,
+    const beansBack = await change({ beans: true, knownFloor: { floor_c: hc(1300) } });
+    assert(beansBack.status === 200 && np.getNodeFeatures().beans && knownFloorSettings().knownFloor_c === hc(1300) && knownFloorSettings().confirmation,
         `Beans on and the known floor moved in one request: the lock it lifts doesn't refuse it (${show(beansBack)})`);
     assert(isDeepStrictEqual(toldEach(nMark), [[SENT('Beans are on.'), SENT('confirmed members can owe up to 1,300 Beans now (the known floor).')].join('\n')]),
         `members are told both: with Beans back, the dial that read off without them is on again (${JSON.stringify(toldEach(nMark))})`);
-    await refusedClean('Beans off and the known floor moved in one request (beans_off)', () => change({ beans: false, knownFloor: { floor: 1400 } }), 409, 'beans_off');
+    await refusedClean('Beans off and the known floor moved in one request (beans_off)', () => change({ beans: false, knownFloor: { floor_c: hc(1400) } }), 409, 'beans_off');
     assert(np.getNodeFeatures().beans, 'and Beans stayed on: nothing of it was written');
     // The dial is compared with the one the owner set, never the off that Beans-off reads it as (#2415 review r4360287274):
     // a request that asks for the dial off is written off, or refused, never a 200 that leaves it on.
@@ -437,11 +443,11 @@ async function main(): Promise<void> {
     await refusedClean('a good change beside a bad one (all or nothing)', () => change({ decisions: false, autoMute: 'yes' }), 400, 'bad_setting');
     await refusedClean(`a note longer than ${SHAPE_NOTE_MAX}`, () => change({ decisions: false }, 'x'.repeat(SHAPE_NOTE_MAX + 1)), 400, 'bad_note');
     await refusedClean('a note that is no sentence', () => post({ changes: { decisions: false }, note: 42 }), 400, 'bad_note');
-    await refusedClean('the known floor above the cap', () => change({ knownFloor: { floor: 4000, cap: 3000 } }), 400, 'floor_above_cap');
-    await refusedClean('a cap past the most', () => change({ knownFloor: { cap: 9000 } }), 400, 'bad_cap');
-    await refusedClean('a known floor below nothing', () => change({ knownFloor: { floor: -1 } }), 400, 'bad_amount');
+    await refusedClean('the known floor above the cap', () => change({ knownFloor: { floor_c: hc(4000), cap_c: hc(3000) } }), 400, 'floor_above_cap');
+    await refusedClean('a cap past the most', () => change({ knownFloor: { cap_c: hc(9000) } }), 400, 'bad_cap');
+    await refusedClean('a known floor below nothing', () => change({ knownFloor: { floor_c: hc(-1) } }), 400, 'bad_amount');
     await refusedClean('a known floor with a field it has not', () => change({ knownFloor: { amount: 1 } }), 400, 'bad_setting');
-    await refusedClean('a known floor that is no object', () => change({ knownFloor: 1500 }), 400, 'bad_setting');
+    await refusedClean('a known floor that is no object', () => change({ knownFloor: hc(1500) }), 400, 'bad_setting');
     const longOk = await change({ decisions: false }, 'y'.repeat(SHAPE_NOTE_MAX));
     assert(longOk.status === 200 && linesSince(logMark() - 1)[0]?.note?.length === SHAPE_NOTE_MAX, `a note of ${SHAPE_NOTE_MAX} is taken (${longOk.status})`);
     await change({ decisions: true });
@@ -464,16 +470,16 @@ async function main(): Promise<void> {
         `the dial off (${show(dialOff)})`);
     assert(isDeepStrictEqual(toldEach(nMark), [SENT('confirmed members no longer have a known floor, and go back to the credit they have earned.')]), 'members are told');
     nMark = noticeMark();
-    const dialOn = await change({ knownFloor: { on: true, floor: 1500 } }, 'Welcome, neighbours');
+    const dialOn = await change({ knownFloor: { on: true, floor_c: hc(1500) } }, 'Welcome, neighbours');
     lines = linesSince(mark);
-    assert(dialOn.status === 200 && knownFloorSettings().confirmation && knownFloorSettings().knownFloor === 1500, `the dial on and the floor moved (${show(dialOn)})`);
-    assert(isDeepStrictEqual(lines.map((l) => `${l.setting}:${l.old_value}>${l.new_value}`), ['knownFloor.on:on>off', 'knownFloor.on:off>on', 'knownFloor.floor:1300>1500']),
+    assert(dialOn.status === 200 && knownFloorSettings().confirmation && knownFloorSettings().knownFloor_c === hc(1500), `the dial on and the floor moved (${show(dialOn)})`);
+    assert(isDeepStrictEqual(lines.map((l) => `${l.setting}:${l.old_value}>${l.new_value}`), ['knownFloor.on:on>off', 'knownFloor.on:off>on', `knownFloor.floor:${hc(1300)}>${hc(1500)}`]),
         `a line for each part that changed (${JSON.stringify(lines.map((l) => l.setting))})`);
     assert(isDeepStrictEqual(toldEach(nMark), [`${SENT('confirmed members can owe up to 1,500 Beans now (the known floor).')}\n\nFrom the owners: “Welcome, neighbours”`]),
         'members are told the floor they can owe up to, with the note');
     const floorLines = db.prepare(`SELECT action, old_value, new_value, at, actor_pubkey FROM known_floor_log
                                    WHERE member_pubkey IS NULL AND rowid > ? ORDER BY rowid`).all(floorLogMark) as any[];
-    assert(isDeepStrictEqual(floorLines.map((l) => `${l.action}:${l.old_value}>${l.new_value}`), ['confirmation:on>off', 'confirmation:off>on', 'known_floor:1300>1500'])
+    assert(isDeepStrictEqual(floorLines.map((l) => `${l.action}:${l.old_value}>${l.new_value}`), ['confirmation:on>off', 'confirmation:off>on', `known_floor:${hc(1300)}>${hc(1500)}`])
         && floorLines.every((l, i) => l.at === lines[i].at && l.actor_pubkey === owenPk),
         `the known floor's own log keeps its lines too, stamped as the shape's (${JSON.stringify(floorLines)})`);
     const shapeLog = readShape().log.filter((l) => l.setting.startsWith('knownFloor.'));
@@ -483,17 +489,17 @@ async function main(): Promise<void> {
     assert(!readShape().log.some((l) => l.kept === 'known_floor_log'),
         'every known-floor change here came through the shape route, so none of its known_floor_log twins is read');
     const getFloor = await call('GET', null, '/api/local/admin/known-floor', undefined, owner);
-    assert(getFloor.status === 200 && getFloor.body?.knownFloor === 1500 && getFloor.body?.log?.some((l: any) => l.action === 'known_floor' && l.newValue === '1500'),
+    assert(getFloor.status === 200 && getFloor.body?.knownFloor_c === hc(1500) && getFloor.body?.log?.some((l: any) => l.action === 'known_floor' && l.newValue === String(hc(1500))),
         `GET /api/local/admin/known-floor still reads the settings and its log (${getFloor.status})`);
     nMark = noticeMark();
-    const capOnly = await change({ knownFloor: { cap: 3000 } });
-    assert(capOnly.status === 200 && capOnly.body?.told === 'nobody' && knownFloorSettings().creditCap === 3000 && noticeMark() === nMark,
+    const capOnly = await change({ knownFloor: { cap_c: hc(3000) } });
+    assert(capOnly.status === 200 && capOnly.body?.told === 'nobody' && knownFloorSettings().creditCap_c === hc(3000) && noticeMark() === nMark,
         `the cap alone tells no member: it is not theirs to read (${show(capOnly)})`);
     await change({ knownFloor: { on: false } });
     nMark = noticeMark();
-    const floorWhileOff = await change({ knownFloor: { floor: 1200 } });
+    const floorWhileOff = await change({ knownFloor: { floor_c: hc(1200) } });
     assert(floorWhileOff.status === 200 && floorWhileOff.body?.told === 'nobody' && noticeMark() === nMark, 'nor the floor moved with the dial off: it changes nobody\'s limit');
-    await change({ knownFloor: { on: true, floor: 1000, cap: 2000 } });
+    await change({ knownFloor: { on: true, floor_c: hc(1000), cap_c: hc(2000) } });
 
     // ── 6. The global kind; a ledger that has moved ─────────────────────────────────────────────
     console.log('\n── 6. the global kind, and a ledger that has moved ──');
@@ -560,7 +566,7 @@ async function main(): Promise<void> {
     await doorStillChosen('a local community with the open door set');
     setOverrideRow('openJoin', null);
 
-    se.transfer('genesis', sam.pk, 5, 'the ledger moves', 'direct', true);
+    se.transfer('genesis', sam.pk, hc(5), 'the ledger moves', 'direct', true);
     np.forgetLedgerHistory();
     assert(np.ledgerHistory() !== null, 'the ledger has moved');
     await refusedClean('Beans off once the ledger has moved (ledger_moved)', () => change({ beans: false }), 409, 'ledger_moved', lockWhy(readShape(), 'beans'));

@@ -299,22 +299,22 @@ async function listsOnLocal(): Promise<void> {
     const shop = crypto.createHash('sha256').update('local shop').digest('hex');
     const fund = crypto.createHash('sha256').update('local fund').digest('hex');
     const shopPhoto = dataUrl(jpeg(6_000, 23)), fundPhoto = dataUrl(jpeg(6_000, 25));
-    const ent = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, purpose, lifecycle, goal_amount, lat, lng, paused)
+    const ent = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, purpose, lifecycle, goal_amount_c, lat, lng, paused)
                             VALUES (?, ?, '2026-01-01T00:00:00.000Z', 'active', 1, 0, 0, ?, ?, ?, ?, ?, 0)`);
     ent.run(shop, 'Shop', 'Bread', 'ongoing', null, -28.55, 153.5);
-    ent.run(fund, 'Fund', 'A roof', 'bounded', 500, null, null);
+    ent.run(fund, 'Fund', 'A roof', 'bounded', 50000 /* a 500-Bean goal, whole hundredths */, null, null);
     for (const [pk, photo] of [[shop, shopPhoto], [fund, fundPhoto]]) {
         engine.setMemberPhoto(db, pk, photo);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'lead', 'creator')`).run(pk, keeper.pk);
     }
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(keeper.pk);
 
     // Two deals with the shop: one asked for (a bid), one in escrow (an active deal, and a dispute for the admins).
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status)
-                VALUES ('shop-post', 'offer', 'food', 'Loaf', 'A loaf', 5, ?, '2026-01-01T00:00:00.000Z', 'active')`).run(shop);
-    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-                             VALUES (?, 'shop-post', ?, ?, 5, ?, '2026-01-01T00:00:00.000Z')`);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status)
+                VALUES ('shop-post', 'offer', 'food', 'Loaf', 'A loaf', 500, ?, '2026-01-01T00:00:00.000Z', 'active')`).run(shop); // 5 Beans
+    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+                             VALUES (?, 'shop-post', ?, ?, 500, ?, '2026-01-01T00:00:00.000Z')`); // 5 Beans
     deal.run('deal-bid', buyer.pk, shop, 'requested');
     deal.run('deal-escrow', buyer.pk, shop, 'pending');
 
@@ -340,7 +340,7 @@ async function listsOnLocal(): Promise<void> {
     const bid = (pageBody.pendingBids ?? []).find((d: any) => d.id === 'deal-bid');
     const active = (pageBody.activeDeals ?? []).find((d: any) => d.id === 'deal-escrow');
     assert(bid?.peer_avatar === urlOf(buyer.pk) && active?.peer_avatar === urlOf(buyer.pk) && PLAIN_URL(buyer.pk).test(bid?.peer_avatar ?? '')
-        && !('peer_avatar_ref' in (bid ?? {})) && Object.keys(active ?? {}).join() === 'id,post_id,buyer_pubkey,seller_pubkey,credits,hours,status,created_at,post_title,post_type,price_type,peer_callsign,peer_avatar,action_required',
+        && !('peer_avatar_ref' in (bid ?? {})) && Object.keys(active ?? {}).join() === 'id,post_id,buyer_pubkey,seller_pubkey,amount_c,hours,status,created_at,post_title,post_type,price_type,peer_callsign,peer_avatar,action_required',
         `the keeper's page gives each deal's other party as their URL, the row's fields as before (${bid?.peer_avatar})`);
     assert(pageBody.avatarUrl === shopPhoto && pageBody.avatar === urlOf(shop),
         'the one enterprise\'s own page still hands its photo out as stored (a read of one, as #1475 left it)');

@@ -6,7 +6,8 @@ import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
-import { formatCount, VOUCH_PRESETS } from '@beanpool/core';
+import { VOUCH_PRESETS } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -20,6 +21,7 @@ export interface GeneratedInviteItem {
     tier: InviteTier;
     fullUrl: string;
     qrDataUrl: string;
+    /** The vouch the node put on the code, whole hundredths of a Bean (2500 is 25 Beans), as its answer said. */
     vouchAmount?: number | null;
 }
 
@@ -36,6 +38,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
     // The manager's own refusal (the batch doesn't fit the budget), said under the amounts: not the node's words.
     const [batchError, setBatchError] = useState<string | null>(null);
     const [vouchData, setVouchData] = useState<MyVouchingResponse | null>(null);
+    // A vouch preset as the node takes it (core VOUCH_PRESETS, seed-invite's `vouchAmount`): whole hundredths, 2500 is 25 Beans.
     const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
 
     useEffect(() => {
@@ -89,7 +92,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
         // The whole batch must fit the budget before the first card is made: never four cards and a refused fifth.
         const leftNow = vouchData?.budget?.left ?? 0;
         if (selectedPreset !== null && selectedPreset * count > leftNow) {
-            setBatchError(`Not enough budget left for ${count} cards at ${selectedPreset} each: ${formatCount(leftNow)} left. Choose fewer cards or a smaller amount.`);
+            setBatchError(`Not enough budget left for ${count} cards at ${beansFigure(selectedPreset)} each: ${beansFigure(leftNow)} left. Choose fewer cards or a smaller amount.`);
             return;
         }
         setBatchError(null);
@@ -182,7 +185,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
     const getShareMessage = (item: GeneratedInviteItem) => {
         const nodeName = activeNode?.name || 'Sovereign Node';
         const tierName = getTierBadge(item.tier);
-        const vouchPart = typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `\n🤝 Vouch: ${item.vouchAmount} Beans` : '';
+        const vouchPart = typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `\n🤝 Vouch: ${beansFigure(item.vouchAmount)} Beans` : '';
         return `🌱 You're invited to join BeanPool on node "${nodeName}"!\nSingle-use onboarding pass (${tierName}): ${item.code}${vouchPart}\n\nTap the link to get started:\n${item.fullUrl}\n\n(Note: This single-use invite link is valid for 30 days)`;
     };
 
@@ -236,7 +239,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 11px; font-weight: bold; color: #4b5563; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
                         <div style="font-size: 26px; font-weight: 900; color: #166534; font-family: monospace; letter-spacing: 2px; margin: 4px 0 10px 0;">${escapeHtml(item.code)}</div>
-                        ${typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `<div style="font-size: 12px; font-weight: bold; color: #166534; margin-bottom: 8px;">🤝 Vouch: ${escapeHtml(String(item.vouchAmount))} Beans included</div>` : ''}
+                        ${typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `<div style="font-size: 12px; font-weight: bold; color: #166534; margin-bottom: 8px;">🤝 Vouch: ${escapeHtml(beansFigure(item.vouchAmount))} Beans included</div>` : ''}
                         <div style="font-size: 12px; color: #374151; margin-bottom: 6px; font-weight: 600;">
                             Scan the large QR code with your phone camera or visit:
                         </div>
@@ -398,13 +401,13 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                 </label>
                                 <span className="text-[11px] text-nature-400" data-testid="vouch-budget-left">
                                     {vouchData.budget
-                                        ? `From your budget: ${formatCount(vouchData.budget.left)} of ${formatCount(vouchData.budget.level)} left`
+                                        ? `From your budget: ${beansFigure(vouchData.budget.left)} of ${beansFigure(vouchData.budget.level)} left`
                                         : null}
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap" role="radiogroup" aria-label="Vouch amount per card">
                                 {[null, ...VOUCH_PRESETS].map((preset) => {
-                                    const label = preset === null ? 'None' : String(preset);
+                                    const label = preset === null ? 'None' : beansFigure(preset);
                                     const isSelected = selectedPreset === preset;
                                     const left = vouchData.budget?.left ?? 0;
                                     const disabled = preset !== null && (preset > left || left === 0);
@@ -553,7 +556,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                                 <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-0.5 rounded">{getTierBadge(item.tier)}</span>
                                                 {typeof item.vouchAmount === 'number' && item.vouchAmount > 0 && (
                                                     <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800" data-testid="card-vouch-badge">
-                                                        🤝 {item.vouchAmount} Beans vouched
+                                                        🤝 {beansFigure(item.vouchAmount)} Beans vouched
                                                     </span>
                                                 )}
                                             </div>
@@ -649,7 +652,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                             </div>
                                             {typeof item.vouchAmount === 'number' && item.vouchAmount > 0 && (
                                                 <div className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded inline-block">
-                                                    🤝 Vouch: {item.vouchAmount} Beans
+                                                    🤝 Vouch: {beansFigure(item.vouchAmount)} Beans
                                                 </div>
                                             )}
                                             <div className="text-xs text-gray-700 font-medium">
@@ -704,7 +707,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                             <div className="text-emerald-400 font-bold text-lg tracking-wider">{previewQrItem.code}</div>
                             <div className="text-nature-300 text-[11px] font-bold">Granted Tier: {getTierBadge(previewQrItem.tier)}</div>
                             {typeof previewQrItem.vouchAmount === 'number' && previewQrItem.vouchAmount > 0 && (
-                                <div className="text-emerald-400 text-xs font-bold">🤝 Vouch: {previewQrItem.vouchAmount} Beans</div>
+                                <div className="text-emerald-400 text-xs font-bold">🤝 Vouch: {beansFigure(previewQrItem.vouchAmount)} Beans</div>
                             )}
                             <div className="text-nature-400 text-[10px] break-all pt-1">{previewQrItem.fullUrl}</div>
                         </div>

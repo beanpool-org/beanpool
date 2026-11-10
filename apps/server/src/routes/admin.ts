@@ -71,7 +71,7 @@ import { APP_PLATFORMS, appStoreCheckDisabled, getMinAppVersion, getMinAppVersio
 import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
@@ -954,8 +954,10 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
             };
             return;
         }
-        const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
-        const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
+        // Whole hundredths (every balance was a number, asked just above): the baseline is the integer as text, read back
+        // exactly by LedgerAudit; the note says it in Beans.
+        const normalizedBaseline = String(result.sumBalances);
+        const note = `[${new Date().toISOString()}] rebaselined at ${hundredthsAsDecimalText(result.sumBalances)} Beans (drift was ${hundredthsAsDecimalText(result.drift)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.
         db.transaction(() => {
             db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(normalizedBaseline);
@@ -1004,13 +1006,13 @@ router.post('/api/local/admin/stranded-escrows/:escrowId/write-off', async (ctx)
     }
     // The log redacts anything shaped like a 64-hex key, so a key session's actor goes in short, as on the other
     // admin lines here. The full signer is on the ledger row's auth_signer, which `transactionId` points to.
-    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount} Beans (Commons ${result.commonsBefore} → ${result.commonsAfter})`, {
+    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount_c} hundredths (Commons ${result.commonsBefore_c} → ${result.commonsAfter_c})`, {
         escrowId: result.escrowId,
         tradeId: result.tradeId,
-        amount: result.amount,
+        amount_c: result.amount_c,
         transactionId: result.transactionId,
-        commonsBefore: result.commonsBefore,
-        commonsAfter: result.commonsAfter,
+        commonsBefore_c: result.commonsBefore_c,
+        commonsAfter_c: result.commonsAfter_c,
         actor: /^[0-9a-f]{64}$/i.test(actor) ? actor.substring(0, 12) : actor,
         memo: result.memo,
     });
@@ -2682,8 +2684,8 @@ router.post('/api/local/admin/commons/projects', async (ctx) => {
             description: p.description,
             proposerPubkey: p.creator_pubkey,
             proposerCallsign: member?.callsign || 'Unknown',
-            requestedAmount: p.goal_amount,
-            currentAmount: p.current_amount,
+            requestedAmount: p.goal_amount_c,
+            currentAmount: p.current_amount_c,
             status: (p.status || 'ACTIVE').toLowerCase(),
             createdAt: p.created_at,
             photos: p.photos,

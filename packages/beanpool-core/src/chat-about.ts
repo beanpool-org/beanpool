@@ -64,7 +64,8 @@ export interface AboutPostLike {
     id?: string | null;
     type?: string | null;
     title?: string | null;
-    credits?: number | string | null;
+    /** The price, whole hundredths of a Bean. */
+    price_c?: number | null;
     priceType?: string | null;
     price_type?: string | null;
     status?: string | null;
@@ -88,10 +89,10 @@ export function aboutOfPost(post: AboutPostLike | null | undefined): ChatAboutCh
     const id = typeof post?.id === 'string' ? post.id : '';
     const title = typeof post?.title === 'string' ? post.title.trim().slice(0, CHAT_ABOUT_TITLE_MAX) : '';
     if (!post || !kind || !POST_ID.test(id) || !title) return null;
-    const beans = Number(post.credits);
-    const price = kind === 'event' || post.credits === null || post.credits === undefined || post.credits === '' || !Number.isFinite(beans)
+    const c = post.price_c;
+    const price = kind === 'event' || typeof c !== 'number' || !Number.isSafeInteger(c) || c < 0
         ? null
-        : beansPriceWords({ beans, per: perOf(post) });
+        : beansPriceWords({ price_c: c, per: perOf(post) });
     return { postId: id, title, kind, price };
 }
 

@@ -86,7 +86,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
-    audienceOf, wordsFor, parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
+    audienceOf, wordsFor, parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError, formatHundredths, isHundredths,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
 import { db, MEMBERS_SCHEMA_RULES } from '../db/db.js';
@@ -1690,7 +1690,7 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
         };
         const troubles = [
             ...(error ? [`the ledger audit could not run (${error}), so it can't say the ledger adds up`]
-                : adds ? [] : [`the ledger does NOT add up (drift ${auditFigure(drift, 4)}, ${howMany(stranded)} stranded escrow(s)`
+                : adds ? [] : [`the ledger does NOT add up (drift ${auditFigure(drift)}, ${howMany(stranded)} stranded escrow(s)`
                 + `${badBalances !== 0 ? `, ${howMany(badBalances)} balance(s) that are not a finite number` : ''})`]),
             ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),
         ];
@@ -1707,14 +1707,16 @@ function finiteOrNull(v: unknown): number | null {
 }
 
 /** A figure for the audit's words: to `digits` places, or "not a number". Never throws. */
-function auditFigure(v: unknown, digits: number): string {
-    return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'not a number';
+/** A ledger figure in an operator's words: whole hundredths in Beans ("1,234.56", "−9.82"); any other number as it is. */
+function auditFigure(v: unknown): string {
+    if (isHundredths(v)) return formatHundredths(v, 'en');
+    return typeof v === 'number' && Number.isFinite(v) ? String(v) : 'not a number';
 }
 
 /** What a take-over's audit says when the ledger isn't the main server's as this server last copied it. */
 function ledgerCopyTrouble(copy: NonNullable<NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy']>): string {
     if (!copy.lastCopy) return "this server has no record of the main server's ledger, so it can't say the ledger is the main server's";
-    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${auditFigure(s.holdings, 2)} Beans`;
+    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${auditFigure(s.holdings)} Beans`;
     return `the ledger is NOT the main server's as this server last copied it (here ${held(copy.here)}; `
         + `the main server's ${held(copy.lastCopy)}${copy.lastCopy.generatedAt ? `, as of ${copy.lastCopy.generatedAt}` : ''})`;
 }

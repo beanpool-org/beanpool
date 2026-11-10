@@ -5,6 +5,8 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
+import { isHundredths } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 
 /**
  * The posts screen in Settings → Moderation (scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.13, slice S4).
@@ -29,8 +31,8 @@ export interface PostModerationItem {
     authorPublicKey?: string;
     author_callsign?: string;
     author_pubkey?: string;
-    price?: number;
-    credits?: number;
+    /** The listing's price, whole hundredths of a Bean (server engine posts.ts MarketplacePost.price_c); 0 is Free. */
+    price_c?: number;
     createdAt?: string | number;
     created_at?: string | number;
     status?: string;
@@ -479,7 +481,7 @@ export function PostModerationPanel({
                                     </p>
                                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-nature-400 font-mono">
                                         <span>By: {author}</span>
-                                        {post.price !== undefined && <span>{post.price} 🫘</span>}
+                                        {isHundredths(post.price_c) && <span>{beansFigure(post.price_c)} 🫘</span>}
                                         {createdStr && <span>{createdStr}</span>}
                                     </div>
                                     {takenDown && (

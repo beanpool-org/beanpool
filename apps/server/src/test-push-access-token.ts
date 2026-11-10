@@ -93,7 +93,7 @@ async function main() {
         const pk = crypto.randomBytes(32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pk, callsign);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         for (let i = 0; i < tokens; i++) {
             putPushTokenRow(pk, `ExponentPushToken[${callsign}-${i}]`, 'android');
         }

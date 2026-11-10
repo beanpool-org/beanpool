@@ -207,7 +207,7 @@ async function main() {
     createPost('offer', 'tools', 'Shovel for lending', 'Good garden shovel', 10, 'fixed', pkPhoto);
     createPost('offer', 'food', 'Fresh apples', '5kg organic apples', 5, 'fixed', pkBundled);
     db.prepare(`INSERT OR REPLACE INTO posts (
-        id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status
+        id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status
     ) VALUES ('test-post-none-1', 'offer', 'transport', 'Ride to market', 'Saturday morning', 15, 'fixed', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1, 'active')`).run(pkNone);
 
     // =========================================================================

@@ -35,10 +35,10 @@ export function generateMockNeighborhood(centerPoint: Location, count: number): 
         (passportManager as any).passport = passportState; // dirty override for simulator
 
         // Random Balance between -50 and 500
-        const randomBalance = Math.floor(Math.random() * 550) - 50;
+        const randomBalance = (Math.floor(Math.random() * 550) - 50) * 100; // whole Beans between -50 and 500, in hundredths
 
         const ledgerManager = new LedgerManager([
-            { id: did, balance: randomBalance, lastDemurrageEpoch: Math.floor(Date.now() / 86400000) }
+            { id: did, balance_c: randomBalance, lastDemurrageEpoch: Math.floor(Date.now() / 86400000) }
         ]);
 
         neighbors.push({
@@ -111,8 +111,8 @@ export function simulateGossip(
     if (Math.random() > 0.7) {
         // Find their account in their own ledger
         let account = activeNeighbor.ledger.getAccount(activeNeighbor.did);
-        if (account.balance > 0) {
-            const originalBalance = account.balance;
+        if (account.balance_c > 0) {
+            const originalBalance = account.balance_c;
 
             // Force a fast decay for visible simulation
             // Fake aging by 1 month (30 Epochs) to make loss visible
@@ -120,7 +120,7 @@ export function simulateGossip(
 
             // Re-fetch to trigger decay calculation automatically
             account = activeNeighbor.ledger.getAccount(activeNeighbor.did);
-            const loss = originalBalance - account.balance;
+            const loss = originalBalance - account.balance_c;
 
             console.log(`[Simulator] ${activeNeighbor.did} decayed. +${loss.toFixed(4)} simulated route to Commons.`);
         }

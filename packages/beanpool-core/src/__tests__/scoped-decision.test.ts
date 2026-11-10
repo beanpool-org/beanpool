@@ -24,60 +24,63 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(scopedOutcomeWords({ status: 'failed' })).toBe('Did not pass');
     });
 
-    it('the pay-out carries the 1.5% fee, out of the amount, in Beans', () => {
-        expect(payOutSplit(40)).toEqual({ receives: 39.4, fee: 0.6 });
-        expect(payOutFeeWords(40, 'Ali')).toBe('Ali receives 39.4 Beans. The 1.5% trade fee (0.6 Beans) goes to the Commons.');
-        expect(payOutFeeWords(40, 'Ali')).not.toMatch(/Ʀ/);
-        expect(beansAmount(12.5)).toBe('12.5');
-        expect(beansAmount(3)).toBe('3');
+    it('the pay-out carries the 1.5% fee, out of the amount, in whole hundredths (truncated: the recipient keeps the rest)', () => {
+        expect(payOutSplit(4000)).toEqual({ receives: 3940, fee: 60 });
+        expect(payOutSplit(100)).toEqual({ receives: 99, fee: 1 });
+        expect(payOutFeeWords(4000, 'Ali')).toBe('Ali receives 39.40 Beans. The 1.5% trade fee (0.60 Beans) goes to the Commons.');
+        expect(payOutFeeWords(4000, 'Ali')).not.toMatch(/Ʀ/);
+        expect(beansAmount(1250)).toBe('12.50');
+        expect(beansAmount(300)).toBe('3');
     });
 
     it('the amount: above 0, cents at most, no more than the enterprise holds', () => {
-        expect(checkPayOutAmount('40', 120)).toEqual({ amount: 40 });
-        expect(checkPayOutAmount('12.50', 120)).toEqual({ amount: 12.5 });
-        expect(checkPayOutAmount('120', 120)).toEqual({ amount: 120 });
-        expect(checkPayOutAmount('120.01', 120)).toHaveProperty('error');
-        expect(checkPayOutAmount('0', 120)).toHaveProperty('error');
-        expect(checkPayOutAmount('-5', 120)).toHaveProperty('error');
-        expect(checkPayOutAmount('1.005', 120)).toHaveProperty('error');
-        expect(checkPayOutAmount('abc', 120)).toHaveProperty('error');
-        expect(checkPayOutAmount('5', -10)).toHaveProperty('error');
+        expect(checkPayOutAmount('40', 12000)).toEqual({ amount: 4000 });
+        expect(checkPayOutAmount('12.50', 12000)).toEqual({ amount: 1250 });
+        expect(checkPayOutAmount('120', 12000)).toEqual({ amount: 12000 });
+        expect(checkPayOutAmount('120.01', 12000)).toHaveProperty('error');
+        expect(checkPayOutAmount('0', 12000)).toHaveProperty('error');
+        expect(checkPayOutAmount('-5', 12000)).toHaveProperty('error');
+        expect(checkPayOutAmount('1.005', 12000)).toHaveProperty('error');
+        expect(checkPayOutAmount('abc', 12000)).toHaveProperty('error');
+        expect(checkPayOutAmount('5', -1000)).toHaveProperty('error');
         // Could be a thousand or one (#2202): refused, in words that say why.
-        expect(checkPayOutAmount('1,000', 2000)).toEqual({ error: 'Type the amount without thousands separators, like 1000.5.' });
+        expect(checkPayOutAmount('1,000', 200000)).toEqual({ error: 'Type the amount without thousands separators, like 1000.5.' });
     });
 
     it("the amount in the member's language (#2202): fr \"12,5\" is 12.5", () => {
         setLanguage('fr');
         try {
-            expect(checkPayOutAmount('12,5', 120)).toEqual({ amount: 12.5 });
-            expect(checkPayOutAmount('12.5', 120)).toEqual({ amount: 12.5 });
+            expect(checkPayOutAmount('12,5', 12000)).toEqual({ amount: 1250 });
+            expect(checkPayOutAmount('12.5', 12000)).toEqual({ amount: 1250 });
             expect(checkPayOutAmount('1.000', 2000)).toHaveProperty('error');
         } finally {
             setLanguage('en');
         }
     });
 
-    it('what it holds, rounded down to cents, as the node counts what it can pay (review opus-1767 N8)', () => {
-        expect(beansHeld(112.3125)).toBe('112.31');
-        expect(beansHeld(0.339)).toBe('0.33');
-        expect(beansHeld(40)).toBe('40');
-        expect(beansHeld(39.999)).toBe('39.99');
-        expect(beansHeld(-5)).toBe('0');
-        expect(checkPayOutAmount('113', 112.3125)).toEqual({ error: "The enterprise holds 112.31 Beans, so it can't pay more than that." });
+    it('what it holds, never below 0, as the node counts what it can pay (review opus-1767 N8)', () => {
+        expect(beansHeld(11231)).toBe('112.31');
+        expect(beansHeld(33)).toBe('0.33');
+        expect(beansHeld(4000)).toBe('40');
+        expect(beansHeld(3999)).toBe('39.99');
+        expect(beansHeld(-500)).toBe('0');
+        expect(checkPayOutAmount('113', 11231)).toEqual({ error: "The enterprise holds 112.31 Beans, so it can't pay more than that." });
+        expect(checkPayOutAmount('112.32', 11231)).toEqual({ error: "The enterprise holds 112.31 Beans, so it can't pay more than that." });
+        expect(checkPayOutAmount('112.31', 11231)).toEqual({ amount: 11231 });
     });
 
     it("a keeper's pay-out is a wage: capped at what it has earned above its costs, in the node's words (review opus-1767 N5)", () => {
         const wage = "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): 10 Beans now.";
-        expect(checkPayOutAmount('50', 100, 10)).toEqual({ error: wage });
-        expect(checkPayOutAmount('10.01', 100, 10.009)).toEqual({ error: wage });
-        expect(checkPayOutAmount('10', 100, 10)).toEqual({ amount: 10 });
+        expect(checkPayOutAmount('50', 10000, 1000)).toEqual({ error: wage });
+        expect(checkPayOutAmount('10.01', 10000, 1000)).toEqual({ error: wage });
+        expect(checkPayOutAmount('10', 10000, 1000)).toEqual({ amount: 1000 });
         // Held is the lower cap: its words.
-        expect(checkPayOutAmount('50', 40, 100)).toEqual({ error: "The enterprise holds 40 Beans, so it can't pay more than that." });
-        expect(checkPayOutAmount('5', 100, -3)).toEqual({ error: wage.replace('10 Beans', '0 Beans') });
+        expect(checkPayOutAmount('50', 4000, 10000)).toEqual({ error: "The enterprise holds 40 Beans, so it can't pay more than that." });
+        expect(checkPayOutAmount('5', 10000, -300)).toEqual({ error: wage.replace('10 Beans', '0 Beans') });
         // Surplus not known: the node checks it.
-        expect(checkPayOutAmount('50', 100, null)).toEqual({ amount: 50 });
-        expect(checkPayOutAmount('50', 100)).toEqual({ amount: 50 });
-        expect(wageNoteWords(12.345, 'ongoing')).toBe('Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 12.34 Beans now.');
+        expect(checkPayOutAmount('50', 10000, null)).toEqual({ amount: 5000 });
+        expect(checkPayOutAmount('50', 10000)).toEqual({ amount: 5000 });
+        expect(wageNoteWords(1234, 'ongoing')).toBe('Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 12.34 Beans now.');
         expect(wageNoteWords(null, 'bounded')).toBe('Paying a keeper is a wage: only out of what the project has earned.');
     });
 
@@ -99,7 +102,7 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
 
     it('what it does, in one line', () => {
         const nameOf = (pk: string) => roll.find(p => p.pubkey === pk)?.name ?? 'a member';
-        expect(scopedEffectWords({ effect: 'pay_out', subject: 'cat', params: { amount: 40 } }, nameOf)).toBe('Pay 40 Beans to Cat');
+        expect(scopedEffectWords({ effect: 'pay_out', subject: 'cat', params: { amount_c: 4000 } }, nameOf)).toBe('Pay 40 Beans to Cat');
         expect(scopedEffectWords({ effect: 'remove_keeper', subject: 'bob', params: null }, nameOf, 'bounded')).toBe('Remove Bob as a collaborator');
         expect(scopedEffectWords({ effect: 'replace_lead', subject: 'bob', params: null }, nameOf)).toBe('Make Bob the lead keeper');
         expect(scopedEffectWords({ effect: 'replace_lead', subject: 'bob', params: null }, nameOf, 'bounded')).toBe('Make Bob the leader');

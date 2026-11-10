@@ -72,7 +72,7 @@ function member(name: string, daysAgo: number, invitedBy?: Id): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), (invitedBy ?? owner).pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     // The 150-day members are the established reporters (off probation: a reporter on it counts for nothing, design 2.3).
     if (daysAgo >= 150) for (let i = 0; i < 3; i++) oldPost(id, `${name} established ${i}`);
     return id;
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
     // ── 2. the same ring still hides a brand-new account's post ──────────────────────────────────
     console.log('\n── 2. the same ring against a brand-new account ──');
     const sid = member('Sid', 0);
-    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', credits: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
+    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', price_c: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
     assert(sidPost.status === 200, `setup: a member who joined today posts (${sidPost.status})`);
     await reportAll(ring, sidPost.body?.post?.id, sid);
     assert(!!hiddenAt(sidPost.body?.post?.id), 'three week-old members hide a brand-new account\'s post: it is not well above them');

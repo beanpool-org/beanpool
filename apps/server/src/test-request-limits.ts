@@ -76,7 +76,7 @@ function member(name: string, opts: { invitedBy?: Id; daysAgo?: number; settled?
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, id.name, ago((opts.daysAgo ?? 60) * DAY), (opts.invitedBy ?? owner).pk);
     setMemberPhoto(db, id.pk, `https://example.org/${id.name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     if (opts.settled !== false) for (let i = 0; i < 3; i++) createPost('offer', 'other', `${id.name} kept ${i}`, 'An old offer', 0, 'fixed', id.pk);
     return id;
 }
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
         assert((await sent(sam, sealed(sam, accepted, acceptedLine.conversationId, 'Great, see you at nine'))).status === 200, 'and go on in an accepted chat');
         const toFriend = await opened(sam, friend);
         assert(toFriend.status === 200 && (await sent(sam, sealed(sam, friend, toFriend.body.conversation.id, 'Thanks for adding me'))).status === 200, 'and write to someone who added them');
-        const posted = await call('POST', sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'A limited member\'s offer', description: 'Still allowed', credits: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
+        const posted = await call('POST', sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'A limited member\'s offer', description: 'Still allowed', price_c: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
         assert(posted.status === 200, `and post (${show(posted)})`);
     }
 

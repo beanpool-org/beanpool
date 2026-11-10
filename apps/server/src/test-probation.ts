@@ -69,7 +69,7 @@ function insertMember(pk: string, callsign: string, joinedAtIso: string, provide
 function insertPost(authorPk: string, createdAtIso: string): string {
     const uniqueId = crypto.randomUUID();
     db.prepare(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, active, status)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, active, status)
          VALUES (?, 'offer', 'other', 'Test post', 'Desc', 0, ?, ?, ?, 1, 'active')`
     ).run(uniqueId, authorPk, createdAtIso, createdAtIso);
     return uniqueId;

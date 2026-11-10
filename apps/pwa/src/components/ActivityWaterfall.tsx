@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
-import { formatNumber, t, tn, activityTarget } from '@beanpool/core';
+import { formatNumber, t, tn, activityTarget, formatHundredths } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 interface Props {
@@ -40,7 +40,7 @@ function formatRelativeTime(isoDate: string): string {
 
 /** A Beans amount the feed carries (a number from the node), written the language's way; anything else as it came. */
 function beansAmount(v: unknown): string {
-    return typeof v === 'number' ? formatNumber(v) : String(v);
+    return typeof v === 'number' ? formatHundredths(v) : String(v);
 }
 
 /** The emoji that heads a Live Pulse chip. */
@@ -383,9 +383,9 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
                                         <Sentence text={t('{actor} completed a trade with {target}')} parts={{ actor, target }} />
-                                        {item.metadata?.credits && (
+                                        {item.metadata?.amount_c && (
                                             <span className="ml-1 font-bold text-emerald-600 dark:text-emerald-400">
-                                                (🫘 {beansAmount(item.metadata.credits)})
+                                                (🫘 {beansAmount(item.metadata.amount_c)})
                                             </span>
                                         )}
                                     </p>
@@ -419,13 +419,13 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                             case 'post_created': {
                                 emoji = '📍';
                                 badgeBg = 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800';
-                                const credits = item.metadata?.credits;
+                                const credits = item.metadata?.price_c;
                                 const title = <span className="font-bold text-zinc-900 dark:text-zinc-100">{item.metadata?.title || t('Listing')}</span>;
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
                                         <Sentence
                                             text={credits
-                                                ? t('{actor} posted "{title}" for 🫘 {credits}', { credits: typeof credits === 'number' ? credits : String(credits) })
+                                                ? t('{actor} posted "{title}" for 🫘 {credits}', { credits: typeof credits === 'number' ? formatHundredths(credits) : String(credits) })
                                                 : t('{actor} posted "{title}"')}
                                             parts={{ actor, title }}
                                         />

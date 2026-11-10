@@ -73,7 +73,7 @@ async function child(): Promise<void> {
             for (const [key, name] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active')`).run(key, name, a.owner, `INV-${name}`);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             grantNodeRole(a.owner, 'owner', 'owner:password');
             for (const key of a.admins) grantNodeRole(key, 'admin', 'owner:password');
@@ -127,7 +127,7 @@ async function child(): Promise<void> {
             const { grantNodeRole } = await import('./engine/node-roles.js');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active')`).run(a.pubkey, a.callsign, a.invitedBy, `INV-${a.callsign}`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pubkey);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pubkey);
             grantNodeRole(a.pubkey, 'admin', 'owner:password');
             return true;
         },

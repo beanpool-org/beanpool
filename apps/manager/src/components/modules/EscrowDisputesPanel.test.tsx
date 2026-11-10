@@ -21,7 +21,7 @@ const mockDisputes: nodeClient.EscrowDisputeItem[] = [
         buyerName: 'Alice Springs',
         sellerCallsign: 'bob-firewood',
         sellerName: 'Bob Builder',
-        credits: 100,
+        amount_c: 10000,
         status: 'pending',
         createdAt: Date.now() - 10 * 86400 * 1000, // 10 days ago
         daysStuck: 10,
@@ -32,8 +32,7 @@ const mockDisputes: nodeClient.EscrowDisputeItem[] = [
             authorPubkey: 'pk_seller_bob_0987654321',
             authorName: 'Bob Builder',
             authorCallsign: 'bob-firewood',
-            priceCredits: 100,
-            unitPrice: 100,
+            price_c: 10000,
             category: 'firewood',
         },
         chatContext: [
@@ -65,7 +64,7 @@ const mockDisputes: nodeClient.EscrowDisputeItem[] = [
         sellerPubkey: 'pk_seller_dana',
         buyerCallsign: 'charlie-coop',
         sellerCallsign: 'dana-pastures',
-        credits: 25,
+        amount_c: 2500,
         status: 'completed',
         createdAt: Date.now() - 15 * 86400 * 1000,
         daysStuck: 15,
@@ -74,8 +73,7 @@ const mockDisputes: nodeClient.EscrowDisputeItem[] = [
             title: 'Farm Fresh Pastured Eggs 5 Dozen',
             description: 'Weekly organic pastured eggs',
             authorPubkey: 'pk_seller_dana',
-            priceCredits: 25,
-            unitPrice: 5,
+            price_c: 2500,
             category: 'produce',
         },
         chatContext: [],
@@ -139,7 +137,7 @@ describe('EscrowDisputesPanel Component', () => {
         expect(screen.getByText(/Escrow Dispute Resolution/i)).toBeInTheDocument();
         expect(screen.getByText(/never a quiet admin button/i)).toBeInTheDocument();
         expect(screen.getByText('Split Ironbark Firewood 1 Trailer')).toBeInTheDocument();
-        expect(screen.getByText('100.00 BEAN')).toBeInTheDocument();
+        expect(screen.getByText('100 BEAN')).toBeInTheDocument();
         expect(screen.getByText(/10d in escrow/i)).toBeInTheDocument();
         expect(screen.getByText(/alice-mullum/i)).toBeInTheDocument();
         expect(screen.getByText(/bob-firewood/i)).toBeInTheDocument();
@@ -217,7 +215,7 @@ describe('EscrowDisputesPanel Component', () => {
             fireEvent.click(refundBtn);
         });
 
-        expect(screen.getByText('+100.00 BEAN')).toBeInTheDocument(); // Full buyer refund
+        expect(screen.getByText('+100 BEAN')).toBeInTheDocument(); // Full buyer refund
 
         const confirmBtn = screen.getByRole('button', { name: /Confirm & Record Resolution/i });
         await act(async () => {
@@ -245,7 +243,7 @@ describe('EscrowDisputesPanel Component', () => {
         });
 
         // 50 to buyer, 49.25 to seller (50 - 1.5%), 0.75 to commons
-        expect(screen.getByText('+50.00 BEAN')).toBeInTheDocument();
+        expect(screen.getByText('+50 BEAN')).toBeInTheDocument();
         expect(screen.getByText('+49.25 BEAN')).toBeInTheDocument();
         expect(screen.getByText('+0.75 BEAN')).toBeInTheDocument();
 
@@ -262,6 +260,26 @@ describe('EscrowDisputesPanel Component', () => {
             'admin-secret-password',
             undefined
         );
+    });
+
+    // Whole hundredths, as the node moves them (engine/escrow.ts resolveEscrowDispute): an odd deal of 12.35 splits 6.17 to the
+    // buyer and 6.18 to the seller (core halves), whose fee is 0.09 (core feeOf, truncated); a release pays 12.17 and 0.18.
+    it('works each ruling out in whole hundredths, as the node does: an odd split and its fee', async () => {
+        const odd: nodeClient.EscrowDisputeItem = { ...mockDisputes[0], id: 'tx_odd', amount_c: 1235, post: { ...mockDisputes[0].post!, price_c: 1235 } };
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockImplementation(routeLike([odd]));
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+        expect(screen.getByText('12.35 BEAN')).toBeInTheDocument();
+        expect(screen.getByText('Pay seller (12.17 BEAN)')).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Split 50 \/ 50/i }));
+        });
+        expect(screen.getByText('+6.17 BEAN')).toBeInTheDocument(); // the buyer's half, fee-free
+        expect(screen.getByText('+6.09 BEAN')).toBeInTheDocument(); // the seller's 6.18, less its fee
+        expect(screen.getByText('+0.09 BEAN')).toBeInTheDocument(); // the fee on 6.18
+        expect(screen.getAllByText('12.35 BEAN').length).toBeGreaterThan(0); // conserved: 617 + 609 + 9 = 1235
     });
 
     it('filters by status: pending vs resolved vs all', async () => {
@@ -366,7 +384,7 @@ describe('EscrowDisputesPanel Component', () => {
             postId: 'post_bread',
             buyerPubkey: 'pk_buyer_alice',
             sellerPubkey: 'pk_seller_bob',
-            credits: 10,
+            amount_c: 1000,
             status: 'completed',
             createdAt: Date.now() - 20 * 86400 * 1000,
             daysStuck: 20,
@@ -375,8 +393,7 @@ describe('EscrowDisputesPanel Component', () => {
                 title: 'Sourdough Loaf',
                 description: 'Fresh bread',
                 authorPubkey: 'pk_seller_bob',
-                priceCredits: 10,
-                unitPrice: 10,
+                price_c: 1000,
                 category: 'goods',
             },
             chatContext: [],

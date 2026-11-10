@@ -8,9 +8,11 @@
  * - {@link ruleStartsLine}: the admins' line for the rule's first 14 days.
  */
 import { formatDate, t, word } from './words.js';
+import { isHundredths } from './hundredths.js';
 
 /** A known community's rule: the lines as the owner set them, and when a tightened one applies while it waits. */
 export interface KnownRule {
+    /** Whole hundredths of a Bean (GET /api/community/known-rule): 100000 is a floor of 1,000 Beans. */
     knownFloor: number;
     debtLinePct: number;
     quietDays: number;
@@ -30,7 +32,7 @@ const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 /** A whole answer from a known community, or null: an older node's 404, `{ known: false }`, or an answer that isn't one. */
 export function readKnownRule(v: unknown): KnownRule | null {
     const o = v as Partial<KnownRule> & { known?: unknown } | null;
-    if (!o || o.known !== true || !num(o.knownFloor) || !num(o.debtLinePct) || !num(o.quietDays)) return null;
+    if (!o || o.known !== true || !isHundredths(o.knownFloor) || !num(o.debtLinePct) || !num(o.quietDays)) return null;
     return {
         knownFloor: o.knownFloor, debtLinePct: o.debtLinePct, quietDays: o.quietDays,
         debtLineFrom: orNull(o.debtLineFrom), quietDaysFrom: orNull(o.quietDaysFrom),

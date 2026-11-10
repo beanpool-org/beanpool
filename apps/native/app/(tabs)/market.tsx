@@ -1818,7 +1818,7 @@ export default function MarketScreen() {
                         )}
                         {!isPulse && showsBeans && !copy && (
                             <View style={[shell.gridBadge, shell.gridPriceEnd]}>
-                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} />
                             </View>
                         )}
                         </View>
@@ -1913,7 +1913,7 @@ export default function MarketScreen() {
                         </View>
                         <View style={shell.compactEnd}>
                             {!isPulse && showsBeans && !copy && (
-                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} />
                             )}
                             {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs, PULSE the warning one. */}
                             <CardChip
@@ -1966,7 +1966,7 @@ export default function MarketScreen() {
                                 {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
                             {!isPulse && showsBeans && !copy && (
-                                <ListingPrice credits={item.credits} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} />
                             )}
                         </View>
 

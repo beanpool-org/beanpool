@@ -63,6 +63,8 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 160)}`;
+/** The story's figures are Beans; the node's floors, grants, prices and settings are whole hundredths. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -74,7 +76,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -194,28 +196,28 @@ async function main(): Promise<void> {
     console.log('── 1. a fresh node ──');
     const kim = makeMember('Kim');
     const una = makeMember('Una');
-    createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', 40, 'fixed', kim.pk);
-    createPost('offer', 'produce', 'Una bakes', 'Bread', 10, 'fixed', una.pk);
+    createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', hc(40), 'fixed', kim.pk);
+    createPost('offer', 'produce', 'Una bakes', 'Bread', hc(10), 'fixed', una.pk);
     const gil = makeMember('Gil');
-    db.prepare('UPDATE members SET earned_credit = 2100 WHERE public_key = ?').run(gil.pk);
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(2100), gil.pk);
     assert(dialRow() === null, 'a fresh node has no confirmation row');
     const fresh = await read();
-    assert(fresh.status === 200 && fresh.body?.confirmation === true && fresh.body?.knownFloor === 1000 && fresh.body?.creditCap === 2000,
+    assert(fresh.status === 200 && fresh.body?.confirmation === true && fresh.body?.knownFloor_c === hc(1000) && fresh.body?.creditCap_c === hc(2000),
         `the settings read: the dial on, known floor 1,000, cap 2,000 (${show(fresh)})`);
-    const gilBefore = getBalance(gil.pk).floor;
+    const gilBefore = getBalance(gil.pk).floor_c;
     const unaBefore = getBalance(una.pk);
-    assert(unaBefore.floor === 0 && unaBefore.usableFloor === 0 && gilBefore === -2000,
-        `with nobody confirmed, nobody's limit moves: Una 0, Gil (2,100 earned) -2,000 as with the dial off (${unaBefore.floor}, ${gilBefore})`);
+    assert(unaBefore.floor_c === 0 && unaBefore.usableFloor_c === 0 && gilBefore === -hc(2000),
+        `with nobody confirmed, nobody's limit moves: Una 0, Gil (2,100 earned) -2,000 as with the dial off (${unaBefore.floor_c}, ${gilBefore} hundredths)`);
     confirm(kim, ada);
     const kimOn = await call('GET', kim, `/api/ledger/balance/${kim.pk}`);
-    assert(kimOn.status === 200 && kimOn.body?.floor === -1000 && kimOn.body?.usableFloor === -1000,
+    assert(kimOn.status === 200 && kimOn.body?.floor_c === -hc(1000) && kimOn.body?.usableFloor_c === -hc(1000),
         `a confirmed member with one live offer has a limit of the known floor, -1,000 (${show(kimOn)})`);
     const unaOn = await call('GET', una, `/api/ledger/balance/${una.pk}`);
-    assert(unaOn.status === 200 && unaOn.body?.floor === 0 && unaOn.body?.usableFloor === 0,
+    assert(unaOn.status === 200 && unaOn.body?.floor_c === 0 && unaOn.body?.usableFloor_c === 0,
         `an unconfirmed member's is unchanged, 0 (${show(unaOn)})`);
-    assert(getBalance(gil.pk).floor === -2000, `and Gil's still -2,000 (${getBalance(gil.pk).floor})`);
+    assert(getBalance(gil.pk).floor_c === -hc(2000), `and Gil's still -2,000 (${getBalance(gil.pk).floor_c} hundredths)`);
     const panel = await call('GET', null, `/api/local/admin/known-floor/member/${kim.pk}`, undefined, owner);
-    assert(panel.status === 200 && panel.body?.confirmation === true && panel.body?.confirmed === true && panel.body?.knownGrant === 1000,
+    assert(panel.status === 200 && panel.body?.confirmation === true && panel.body?.confirmed === true && panel.body?.knownGrant === hc(1000),
         `her panel in the manager: the dial on, confirmed, a known grant of 1,000 (${show(panel)})`);
     const freshTerms = await terms();
     assert(freshTerms.status === 200 && freshTerms.body?.known === true, `the join screen offers the consent: a known community (${show(freshTerms)})`);
@@ -226,8 +228,8 @@ async function main(): Promise<void> {
     assert(off.status === 200 && off.body?.confirmation === false, `the owner switches it off (${show(off)})`);
     assert(dialRow() === 'off', `an 'off' row is written (${JSON.stringify(dialRow())})`);
     const kimOff = getBalance(kim.pk);
-    assert(memberKnownGrant(db, kim.pk) === 0 && kimOff.floor === 0 && kimOff.usableFloor === 0,
-        `the confirmed member's grant is 0, her limit 0 (${JSON.stringify({ grant: memberKnownGrant(db, kim.pk), floor: kimOff.floor, usable: kimOff.usableFloor })})`);
+    assert(memberKnownGrant(db, kim.pk) === 0 && kimOff.floor_c === 0 && kimOff.usableFloor_c === 0,
+        `the confirmed member's grant is 0, her limit 0 (${JSON.stringify({ grant: memberKnownGrant(db, kim.pk), floor: kimOff.floor_c, usable: kimOff.usableFloor_c })})`);
     const panelOff = await call('GET', null, `/api/local/admin/known-floor/member/${kim.pk}`, undefined, owner);
     assert(panelOff.body?.confirmation === false && panelOff.body?.knownGrant === 0, `her panel says off, a grant of 0 (${show(panelOff)})`);
     assert((await terms()).body?.known === false, 'and the join screen asks no consent');
@@ -246,8 +248,8 @@ async function main(): Promise<void> {
     const on = await settings({ confirmation: true });
     assert(on.status === 200 && on.body?.confirmation === true, `the owner switches it back on (${show(on)})`);
     assert(dialRow() === null, `the default removes the row (${JSON.stringify(dialRow())})`);
-    assert(memberKnownGrant(db, kim.pk) === 1000 && getBalance(kim.pk).floor === -1000 && getBalance(kim.pk).usableFloor === -1000,
-        `her -1,000 is back (${getBalance(kim.pk).floor})`);
+    assert(memberKnownGrant(db, kim.pk) === hc(1000) && getBalance(kim.pk).floor_c === -hc(1000) && getBalance(kim.pk).usableFloor_c === -hc(1000),
+        `her -1,000 is back (${getBalance(kim.pk).floor_c} hundredths)`);
     const logOn = ((await read()).body?.log as Array<{ action: string; oldValue: string; newValue: string }>)?.[0];
     assert(logOn?.action === 'confirmation' && logOn.oldValue === 'off' && logOn.newValue === 'on', `the log: off → on (${JSON.stringify(logOn)})`);
 
@@ -268,8 +270,8 @@ async function main(): Promise<void> {
         `installing the kept record (a take-over's step) writes the 'off' row (${JSON.stringify({ installed: installed.installed, row: dialRow() })})`);
     keepMainServerCommunitySettings({ ...JSON.parse(JSON.stringify(record)), nodeConfig: { ...record.nodeConfig, confirmation: null } }, new Date().toISOString());
     installCommunitySettings();
-    assert(dialRow() === null && confirmationDialOn(db) === true && getBalance(kim.pk).floor === -1000,
-        `a record from a community with the dial on removes it: on, and her -1,000 back (${getBalance(kim.pk).floor})`);
+    assert(dialRow() === null && confirmationDialOn(db) === true && getBalance(kim.pk).floor_c === -hc(1000),
+        `a record from a community with the dial on removes it: on, and her -1,000 back (${getBalance(kim.pk).floor_c} hundredths)`);
 
     // ── 4. nobody is confirmed without an admin's act ──────────────────────────────────────────
     console.log('── 4. no confirmation without an admin ──');

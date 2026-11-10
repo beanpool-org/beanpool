@@ -74,8 +74,8 @@ describe('yoursRows', () => {
                 publicKey: 'ent-keeper',
                 name: 'Community Bakery',
                 callsign: 'bakery',
-                balance: 150,
-                creditLine: 0,
+                balance_c: 15000,
+                creditLine_c: 0,
                 liveOffers: 2,
                 lifecycle: 'ongoing',
                 status: 'active',
@@ -93,7 +93,7 @@ describe('yoursRows', () => {
         expect(result.kept[0].chat.id).toBe('ent-lead-project');
         expect(result.kept[0].summary).toBeUndefined(); // Project was absent from /api/treasuries
         expect(result.kept[1].chat.id).toBe('ent-keeper');
-        expect(result.kept[1].summary?.balance).toBe(150);
+        expect(result.kept[1].summary?.balance_c).toBe(15000);
 
         // Groups: convenor first (Garden Circle), then Book Club
         expect(result.groups[0].id).toBe('grp-convenor');
@@ -106,8 +106,8 @@ describe('yoursRows', () => {
                 publicKey: 'ent-2',
                 name: 'Zebra Enterprise',
                 callsign: 'zebra',
-                balance: 10,
-                creditLine: 0,
+                balance_c: 1000,
+                creditLine_c: 0,
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',
@@ -117,8 +117,8 @@ describe('yoursRows', () => {
                 publicKey: 'ent-1',
                 name: 'Apple Enterprise',
                 callsign: 'apple',
-                balance: 20,
-                creditLine: 0,
+                balance_c: 2000,
+                creditLine_c: 0,
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',
@@ -164,8 +164,8 @@ describe('yoursRows', () => {
             {
                 publicKey: 'ent-suspended',
                 name: 'Suspended Enterprise',
-                balance: 10,
-                creditLine: 0,
+                balance_c: 1000,
+                creditLine_c: 0,
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',
@@ -182,8 +182,8 @@ describe('yoursRows', () => {
             {
                 publicKey: 'ent-active',
                 name: 'Active Enterprise',
-                balance: 10,
-                creditLine: 0,
+                balance_c: 1000,
+                creditLine_c: 0,
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',

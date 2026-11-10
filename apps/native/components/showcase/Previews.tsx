@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { SAMPLE_COMMUNITY, formatNumber, t, tn } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, beans, formatHundredths, t, tn } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { LocalCommunityMark, ExampleHeader } from './LocalCommunityMark';
@@ -18,12 +18,15 @@ import { CommonsInfoModal } from '../CommonsInfoModal';
 import { EnterpriseCard } from '../EnterpriseCard';
 import { sampleEnterprises } from './sample-screens';
 
-/** A Bean amount as a row shows it: signed, at most one decimal, and the word Beans (never Ʀ), in the member's language. */
-export function beansText(amount: number, signed = false): string {
-    const abs = Math.abs(amount);
-    const n = formatNumber(abs, Number.isInteger(abs) ? undefined : 1);
-    const sign = signed ? (amount < 0 ? '−' : '+') : amount < 0 ? '−' : '';
-    return tn(abs, '{sign}{n} Bean', '{sign}{n} Beans', { sign, n });
+/**
+ * An amount (whole hundredths of a Bean) as a row shows it: signed, written as every figure is (formatHundredths: "12",
+ * "12.50"), and the word Beans (never Ʀ), in the member's language. Not whole hundredths: "—", never a number.
+ */
+export function beansText(amount_c: number, signed = false): string {
+    const abs = Math.abs(amount_c);
+    const n = formatHundredths(abs);
+    const sign = signed ? (amount_c < 0 ? '−' : '+') : amount_c < 0 ? '−' : '';
+    return tn(abs / 100, '{sign}{n} Bean', '{sign}{n} Beans', { sign, n });
 }
 
 /**
@@ -49,7 +52,8 @@ export function CommonsPreview() {
                         <Text style={s.infoText}>ⓘ</Text>
                     </Pressable>
                 </View>
-                <Text style={s.big}>{beansText(c.pool)}</Text>
+                {/* The sample writes the pool in whole Beans: in hundredths, as every figure is shown. */}
+                <Text style={s.big}>{beansText(beans(c.pool))}</Text>
             </View>
             <View style={s.sampleCard} testID="sample-enterprise">
                 <EnterpriseCard item={bakery} sample />

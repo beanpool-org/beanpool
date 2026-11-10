@@ -56,13 +56,14 @@ async function post(path: string, body: Record<string, unknown>): Promise<{ stat
 
 const randomKey = (): string => crypto.randomBytes(32).toString('hex');
 
+/** A listing in the shape a peer sends: its price whole hundredths (`price_c`, 1000 is 10 Beans). */
 const listing = (over: Record<string, unknown> = {}) => ({
     id: crypto.randomUUID(),
     type: 'offer',
     category: 'other',
     title: 'Peer tutoring',
     description: 'Maths, over video',
-    credits: 10,
+    price_c: 1000,
     priceType: 'fixed',
     authorPublicKey: randomKey(),
     authorCallsign: 'PeerAuthor',
@@ -77,8 +78,8 @@ const cachedFor = (originNode: string): any[] =>
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 50000)`).run(pk, callsign);
     setMemberPhoto(db, pk, TINY_PNG);
     return pk;
 }
@@ -123,7 +124,7 @@ async function main() {
         password: PW, address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA, enabled: true,
     });
     const capA = await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrA, cap: 500,
+        password: PW, address: addrA, cap: 50000,
     });
     assert(addA.status === 200 && capA.status === 200, `1a. Peer A connector configured and capped (${addA.status}, ${capA.status})`);
 
@@ -131,18 +132,18 @@ async function main() {
         password: PW, address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: true,
     });
     const capB = await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrB, cap: 500,
+        password: PW, address: addrB, cap: 50000,
     });
     assert(addB.status === 200 && capB.status === 200, `1b. Peer B connector configured and capped (${addB.status}, ${capB.status})`);
 
     const localMember = makeLocalMember('local-alice');
-    const localPost = createPost('offer', 'other', 'Local organic bread', 'Freshly baked', 5, 'fixed', localMember);
+    const localPost = createPost('offer', 'other', 'Local organic bread', 'Freshly baked', 500, 'fixed', localMember);
     assert(localPost !== null, '1c. Local listing created');
 
     // ── 2. Pull listings from both peers ────────────────────────────────────────────────────────────
-    const itemA1 = listing({ title: 'Peer A apples', credits: 4 });
-    const itemA2 = listing({ title: 'Peer A honey', credits: 8 });
-    const itemB1 = listing({ title: 'Peer B bread', credits: 6 });
+    const itemA1 = listing({ title: 'Peer A apples', price_c: 400 });
+    const itemA2 = listing({ title: 'Peer A honey', price_c: 800 });
+    const itemB1 = listing({ title: 'Peer B bread', price_c: 600 });
 
     const listingsByPeer = new Map<string, any[]>();
     listingsByPeer.set(peerA, [itemA1, itemA2]);
@@ -221,9 +222,9 @@ async function main() {
     const urlE = 'https://peer-e.beanpool.org';
     for (const address of [addrE1, addrE2]) {
         await post('/api/local/connectors', { password: PW, address, trustLevel: 'peer', callsign: 'peer-e', publicUrl: urlE, enabled: true });
-        await post('/api/local/connectors/credit-cap', { password: PW, address, cap: 500 });
+        await post('/api/local/connectors/credit-cap', { password: PW, address, cap: 50000 });
     }
-    listingsByPeer.set(peerE, [listing({ title: 'Peer E eggs', credits: 3 }), listing({ title: 'Peer E jam', credits: 5 })]);
+    listingsByPeer.set(peerE, [listing({ title: 'Peer E eggs', price_c: 300 }), listing({ title: 'Peer E jam', price_c: 500 })]);
     await pullAllPeerListings(fakeNode);
     await tick();
     const bellsBeforeE = doorbells();

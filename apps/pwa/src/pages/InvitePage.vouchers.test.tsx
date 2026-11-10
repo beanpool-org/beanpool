@@ -17,7 +17,7 @@ vi.mock('../lib/api', async (importOriginal) => {
         buildOfflineInviteCode: vi.fn(async () => 'BP-offline-ticket'),
         getMyInvites: vi.fn(async () => ({ invites: [] })),
         getInviteTree: vi.fn(async () => []),
-        getMyVouching: vi.fn(async () => ({ voucher: true, presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [], budget: { level: 1000, left: 900 } })),
+        getMyVouching: vi.fn(async () => ({ voucher: true, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000, vouchedBy: [], budget: { level: 100000, left: 90000 } })),
         getVouchersBlock: vi.fn(async () => BLOCK.body),
         getVoucherCard: vi.fn(async () => { throw new Error('not opened in this test'); }),
         myNodeRoleOnce: vi.fn(async () => 'owner'),
@@ -26,7 +26,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     };
 });
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true } })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true } })),
 }));
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
@@ -35,16 +35,16 @@ import { InvitePage } from './InvitePage';
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Owen', createdAt: '2026-10-01T00:00:00.000Z' };
 const row = (pk: string, callsign: string, over: Record<string, unknown> = {}) => ({
     memberPubkey: pk, callsign, source: 'entry', entryId: null, madeBy: null, madeByCallsign: '', madeAt: null, stoppedAt: null, stopReason: null,
-    left: 400, held: 0, heldInvites: 0, vouched: 350, peopleVouched: 4, level: 400, belowZero: 1, writtenOff: 0,
-    passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 0, trading: { withOthers: 0, insideOnly: 0 }, ...over,
+    left: 40000, held: 0, heldInvites: 0, vouched: 35000, peopleVouched: 4, level: 40000, belowZero: 1, writtenOff: 0,
+    passedOn: { amount_c: 0, people: 0, belowZero: 0 }, invitesWithVouch: 0, trading: { withOthers: 0, insideOnly: 0 }, ...over,
 });
-const SETTINGS = { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 };
+const SETTINGS = { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 };
 const FULL = {
     vouchers: [
         row('1'.repeat(64), 'Marty', { noLimit: true, source: 'role', peopleVouched: 2, left: 0, level: 0 }),
-        row('2'.repeat(64), 'Rob', { left: 400, level: 900 }),
+        row('2'.repeat(64), 'Rob', { left: 40000, level: 90000 }),
     ],
-    waiting: [{ entryId: '9'.repeat(32), level: 1000, vouchAmount: 25, madeBy: '1'.repeat(64), madeByCallsign: 'Marty', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' }],
+    waiting: [{ entryId: '9'.repeat(32), level: 100000, vouchAmount: 2500, madeBy: '1'.repeat(64), madeByCallsign: 'Marty', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' }],
     settings: SETTINGS,
 };
 

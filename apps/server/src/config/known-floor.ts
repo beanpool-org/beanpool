@@ -14,7 +14,7 @@
  */
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
-import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX } from '@beanpool/core';
+import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, formatHundredths, isHundredths } from '@beanpool/core';
 import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, confirmationDialSetFrom, savedCreditCap, knownFloor, isConfirmed, memberKnownGrant } from '@beanpool/engine';
 import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
@@ -28,7 +28,7 @@ export class KnownFloorError extends Error {
     }
 }
 
-export interface KnownFloorException { memberPubkey: string; amount: number | null; frozen: boolean; setBy: string; setAt: string }
+export interface KnownFloorException { memberPubkey: string; amount_c: number | null; frozen: boolean; setBy: string; setAt: string }
 export interface KnownFloorLogLine { id: string; actor: string; action: string; memberPubkey: string | null; oldValue: string | null; newValue: string | null; at: string }
 
 /** The dial as the owner set it (no 'off' row: on), Beans or not: what a change to it is compared with and logged from. */
@@ -60,19 +60,21 @@ function log(actor: string, action: string, memberPubkey: string | null, oldValu
             at ?? null);
 }
 
-function wholeBeans(v: unknown, name: string): number {
-    if (!Number.isInteger(v) || (v as number) < 0) throw new KnownFloorError(400, 'bad_amount', `${name} must be a whole number of Beans, 0 or more.`);
-    return v as number;
+/** A money setting a body carries: whole hundredths of a Bean, 0 or more (the wire's `*_c`), or refused (400). */
+function wholeHundredths(v: unknown, name: string): number {
+    if (!isHundredths(v) || v < 0) throw new KnownFloorError(400, 'bad_amount', `${name} must be a number of Beans, 0 or more, to the cent.`);
+    return v;
 }
 
 export function knownFloorSettings() {
     return {
         confirmation: confirmationDialOn(db),
-        knownFloor: knownFloor(db),
-        creditCap: savedCreditCap(db),
-        knownFloorDefault: KNOWN_FLOOR_DEFAULT,
-        creditCapDefault: CREDIT_CAP_DEFAULT,
-        creditCapMax: CREDIT_CAP_MAX,
+        // Whole hundredths of a Bean, `*_c` (@beanpool/core hundredths.ts).
+        knownFloor_c: knownFloor(db),
+        creditCap_c: savedCreditCap(db),
+        knownFloorDefault_c: KNOWN_FLOOR_DEFAULT,
+        creditCapDefault_c: CREDIT_CAP_DEFAULT,
+        creditCapMax_c: CREDIT_CAP_MAX,
     };
 }
 
@@ -94,7 +96,7 @@ export interface KnownFloorPlan {
  * `beans`: whether the node will have Beans when it is written: the shape route's change may switch them in the same
  * request (config/community-shape-write.ts), which checks Beans itself; the node's own switches otherwise.
  */
-export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }, beans = getProfileSwitches().beans): KnownFloorPlan {
+export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFloor_c?: unknown; creditCap_c?: unknown }, beans = getProfileSwitches().beans): KnownFloorPlan {
     const before = { ...knownFloorSettings(), confirmationSet: dialSet() };
     if (body.confirmation !== undefined && typeof body.confirmation !== 'boolean') {
         throw new KnownFloorError(400, 'bad_confirmation', 'confirmation must be true or false.');
@@ -102,13 +104,13 @@ export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFlo
     if (body.confirmation === true && !beans) {
         throw new KnownFloorError(409, 'no_beans', 'This node has no Beans, so it has no known floor to turn on.');
     }
-    const cap = body.creditCap === undefined ? before.creditCap : wholeBeans(body.creditCap, 'The cap');
+    const cap = body.creditCap_c === undefined ? before.creditCap_c : wholeHundredths(body.creditCap_c, 'The cap');
     if (cap < CREDIT_CAP_DEFAULT || cap > CREDIT_CAP_MAX) {
-        throw new KnownFloorError(400, 'bad_cap', `The cap is from ${CREDIT_CAP_DEFAULT.toLocaleString('en')} to ${CREDIT_CAP_MAX.toLocaleString('en')} Beans.`);
+        throw new KnownFloorError(400, 'bad_cap', `The cap is from ${formatHundredths(CREDIT_CAP_DEFAULT, 'en')} to ${formatHundredths(CREDIT_CAP_MAX, 'en')} Beans.`);
     }
-    const floor = body.knownFloor === undefined ? before.knownFloor : wholeBeans(body.knownFloor, 'The known floor');
+    const floor = body.knownFloor_c === undefined ? before.knownFloor_c : wholeHundredths(body.knownFloor_c, 'The known floor');
     if (floor > cap) {
-        throw new KnownFloorError(400, 'floor_above_cap', `The known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
+        throw new KnownFloorError(400, 'floor_above_cap', `The known floor can't be more than the cap (${formatHundredths(cap, 'en')} Beans).`);
     }
     return { before, confirmation: body.confirmation as boolean | undefined, floor, cap };
 }
@@ -124,13 +126,13 @@ export function writeKnownFloorSettings(actor: string, plan: KnownFloorPlan, at?
             setDial(confirmation);
             log(actor, 'confirmation', null, before.confirmationSet ? 'on' : 'off', confirmation ? 'on' : 'off', at);
         }
-        if (cap !== before.creditCap) {
+        if (cap !== before.creditCap_c) {
             setCap(cap);
-            log(actor, 'credit_cap', null, before.creditCap, cap, at);
+            log(actor, 'credit_cap', null, before.creditCap_c, cap, at);
         }
-        if (floor !== before.knownFloor) {
+        if (floor !== before.knownFloor_c) {
             setFloor(floor);
-            log(actor, 'known_floor', null, before.knownFloor, floor, at);
+            log(actor, 'known_floor', null, before.knownFloor_c, floor, at);
         }
     })();
     clearEnterpriseFloorCache(db);
@@ -138,14 +140,14 @@ export function writeKnownFloorSettings(actor: string, plan: KnownFloorPlan, at?
 
 /** The dial, the known floor or the cap, checked whole before anything is written. Settings changes them only through
  *  POST /api/local/admin/community-shape (config/community-shape-write.ts), which logs and tells: this is for a suite's probe. */
-export function setKnownFloorSettings(actor: string, body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) {
+export function setKnownFloorSettings(actor: string, body: { confirmation?: unknown; knownFloor_c?: unknown; creditCap_c?: unknown }) {
     writeKnownFloorSettings(actor, checkKnownFloorSettings(body));
     return knownFloorSettings();
 }
 
 export function knownFloorExceptions(): KnownFloorException[] {
-    return (db.prepare('SELECT member_pubkey, amount, frozen, set_by, set_at FROM known_floor_exceptions ORDER BY set_at DESC').all() as any[])
-        .map(r => ({ memberPubkey: r.member_pubkey, amount: r.amount, frozen: r.frozen === 1, setBy: r.set_by, setAt: r.set_at }));
+    return (db.prepare('SELECT member_pubkey, amount_c, frozen, set_by, set_at FROM known_floor_exceptions ORDER BY set_at DESC').all() as any[])
+        .map(r => ({ memberPubkey: r.member_pubkey, amount_c: r.amount_c, frozen: r.frozen === 1, setBy: r.set_by, setAt: r.set_at }));
 }
 
 export function readKnownFloorLog(limit = 100): KnownFloorLogLine[] {
@@ -177,8 +179,8 @@ export function knownFloorForMember(pk: string, viewerKey: string | null = null)
     return {
         memberPubkey: pk,
         confirmation: confirmationDialOn(db),
-        knownFloor: knownFloor(db),
-        creditCap: savedCreditCap(db),
+        knownFloor_c: knownFloor(db),
+        creditCap_c: savedCreditCap(db),
         confirmed: isConfirmed(db, pk),
         exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null,
         knownGrant: memberKnownGrant(db, pk),
@@ -196,15 +198,15 @@ export function knownFloorForMember(pk: string, viewerKey: string | null = null)
  * nothing and logs nothing, and answers with the line as it is (#1631 review r4179579785: the panel read "from 250 Beans to
  * 250 Beans"). A live work-off's 0 is not the admin's own 0: setting 0 over it takes it over (workOffHoldsFloor).
  */
-export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount?: unknown; frozen?: unknown; clear?: unknown }) {
+export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount_c?: unknown; frozen?: unknown; clear?: unknown }) {
     const pk = body.memberPubkey;
     if (typeof pk !== 'string' || !pk) throw new KnownFloorError(400, 'bad_member', 'memberPubkey is required.');
     const m = getMember(pk);
     if (!m || m.status !== 'active' || m.isTreasury) throw new KnownFloorError(404, 'not_member', 'Only an active member of this community has a known floor.');
     if (pk === actor) throw new KnownFloorError(403, 'own_floor', 'Another admin or the owner sets your own known floor.');
-    const old = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pk) as { amount: number | null; frozen: number } | undefined;
-    const describe = (r: { amount: number | null; frozen: number | boolean } | undefined) =>
-        !r ? 'default' : (r.frozen ? 'frozen' : String(r.amount));
+    const old = db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pk) as { amount_c: number | null; frozen: number } | undefined;
+    const describe = (r: { amount_c: number | null; frozen: number | boolean } | undefined) =>
+        !r ? 'default' : (r.frozen ? 'frozen' : String(r.amount_c));
     const line = () => ({ memberPubkey: pk, confirmed: isConfirmed(db, pk), exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null });
     if (body.clear === true) {
         if (!old) return line();
@@ -216,25 +218,25 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
         if (body.frozen !== undefined && typeof body.frozen !== 'boolean') throw new KnownFloorError(400, 'bad_frozen', 'frozen must be true or false.');
         const frozen = body.frozen === true;
         // Unfreezing with no amount goes back to the kept one; with none kept, back to the community's known floor.
-        const unfreeze = body.frozen === false && body.amount === undefined;
+        const unfreeze = body.frozen === false && body.amount_c === undefined;
         if (unfreeze && !old?.frozen) throw new KnownFloorError(409, 'not_frozen', "This member's known floor isn't frozen.");
         let amount: number | null = null;
         if (unfreeze) {
-            amount = old!.amount;
+            amount = old!.amount_c;
         } else if (!frozen) {
-            amount = wholeBeans(body.amount, 'The amount');
+            amount = wholeHundredths(body.amount_c, 'The amount');
             const cap = savedCreditCap(db);
-            if (amount > cap) throw new KnownFloorError(400, 'above_cap', `A member's known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
+            if (amount > cap) throw new KnownFloorError(400, 'above_cap', `A member's known floor can't be more than the cap (${formatHundredths(cap, 'en')} Beans).`);
         }
         // An unfreeze is always a change (the line was frozen); a freeze keeps the amount, so only the flag is compared.
-        if (old && !unfreeze && (frozen ? old.frozen === 1 : old.frozen === 0 && old.amount === amount) && !workOffHoldsFloor(pk)) return line();
+        if (old && !unfreeze && (frozen ? old.frozen === 1 : old.frozen === 0 && old.amount_c === amount) && !workOffHoldsFloor(pk)) return line();
         db.transaction(() => {
             if (unfreeze && amount === null) {
                 db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
             } else {
                 // A freeze leaves the amount as it is (a fresh row's is NULL); anything else writes it.
-                db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                    ON CONFLICT(member_pubkey) DO UPDATE SET amount = CASE WHEN excluded.frozen = 1 THEN amount ELSE excluded.amount END,
+                db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    ON CONFLICT(member_pubkey) DO UPDATE SET amount_c = CASE WHEN excluded.frozen = 1 THEN amount_c ELSE excluded.amount_c END,
                         frozen = excluded.frozen, set_by = excluded.set_by, set_at = excluded.set_at`)
                     .run(pk, amount, frozen ? 1 : 0, actor);
             }

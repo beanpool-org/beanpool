@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { formatNumber, t, inviteFromNamesListWords, INVITE_ADDS_WORDS } from '@beanpool/core';
+import { formatHundredths, t, inviteFromNamesListWords, INVITE_ADDS_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
@@ -95,7 +95,7 @@ const sameText = (a: { name: string; note: string }, b: { name: string; note: st
  * The boxes' state for People → Invites. `offered`: an owner or admin of a local community where invites are made (the caller
  * decides, utils/invite-names.ts offersNamesBoxes). `here`: Invites is the view on screen (People keeps this mounted across
  * its views). `committee`: the node answered GET /api/names/vouchers (only owners and committee admins get an answer; a 403 is
- * false; undefined while not heard). `voucherBudget`: the community's default budget, where the stepper starts. `needList`: Pending
+ * false; undefined while not heard). `voucherBudget`: the community's default budget (whole hundredths), where the stepper starts. `needList`: Pending
  * is open with an invite bound to an entry in it, so the list is opened (as the tick opens it) to read that entry's name.
  */
 export function useInviteNames(o: {
@@ -369,7 +369,7 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
                         >
                             <Text style={styles.smallBtnText}>−</Text>
                         </Pressable>
-                        <Text style={styles.amount} maxFontSizeMultiplier={1.3} testID="invite-voucher-amount">{t('{amount} Beans', { amount: formatNumber(names.level) })}</Text>
+                        <Text style={styles.amount} maxFontSizeMultiplier={1.3} testID="invite-voucher-amount">{t('{amount} Beans', { amount: formatHundredths(names.level) })}</Text>
                         <Pressable
                             onPress={() => { if (up !== null) names.setLevel(up); }}
                             disabled={up === null}
@@ -383,7 +383,7 @@ export function InviteNamesBoxes({ names, busy, onInviteExisting }: { names: Inv
                         </Pressable>
                     </View>
                     <Text style={styles.hint} maxFontSizeMultiplier={1.3}>
-                        {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each, from the day they join.', { amount: formatNumber(names.level) })}
+                        {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each, from the day they join.', { amount: formatHundredths(names.level) })}
                     </Text>
                 </View>
             ) : null}

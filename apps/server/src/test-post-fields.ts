@@ -4,7 +4,7 @@
  * Verifies:
  * 1. isDealQuantity bounds and type checking.
  * 2. dealQuantityFromBody conversion and error handling for malformed inputs.
- * 3. isListingPrice bounds and type checking.
+ * 3. isListingPrice bounds and type checking (a price is whole hundredths of a Bean, `price_c`).
  * 4. assertPostFields validation in 'create' and 'edit' modes:
  *    - Text field length limits, missing required fields, surrogate pair replacement.
  *    - Retention of oversized pre-existing stored text during edits.
@@ -18,7 +18,7 @@ import {
     isListingPrice,
     assertPostFields,
     DEAL_QUANTITY_ERROR,
-    POST_CREDITS_MAX,
+    POST_PRICE_MAX_C,
     POST_HOURS_MAX,
     POST_HOURS_MIN,
     POST_PRICE_TYPES,
@@ -33,6 +33,10 @@ import {
 } from '@beanpool/core';
 
 console.log('Running post-fields engine utility tests...');
+
+/** Beans to whole hundredths (exact for every figure here), and back for a message. */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 // 1. isDealQuantity tests
 console.log('  1. Testing isDealQuantity...');
@@ -67,10 +71,11 @@ assert.strictEqual(Number.isNaN(dealQuantityFromBody([2])), true, 'Array returns
 // 3. isListingPrice tests
 console.log('  3. Testing isListingPrice...');
 assert.strictEqual(isListingPrice(0), true, 'Price 0 must be valid');
-assert.strictEqual(isListingPrice(100), true, 'Price 100 must be valid');
-assert.strictEqual(isListingPrice(POST_CREDITS_MAX), true, 'Max price must be valid');
-assert.strictEqual(isListingPrice(-0.01), false, 'Negative price must be invalid');
-assert.strictEqual(isListingPrice(POST_CREDITS_MAX + 0.01), false, 'Price above max must be invalid');
+assert.strictEqual(isListingPrice(hc(100)), true, 'Price 100 must be valid');
+assert.strictEqual(isListingPrice(POST_PRICE_MAX_C), true, 'Max price must be valid');
+assert.strictEqual(isListingPrice(hc(-0.01)), false, 'Negative price must be invalid');
+assert.strictEqual(isListingPrice(POST_PRICE_MAX_C + hc(0.01)), false, 'Price above max must be invalid');
+assert.strictEqual(isListingPrice(150.5), false, 'A price that is not whole hundredths must be invalid');
 assert.strictEqual(isListingPrice(NaN), false, 'NaN price must be invalid');
 assert.strictEqual(isListingPrice(Infinity), false, 'Infinity price must be invalid');
 assert.strictEqual(isListingPrice('100'), false, 'String price must be invalid');
@@ -118,14 +123,18 @@ assert.throws(() => {
     assertPostFields({ title: 'Title', category: 'a'.repeat(LISTING_CATEGORY_LIMIT.chars + 1) }, 'create');
 }, new RegExp(LISTING_CATEGORY_TOO_LONG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'Oversized category throws');
 
-// Credits errors
+// Price errors (the words speak Beans: the most is a million)
 assert.throws(() => {
-    assertPostFields({ title: 'Title', credits: -1 }, 'create');
-}, new RegExp(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`), 'Negative credits throw');
+    assertPostFields({ title: 'Title', price_c: hc(-1) }, 'create');
+}, new RegExp(`The price must be a number of Beans from 0 to ${beansOf(POST_PRICE_MAX_C)}`), 'Negative price throws');
 
 assert.throws(() => {
-    assertPostFields({ title: 'Title', credits: POST_CREDITS_MAX + 1 }, 'create');
-}, new RegExp(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`), 'Excessive credits throw');
+    assertPostFields({ title: 'Title', price_c: POST_PRICE_MAX_C + hc(1) }, 'create');
+}, new RegExp(`The price must be a number of Beans from 0 to ${beansOf(POST_PRICE_MAX_C)}`), 'Excessive price throws');
+
+assert.throws(() => {
+    assertPostFields({ title: 'Title', price_c: 150.5 }, 'create');
+}, new RegExp(`The price must be a number of Beans from 0 to ${beansOf(POST_PRICE_MAX_C)}`), 'A price that is not whole hundredths throws');
 
 // priceType errors
 assert.throws(() => {
@@ -152,7 +161,7 @@ assert.doesNotThrow(() => {
         title: 'Fresh Bread',
         description: 'Sourdough loaf',
         category: 'Food',
-        credits: 5,
+        price_c: hc(5),
         priceType: 'fixed',
         lat: 37.7749,
         lng: -122.4194,
@@ -165,7 +174,7 @@ console.log('  5. Testing assertPostFields in edit mode...');
 
 // Edit only price without specifying title
 assert.doesNotThrow(() => {
-    assertPostFields({ credits: 10 }, 'edit');
+    assertPostFields({ price_c: hc(10) }, 'edit');
 }, 'Edit mode allows partial field update');
 
 // Edit latitude and longitude clearing with null
@@ -183,12 +192,12 @@ const storedPost = { title: oversizedTitle };
 
 // Sending unchanged oversized title back in edit mode passes
 assert.doesNotThrow(() => {
-    assertPostFields({ title: oversizedTitle, credits: 15 }, 'edit', storedPost);
+    assertPostFields({ title: oversizedTitle, price_c: hc(15) }, 'edit', storedPost);
 }, 'Edit mode allows unchanged pre-existing oversized title');
 
 // Changing oversized title to another oversized title fails
 assert.throws(() => {
-    assertPostFields({ title: oversizedTitle + 'b', credits: 15 }, 'edit', storedPost);
+    assertPostFields({ title: oversizedTitle + 'b', price_c: hc(15) }, 'edit', storedPost);
 }, new RegExp(LISTING_TITLE_TOO_LONG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'Edit mode rejects changed oversized title');
 
 console.log('✅ post-fields engine utility tests PASSED!');

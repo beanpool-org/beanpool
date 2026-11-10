@@ -64,7 +64,7 @@ describe('voucher-words', () => {
     describe('historyLineWords', () => {
         const baseLine: VoucherHistoryLine = {
             kind: 'grant',
-            amount: 1000,
+            amount_c: 100000,
             actor: 'node:claim',
             actorCallsign: null,
             at: '2026-11-05T12:00:00.000Z',
@@ -79,11 +79,17 @@ describe('voucher-words', () => {
             );
         });
 
+        it('says whole hundredths as Beans to the cent, never 100 times over', () => {
+            expect(historyLineWords({ ...baseLine, kind: 'top_up', amount_c: 2550, actorCallsign: 'marty' })).toBe('+25.50 top-up by @marty, 5 Nov');
+            expect(historyLineWords({ ...baseLine, kind: 'hold', amount_c: -1, for: 'invite' })).toBe('−0.01 held for an invite, 5 Nov');
+            expect(voucherPanelHeader({ left: 49925, level: 100000, source: 'role' })).toBe('Voucher · 499.25 of 1,000 left · by role');
+        });
+
         it('formats top_up lines', () => {
             const line: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'top_up',
-                amount: 500,
+                amount_c: 50000,
                 actorCallsign: 'marty',
             };
             expect(historyLineWords(line)).toBe('+500 top-up by @marty, 5 Nov');
@@ -93,7 +99,7 @@ describe('voucher-words', () => {
             const line: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'lower',
-                amount: -200,
+                amount_c: -20000,
                 actorCallsign: 'marty',
             };
             expect(historyLineWords(line)).toBe('−200 lower by @marty, 5 Nov');
@@ -103,7 +109,7 @@ describe('voucher-words', () => {
             const inviteHold: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'hold',
-                amount: -100,
+                amount_c: -10000,
                 for: 'invite',
             };
             expect(historyLineWords(inviteHold)).toBe('−100 held for an invite, 5 Nov');
@@ -111,7 +117,7 @@ describe('voucher-words', () => {
             const profileHold: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'hold',
-                amount: -50,
+                amount_c: -5000,
                 for: 'profile',
                 person: { memberPubkey: 'abc', callsign: 'sam' },
             };
@@ -120,7 +126,7 @@ describe('voucher-words', () => {
             const profileWithoutPerson: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'hold',
-                amount: -50,
+                amount_c: -5000,
                 for: 'profile',
                 person: null,
             };
@@ -129,19 +135,19 @@ describe('voucher-words', () => {
 
         it('formats return lines with reasons (expired, stopped, not_landed, or general)', () => {
             expect(
-                historyLineWords({ ...baseLine, kind: 'return', amount: 100, why: 'expired' })
+                historyLineWords({ ...baseLine, kind: 'return', amount_c: 10000, why: 'expired' })
             ).toBe('+100 back, invite expired, 5 Nov');
 
             expect(
-                historyLineWords({ ...baseLine, kind: 'return', amount: 100, why: 'stopped' })
+                historyLineWords({ ...baseLine, kind: 'return', amount_c: 10000, why: 'stopped' })
             ).toBe('+100 back, budget stopped, 5 Nov');
 
             expect(
-                historyLineWords({ ...baseLine, kind: 'return', amount: 100, why: 'not_landed' })
+                historyLineWords({ ...baseLine, kind: 'return', amount_c: 10000, why: 'not_landed' })
             ).toBe('+100 back, vouch didn’t land, 5 Nov');
 
             expect(
-                historyLineWords({ ...baseLine, kind: 'return', amount: 100 })
+                historyLineWords({ ...baseLine, kind: 'return', amount_c: 10000 })
             ).toBe('+100 back, 5 Nov');
         });
 
@@ -149,7 +155,7 @@ describe('voucher-words', () => {
             const line: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'stop',
-                amount: 0,
+                amount_c: 0,
                 actor: 'server:recover',
             };
             expect(historyLineWords(line)).toBe('Budget stopped by the server’s shell, 5 Nov');
@@ -159,7 +165,7 @@ describe('voucher-words', () => {
             const line: VoucherHistoryLine = {
                 ...baseLine,
                 kind: 'custom_change',
-                amount: 50,
+                amount_c: 5000,
                 actorCallsign: 'owner',
             };
             expect(historyLineWords(line)).toBe('Budget changed by @owner, 5 Nov');
@@ -168,31 +174,32 @@ describe('voucher-words', () => {
 
     describe('voucherPanelHeader', () => {
         it('formats header for role-sourced vouchers', () => {
-            expect(voucherPanelHeader({ left: 550, level: 1000, source: 'role' })).toBe(
+            expect(voucherPanelHeader({ left: 55000, level: 100000, source: 'role' })).toBe(
                 'Voucher · 550 of 1,000 left · by role'
             );
         });
 
+        // Budget figures are whole hundredths of a Bean, as the node sends them: 30000 is 300 Beans.
         it('an owner’s card says by role; an admin an owner made a voucher does not (review, 10 Nov; I5)', () => {
             expect(voucherPanelHeader({ left: 0, level: 0, source: 'role', noLimit: true })).toBe('Voucher · 0 of 0 left · by role');
-            const admin = voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'f'.repeat(64), madeByCallsign: 'marty' });
+            const admin = voucherPanelHeader({ left: 30000, level: 30000, source: 'role', noLimit: false, madeBy: 'f'.repeat(64), madeByCallsign: 'marty' });
             expect(admin).toBe('Voucher · 300 of 300 left · made by @marty');
             expect(admin).not.toMatch(/by role/);
             // Made by the shell or from before vouchers started: the actor's words, never a key.
-            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'server:recover' })).toBe('Voucher · 300 of 300 left · made by the server’s shell');
-            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: 'migration:vouchers' })).toBe('Voucher · 300 of 300 left · made by BeanPool, when vouchers started');
-            expect(voucherPanelHeader({ left: 300, level: 300, source: 'role', noLimit: false, madeBy: null, madeByCallsign: null })).toBe('Voucher · 300 of 300 left · made by an owner');
+            expect(voucherPanelHeader({ left: 30000, level: 30000, source: 'role', noLimit: false, madeBy: 'server:recover' })).toBe('Voucher · 300 of 300 left · made by the server’s shell');
+            expect(voucherPanelHeader({ left: 30000, level: 30000, source: 'role', noLimit: false, madeBy: 'migration:vouchers' })).toBe('Voucher · 300 of 300 left · made by BeanPool, when vouchers started');
+            expect(voucherPanelHeader({ left: 30000, level: 30000, source: 'role', noLimit: false, madeBy: null, madeByCallsign: null })).toBe('Voucher · 300 of 300 left · made by an owner');
             expect(admin).not.toMatch(/[0-9a-f]{64}/);
         });
 
         it('formats header for entry/names list vouchers', () => {
-            expect(voucherPanelHeader({ left: 550, level: 1000, source: 'entry' })).toBe(
+            expect(voucherPanelHeader({ left: 55000, level: 100000, source: 'entry' })).toBe(
                 'Voucher · 550 of 1,000 left · made from the names list'
             );
         });
 
         it('uses default level of 1000 when level is omitted', () => {
-            expect(voucherPanelHeader({ left: 200 })).toBe(
+            expect(voucherPanelHeader({ left: 20000 })).toBe(
                 'Voucher · 200 of 1,000 left · made from the names list'
             );
         });

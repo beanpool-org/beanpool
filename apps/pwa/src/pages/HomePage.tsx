@@ -34,17 +34,7 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import {
-    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
-    restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel,
-    type TipsRecord,
-    ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings,
-    type CardHue,
-    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
-    communityShapeSummary, type CommunityShapeFeatures,
-    starterSheet, type PricingGuideItem, type StarterRow,
-} from '@beanpool/core';
+import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord, restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel, type TipsRecord, ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings, type CardHue, SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings, capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word, communityShapeSummary, type CommunityShapeFeatures, starterSheet, type PricingGuideItem, type StarterRow, formatHundredths } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { useKnockStatuses } from '../lib/use-knock-statuses';
@@ -308,11 +298,8 @@ const coarse = (n: number) => Math.round(n * 10) / 10;
  * as it always has, a fraction's too ("1,234.5"); every other language writes the digits alone with its own decimal sign
  * (formatCount: "1.500" reads as 1.5 in pt and es).
  */
-function priceWords(credits: number): string {
-    const r = Math.round(credits * 100) / 100;
-    const [whole, fraction] = String(r).split('.');
-    const n = currentLanguage() === 'en' && fraction !== undefined ? `${formatCount(Number(whole))}.${fraction}` : formatCount(r);
-    return tn(r, '{n} Beans', '{n} Beans', { n });
+function priceWords(price_c: number): string {
+    return tn(price_c / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(price_c) });
 }
 
 export interface HomeVisitor {
@@ -386,7 +373,7 @@ function MarketListingItem({
     const copy = eventCopyOf(item);
     const price = copy ? copyPriceLine(copy)
         : !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-        : typeof item.credits === 'number' ? (freePriceWords(item.credits, item.type) ?? priceWords(item.credits)) : null;
+        : typeof item.price_c === 'number' ? (freePriceWords(item.price_c, item.type) ?? priceWords(item.price_c)) : null;
     const km = distanceText(item.distanceKm);
     const kind = item.type === 'need' ? 'NEED' : 'OFFER';
     const label = [
@@ -782,10 +769,10 @@ function EnterpriseBody({
     const titleLine = `${e.name} · ${lifecycleWord}`;
     const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
     const keeperText = typeof e.keepers === 'number' ? tn(e.keepers, '{n} keeper', '{n} keepers') : null;
-    const balanceText = typeof e.balance === 'number' && keeperText
-        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance), keepers: keeperText })
-        : typeof e.balance === 'number'
-            ? t('Balance {balance}', { balance: beansAmount(e.balance) })
+    const balanceText = typeof e.balance_c === 'number' && keeperText
+        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance_c), keepers: keeperText })
+        : typeof e.balance_c === 'number'
+            ? t('Balance {balance}', { balance: beansAmount(e.balance_c) })
             : keeperText;
     const monthText = e.month ? monthSummaryLine(e.month) : null;
     const latestText = e.latest ? enterpriseLatestLine(e.latest) : null;
@@ -1069,7 +1056,7 @@ function BeansBody({
 }) {
     const lines = beansLines(b);
     const month = b.month ? monthSummaryLine(b.month) : null;
-    const isNewcomer = !b.activated && Math.round(b.balance * 100) / 100 === 0;
+    const isNewcomer = !b.activated && b.balance_c === 0;
     const tierBadge = !isNewcomer && b.tier ? tierWords(b.tier) : null;
     const note = isNewcomer ? lines.note : null;
     const fullLine = [lines.line, month].filter(Boolean).join('. ');
@@ -1115,7 +1102,7 @@ function CommunityBody({
     const shapeSummary = isVisitor ? null : communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
-        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
+        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot_c === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
         : typeof cm.listings === 'number';
 
     const globalTiles = [
@@ -1128,7 +1115,7 @@ function CommunityBody({
         { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
         ...(typeof cm.joined7d === 'number' ? [{ figure: formatCount(cm.joined7d), label: t('joined this week') }] : []),
         ...(typeof cm.tradesThisMonth === 'number' ? [{ figure: formatCount(cm.tradesThisMonth), label: t('trades this month') }] : []),
-        ...(typeof cm.commonsPot === 'number' ? [{ figure: beansAmount(cm.commonsPot), label: t('Commons pot') }] : []),
+        ...(typeof cm.commonsPot_c === 'number' ? [{ figure: beansAmount(cm.commonsPot_c), label: t('Commons pot') }] : []),
         ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
         ...(typeof cm.eventsSoon === 'number' ? [{ figure: formatCount(cm.eventsSoon), label: tn(cm.eventsSoon, 'event coming up', 'events coming up') }] : []),
     ];
@@ -1149,7 +1136,7 @@ function CommunityBody({
 
     const localLine2 = [
         typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
-        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
+        typeof cm.commonsPot_c === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot_c) }) : null,
     ].filter(Boolean).join(' · ');
 
     const localLine3 = [

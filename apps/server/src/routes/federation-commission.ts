@@ -41,6 +41,8 @@ import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '
 import { checkMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
 import { answerPotPaused } from '../engine/audit.js';
+import { isHundredths } from '@beanpool/core';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, positiveHundredthsOf } from '../money-body.js';
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_COMMISSION_ERROR = 'Only a member of this community can commission across a boundary';
@@ -183,11 +185,24 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         // 5. THE AMOUNT. Defaults to the listing's own price, which is the normal case — a keeper pressing
         //    "commission" on a card. An explicit amount is accepted for an hourly or negotiated listing, the
         //    same latitude an ordinary purchase has, and is bounded by the allowance either way.
-        const amount = body.amount === undefined ? Number(listing.credits) : Number(body.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-            ctx.status = 400;
-            ctx.body = { error: 'amount must be a positive number' };
-            return;
+        //    Either way whole hundredths above 0: a named amount_c that isn't one is 400 amount_c_required (money-body.ts),
+        //    and a cached price that isn't one (a free listing, or a figure a peer sent wrong) names no amount at all.
+        let amount: number;
+        if (body.amount_c !== undefined) {
+            const named = positiveHundredthsOf(body);
+            if (named === null) {
+                ctx.status = 400;
+                ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+                return;
+            }
+            amount = named;
+        } else {
+            if (!isHundredths(listing.price_c) || listing.price_c <= 0) {
+                ctx.status = 400;
+                ctx.body = { error: 'amount must be a positive number' };
+                return;
+            }
+            amount = listing.price_c;
         }
 
         // 6. THE SELLER MUST BELONG TO THE COMMUNITY BEING CHARGED. `originOfCachedPost` gives us the author
@@ -244,7 +259,7 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         //    must be this link's own commission of this listing, for this amount (settlementKeyFor), or it is refused
         //    here, before the Commons tops the link up. The payer is the link, so any of its keepers may retry it.
         const keyed = settlementKeyFor(body.key, 'xc-', {
-            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount,
+            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount_c: amount,
         });
         if (!keyed.ok) {
             ctx.status = keyed.status;
@@ -296,13 +311,13 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
                 buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey: seller,
                 postId,
-                amount: funding.amount,
+                amount_c: funding.amount_c,
             });
             ctx.status = statusFor(outcome.status);
             ctx.body = {
                 ...outcome,
-                amount: funding.amount,
-                fee: funding.fee,
+                amount_c: funding.amount_c,
+                fee_c: funding.fee_c,
                 drawnFromCommons: funding.drawnFromCommons,
                 commissionedBy: link.name,
                 peer: connector.callsign ?? connector.address,

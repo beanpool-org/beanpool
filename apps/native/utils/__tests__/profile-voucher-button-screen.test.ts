@@ -93,7 +93,7 @@ vi.mock('../db', () => ({
     getMemberProfile: vi.fn(async () => (communityRow.value ? { ...communityRow.value } : null)),
     getMemberRatings: vi.fn(async () => ({ average: 5, count: 1, asProvider: { average: 5 }, asReceiver: { average: 5 }, ratings: [] })),
     getMemberPosts: vi.fn(async () => []),
-    getBalance: vi.fn(async () => ({ balance: 100 })),
+    getBalance: vi.fn(async () => ({ balance_c: 10000 })),
     getRatingsGiven: vi.fn(async () => []),
     getFriendsLocal: vi.fn(async () => []),
     isFriendLocal: vi.fn(async () => false),
@@ -130,10 +130,11 @@ vi.mock('../../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityMark: () => null }));
 vi.mock('../../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => null }));
 
+// Every figure is whole hundredths of a Bean, as the node sends them.
 const node = vi.hoisted(() => ({
     voucher: true,
-    budgetLeft: 550,
-    budgetLevel: 1000,
+    budgetLeft: 55000,
+    budgetLevel: 100000,
     history: [] as any[],
     posts: [] as Array<{ path: string; body: any }>,
     postResult: null as any,
@@ -146,10 +147,10 @@ vi.mock('../node-post', () => ({
                 ok: true,
                 json: async () => ({
                     voucher: node.voucher,
-                    budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
-                    presets: [25, 50, 75, 100],
-                    vouchMax: 100,
-                    budgetMax: 2000,
+                    budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
+                    presets: [2500, 5000, 7500, 10000],
+                    vouchMax: 10000,
+                    budgetMax: 200000,
                     vouchedBy: [],
                     history: node.history,
                 }),
@@ -189,8 +190,8 @@ beforeEach(() => {
     nav.params = { publicKey: TARGET_KEY, callsign: 'sam' };
     communityRow.value = { public_key: TARGET_KEY, callsign: 'sam', avatar_url: null, bio: null, archetype: null };
     node.voucher = true;
-    node.budgetLeft = 550;
-    node.budgetLevel = 1000;
+    node.budgetLeft = 55000;
+    node.budgetLevel = 100000;
     node.history = [];
     node.posts = [];
     node.postResult = null;
@@ -246,7 +247,7 @@ describe('the profile’s names-list / voucher button follows the person’s sta
     it('back after the voucher was made: Voucher · 400 left ›', async () => {
         trustNow.button = { state: 'make' };
         await render();
-        trustNow.button = { state: 'voucher', left: 400, noLimit: false };
+        trustNow.button = { state: 'voucher', left: 40000, noLimit: false };
         await comeBack();
         expect(button()?.textContent).toBe('Voucher · 400 left ›');
     });

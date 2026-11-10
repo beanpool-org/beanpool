@@ -57,7 +57,7 @@ const ME = 'me-pk';
 const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: 'Damo', createdAt: '2026-09-17T00:00:00.000Z' };
 const AT = new Date(Date.now() - 60_000).toISOString();
 const listing = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
-    id, type: 'offer', category: 'general', title, description: '', credits: 5, priceType: 'fixed', status: 'active', active: true,
+    id, type: 'offer', category: 'general', title, description: '', price_c: 500, priceType: 'fixed', status: 'active', active: true,
     authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: AT, updatedAt: AT, photos: [], audienceScope: 'public', ...extra,
 });
 
@@ -77,7 +77,7 @@ function stubNode() {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false, keeperOf: [] } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false, keeperOf: [] } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);

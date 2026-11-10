@@ -110,7 +110,7 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
                         {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} wrap />}
                     </View>
                     {showsBeans && !copy && (
-                        <ListingPrice credits={post.credits} type={post.type} unit={priceUnit(post.price_type)} style={shell.price} />
+                        <ListingPrice price_c={post.price_c} type={post.type} unit={priceUnit(post.price_type)} style={shell.price} />
                     )}
                 </View>
                 <Text style={[shell.loud, styles.title]} numberOfLines={1}>{post.title}</Text>

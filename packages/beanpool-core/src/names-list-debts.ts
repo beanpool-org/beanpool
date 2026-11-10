@@ -7,20 +7,20 @@
  *
  * A debt record names an entry of the names list by its id, never a person: the name is the device's, from the list it
  * opened. The requests stay with each app (the phone's utils/names-debts.ts signs them with the member's own key).
- * Amounts are Beans to the cent.
+ * Amounts are whole hundredths of a Bean (hundredths.ts), as the node sends them: `*_c` fields.
  */
-import { parseAmount } from './amount-input.js';
+import { formatHundredths, hundredthsAsDecimalText, parseHundredths, type Hundredths } from './hundredths.js';
 
 /** A debt record as GET /api/names/debts sends it (engine/names-debts.ts DebtRecord). */
 export interface NamesDebt {
     id: string;
     entry_id: string;
-    amount: number;
+    amount_c: Hundredths;
     reason: 'removed' | 'account_deleted';
     removed_at: string;
     status: 'open' | 'settled' | 'forgiven';
     repaying_pubkey: string | null;
-    repaid: number;
+    repaid_c: Hundredths;
     settled_how: 'pay_back' | 'work_off' | 'forgiven' | null;
     settled_by: string | null;
     settled_at: string | null;
@@ -29,7 +29,7 @@ export interface NamesDebt {
 }
 
 /** A member's own repayment, as GET /api/commons/repayment sends it: only while they work a debt off. */
-export interface Repayment { amount: number; repaid: number; left: number; debtId?: string }
+export interface Repayment { amount_c: Hundredths; repaid_c: Hundredths; left_c: Hundredths; debtId?: string }
 
 export type DebtResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string };
 
@@ -55,12 +55,11 @@ export const PAY_REFUSED_UNSAID = 'Your community’s server turned this payment
 export const SETTLE_UNANSWERED = 'Your community’s server didn’t answer, so this debt may have been settled. Open the entry again to see before you settle it again.';
 
 /** Whether a payment of `amount` covers what is left: one that does settles the debt as it is paid. */
-export const coversLeft = (amount: number, left: number | null): boolean => left !== null && Math.round(amount * 100) >= Math.round(left * 100);
+export const coversLeft = (amount: Hundredths, left: Hundredths | null): boolean => left !== null && amount >= left;
 
-/** Beans to the cent: 300 Beans, 12.50 Beans. Never anything finer than a cent. */
-export function beans(n: number): string {
-    const cents = Math.round(n * 100);
-    return `${cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2)} Beans`;
+/** A figure in these English words: "300 Beans", "12.50 Beans" (formatHundredths). */
+export function debtBeans(c: Hundredths): string {
+    return `${formatHundredths(c, 'en')} Beans`;
 }
 
 const day = (iso: string | null) => {
@@ -69,7 +68,7 @@ const day = (iso: string | null) => {
 };
 
 /** What is left to repay, to the cent. */
-export const leftOf = (d: Pick<NamesDebt, 'amount' | 'repaid'>): number => Math.round((d.amount - d.repaid) * 100) / 100;
+export const leftOf = (d: Pick<NamesDebt, 'amount_c' | 'repaid_c'>): Hundredths => d.amount_c - d.repaid_c;
 
 /** An entry's records, newest first (the node sends them so): its debt history. */
 export const debtsOfEntry = (debts: NamesDebt[], entryId: string): NamesDebt[] => debts.filter((d) => d.entry_id === entryId);
@@ -80,13 +79,13 @@ export const openDebtOf = (debts: NamesDebt[], entryId: string): NamesDebt | und
 /** One line of an entry's debt history, in plain words. `who` turns a key into "@callsign" (or "an admin"). */
 export function debtLine(d: NamesDebt, who: (pubkey: string) => string): string {
     const left = d.reason === 'removed' ? 'Removed' : 'Deleted their account';
-    const head = `${left} on ${day(d.removed_at)} owing the Commons ${beans(d.amount)}.`;
+    const head = `${left} on ${day(d.removed_at)} owing the Commons ${debtBeans(d.amount_c)}.`;
     let tail: string;
     if (d.status === 'open') {
-        tail = d.repaid > 0 ? ` Open: ${beans(d.repaid)} repaid, ${beans(leftOf(d))} left.` : ' Open.';
+        tail = d.repaid_c > 0 ? ` Open: ${debtBeans(d.repaid_c)} repaid, ${debtBeans(leftOf(d))} left.` : ' Open.';
         if (d.repaying_pubkey) tail += ` ${who(d.repaying_pubkey)} is working it off.`;
     } else if (d.status === 'forgiven') {
-        tail = d.repaid > 0 ? ` Forgiven by the community on ${day(d.settled_at)}: ${beans(d.repaid)} had been repaid, and the ${beans(leftOf(d))} left was forgiven.`
+        tail = d.repaid_c > 0 ? ` Forgiven by the community on ${day(d.settled_at)}: ${debtBeans(d.repaid_c)} had been repaid, and the ${debtBeans(leftOf(d))} left was forgiven.`
             : ` Forgiven by the community on ${day(d.settled_at)}.`;
     } else {
         tail = ` Settled on ${day(d.settled_at)}: ${d.settled_how === 'work_off' ? 'worked off' : 'paid back'}${d.settled_by && d.settled_by !== 'node' && d.settled_how === 'pay_back' ? `, with a payment counted by ${who(d.settled_by)}` : ''}.`;
@@ -97,26 +96,26 @@ export function debtLine(d: NamesDebt, who: (pubkey: string) => string): string 
 /** The words each control asks before it calls the node. */
 export const DEBT_COPY = {
     workOffTitle: 'Confirm them to work it off?',
-    workOff: (member: string, name: string, d: NamesDebt) => `Confirm ${member} as ${name}, to work off ${beans(leftOf(d))}. `
+    workOff: (member: string, name: string, d: NamesDebt) => `Confirm ${member} as ${name}, to work off ${debtBeans(leftOf(d))}. `
         + 'Their known floor becomes 0, and every Bean they receive above 0 goes to the Commons until the debt is cleared. '
         + 'If you take the confirmation back, that stops, and what they repaid stays repaid.',
     workOffButton: 'Confirm to work it off',
     settleTitle: 'Count a payment made without the code?',
     settle: (d: NamesDebt) => `Only for a payment to the Commons the member made without the pay-back code. A payment made with the code `
-        + `came off this debt when it was paid. Your server counts the payment once, toward this debt only, up to the ${beans(leftOf(d))} left, `
+        + `came off this debt when it was paid. Your server counts the payment once, toward this debt only, up to the ${debtBeans(leftOf(d))} left, `
         + 'and when nothing is left the debt is settled.',
     settleButton: 'Count it',
     forgiveTitle: 'Ask the community to forgive it?',
-    forgive: (d: NamesDebt) => `This starts a Decision the community votes on: forgive a debt of ${beans(leftOf(d))}. No Beans move: the `
+    forgive: (d: NamesDebt) => `This starts a Decision the community votes on: forgive a debt of ${debtBeans(leftOf(d))}. No Beans move: the `
         + 'Commons took the debt when they left. If it passes, the record stays, marked forgiven, and an admin can confirm them again. '
         + 'The Decision names no one.',
     forgiveButton: 'Start the Decision',
-    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${beans(leftOf(d))}), pay it with this code: each payment comes off `
-        + `the debt as you pay it, and when nothing is left it is settled. Open beanpool://pay-commons?code=${d.id}&amount=${leftOf(d)} on your phone, or open BeanPool, go to Ledger, tap Pay `
-        + `the Commons, enter this pay-back code: ${d.id} and pay ${beans(leftOf(d))}.`,
+    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${debtBeans(leftOf(d))}), pay it with this code: each payment comes off `
+        + `the debt as you pay it, and when nothing is left it is settled. Open beanpool://pay-commons?code=${d.id}&amount=${hundredthsAsDecimalText(leftOf(d))} on your phone, or open BeanPool, go to Ledger, tap Pay `
+        + `the Commons, enter this pay-back code: ${d.id} and pay ${debtBeans(leftOf(d))}.`,
     /** The matching-name warning: an admin adding a name the list holds already, with an open debt on it. */
     sameNameTitle: 'This name has an open debt',
-    sameName: (name: string, d: NamesDebt) => `${name} is on the list already, and left owing the Commons ${beans(leftOf(d))}, still open. `
+    sameName: (name: string, d: NamesDebt) => `${name} is on the list already, and left owing the Commons ${debtBeans(leftOf(d))}, still open. `
         + 'If this is the same person, settle that debt on their entry rather than adding them again. Your community trusts its admins with this.',
     sameNameAdd: 'Add anyway',
 };
@@ -149,18 +148,16 @@ export const debtCodeOk = (code: string): boolean => /^[0-9a-f]{32}$/.test(code.
  * Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. Read as every
  * typed amount is (core parseAmount): the language's decimal mark and digits; "1.000" or "1,000" is refused, never a guess.
  */
-export function parseBeans(text: string): number | null {
-    const read = parseAmount(text);
-    if (!read.ok) return null;
-    const n = Math.round(read.value * 100) / 100;
-    return n > 0 ? n : null;
+export function parseBeans(text: string): Hundredths | null {
+    const read = parseHundredths(text);
+    return read.ok && read.value > 0 ? read.value : null;
 }
 
 /** A payment to the Commons as the member confirmed it: the fields every send of it carries, with its id. */
-export type CommonsPayment = { amount: number; debtId?: string };
+export type CommonsPayment = { amount_c: Hundredths; debtId?: string };
 
 /** The node's answer to a payment: its reference, the Beans paid, and for a debt what was left before and after it, and whether it settled it. */
-export type PaidToCommons = { transactionId: string; amount: number; left?: number; leftAfter?: number; settled?: boolean };
+export type PaidToCommons = { transactionId: string; amount_c: Hundredths; left_c?: Hundredths; leftAfter_c?: Hundredths; settled?: boolean };
 
 /**
  * One payment at a time: the busy flag is set before anything is awaited, and a second confirmed tap while a payment is
@@ -185,7 +182,7 @@ const notOffDebtAfter = (ref: string) => ` This did not come off your debt: it w
     + `admin to count it toward your debt with this reference: ${ref}.`+ ' Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0.';
 
 export const REPAYMENT_COPY = {
-    banner: (r: Repayment) => `You’re working off a debt to the Commons: ${beans(r.left)} left of ${beans(r.amount)}. Every Bean you receive `
+    banner: (r: Repayment) => `You’re working off a debt to the Commons: ${debtBeans(r.left_c)} left of ${debtBeans(r.amount_c)}. Every Bean you receive `
         + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your '
         + 'pay-back code is filled in: it comes off at once. Then you keep '
         + 'what you receive, as everyone does.',
@@ -193,13 +190,13 @@ export const REPAYMENT_COPY = {
     payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin '
         + 'gave you (working one off, yours is filled in): what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.',
     /** The admin's link's amount: what was left when they shared it (a work-off may have lowered it since). */
-    linkLeft: (left: number) => `What was left when the admin shared this: ${beans(left)}.`,
+    linkLeft: (left: Hundredths) => `What was left when the admin shared this: ${debtBeans(left)}.`,
     /**
      * `shared`: what was left when the admin shared the link, from the link; null when this phone doesn't know it. Never
      * "it covers what is left": only the node knows what is left now, and it refuses a payment above that.
      */
-    payConfirm: (amount: number, forDebt: boolean, shared: number | null = null, openDebt = false) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
-        !forDebt ? (openDebt ? NOT_OFF_DEBT_BEFORE : '') : `${shared !== null ? `${beans(shared)} was what was left when the admin shared this. ` : ''}It comes off your debt at once. `
+    payConfirm: (amount: Hundredths, forDebt: boolean, shared: Hundredths | null = null, openDebt = false) => `Pay ${debtBeans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
+        !forDebt ? (openDebt ? NOT_OFF_DEBT_BEFORE : '') : `${shared !== null ? `${debtBeans(shared)} was what was left when the admin shared this. ` : ''}It comes off your debt at once. `
             + 'If less is left now, your server refuses it and says how much, and nothing is paid. '
     }This can’t be undone.`,
     /**
@@ -208,9 +205,9 @@ export const REPAYMENT_COPY = {
      * the Commons for other reasons). Said before and after, with what to do.
      */
     /** The node's answer for a debt: `settled` when this payment left nothing, else `leftAfter`, what is left now. */
-    paid: (amount: number, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}, openDebt = false) => `Paid ${beans(amount)} to the Commons.${
+    paid: (amount: Hundredths, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}, openDebt = false) => `Paid ${debtBeans(amount)} to the Commons.${
         !forDebt ? (openDebt ? notOffDebtAfter(ref) : '') : answer.settled ? ' Your debt is paid off and settled.'
-            : typeof answer.leftAfter === 'number' ? ` That came off your debt: ${beans(answer.leftAfter)} left.`
+            : typeof answer.leftAfter_c === 'number' ? ` That came off your debt: ${debtBeans(answer.leftAfter_c)} left.`
                 : ` Reference: ${ref}`
     }`,
     badAmount: 'Write an amount of Beans above 0, to the cent (for example 12.50).',

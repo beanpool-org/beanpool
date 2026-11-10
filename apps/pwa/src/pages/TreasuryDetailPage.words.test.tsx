@@ -34,9 +34,9 @@ const ALICE_ID = { publicKey: ALICE, callsign: 'Alice' } as any;
 const DAN_ID = { publicKey: 'member-dan', callsign: 'Dan' } as any;
 
 const KEEPERS = [
-    { publicKey: ALICE, callsign: 'Alice', role: 'lead', backing: 0 },
-    { publicKey: BOB, callsign: 'Bob', role: 'keeper', backing: 20 },
-    { publicKey: CARA, callsign: 'Cara', role: 'keeper', backing: 0, suspended: true },
+    { publicKey: ALICE, callsign: 'Alice', role: 'lead', backing_c: 0 },
+    { publicKey: BOB, callsign: 'Bob', role: 'keeper', backing_c: 2000 },
+    { publicKey: CARA, callsign: 'Cara', role: 'keeper', backing_c: 0, suspended: true },
 ];
 const INACTIVITY = { leadPubkey: ALICE, leadCallsign: 'Alice', daysInactive: 40, isEligible: true, autoPromoted: false };
 
@@ -44,21 +44,21 @@ const INACTIVITY = { leadPubkey: ALICE, leadCallsign: 'Alice', daysInactive: 40,
 function busy(over: Record<string, unknown> = {}) {
     return {
         publicKey: ENT, name: 'Community Eggs', purpose: 'Eggs for the street', status: 'active', paused: false, lifecycle: 'ongoing',
-        balance: -12.5, creditLine: 200, liveOffers: 2, earnedSurplus: 30, workingCapitalCeiling: null,
-        deferredClaims: [{ id: 'c1', status: 'pending', amount: 8 }],
-        pendingBids: [{ id: 'bid-1', post_title: 'Clean the coop', credits: 10, peer_callsign: 'Dan' }],
+        balance_c: -1250, creditLine_c: 20000, liveOffers: 2, earnedSurplus_c: 3000, workingCapitalCeiling_c: null,
+        deferredClaims: [{ id: 'c1', status: 'pending', amount_c: 800 }],
+        pendingBids: [{ id: 'bid-1', post_title: 'Clean the coop', amount_c: 1000, peer_callsign: 'Dan' }],
         activeDeals: [
-            { id: 'deal-1', post_id: 'p1', post_title: 'Egg delivery', credits: 6, action_required: 'fulfill', peer_callsign: 'Eve' },
-            { id: 'deal-2', post_id: 'p3', post_title: 'Fix the fence', credits: 15, action_required: 'release', peer_callsign: null, price_type: 'fixed' },
+            { id: 'deal-1', post_id: 'p1', post_title: 'Egg delivery', amount_c: 600, action_required: 'fulfill', peer_callsign: 'Eve' },
+            { id: 'deal-2', post_id: 'p3', post_title: 'Fix the fence', amount_c: 1500, action_required: 'release', peer_callsign: null, price_type: 'fixed' },
         ],
         keepers: KEEPERS,
         isLeadOrSoleKeeperOrAdmin: true,
         keeperRequests: [
-            { id: 'req-1', enterprisePubkey: ENT, memberPubkey: 'member-dan', callsign: 'Dan', pledgedBacking: 5, status: 'pending', createdAt: at(-DAY), canBackPledge: false },
+            { id: 'req-1', enterprisePubkey: ENT, memberPubkey: 'member-dan', callsign: 'Dan', pledgedBacking: 500, status: 'pending', createdAt: at(-DAY), canBackPledge: false },
             { id: 'req-2', enterprisePubkey: ENT, memberPubkey: 'member-fay', callsign: 'Fay', pledgedBacking: 0, status: 'pending', createdAt: at(-DAY), canBackPledge: true, pendingChange: { appliesAt: at(2 * DAY + 60_000) } },
         ],
         keeperChanges: [{
-            id: 'chg-1', enterprisePubkey: ENT, kind: 'add', memberPubkey: 'member-gus', memberCallsign: 'Gus', requestId: 'req-0', pledgedBacking: 4,
+            id: 'chg-1', enterprisePubkey: ENT, kind: 'add', memberPubkey: 'member-gus', memberCallsign: 'Gus', requestId: 'req-0', pledgedBacking: 400,
             proposedBy: ALICE, proposedByCallsign: 'Alice', status: 'pending', createdAt: at(-DAY), appliesAt: at(2 * DAY + 60_000),
             resolvedAt: null, resolvedBy: null,
         }],
@@ -71,12 +71,12 @@ function busy(over: Record<string, unknown> = {}) {
             }],
         },
         posts: [
-            { id: 'p1', type: 'offer', title: 'Dozen eggs', description: 'Free range', credits: 6, price_type: 'hourly', repeatable: true },
-            { id: 'p2', type: 'need', title: 'Coop cleaning', credits: 10 },
+            { id: 'p1', type: 'offer', title: 'Dozen eggs', description: 'Free range', price_c: 600, price_type: 'hourly', repeatable: true },
+            { id: 'p2', type: 'need', title: 'Coop cleaning', price_c: 1000 },
         ],
         flow: [
-            { id: 'f1', memo: 'Egg sale', amount: 6, incoming: true, timestamp: at(-2 * DAY) },
-            { id: 'f2', memo: '', amount: 2, incoming: false, timestamp: at(-DAY) },
+            { id: 'f1', memo: 'Egg sale', amount_c: 600, incoming: true, timestamp: at(-2 * DAY) },
+            { id: 'f2', memo: '', amount_c: 200, incoming: false, timestamp: at(-DAY) },
         ],
         lat: -28.55, lng: 153.5,
         ...over,
@@ -84,12 +84,12 @@ function busy(over: Record<string, unknown> = {}) {
 }
 
 const LEDGER = {
-    enterprise: { publicKey: ENT, name: 'Community Eggs', status: 'active', paused: false, balance: -12.5 },
+    enterprise: { publicKey: ENT, name: 'Community Eggs', status: 'active', paused: false, balance_c: -1250 },
     period: { since: null, until: null },
-    summary: { totalIncome: 120, totalSpend: 40, netChange: 78, startingBalance: -90.5, endingBalance: -12.5, transactionCount: 3 },
+    summary: { totalIncome: 12000, totalSpend: 4000, netChange: 7800, startingBalance: -9050, endingBalance: -1250, transactionCount: 3 },
     entries: [
-        { id: 'e1', timestamp: at(-3 * DAY), direction: 'income', amount: 120, fee: 2, netAmount: 118, counterparty: 'member-dan', counterpartyName: 'Dan', memo: 'Veggie box', runningBalance: 29.5 },
-        { id: 'e2', timestamp: at(-2 * DAY), direction: 'spend', amount: 40, fee: 0, netAmount: 40, counterparty: 'member-eve', counterpartyName: '', memo: '', runningBalance: -12.5 },
+        { id: 'e1', timestamp: at(-3 * DAY), direction: 'income', amount_c: 12000, fee_c: 200, netAmount: 11800, counterparty: 'member-dan', counterpartyName: 'Dan', memo: 'Veggie box', runningBalance: 2950 },
+        { id: 'e2', timestamp: at(-2 * DAY), direction: 'spend', amount_c: 4000, fee_c: 0, netAmount: 4000, counterparty: 'member-eve', counterpartyName: '', memo: '', runningBalance: -1250 },
     ],
 };
 
@@ -114,7 +114,7 @@ let said: string[] = [];
 
 function node(treasury: unknown, o: { ledger?: unknown; thread?: unknown; keeperOf?: string[] } = {}) {
     vi.spyOn(api, 'getTreasury').mockResolvedValue(treasury as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: o.keeperOf ?? [] } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: o.keeperOf ?? [] } as any);
     const ledger = o.ledger ?? LEDGER;
     if (ledger instanceof Error) vi.spyOn(api, 'getEnterpriseLedger').mockRejectedValue(ledger);
     else vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(ledger as any);
@@ -207,7 +207,7 @@ describe('the enterprise page in the pseudo-locale', () => {
 
     it('paused: the banner, its warning and resuming', async () => {
         node(busy({
-            balance: 40, paused: true, pausedFloorSnapshot: -200, pauseExpiresAt: '2026-12-14T12:00:00.000Z', pauseDaysRemaining: 3,
+            balance_c: 4000, paused: true, pausedFloorSnapshot_c: -20000, pauseExpiresAt: '2026-12-14T12:00:00.000Z', pauseDaysRemaining: 3,
             keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null, pendingBids: [], activeDeals: [],
         }), { keeperOf: [ENT] });
         await showIn('xx');
@@ -228,7 +228,7 @@ describe('the enterprise page in the pseudo-locale', () => {
 
     it('winding up past its grace: the banner, stopping and finalising', async () => {
         node(busy({
-            balance: 40, status: 'winding_up', windUpInitiatedBy: ALICE, windUpInitiatedAt: at(-8 * DAY), windUpGraceEndsAt: at(-DAY),
+            balance_c: 4000, status: 'winding_up', windUpInitiatedBy: ALICE, windUpInitiatedAt: at(-8 * DAY), windUpGraceEndsAt: at(-DAY),
             keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null, pendingBids: [], activeDeals: [],
         }), { keeperOf: [ENT] });
         await showIn('xx');
@@ -249,8 +249,8 @@ describe('the enterprise page in the pseudo-locale', () => {
 
     it("a project raising Beans, to a member: the funding, the pledge box, asking to join, and a refused pledge", async () => {
         node(busy({
-            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance: 120, goalAmount: 500, currentAmount: 120,
-            deadlineAt: at(5 * DAY), availableToBack: 30, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
+            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance_c: 12000, goalAmount_c: 50000, currentAmount_c: 12000,
+            deadlineAt: at(5 * DAY), availableToBack_c: 3000, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
             leadInactivity: null, succession: null, pendingBids: [], activeDeals: [], keepers: KEEPERS.slice(0, 2),
         }));
         await showIn('xx');
@@ -270,9 +270,9 @@ describe('the enterprise page in the pseudo-locale', () => {
 
     it('a request waiting, a wound-up project, and a guest', async () => {
         node(busy({
-            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance: 0, isLeadOrSoleKeeperOrAdmin: false,
+            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance_c: 0, isLeadOrSoleKeeperOrAdmin: false,
             keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null, pendingBids: [], activeDeals: [],
-            myPendingRequest: { id: 'req-9', enterprisePubkey: ENT, memberPubkey: 'member-dan', pledgedBacking: 7, status: 'pending', createdAt: at(-DAY) },
+            myPendingRequest: { id: 'req-9', enterprisePubkey: ENT, memberPubkey: 'member-dan', pledgedBacking: 700, status: 'pending', createdAt: at(-DAY) },
         }));
         await showIn('xx');
         await draw(DAN_ID);
@@ -280,7 +280,7 @@ describe('the enterprise page in the pseudo-locale', () => {
         expect(clean(INITIALS)).toEqual([]);
         cleanup();
 
-        node(busy({ name: 'New Roof', lifecycle: 'bounded', status: 'completed', balance: 0, keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null }), { thread: { ...THREAD, readOnly: true } });
+        node(busy({ name: 'New Roof', lifecycle: 'bounded', status: 'completed', balance_c: 0, keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null }), { thread: { ...THREAD, readOnly: true } });
         await draw(DAN_ID);
         expect(await screen.findByText(xx('This project has completed its purpose and wound up permanently. Surplus was returned to the Commons, collaborators were released, and listings are closed.'))).toBeInTheDocument();
         expect(screen.getByText(xx('This project has wound up. Discussion is read-only for accountability.'))).toBeInTheDocument();
@@ -333,15 +333,16 @@ describe('the enterprise page in English', () => {
         openMoney();
         expect(bracketed()).toBe(0);
         expect(screen.getByText('Enterprise Balance')).toBeInTheDocument();
-        expect(screen.getByRole('alert').textContent).toBe('⚠️ In Deficit: This enterprise is currently in deficit (-12.5 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.');
+        // Every figure as formatHundredths writes it: a true minus, two decimals whenever there are cents.
+        expect(screen.getByRole('alert').textContent).toBe('⚠️ In Deficit: This enterprise is currently in deficit (−12.50 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.');
         expect(screen.getByText('Uncapped')).toBeInTheDocument();
         expect(screen.getByText('Pending Wage Claims (1)')).toBeInTheDocument();
         expect(screen.getByTestId('enterprise-backing').textContent).toContain('Bob · 20 🫘');
-        expect(screen.getByTestId('ledger-fee-note').textContent).toBe('Came in is before fees: 2.00 🫘 in fees came off it.');
+        expect(screen.getByTestId('ledger-fee-note').textContent).toBe('Came in is before fees: 2 🫘 in fees came off it.');
         // Came in and went out, and the rows they came in and went out on.
-        expect(screen.getAllByText('+120.00 🫘')).toHaveLength(2);
-        expect(screen.getAllByText('-40.00 🫘')).toHaveLength(2);
-        expect(screen.getAllByText('Starting balance:', { exact: false })[0].textContent).toBe('Starting balance: -90.50 🫘');
+        expect(screen.getAllByText('+120 🫘')).toHaveLength(2);
+        expect(screen.getAllByText('−40 🫘')).toHaveLength(2);
+        expect(screen.getAllByText('Starting balance:', { exact: false })[0].textContent).toBe('Starting balance: −90.50 🫘');
         expect(screen.getAllByText('Transfer')).toHaveLength(2);
         expect(screen.getByText('removed by a keeper')).toBeInTheDocument();
         expect(screen.getByText('This message was deleted')).toBeInTheDocument();
@@ -375,14 +376,14 @@ describe('the enterprise page in English', () => {
         expect(said[2]).toBe('Are you sure you want to remove this message? It will show as "removed by a keeper".');
 
         fireEvent.click(screen.getByRole('button', { name: /Start Wind-Up/ }));
-        expect(screen.getByText('Cannot wind up an enterprise in deficit (-12.5 🫘). Debt must be resolved or written off first.')).toBeInTheDocument();
-        expect(screen.getByText(/^Winding up returns/).textContent).toBe('Winding up returns 0.00 beans to the Commons, releases 3 keepers, and closes Community Eggs for good. Any keeper can stop this for the next 7 days.');
+        expect(screen.getByText('Cannot wind up an enterprise in deficit (−12.50 🫘). Debt must be resolved or written off first.')).toBeInTheDocument();
+        expect(screen.getByText(/^Winding up returns/).textContent).toBe('Winding up returns 0 beans to the Commons, releases 3 keepers, and closes Community Eggs for good. Any keeper can stop this for the next 7 days.');
     });
 
     it("a project's words: the funding, asking to join, and the collaborators", async () => {
         node(busy({
-            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance: 120, goalAmount: 500, currentAmount: 120,
-            deadlineAt: at(5 * DAY), availableToBack: 30, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
+            name: 'New Roof', purpose: 'A roof for the hall', lifecycle: 'bounded', balance_c: 12000, goalAmount_c: 50000, currentAmount_c: 12000,
+            deadlineAt: at(5 * DAY), availableToBack_c: 3000, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
             leadInactivity: null, succession: null, pendingBids: [], activeDeals: [], keepers: KEEPERS.slice(0, 2),
         }));
         await draw(DAN_ID);

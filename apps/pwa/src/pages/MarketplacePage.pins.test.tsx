@@ -81,7 +81,7 @@ function makePost(id: string, title: string, opts: { pinnedAt?: string; pinnedUn
         category: 'goods',
         title,
         description: 'Test description',
-        credits: 10,
+        price_c: 1000,
         priceType: 'fixed',
         status: 'active',
         active: true,
@@ -109,7 +109,7 @@ function stubNode(feedPosts: any[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);

@@ -18,7 +18,8 @@
  *  2. The cap moves with the balance, with a new inflow row, and with the clock (injected): two days on, a row 29 days
  *     old drops out and tomorrow's row comes in; sixty days on the inflow is 0 and the cap is what the Commons holds.
  *  3. A Commons in deficit is named plainly ("owes") and the cap never shows below 0; a grant with no usable amount is
- *     refused with its own sentence, writing nothing. A cap of exactly 0 refuses even a sub-cent sliver.
+ *     refused with its own sentence, writing nothing (a part of a hundredth of a Bean is no amount). A cap of exactly 0
+ *     refuses even one hundredth, the least amount there is.
  *  4. With a cap of 0 (a new node), any grant is refused, however small. Other Decision kinds are unaffected: a member
  *     Decision and a deficit write-off are still proposed.
  *  5. Day zero: a grant queued and a grant open before the rule, both far over today's cap, are untouched by all of the
@@ -48,6 +49,11 @@ let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const DAY = 24 * 60 * 60 * 1000;
 const AMOUNT_ERROR = 'A grant needs an amount in Beans above 0.';
+/**
+ * The story's figures are Beans; the node's are whole hundredths of a Bean (a grant's `params.amount_c`, a row's `amount_c`
+ * and `fee_c`, the pot). `hc` turns a Beans figure into hundredths at the door.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 // Every assertion runs and failures are reported together, so one broken check does not hide the others.
 let run = 0, passed = 0;
@@ -67,9 +73,10 @@ function makeMember(callsign: string, opts: { treasury?: boolean; balance?: numb
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const pkcs8 = new Uint8Array(privateKey.export({ type: 'pkcs8', format: 'der' }) as Buffer);
     const joinedAt = new Date(Date.now() - 60 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, is_treasury)
-                VALUES (?, ?, ?, 'active', 100, ?)`).run(pubKeyHex, `${callsign}${++seq}`, joinedAt, opts.treasury ? 1 : 0);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(pubKeyHex, opts.balance ?? 0);
+    // 100 Beans of earned credit, and `opts.balance` Beans: whole hundredths in the rows.
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c, is_treasury)
+                VALUES (?, ?, ?, 'active', 10000, ?)`).run(pubKeyHex, `${callsign}${++seq}`, joinedAt, opts.treasury ? 1 : 0);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(pubKeyHex, hc(opts.balance ?? 0));
     reconcileLedgerFromDb();
     return { pubKeyHex, sign: ed25519Signer(pkcs8) };
 }
@@ -101,13 +108,14 @@ function grantBody(effect: 'grant_enterprise' | 'grant_hardship', params: unknow
 /** A completed trade: the standing to propose (the earned_credit badge makeMember gives is none). Not ledger, so no inflow. */
 function hasTraded(id: Id): void {
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
-                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), id.pubKeyHex, recipient.pubKeyHex, now, now);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 500, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), id.pubKeyHex, recipient.pubKeyHex, now, now);
 }
 
+/** A grant proposed with `amount` as its params' `amount_c`, as sent (whole hundredths, or anything else to be refused). */
 async function propose(effect: 'grant_enterprise' | 'grant_hardship', amount: unknown, proposer = makeMember('Proposer')) {
     hasTraded(proposer);
-    const res = await signedPost('/api/commons/decisions', grantBody(effect, amount === undefined ? undefined : { amount }), proposer);
+    const res = await signedPost('/api/commons/decisions', grantBody(effect, amount === undefined ? undefined : { amount_c: amount }), proposer);
     return { ...res, proposer };
 }
 
@@ -134,17 +142,18 @@ async function expectRefused(effect: 'grant_enterprise' | 'grant_hardship', amou
 async function expectAccepted(effect: 'grant_enterprise' | 'grant_hardship', amount: number, label: string) {
     const res = await propose(effect, amount);
     const row = db.prepare('SELECT status, params FROM decisions WHERE author_pubkey = ?').get(res.proposer.pubKeyHex) as any;
-    assert(res.status === 200 && res.body?.success === true && row?.status === 'open' && JSON.parse(row.params).amount === amount,
-        `${label}: accepted and stored open for ${amount} (got ${res.status} ${JSON.stringify(res.error ?? '')}, row ${JSON.stringify(row)})`);
+    assert(res.status === 200 && res.body?.success === true && row?.status === 'open' && JSON.parse(row.params).amount_c === amount,
+        `${label}: accepted and stored open for ${amount} hundredths (got ${res.status} ${JSON.stringify(res.error ?? '')}, row ${JSON.stringify(row)})`);
 }
 
 function refusal(held: string, inflow: string, most: string): string {
     return `This grant is bigger than the Commons could pay: it ${held} and took in ${inflow} Beans over the last 30 days, so the most you can ask for now is ${most} Beans.`;
 }
 
+/** A ledger row, its `amount` and `taxFee` in Beans (whole hundredths in the row's amount_c and fee_c). */
 function insertTxn(opts: { from: string; to: string; amount: number; taxFee?: number; at: string; id?: string; memo?: string }) {
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(opts.id ?? `txn-${crypto.randomUUID()}`, opts.from, opts.to, opts.amount, opts.taxFee ?? 0, opts.memo ?? '', opts.at);
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(opts.id ?? `txn-${crypto.randomUUID()}`, opts.from, opts.to, hc(opts.amount), hc(opts.taxFee ?? 0), opts.memo ?? '', opts.at);
 }
 
 function insertDecision(opts: { id: string; author: string; effect: string; subject: string; amount: number; status: string; closesAt: string }) {
@@ -153,7 +162,7 @@ function insertDecision(opts: { id: string; author: string; effect: string; subj
                                opens_at, closes_at, created_at, updated_at, execution_reason)
         VALUES (?, ?, 'Before the cap', 'Proposed before grants were capped', 'pool', ?, ?, ?, 'quadratic_trade', ?,
                 '2026-09-01T00:00:00.000Z', ?, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', ?)
-    `).run(opts.id, opts.author, opts.effect, opts.subject, JSON.stringify({ amount: opts.amount }), opts.status, opts.closesAt,
+    `).run(opts.id, opts.author, opts.effect, opts.subject, JSON.stringify({ amount_c: hc(opts.amount) }), opts.status, opts.closesAt,
         opts.status === 'passed_queued_for_funds' ? 'Insufficient pool funds: requires 5000, available 10.00' : null);
 }
 
@@ -189,7 +198,7 @@ async function main(): Promise<void> {
     // ── The ledger the 30-day inflow is read from ──
     // Counted: a real sweep into the Commons (moveToCommons, timestamped now), a circulation-fee row 29 days old, a
     // trade's 1.5% fee 5 days old, and a row in SQLite's 'YYYY-MM-DD HH:MM:SS' form 2 days old.
-    const swept = moveToCommons(enterprise.pubKeyHex, 7.75, 'Surplus swept to Commons');
+    const swept = moveToCommons(enterprise.pubKeyHex, hc(7.75), 'Surplus swept to Commons');
     assert(!!swept && swept.to === 'COMMONS_POOL', 'a real moveToCommons wrote its row to COMMONS_POOL');
     insertTxn({ id: `demurrage_${buyer.pubKeyHex.slice(0, 16)}_1_30`, from: buyer.pubKeyHex, to: 'COMMONS_POOL', amount: 12.25,
         at: iso(-29 * DAY), memo: 'Circulation fee (demurrage, 29d)' });
@@ -203,46 +212,47 @@ async function main(): Promise<void> {
 
     // ── 1. At the cap, and over it ──
     console.log('\n--- 1. At the cap, and over it ---');
-    setCommonsBalance(100);
+    setCommonsBalance(hc(100));
     // held 100 + inflow (7.75 + 12.25 + 3 + 0.5 = 23.50) = 123.50
-    await expectRefused('grant_enterprise', 124.5, refusal('holds 100 Beans', '23.50', '123.50'), 'one Bean over the cap');
-    await expectRefused('grant_enterprise', 123.51, refusal('holds 100 Beans', '23.50', '123.50'), 'one cent over the cap');
-    await expectRefused('grant_hardship', 124.5, refusal('holds 100 Beans', '23.50', '123.50'), 'a hardship grant one Bean over');
-    await expectAccepted('grant_enterprise', 123.5, 'a grant exactly at the cap');
-    await expectAccepted('grant_hardship', 123.5, 'a hardship grant exactly at the cap');
+    await expectRefused('grant_enterprise', hc(124.5), refusal('holds 100 Beans', '23.50', '123.50'), 'one Bean over the cap');
+    await expectRefused('grant_enterprise', hc(123.51), refusal('holds 100 Beans', '23.50', '123.50'), 'one cent over the cap');
+    await expectRefused('grant_hardship', hc(124.5), refusal('holds 100 Beans', '23.50', '123.50'), 'a hardship grant one Bean over');
+    await expectAccepted('grant_enterprise', hc(123.5), 'a grant exactly at the cap');
+    await expectAccepted('grant_hardship', hc(123.5), 'a hardship grant exactly at the cap');
 
     // ── 2. The cap moves with the balance, the inflow and the clock ──
     console.log('\n--- 2. The cap moves with the balance, the inflow and the clock ---');
-    setCommonsBalance(150);
-    await expectRefused('grant_enterprise', 174.5, refusal('holds 150 Beans', '23.50', '173.50'), 'with 150 held, one Bean over');
-    await expectAccepted('grant_enterprise', 173.5, 'with 150 held, a grant at 173.50');
+    setCommonsBalance(hc(150));
+    await expectRefused('grant_enterprise', hc(174.5), refusal('holds 150 Beans', '23.50', '173.50'), 'with 150 held, one Bean over');
+    await expectAccepted('grant_enterprise', hc(173.5), 'with 150 held, a grant at 173.50');
 
     insertTxn({ from: buyer.pubKeyHex, to: seller.pubKeyHex, amount: 166.67, taxFee: 2.5, at: iso(-60 * 60 * 1000), memo: 'Trade' });
-    await expectRefused('grant_enterprise', 176.01, refusal('holds 150 Beans', '26', '176'), 'after a new 2.50 market fee, one cent over');
-    await expectAccepted('grant_enterprise', 176, 'after a new 2.50 market fee, a grant at 176');
+    await expectRefused('grant_enterprise', hc(176.01), refusal('holds 150 Beans', '26', '176'), 'after a new 2.50 market fee, one cent over');
+    await expectAccepted('grant_enterprise', hc(176), 'after a new 2.50 market fee, a grant at 176');
 
     // Two days on: the 12.25 circulation fee (29 days old) leaves the window, tomorrow's 40 enters it.
     setClock(() => now + 2 * DAY);
-    await expectRefused('grant_enterprise', 204.75, refusal('holds 150 Beans', '53.75', '203.75'), 'two days on, one Bean over');
-    await expectAccepted('grant_enterprise', 203.75, 'two days on, a grant at 203.75');
+    await expectRefused('grant_enterprise', hc(204.75), refusal('holds 150 Beans', '53.75', '203.75'), 'two days on, one Bean over');
+    await expectAccepted('grant_enterprise', hc(203.75), 'two days on, a grant at 203.75');
     // Sixty days on: nothing is inside the window, so the cap is what the Commons holds.
     setClock(() => now + 60 * DAY);
-    await expectRefused('grant_enterprise', 150.01, refusal('holds 150 Beans', '0', '150'), 'sixty days on, one cent over what it holds');
-    await expectAccepted('grant_enterprise', 150, 'sixty days on, a grant of exactly what it holds');
+    await expectRefused('grant_enterprise', hc(150.01), refusal('holds 150 Beans', '0', '150'), 'sixty days on, one cent over what it holds');
+    await expectAccepted('grant_enterprise', hc(150), 'sixty days on, a grant of exactly what it holds');
 
     // ── 3. A Commons in deficit, and amounts that are not amounts ──
     console.log('\n--- 3. A Commons in deficit, and amounts that are not amounts ---');
     setClock(null);
-    setCommonsBalance(-5);
-    await expectRefused('grant_hardship', 22, refusal('owes 5 Beans', '26', '21'), 'a Commons 5 Beans in deficit');
-    await expectAccepted('grant_hardship', 21, 'a Commons 5 Beans in deficit, a grant at 21');
-    setCommonsBalance(-30);
-    await expectRefused('grant_hardship', 1, refusal('owes 30 Beans', '26', '0'), 'a Commons deeper in deficit than its inflow: the most is 0, never below');
-    // A deficit its inflow exactly cancels: the cap is 0, and the float allowance does not let a sliver through.
-    setCommonsBalance(-26);
-    await expectRefused('grant_hardship', 1e-8, refusal('owes 26 Beans', '26', '0'), 'a cap of exactly 0 from a deficit, a hundred-millionth of a Bean');
-    setCommonsBalance(100);
-    for (const bad of ['ten', 0, -5, null, '1e999'] as unknown[]) {
+    setCommonsBalance(hc(-5));
+    await expectRefused('grant_hardship', hc(22), refusal('owes 5 Beans', '26', '21'), 'a Commons 5 Beans in deficit');
+    await expectAccepted('grant_hardship', hc(21), 'a Commons 5 Beans in deficit, a grant at 21');
+    setCommonsBalance(hc(-30));
+    await expectRefused('grant_hardship', hc(1), refusal('owes 30 Beans', '26', '0'), 'a Commons deeper in deficit than its inflow: the most is 0, never below');
+    // A deficit its inflow exactly cancels: the cap is 0, and not even the least amount there is, one hundredth, goes.
+    setCommonsBalance(hc(-26));
+    await expectRefused('grant_hardship', 1, refusal('owes 26 Beans', '26', '0'), 'a cap of exactly 0 from a deficit, one hundredth of a Bean');
+    setCommonsBalance(hc(100));
+    // Whole hundredths above 0 only: a word, 0, below 0, none, text, and a part of a hundredth (half of one, a millionth).
+    for (const bad of ['ten', 0, -5, null, '1e999', '12350', 0.5, 1e-6] as unknown[]) {
         await expectRefused('grant_enterprise', bad, AMOUNT_ERROR, `amount ${JSON.stringify(bad)}`);
     }
     await expectRefused('grant_enterprise', undefined, AMOUNT_ERROR, 'no params at all');
@@ -251,10 +261,10 @@ async function main(): Promise<void> {
     console.log('\n--- 4. Other Decision kinds are unaffected ---');
     setCommonsBalance(0);
     setClock(() => now + 60 * DAY);
-    await expectRefused('grant_enterprise', 1, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, any grant');
-    // A new node's cap (nothing held, nothing in): a sliver under the float allowance would otherwise be queued unpayable.
-    await expectRefused('grant_enterprise', 1e-8, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hundred-millionth of a Bean');
-    await expectRefused('grant_hardship', 1e-9, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hardship grant of a billionth of a Bean');
+    await expectRefused('grant_enterprise', hc(1), refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, any grant');
+    // A new node's cap (nothing held, nothing in): not even the least amount there is, which would be queued unpayable.
+    await expectRefused('grant_enterprise', 1, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, one hundredth of a Bean');
+    await expectRefused('grant_hardship', 1, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hardship grant of one hundredth of a Bean');
     const target = makeMember('Target');
     const memberProposer = makeMember('MemberProposer');
     hasTraded(memberProposer);
@@ -278,16 +288,16 @@ async function main(): Promise<void> {
     console.log('\n--- 5. Grants from before the rule are untouched ---');
     assert(rowOf('queued-before-cap') === queuedBefore, 'the queued 5000-Bean grant is byte-identical after every proposal above');
     assert(rowOf('open-before-cap') === openBefore, 'the open 5000-Bean grant is byte-identical after every proposal above');
-    setCommonsBalance(10);
+    setCommonsBalance(hc(10));
     tickDecisions();
     const waiting = db.prepare('SELECT status FROM decisions WHERE id = ?').get('queued-before-cap') as any;
     assert(waiting?.status === 'passed_queued_for_funds', `with 10 in the Commons it still waits in the queue (got ${waiting?.status})`);
-    const entBefore = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
-    setCommonsBalance(5000);
+    const entBefore = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance_c as number;
+    setCommonsBalance(hc(5000));
     tickDecisions();
     const paid = db.prepare('SELECT status FROM decisions WHERE id = ?').get('queued-before-cap') as any;
-    const entAfter = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
-    assert(paid?.status === 'executed' && Math.abs(entAfter - entBefore - 5000) < 1e-9 && Math.abs(getCommonsBalanceExact()) < 1e-9,
+    const entAfter = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance_c as number;
+    assert(paid?.status === 'executed' && entAfter - entBefore === hc(5000) && getCommonsBalanceExact() === 0,
         `once the Commons holds 5000 it pays, as before (status ${paid?.status}, enterprise +${entAfter - entBefore}, Commons ${getCommonsBalanceExact()})`);
     const stillOpen = db.prepare('SELECT status FROM decisions WHERE id = ?').get('open-before-cap') as any;
     assert(stillOpen?.status === 'open', `the open grant from before the rule is still open for its vote (got ${stillOpen?.status})`);

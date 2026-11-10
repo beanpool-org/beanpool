@@ -6,9 +6,9 @@ import {
 
 describe('the known floor (community modes slice 4)', () => {
     it('ships 1,000 Beans known floor and a 2,000 cap settable to 5,000', () => {
-        expect(KNOWN_FLOOR_DEFAULT).toBe(1000);
+        expect(KNOWN_FLOOR_DEFAULT).toBe(100000);
         expect(CREDIT_CAP_DEFAULT).toBe(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP);
-        expect(CREDIT_CAP_MAX).toBe(5000);
+        expect(CREDIT_CAP_MAX).toBe(500000);
     });
 
     it('an unconfirmed member (or known mode off) gets today\'s formula exactly', () => {
@@ -43,21 +43,21 @@ describe('the known floor (community modes slice 4)', () => {
     it('one band for the known part: any live offer unlocks all of it, none unlocks none; the earned part keeps its bands', () => {
         // nothing known: identical to today's covenant
         for (let n = 0; n <= 6; n++) {
-            for (const other of [0, 150, 700, 1920, 2000]) {
-                expect(usableAllowance({ knownGrant: 0, otherAllowance: other, cap: 2000, liveOffers: n }))
+            for (const other of [0, 15000, 70000, 192000, 200000]) {
+                expect(usableAllowance({ knownGrant: 0, otherAllowance: other, cap: 200000, liveOffers: n }))
                     .toBe(Math.min(other, offerCapForCount(n)));
             }
         }
-        expect(usableAllowance({ knownGrant: 1000, otherAllowance: 0, cap: 2000, liveOffers: 0 })).toBe(0);
-        expect(usableAllowance({ knownGrant: 1000, otherAllowance: 0, cap: 2000, liveOffers: 1 })).toBe(1000);
+        expect(usableAllowance({ knownGrant: 100000, otherAllowance: 0, cap: 200000, liveOffers: 0 })).toBe(0);
+        expect(usableAllowance({ knownGrant: 100000, otherAllowance: 0, cap: 200000, liveOffers: 1 })).toBe(100000);
         // 1 offer: all 1,000 known + the 200 band of the earned 700
-        expect(usableAllowance({ knownGrant: 1000, otherAllowance: 700, cap: 2000, liveOffers: 1 })).toBe(1200);
+        expect(usableAllowance({ knownGrant: 100000, otherAllowance: 70000, cap: 200000, liveOffers: 1 })).toBe(120000);
         // 3 offers: 1,000 known + 700 earned (band 1,000), within the 2,000 cap
-        expect(usableAllowance({ knownGrant: 1000, otherAllowance: 700, cap: 2000, liveOffers: 3 })).toBe(1700);
+        expect(usableAllowance({ knownGrant: 100000, otherAllowance: 70000, cap: 200000, liveOffers: 3 })).toBe(170000);
         // the cap bounds the sum
-        expect(usableAllowance({ knownGrant: 1500, otherAllowance: 1920, cap: 2000, liveOffers: 5 })).toBe(2000);
+        expect(usableAllowance({ knownGrant: 150000, otherAllowance: 192000, cap: 200000, liveOffers: 5 })).toBe(200000);
         // 0 offers with earned trust: only the earned band (0)
-        expect(usableAllowance({ knownGrant: 1000, otherAllowance: 700, cap: 2000, liveOffers: 0 })).toBe(0);
+        expect(usableAllowance({ knownGrant: 100000, otherAllowance: 70000, cap: 200000, liveOffers: 0 })).toBe(0);
     });
 
     it('an enterprise counts half of each confirmed keeper\'s known grant', () => {

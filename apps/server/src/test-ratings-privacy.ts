@@ -99,7 +99,7 @@ async function main() {
         const postId = `post-rp-${i}`, dealId = `deal-rp-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, author_pubkey, title, description, type, category, created_at) VALUES (?, ?, ?, ?, 'offer', 'goods', ?)`)
             .run(postId, ana.pub, `Eggs ${i}`, 'A dozen', new Date().toISOString());
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 10, 'completed', ?)`)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 10, 'completed', ?)`)
             .run(dealId, postId, i <= 2 ? ben.pub : eve.pub, ana.pub, new Date().toISOString());
         deals.push(dealId);
     }

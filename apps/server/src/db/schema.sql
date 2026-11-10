@@ -40,27 +40,26 @@ CREATE TABLE IF NOT EXISTS members (
     -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
     -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
     -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
+    -- MONEY IS WHOLE HUNDREDTHS OF A BEAN (@beanpool/core hundredths.ts; DESIGN-atomic-beans-fable.md): every money column
+    -- is INTEGER and named *_c, so a REAL or a whole-Bean figure can never be mistaken for one.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
-    earned_credit REAL DEFAULT 0,
+    earned_credit_c INTEGER NOT NULL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)
-    earned_surplus REAL DEFAULT 0,
-    working_capital_ceiling REAL DEFAULT NULL,
-    -- Grandfathered credit floor for enterprises (docs/the-commons.md §2.4, §6 Slice 4).
-    -- Auto-cleared once keepers' pledges exceed it.
-    legacy_credit_floor REAL DEFAULT NULL,
+    earned_surplus_c INTEGER NOT NULL DEFAULT 0,
+    working_capital_ceiling_c INTEGER DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
     archetype TEXT,
     -- Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
     purpose TEXT,
-    goal_amount REAL DEFAULT NULL CHECK (goal_amount IS NULL OR goal_amount >= 0),
+    goal_amount_c INTEGER DEFAULT NULL CHECK (goal_amount_c IS NULL OR goal_amount_c >= 0),
     deadline_at DATETIME DEFAULT NULL,
     lifecycle TEXT DEFAULT 'ongoing' CHECK (lifecycle IN ('ongoing', 'bounded')),
     paused INTEGER DEFAULT 0 CHECK (paused IN (0, 1)),
     paused_at DATETIME,
     paused_by TEXT,
-    paused_floor_snapshot REAL,
+    paused_floor_snapshot_c INTEGER,
     wind_up_initiated_at DATETIME,
     wind_up_initiated_by TEXT,
     wind_up_finalised_at DATETIME,
@@ -187,14 +186,14 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- The vouch the invite carries (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §4): one of core's
     -- VOUCH_PRESETS, held from its maker's budget when the code was made and landing on the joiner at the redeem. NULL for
     -- every other invite; an offline ticket never carries one. Declared here for the same reason as genesis_type.
-    vouch_amount INTEGER,
+    vouch_amount_c INTEGER,
     -- A voucher budget the invite promises (DESIGN-invites-and-names-list-amend3-fable.md §2, engine/vouchers.ts
-    -- landInviteVoucher): 100 to 2,000 in 100s, written only with names_entry_id, by an owner or a credit-committee admin.
+    -- landInviteVoucher): 100 to 2,000 Beans in 100s, in whole hundredths, written only with names_entry_id, by an owner or a credit-committee admin.
     -- Nothing is allocated when the code is made; whoever joins with it, confirmed against the entry, is made a voucher with
     -- this budget then. `voucher_outcome` is what the redeem (or, with two admins to confirm, the second confirmation) did
     -- with it: 'made', 'awaiting_second', or why not. NULL for every other invite. Declared here for the same reason as
     -- genesis_type.
-    voucher_level INTEGER,
+    voucher_level_c INTEGER,
     voucher_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -204,8 +203,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 CREATE TABLE IF NOT EXISTS accounts (
     public_key TEXT PRIMARY KEY,
     -- NOT NULL: better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance silently (review F1,
-    -- 2026-10-01). A node whose table predates this is rebuilt at boot (db.ts makeAccountBalanceNotNull).
-    balance REAL NOT NULL DEFAULT 0.0,
+    -- 2026-10-01). Whole hundredths of a Bean (hundredths.ts).
+    balance_c INTEGER NOT NULL DEFAULT 0,
     last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_demurrage_epoch INTEGER DEFAULT 0
 );
@@ -219,8 +218,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     from_pubkey TEXT NOT NULL,
     to_pubkey TEXT NOT NULL,
-    amount REAL NOT NULL CHECK (amount > 0),
-    tax_fee REAL DEFAULT 0.0,
+    -- Whole hundredths: amount_c left the payer, amount_c - fee_c reached the payee, fee_c reached the Commons.
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0),
+    fee_c INTEGER NOT NULL DEFAULT 0 CHECK (fee_c >= 0 AND fee_c <= amount_c),
     memo TEXT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- SRV-20: cryptographic authorship. For member-authored transactions these hold
@@ -250,7 +250,8 @@ CREATE TABLE IF NOT EXISTS posts (
     category TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    credits REAL NOT NULL DEFAULT 0,
+    -- The price, whole hundredths of a Bean; 0 is Free.
+    price_c INTEGER NOT NULL DEFAULT 0 CHECK (price_c >= 0),
     author_pubkey TEXT NOT NULL REFERENCES members(public_key),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     active INTEGER DEFAULT 1,
@@ -379,7 +380,7 @@ CREATE TABLE IF NOT EXISTS posts (
     -- slices G2′ and G1′), on a node that keeps the directory: `shown_from_host` is set on every copy and on nothing else. It
     -- holds the community's host while that was a shown row of the directory when the copy was written, else '' (an unlisted
     -- community's host is never kept). `shown_from_post_id` is the home listing's id there, or NULL. `shown_price` is an Offer's
-    -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `credits` stays 0, and
+    -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `price_c` stays 0, and
     -- nothing adds, compares or pays it. engine/event-copy.ts reads all three. No trigger, index or default here calls a
     -- connection function, so an older image boots on this file. Added to an older database by db.ts.
     shown_from_host TEXT,
@@ -566,7 +567,8 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     post_id TEXT NOT NULL REFERENCES posts(id),
     buyer_pubkey TEXT NOT NULL,
     seller_pubkey TEXT NOT NULL,
-    credits REAL NOT NULL,
+    -- The deal's price, whole hundredths of a Bean (0 for a free listing). `hours` is hours, not money.
+    amount_c INTEGER NOT NULL DEFAULT 0 CHECK (amount_c >= 0),
     hours REAL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -614,7 +616,7 @@ CREATE TABLE IF NOT EXISTS standing_deals (
     post_id TEXT NOT NULL REFERENCES posts(id),
     payer_pubkey TEXT NOT NULL,
     payee_pubkey TEXT NOT NULL,
-    beans_per_period REAL NOT NULL,
+    beans_per_period_c INTEGER NOT NULL CHECK (beans_per_period_c > 0),
     period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
     -- Period n runs [starts_at + (n-1) units, starts_at + n units), UTC, months clamped (@beanpool/core periodEnd).
     starts_at TEXT NOT NULL,
@@ -827,8 +829,8 @@ CREATE TABLE IF NOT EXISTS projects (
     title TEXT NOT NULL,
     description TEXT,
     photos TEXT, -- JSON array of URLs
-    goal_amount INTEGER NOT NULL,
-    current_amount INTEGER DEFAULT 0,
+    goal_amount_c INTEGER NOT NULL,
+    current_amount_c INTEGER NOT NULL DEFAULT 0,
     deadline_at DATETIME,
     status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'FUNDED', 'FAILED', 'COMPLETED'
     migrated_at DATETIME,
@@ -1566,17 +1568,17 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- to the `members` table above, add it to this whitelist too — otherwise
 -- mutations to that column won't be picked up by cursor-based delta sync.
 -- db.ts drops this trigger at every boot before this file runs, so the list here is the one in force on an existing
--- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus and working_capital_ceiling
+-- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus_c and working_capital_ceiling_c
 -- are an enterprise's standing a standby copies (engine/sync.ts importRemoteState, design G2a): Rule 6's surplus and the
 -- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
-    contact_value, contact_visibility, status, earned_credit, profile_updated_at,
+    contact_value, contact_visibility, status, earned_credit_c, profile_updated_at,
     archetype, credit_frozen, is_treasury, can_operate, credit_committee, joined_at, public_key,
-    legacy_credit_floor, earned_surplus, working_capital_ceiling,
-    purpose, goal_amount, deadline_at, lifecycle, paused,
-    paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
+    earned_surplus_c, working_capital_ceiling_c,
+    purpose, goal_amount_c, deadline_at, lifecycle, paused,
+    paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
@@ -1783,7 +1785,7 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
     role            TEXT NOT NULL DEFAULT 'keeper',
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
-    backing         REAL DEFAULT 0,
+    backing_c       INTEGER NOT NULL DEFAULT 0,
     -- Set when this keeper became lead automatically (the community removed the old lead, or the old lead
     -- stepped down): the other keepers may then run succession at once, without the 30-day inactivity wait.
     auto_promoted_at DATETIME,
@@ -1993,31 +1995,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(
 -- Debts and a second chance (community modes slice 5, engine/names-debts.ts): a confirmed member who left in debt. The
 -- debt went to the Commons when they left; this says so, on the entry (by id only: the names are sealed). While `open`, no
 -- key is confirmed against the entry. Settled by a payment to the Commons (`settle_ref` the transaction), worked off
--- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid` reaches `amount`), or forgiven by
+-- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid_c` reaches `amount_c`), or forgiven by
 -- a community Decision (`settle_ref` the Decision). Each record goes 3 years after `removed_at`, whatever its status.
 CREATE TABLE IF NOT EXISTS names_debts (
     id               TEXT PRIMARY KEY,
     entry_id         TEXT NOT NULL,
-    amount           REAL NOT NULL CHECK (amount > 0),
+    amount_c         INTEGER NOT NULL CHECK (amount_c > 0),
     reason           TEXT NOT NULL CHECK (reason IN ('removed', 'account_deleted')),
     removed_at       DATETIME NOT NULL,
     status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'forgiven')),
     repaying_pubkey  TEXT,
-    repaid           REAL NOT NULL DEFAULT 0,
+    repaid_c         INTEGER NOT NULL DEFAULT 0,
     settled_how      TEXT CHECK (settled_how IS NULL OR settled_how IN ('pay_back', 'work_off', 'forgiven')),
     settled_by       TEXT,
     settled_at       DATETIME,
     settle_ref       TEXT,
     note             TEXT,
     -- The work-off under way (engine/names-debts.ts): the confirmation that started it, and, once it set the 0 known
-    -- floor, the member's floor before ('default', 'frozen' or Beans) and the set_at it wrote. Its revoke puts back that
+    -- floor, the member's floor before ('default', 'frozen' or whole hundredths) and the set_at it wrote. Its revoke puts back that
     -- floor and nothing else, only while the floor is still the one it wrote.
     work_off_confirmation_id TEXT,
     work_off_floor_before    TEXT,
     work_off_floor_set_at    TEXT,
     -- What a hardship grant Decision gave the member working this debt off, as far as they still hold it: never swept
     -- (state-engine.ts sweepRepayment). Spending it shrinks it, so Beans spent and earned back count toward the debt.
-    hardship_held    REAL NOT NULL DEFAULT 0,
+    hardship_held_c  INTEGER NOT NULL DEFAULT 0,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -2030,7 +2032,7 @@ CREATE TABLE IF NOT EXISTS names_debt_payments (
     transaction_id   TEXT PRIMARY KEY,
     debt_id          TEXT NOT NULL,
     payer_pubkey     TEXT NOT NULL,
-    amount           REAL NOT NULL CHECK (amount > 0),
+    amount_c         INTEGER NOT NULL CHECK (amount_c > 0),
     paid_at          DATETIME NOT NULL,
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -2092,11 +2094,11 @@ CREATE TABLE IF NOT EXISTS known_consent_log (
 CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
 
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
--- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
+-- `amount_c` (whole hundredths) replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.
 CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     member_pubkey  TEXT PRIMARY KEY,
-    amount         INTEGER,
+    amount_c       INTEGER,
     frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
     set_by         TEXT NOT NULL,
     set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -2133,14 +2135,14 @@ CREATE TABLE IF NOT EXISTS vouchers (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- The allocation ledger (amend2 §3): every line of a voucher's budget, append-only. `amount` is signed by its kind: grant,
+-- The allocation ledger (amend2 §3): every line of a voucher's budget, append-only. `amount_c` (whole hundredths) is signed by its kind: grant,
 -- top_up and return add; lower, hold and stop take away. What is left is the sum. `ref`: the invite code a hold or its
 -- return is for, or the room_gifts id of a vouch from a profile. Nothing here is a Bean.
 CREATE TABLE IF NOT EXISTS voucher_allocations (
     id             TEXT PRIMARY KEY,
     member_pubkey  TEXT NOT NULL,
     kind           TEXT NOT NULL CHECK (kind IN ('grant', 'top_up', 'lower', 'hold', 'return', 'stop')),
-    amount         INTEGER NOT NULL CHECK ((kind IN ('grant', 'top_up', 'return') AND amount > 0) OR (kind IN ('lower', 'hold', 'stop') AND amount < 0)),
+    amount_c       INTEGER NOT NULL CHECK ((kind IN ('grant', 'top_up', 'return') AND amount_c > 0) OR (kind IN ('lower', 'hold', 'stop') AND amount_c < 0)),
     actor          TEXT NOT NULL,
     ref            TEXT,
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -2152,7 +2154,7 @@ CREATE INDEX IF NOT EXISTS idx_voucher_allocations_ref ON voucher_allocations(re
 -- Room: credit line one member gave another (amend2 §3, §6), a credit-limit input (engine trust.ts roomHeldOf), never a
 -- Bean. A voucher's vouch (`kind` 'vouch', out of their budget: at an invite's redeem, `invite_code`, or from a profile) or
 -- a member's gift of part of their own (kind 'gift', slice G1, `source_gift_id` the piece it was split from). `root_pubkey`
--- is the voucher every piece traces to, copied at each split. `written_off`: what of it a departed holder's debt used,
+-- is the voucher every piece traces to, copied at each split. `written_off_c`: what of it a departed holder's debt used,
 -- stamped when they left (the Commons' row stays the record of truth).
 CREATE TABLE IF NOT EXISTS room_gifts (
     id              TEXT PRIMARY KEY,
@@ -2160,11 +2162,11 @@ CREATE TABLE IF NOT EXISTS room_gifts (
     to_pubkey       TEXT NOT NULL,
     root_pubkey     TEXT NOT NULL,
     kind            TEXT NOT NULL CHECK (kind IN ('vouch', 'gift')),
-    amount          INTEGER NOT NULL CHECK (amount > 0),
+    amount_c        INTEGER NOT NULL CHECK (amount_c > 0),
     source_gift_id  TEXT,
     invite_code     TEXT,
     at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    written_off     REAL,
+    written_off_c   INTEGER,
     written_off_at  DATETIME,
     updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -2218,7 +2220,7 @@ CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
     transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
-    amount            REAL NOT NULL,
+    amount_c          INTEGER NOT NULL CHECK (amount_c > 0),
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     paid_at           DATETIME,
@@ -2254,12 +2256,12 @@ CREATE TABLE IF NOT EXISTS settlements (
     buyer_home_node TEXT,
     seller_pubkey   TEXT,
     post_id         TEXT,
-    amount          REAL NOT NULL CHECK (amount > 0),
+    amount_c        INTEGER NOT NULL CHECK (amount_c > 0),
     -- Outbound only. The cross-node fee is paid by the buyer ON TOP of the price (§2.1), so it is a
-    -- separate figure from `amount` — the bridge entries carry the price alone, never price plus fee.
+    -- separate figure from `amount_c` — the bridge entries carry the price alone, never price plus fee.
     -- Stored rather than recomputed so a reversal refunds exactly what was taken, even if the fee rate
     -- changes between the commit and the reversal.
-    fee             REAL NOT NULL DEFAULT 0 CHECK (fee >= 0),
+    fee_c           INTEGER NOT NULL DEFAULT 0 CHECK (fee_c >= 0),
     -- Inbound only. When the cap reservation lapses. A reservation moves no beans, so expiry is free —
     -- but a receipt arriving after it must be re-validated against the cap, never honoured on trust.
     reserved_until  DATETIME,
@@ -2340,7 +2342,7 @@ CREATE TABLE IF NOT EXISTS federation_links (
     -- asking anyone (§7, "the ceiling is the safety, and it must be visible alongside the balance").
     -- Starts at 0 — a link with no ceiling can hold a balance and show it, but cannot spend. Deliberate:
     -- the link is created automatically, so anything it could do unattended must start switched off.
-    commission_ceiling REAL NOT NULL DEFAULT 0 CHECK (commission_ceiling >= 0),
+    commission_ceiling_c INTEGER NOT NULL DEFAULT 0 CHECK (commission_ceiling_c >= 0),
     created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -2755,7 +2757,7 @@ CREATE TABLE IF NOT EXISTS enterprise_pledges (
     id TEXT PRIMARY KEY,
     keeper TEXT NOT NULL REFERENCES members(public_key),
     enterprise TEXT NOT NULL REFERENCES members(public_key),
-    amount REAL NOT NULL CHECK (amount > 0),
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0),
     pledged_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     released_at DATETIME DEFAULT NULL
 );
@@ -3102,7 +3104,7 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
     id                TEXT PRIMARY KEY,
     enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    pledged_backing_c INTEGER NOT NULL DEFAULT 0 CHECK (pledged_backing_c >= 0),
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_at        DATETIME,
@@ -3161,7 +3163,7 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_changes (
     kind              TEXT NOT NULL CHECK (kind IN ('add', 'remove')),
     member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     request_id        TEXT REFERENCES enterprise_keeper_requests(id) ON DELETE SET NULL,
-    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    pledged_backing_c INTEGER NOT NULL DEFAULT 0 CHECK (pledged_backing_c >= 0),
     proposed_by       TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'objected', 'withdrawn', 'failed')),
     created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

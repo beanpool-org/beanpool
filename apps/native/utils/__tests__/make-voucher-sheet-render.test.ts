@@ -3,7 +3,8 @@
  * "+ Make someone a voucher" on the phone (invites-vouching I5; DESIGN-invites-vouching-review-fable.md §3 ask 1; Marty,
  * 10 Nov: admins are vouchers only when an owner makes them one). The sheet draws the node's `candidates` in two sections,
  * Admins and Confirmed on the names list, and nobody else; the budget stepper starts at the community's default; an admin
- * is made with { memberPubkey } and a confirmed name with its entry id; the node's refusal is shown in its own words.
+ * is made with { memberPubkey } and a confirmed name with its entry id; the node's refusal is shown in its own words. Every
+ * budget is whole hundredths of a Bean, as the node's settings and levels are (80000 is a budget of 800 Beans).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -62,7 +63,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const draw = async (props: Record<string, unknown> = {}) => {
     await act(async () => {
         root.render(createElement(MakeVoucherSheet, {
-            anchorUrl: 'https://community.test', identity, candidates: CANDIDATES, defaultBudget: 1000,
+            anchorUrl: 'https://community.test', identity, candidates: CANDIDATES, defaultBudget: 100000,
             names: new Map([[LIZ_ENTRY, 'Liz Moreau']]), onClose: () => {}, onMade: () => { made++; }, ...props,
         } as any) as any);
     });
@@ -103,14 +104,14 @@ describe('+ Make someone a voucher (phone)', () => {
     });
 
     it('an admin picked: the stepper starts at the community default; Make sends { memberPubkey } with the level', async () => {
-        await draw({ defaultBudget: 800 });
+        await draw({ defaultBudget: 80000 });
         await click(all('make-voucher-admin-row')[0]);
         expect(one('make-voucher-budget')?.textContent).toContain('Budget: 800 Beans');
         await click(host.querySelector('[aria-label="Increase budget"]'));
         expect(one('make-voucher-budget')?.textContent).toContain('Budget: 900 Beans');
         expect(one('make-voucher-go')?.textContent).toBe('Make @Ike a voucher');
         await click(one('make-voucher-go'));
-        expect(calls.made).toEqual([['admin', IKE, 900]]);
+        expect(calls.made).toEqual([['admin', IKE, 90000]]);
         expect(made).toBe(1);
         expect(host.textContent).toContain('@Ike is a voucher now, with a budget of 900 Beans.');
     });
@@ -119,7 +120,7 @@ describe('+ Make someone a voucher (phone)', () => {
         await draw();
         await click(all('make-voucher-confirmed-row')[0]);
         await click(one('make-voucher-go'));
-        expect(calls.made).toEqual([['entry', LIZ_ENTRY, 1000]]);
+        expect(calls.made).toEqual([['entry', LIZ_ENTRY, 100000]]);
     });
 
     it('the node refuses: its words shown, nothing told as made', async () => {
@@ -132,12 +133,12 @@ describe('+ Make someone a voucher (phone)', () => {
     });
 
     it('the stepper stays on the node’s levels: never below 100, never above 2,000', async () => {
-        await draw({ defaultBudget: 100 });
+        await draw({ defaultBudget: 10000 });
         await click(all('make-voucher-admin-row')[0]);
         expect(host.querySelector('[aria-label="Decrease budget"]')?.getAttribute('data-disabled')).toBe('true');
         act(() => root.unmount());
         root = createRoot(host);
-        await draw({ defaultBudget: 2000 });
+        await draw({ defaultBudget: 200000 });
         await click(all('make-voucher-admin-row')[0]);
         expect(host.querySelector('[aria-label="Increase budget"]')?.getAttribute('data-disabled')).toBe('true');
     });

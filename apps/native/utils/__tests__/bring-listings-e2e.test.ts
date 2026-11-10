@@ -208,7 +208,7 @@ async function memberOfBoth(name: string): Promise<BeanPoolIdentity> {
 /** A listing posted to the global community as the app posts one. */
 async function listOnGlobal(me: BeanPoolIdentity, type: 'offer' | 'need', title: string, photos: number, tags?: string[], freeTags?: string[]): Promise<string> {
     const res = await signedPost(global_.url, '/api/marketplace/posts', {
-        type, category: 'food', title, description: `About ${title}`, credits: 0, priceType: 'fixed', authorPublicKey: me.publicKey,
+        type, category: 'food', title, description: `About ${title}`, price_c: 0, priceType: 'fixed', authorPublicKey: me.publicKey,
         lat: -28.54, lng: 153.51, photos: Array.from({ length: photos }, () => PNG), ...(tags ? { tags } : {}), ...(freeTags ? { freeTags } : {}),
     }, me);
     const answer = await res.json() as { post?: { id: string }; error?: string };
@@ -225,7 +225,7 @@ async function offerFor(me: BeanPoolIdentity): Promise<BringOffer> {
 }
 
 const rowsOn = (node: TestNode, key: string) => node.control<Array<Record<string, any>>>('sql', {
-    sql: `SELECT p.id, p.type, p.title, p.description, p.credits, p.status, p.lat, p.lng, p.author_pubkey, p.tags, p.free_tags,
+    sql: `SELECT p.id, p.type, p.title, p.description, p.price_c, p.status, p.lat, p.lng, p.author_pubkey, p.tags, p.free_tags,
                  (SELECT COUNT(*) FROM post_photos ph WHERE ph.post_id = p.id) AS photos
             FROM posts p WHERE p.author_pubkey = ? ORDER BY p.created_at, p.rowid`,
     params: [key], all: true,
@@ -272,7 +272,7 @@ describe('bringing listings to a first local community (the phone against two re
         const arrived = await rowsOn(local, me.publicKey);
         expect(arrived.map((p) => [p.type, p.title, p.photos])).toEqual([['offer', 'Seedlings', 5], ['offer', 'Honey', 1], ['need', 'A ladder', 2]]);
         for (const p of arrived) {
-            expect(p).toMatchObject({ author_pubkey: me.publicKey, credits: 0, status: 'active', lat: -28.54, lng: 153.51 });
+            expect(p).toMatchObject({ author_pubkey: me.publicKey, price_c: 0, status: 'active', lat: -28.54, lng: 153.51 });
             expect(p.description).toBe(`About ${p.title}`);
         }
         expect(arrived[0].id).toBe(broughtId(seedlings, offer.to));
@@ -337,7 +337,7 @@ describe('bringing listings to a first local community (the phone against two re
 
         // Their own Offer, posted there as the app posts one.
         const listed = await signedPost(local.url, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title: 'Worm castings', description: 'A bucket', credits: 0, priceType: 'fixed',
+            type: 'offer', category: 'food', title: 'Worm castings', description: 'A bucket', price_c: 0, priceType: 'fixed',
             authorPublicKey: me.publicKey, lat: -28.54, lng: 153.51, photos: [PNG],
         }, me);
         expect(await listed.json()).toMatchObject({ success: true });
@@ -360,7 +360,7 @@ describe('bringing listings to a first local community (the phone against two re
         await settleBringOffer(accepted, await runBring(accepted, await planBring(accepted, me) as BringPlan, me));
 
         const listed = await signedPost(local.url, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title: 'Compost', description: 'A trailer load', credits: 0, priceType: 'fixed',
+            type: 'offer', category: 'food', title: 'Compost', description: 'A trailer load', price_c: 0, priceType: 'fixed',
             authorPublicKey: me.publicKey, lat: -28.54, lng: 153.51, photos: [PNG],
         }, me);
         const { post } = await listed.json() as { post: { id: string } };

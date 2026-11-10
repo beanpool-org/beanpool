@@ -74,7 +74,7 @@ function member(callsign: string): Key {
     const priv = new Uint8Array(crypto.randomBytes(32));
     const pub = Buffer.from(ed25519.getPublicKey(priv)).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return { pub, priv, callsign };
 }
 function stranger(callsign: string): Key {

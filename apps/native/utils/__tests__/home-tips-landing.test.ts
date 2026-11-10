@@ -168,13 +168,13 @@ function localMember(): HomeAnswer {
                 { id: 'e2', title: 'Repair café', startsAt: iso(now + 5 * 24 * H), endsAt: null, place: null, rsvp: 'going' },
             ], radiusKm: null },
             market: { items: [
-                { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', credits: 12, photoUrl: '/api/photos/p1.jpg' },
+                { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', price_c: 1200, photoUrl: '/api/photos/p1.jpg' },
                 { id: 'p2', type: 'need', title: 'Help moving a couch', category: 'labour', photoUrl: null },
-                { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: null },
+                { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', price_c: 800, photoUrl: null },
             ], total14d: 3, more: false },
             joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }, { callsign: 'Kofi', avatarUrl: null }] },
             pulse: { items: [{ id: 'q1', title: 'How our LETS started', thumbnailUrl: '/x', platform: 'youtube', callsign: 'River Folk Studio', category: 'education', url: null }] },
-            beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
+            beans: { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false },
             community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
         },
     };

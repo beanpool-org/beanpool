@@ -4,7 +4,7 @@ import { InfoModal, InfoModalTab } from '../InfoModal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { palette } from '../../constants/colors';
 import { useStyles, useTheme } from '../../app/ThemeContext';
-import { TIER_LEVELS, formatNumber, t, tn } from '@beanpool/core';
+import { TIER_LEVELS, formatHundredths, formatNumber, t, tn } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { richWords } from './rich-words';
 
@@ -106,7 +106,8 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
     /** A tier's heading: its emoji and its name in the member's language. */
     const tierHeading = (tier: typeof NEWCOMER) => t('{emoji} {label}', { emoji: tier.emoji, label: t(TIER_WORDS[tier.name]) });
     /** "Reached at 200 trust (up to 599)": where a tier starts, and where the next one does. */
-    const reachedUpTo = (tier: typeof NEWCOMER, next: typeof NEWCOMER) => richWords(t('Reached at **{trust}** trust (up to {upTo})', { trust: formatNumber(tier.minCredit), upTo: formatNumber(next.minCredit - 1) }), bold);
+    // Trust is credit in whole hundredths, as core's TIER_LEVELS hold it (atomic Beans): a tier runs up to one hundredth below the next.
+    const reachedUpTo = (tier: typeof NEWCOMER, next: typeof NEWCOMER) => richWords(t('Reached at **{trust}** trust (up to {upTo})', { trust: formatHundredths(tier.minCredit), upTo: formatHundredths(next.minCredit - 1) }), bold);
 
     const tabs: InfoModalTab[] = [
         {
@@ -189,7 +190,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
                         <Text style={styles.tierTitle}>{tierHeading(ELDER)}</Text>
-                        <ListItem>{richWords(t('Reached at **{trust}** trust', { trust: formatNumber(ELDER.minCredit) }), bold)}</ListItem>
+                        <ListItem>{richWords(t('Reached at **{trust}** trust', { trust: formatHundredths(ELDER.minCredit) }), bold)}</ListItem>
                         <ListItem>{t('Recognised as a long-standing, high-trust member')}</ListItem>
                     </View>
 

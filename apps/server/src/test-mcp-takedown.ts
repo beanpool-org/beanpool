@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(admin, 'Adele Admin');
@@ -142,7 +142,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     clearEnterpriseFloorCache(db);
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
         // ── 3. Refused, and listed back ──────────────────────────────────────────────────────────────
         const escrowed = post('Held in escrow', mia.pub);
         const tx = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx, escrowed, rae.pub, mia.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx, escrowed, rae.pub, mia.pub);
         const ownerPost = post('Owner announcement', owner.pub), adminPost = post('Admin notes', admin.pub), modPost = post('Moderator notes', moderator.pub), keptPost = post('Bakery loaves', bakery);
         const peerPost = post('A peer listing', mia.pub);
         db.prepare('UPDATE posts SET origin_node = ? WHERE id = ?').run('https://peer.example', peerPost);
@@ -248,13 +248,13 @@ async function main(): Promise<void> {
         // A keeper's wage owed on a listing is money too: a removal would cancel the claim.
         const wagePost = post('A wage still owed', mia.pub);
         const claim = crypto.randomUUID();
-        db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount, status) VALUES (?, ?, ?, ?, 3, 'pending')`).run(claim, bakery, mia.pub, wagePost);
+        db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount_c, status) VALUES (?, ?, ?, ?, 3, 'pending')`).run(claim, bakery, mia.pub, wagePost);
         const wageOut = structured(await a.callTool({ name: 'take_down', arguments: { post_id: wagePost, reason: 'spam', why: WHY } }));
         assert(wageOut?.removed?.length === 0 && /wage still owed/.test(wageOut?.kept?.[0]?.why ?? '') && !row(wagePost).hidden_by_reports_at, `a wage still owed stays up (${wageOut?.kept?.[0]?.why})`);
         // A deal only asked for is declined, as an author's own removal declines one, and holds no Bean.
         const askedPost = post('Asked for, not agreed', mia.pub);
         const asked = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'requested')`).run(asked, askedPost, rae.pub, mia.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'requested')`).run(asked, askedPost, rae.pub, mia.pub);
         const askedOut = structured(await a.callTool({ name: 'take_down', arguments: { post_id: askedPost, reason: 'spam', why: WHY } }));
         assert(askedOut?.removed?.[0] === askedPost && (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(asked) as any).status === 'rejected', 'a deal only asked for is declined');
         for (const [name, id] of [['an owner', ownerPost], ['an admin', adminPost], ['a moderator', modPost], ['an enterprise an owner keeps', keptPost]] as const) {
@@ -664,7 +664,7 @@ async function main(): Promise<void> {
         setNodeRole(roleWas);
         await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: a2 } });
         const tx2 = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx2, a3, rae.pub, sam.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx2, a3, rae.pub, sam.pub);
         const samNoticesBefore = noticesOf(sam.pub).length;
         const removedAt = row(a1).removed_by_moderator_at;
         backdate(TAKEDOWN.holdDays + 1);
@@ -804,7 +804,7 @@ async function main(): Promise<void> {
         const leftChild = await lineOf(byReportId.id);
         assert(leftChild?.state === 'left_hidden' && leftChild?.leftFor === 'child_safety', `Settings shows it left hidden, and why (${JSON.stringify(leftChild)})`);
         const dealToo = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(dealToo, filedLate, rae.pub, sam.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(dealToo, filedLate, rae.pub, sam.pub);
         assert((await lineOf(filedLate))?.leftFor === 'deal', 'a deal as well says the deal, because removing that post refunds it');
         db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(dealToo);
 

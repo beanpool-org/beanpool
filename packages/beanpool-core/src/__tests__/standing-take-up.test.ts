@@ -37,23 +37,23 @@ function keyPair() {
 }
 
 describe('standingFieldsFor: what both apps put in the text', () => {
-    it('a v4 UUID, a 32-hex nonce, the start as toISOString writes it, Beans to the cent', () => {
-        const f = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod: 50.004, unit: 'month', maxPeriods: null, startsAt: NOW }, fixedRand);
+    it('a v4 UUID, a 32-hex nonce, the start as toISOString writes it, the amount in whole hundredths', () => {
+        const f = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod_c: 5000, unit: 'month', maxPeriods: null, startsAt: NOW }, fixedRand);
         expect(f.standingId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
         expect(f.nonce).toMatch(/^[0-9a-f]{32}$/);
         expect(f.startsAt).toBe('2026-11-09T08:00:00.000Z');
-        expect(f.beansPerPeriod).toBe(50);
+        expect(f.beansPerPeriod_c).toBe(5000);
     });
     it('two take-ups never share an id or a nonce', () => {
-        const a = standingFieldsFor({ listingId: 'p', payee: PAYEE, beansPerPeriod: 5, unit: 'week', maxPeriods: 3, startsAt: NOW });
-        const b = standingFieldsFor({ listingId: 'p', payee: PAYEE, beansPerPeriod: 5, unit: 'week', maxPeriods: 3, startsAt: NOW });
+        const a = standingFieldsFor({ listingId: 'p', payee: PAYEE, beansPerPeriod_c: 500, unit: 'week', maxPeriods: 3, startsAt: NOW });
+        const b = standingFieldsFor({ listingId: 'p', payee: PAYEE, beansPerPeriod_c: 500, unit: 'week', maxPeriods: 3, startsAt: NOW });
         expect(a.standingId).not.toBe(b.standingId);
         expect(a.nonce).not.toBe(b.nonce);
     });
 });
 
 describe('signStandingAuthorisation: the signed text an accept or approval carries', () => {
-    const fields = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod: 50, unit: 'month', maxPeriods: 6, startsAt: NOW }, fixedRand);
+    const fields = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod_c: 5000, unit: 'month', maxPeriods: 6, startsAt: NOW }, fixedRand);
 
     it('signs 0xFF then the text in UTF-8, for the host the URL names, and the node can read the text back', async () => {
         const k = keyPair();
@@ -101,7 +101,7 @@ describe('standingStartAt: Today, or 1 to 30 days ahead, never past the node\'s 
 
 describe('standingTakeUpLines: the take-up screen (design §3)', () => {
     it('a month from today: paid now for the first month, its dates, the agree button', () => {
-        const l = standingTakeUpLines({ unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 }, day);
+        const l = standingTakeUpLines({ unit: 'month', beans: 5000, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 }, day);
         expect(l.title).toBe('Take this up?');
         expect(l.summary).toBe('Vehicle Storage · 50 Beans a month · from Rob');
         expect(l.paidNow).toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
@@ -111,34 +111,36 @@ describe('standingTakeUpLines: the take-up screen (design §3)', () => {
         expect(Object.values(l).join(' ')).not.toMatch(/held|hold/i);
     });
     it('a week, one period, starting later', () => {
-        const l = standingTakeUpLines({ unit: 'week', beans: 12.5, title: 'Eggs', payeeName: 'Ann', startsAt: NOW + 2 * 86_400_000, periods: 1 }, day);
+        const l = standingTakeUpLines({ unit: 'week', beans: 1250, title: 'Eggs', payeeName: 'Ann', startsAt: NOW + 2 * 86_400_000, periods: 1 }, day);
         expect(l.forPeriods).toBe('For 1 week');
         expect(l.startOn).toBe('On 11 Nov');
-        expect(l.paidNow).toBe('12.5 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.5 at the start of each week, until one of you stops it.');
+        expect(l.paidNow).toBe('12.50 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.50 at the start of each week, until one of you stops it.');
         expect(l.shortAhead).toBe("If you're short when a week is due, you'll be told the day before.");
     });
     it("Agree is never a button that fails: short of the first period's room, a plain line says so (design §3)", () => {
-        const base = { unit: 'month' as const, beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 };
-        expect(standingTakeUpLines({ ...base, room: 30 }, day).noRoom).toBe('You need 50 Beans of room; you have 30');
-        expect(standingTakeUpLines({ ...base, room: -4 }, day).noRoom).toBe('You need 50 Beans of room; you have 0');
-        expect(standingTakeUpLines({ ...base, room: 49.99 }, day).noRoom).toBe('You need 50 Beans of room; you have 49.99');
+        const base = { unit: 'month' as const, beans: 5000, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 };
+        expect(standingTakeUpLines({ ...base, room: 3000 }, day).noRoom).toBe('You need 50 Beans of room; you have 30');
+        expect(standingTakeUpLines({ ...base, room: -400 }, day).noRoom).toBe('You need 50 Beans of room; you have 0');
+        expect(standingTakeUpLines({ ...base, room: 4999 }, day).noRoom).toBe('You need 50 Beans of room; you have 49.99');
         // Room enough, or not known (the node still checks): no line, Agree stays.
-        for (const room of [50, 120, null, undefined, NaN]) expect(standingTakeUpLines({ ...base, room }, day).noRoom).toBeNull();
+        for (const room of [5000, 12000, null, undefined, NaN]) expect(standingTakeUpLines({ ...base, room }, day).noRoom).toBeNull();
     });
     it("standingRoomOf: the balance less the usable floor, else the earned floor; null when there's no read", () => {
-        expect(standingRoomOf({ balance: 10, floor: -100, usableFloor: -20 })).toBe(30);
-        expect(standingRoomOf({ balance: 10, floor: -40 })).toBe(50);
-        expect(standingRoomOf({ balance: -25.5, floor: -20, usableFloor: -20 })).toBe(-5.5);
-        expect(standingRoomOf({ balance: 7 })).toBe(7);
+        expect(standingRoomOf({ balance_c: 1000, floor_c: -10000, usableFloor_c: -2000 })).toBe(3000);
+        expect(standingRoomOf({ balance_c: 1000, floor_c: -4000 })).toBe(5000);
+        expect(standingRoomOf({ balance_c: -2550, floor_c: -2000, usableFloor_c: -2000 })).toBe(-550);
+        expect(standingRoomOf({ balance_c: 700 })).toBe(700);
         expect(standingRoomOf(null)).toBeNull();
-        expect(standingRoomOf({ floor: -20 })).toBeNull();
+        expect(standingRoomOf({ floor_c: -2000 })).toBeNull();
+        // A read that isn't whole hundredths (an old Beans figure) is no read: never a room 100 times off.
+        expect(standingRoomOf({ balance_c: 10.5 })).toBeNull();
     });
 });
 
 const row = (o: Partial<StandingDealRow> = {}): StandingDealRow => ({
     id: 'tx-3', postTitle: 'Vehicle Storage', status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
     buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 });
@@ -179,29 +181,31 @@ describe('standingUnitForListing: only a PRICED weekly or monthly listing makes 
     it('a free one (0 Beans a week or a month) stays a one-off deal of 0 Beans, as before S2: there is nothing to hold each period', () => {
         expect(standingUnitForListing('monthly', 0)).toBeNull();
         expect(standingUnitForListing('weekly', 0)).toBeNull();
-        expect(standingUnitForListing('monthly', '0')).toBeNull();
+        expect(standingUnitForListing('monthly', '0' as unknown as number)).toBeNull();
         expect(standingUnitForListing('monthly', null)).toBeNull();
         expect(standingUnitForListing('monthly', undefined)).toBeNull();
         expect(standingUnitForListing('monthly', Number.NaN)).toBeNull();
-        expect(standingUnitForListing('monthly', -5)).toBeNull();
+        expect(standingUnitForListing('monthly', -500)).toBeNull();
+        // A figure that is not whole hundredths is not a price: a float, and a string (the wire carries an integer).
+        expect(standingUnitForListing('weekly', 12.5)).toBeNull();
+        expect(standingUnitForListing('weekly', '1250' as unknown as number)).toBeNull();
     });
     it('a priced one is a standing deal by the week or the month; hourly, daily and fixed never are', () => {
-        expect(standingUnitForListing('monthly', 50)).toBe('month');
-        expect(standingUnitForListing('weekly', 12.5)).toBe('week');
-        expect(standingUnitForListing('weekly', '12.5')).toBe('week');
-        expect(standingUnitForListing('fixed', 50)).toBeNull();
-        expect(standingUnitForListing('hourly', 50)).toBeNull();
-        expect(standingUnitForListing('daily', 50)).toBeNull();
+        expect(standingUnitForListing('monthly', 5000)).toBe('month');
+        expect(standingUnitForListing('weekly', 1250)).toBe('week');
+        expect(standingUnitForListing('fixed', 5000)).toBeNull();
+        expect(standingUnitForListing('hourly', 5000)).toBeNull();
+        expect(standingUnitForListing('daily', 5000)).toBeNull();
     });
     it('whatever it calls standing, core can sign: 0.01 Beans a month signs; 0 is the case that threw before signing', async () => {
         const signed: Uint8Array[] = [];
         const sign = async (b: Uint8Array) => { signed.push(b); return new Uint8Array(64); };
-        const unit = standingUnitForListing('monthly', 0.01)!;
-        const fields = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod: 0.01, unit, maxPeriods: null, startsAt: NOW }, fixedRand);
+        const unit = standingUnitForListing('monthly', 1)!;
+        const fields = standingFieldsFor({ listingId: 'post-1', payee: PAYEE, beansPerPeriod_c: 1, unit, maxPeriods: null, startsAt: NOW }, fixedRand);
         await signStandingAuthorisation('https://mullum.example', fields, sign);
         expect(signed).toHaveLength(1);
         // The defect: a free monthly listing went to the take-up and Agree threw here, before anything was signed.
-        await expect(signStandingAuthorisation('https://mullum.example', { ...fields, beansPerPeriod: 0 }, sign)).rejects.toThrow();
+        await expect(signStandingAuthorisation('https://mullum.example', { ...fields, beansPerPeriod_c: 0 }, sign)).rejects.toThrow();
         expect(signed).toHaveLength(1);
     });
 });

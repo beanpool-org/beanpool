@@ -64,10 +64,10 @@ beforeEach(() => {
     vi.clearAllMocks();
     forgetRecentLookups();
     resetReaderFeaturesOnce();
-    node.offer = { offered: true, max: 100, room: 100, canGive: 100, why: null };
+    node.offer = { offered: true, max: 10000, room: 10000, canGive: 10000, why: null };
     node.refuse = null;
     node.gifts = [];
-    vi.mocked(getBalance).mockResolvedValue({ balance: 100, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+    vi.mocked(getBalance).mockResolvedValue({ balance_c: 10000, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
     vi.mocked(getMembers).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana' }] as any);
     vi.mocked(request).mockImplementation(async (method: string, path: string, body?: unknown) => {
         if (path !== '/api/credit/gift') throw Object.assign(new Error('not found'), { status: 404 });
@@ -77,7 +77,7 @@ beforeEach(() => {
         }
         node.gifts.push(body);
         if (node.refuse) throw new Error(node.refuse);
-        return { amount: (body as any).amount, room: 50, canGive: 50 };
+        return { amount_c: (body as any).amount_c, room: 5000, canGive: 5000 };
     });
 });
 
@@ -100,7 +100,7 @@ const give = async () => { await act(async () => { fireEvent.click(screen.getByR
 
 describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
     it('no tab when the node does not offer it: the owner set 0, no credit line someone gave them, or a node from before G1', async () => {
-        for (const offer of [{ offered: false, max: 0, room: 60, canGive: 0, why: 'Giving part of your credit line is off in this community.' }, { offered: false, max: 100, room: 0, canGive: 0, why: null }, null]) {
+        for (const offer of [{ offered: false, max: 0, room: 6000, canGive: 0, why: 'Giving part of your credit line is off in this community.' }, { offered: false, max: 10000, room: 0, canGive: 0, why: null }, null]) {
             node.offer = offer;
             const { unmount } = render(<LedgerPage identity={identity} isMember={true} />);
             await waitFor(() => expect(request).toHaveBeenCalledWith('GET', '/api/credit/gift'));
@@ -123,7 +123,7 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
         expect(screen.queryByPlaceholderText('Memo (optional)')).toBeNull();
         fireEvent.change(screen.getByLabelText('Credit line to give'), { target: { value: '50' } });
         await give();
-        expect(node.gifts).toEqual([{ memberPubkey: DANA, amount: 50 }]);
+        expect(node.gifts).toEqual([{ memberPubkey: DANA, amount_c: 5000 }]); // 50 typed, whole hundredths sent
         expect(await screen.findByTestId('credit-gift-note')).toHaveTextContent('✓ Given!');
     });
 
@@ -140,7 +140,7 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
     });
 
     it('nothing to give now: the node\'s why, and Give stays off', async () => {
-        node.offer = { offered: true, max: 100, room: 17, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
+        node.offer = { offered: true, max: 10000, room: 1700, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
         await openCreditTab();
         await pickDana();
         expect(screen.getByTestId('credit-gift-words')).toHaveTextContent('You’re using the credit line someone gave you, so none of it is free to give now.');
@@ -150,7 +150,7 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
     });
 
     it('Beans locked (nothing held) but part of the line to give: Send opens on the Credit line tab, the Beans tab says why', async () => {
-        vi.mocked(getBalance).mockResolvedValue({ balance: 0, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 0, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         await openWallet();
         expect(screen.queryByRole('button', { name: /^💸 Send Beans$/ })).toBeNull();
         fireEvent.click(await screen.findByRole('button', { name: 'Give part of your credit line' }));
@@ -161,16 +161,16 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
     });
 
     it('Beans locked, and all of it given: the node\'s sentence for that, and Cancel closes the form (round 2)', async () => {
-        vi.mocked(getBalance).mockResolvedValue({ balance: 0, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
-        node.offer = { offered: true, max: 100, room: 25, canGive: 25, why: null };
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 0, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        node.offer = { offered: true, max: 10000, room: 2500, canGive: 2500, why: null };
         await openWallet();
         fireEvent.click(await screen.findByRole('button', { name: 'Give part of your credit line' }));
         await pickDana();
         fireEvent.change(screen.getByLabelText('Credit line to give'), { target: { value: '25' } });
         const allGiven = 'You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.';
-        node.offer = { offered: false, max: 100, room: 0, canGive: 0, why: allGiven };
+        node.offer = { offered: false, max: 10000, room: 0, canGive: 0, why: allGiven };
         await give();
-        expect(node.gifts).toEqual([{ memberPubkey: DANA, amount: 25 }]);
+        expect(node.gifts).toEqual([{ memberPubkey: DANA, amount_c: 2500 }]);
         expect(await screen.findByTestId('credit-gift-note')).toHaveTextContent('✓ Given!');
         await waitFor(() => expect(screen.getByTestId('credit-gift-words')).toHaveTextContent(allGiven));
         expect(document.body.textContent).not.toContain('nobody has given you any');
@@ -194,8 +194,8 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
     });
 
     it('Beans locked and nothing to give: Send stays locked as before', async () => {
-        vi.mocked(getBalance).mockResolvedValue({ balance: 0, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
-        node.offer = { offered: true, max: 100, room: 50, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 0, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        node.offer = { offered: true, max: 10000, room: 5000, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
         await openWallet();
         expect(await screen.findByRole('button', { name: /Send Beans \(needs positive balance\)/ })).toBeDisabled();
         expect(screen.queryByRole('button', { name: 'Give part of your credit line' })).toBeNull();

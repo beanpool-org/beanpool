@@ -233,11 +233,11 @@ async function main(): Promise<void> {
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number } = {}): Id => {
         const id = newId();
         // A profile photo, because posting needs one; joined long ago, so no new account's limits apply.
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, earned_credit_c)
                     VALUES (?, ?, ?, 'seed', 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active', opts.visitor ? 1 : 0, opts.earned ?? 0);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('DoorbellAlice', { earned: 10 });
@@ -541,7 +541,7 @@ async function main(): Promise<void> {
 
         // A trade's step on a members-only listing: the member socket gets the bare doorbell as before,
         // and no socket off the member feed is rung.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade-group', 'offer', 'other', 'Group trade', 'desc', 1, ?, 'group')").run(alice.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope) VALUES ('doorbell-trade-group', 'offer', 'other', 'Group trade', 'desc', 1, ?, 'group')").run(alice.pk);
         await sleep(100);
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade-group', transaction: { id: 'doorbell-trade-group-tx' } }, [alice.pk], { othersGetDoorbell: true });
@@ -555,7 +555,7 @@ async function main(): Promise<void> {
 
         // A trade's step on a public listing, sent to its parties with a bare doorbell for the other members (othersGetDoorbell):
         // the listing went pending, came back or went, so every socket off the member feed gets the listings' doorbell.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade', 'offer', 'other', 'Public trade', 'desc', 1, ?, 'public')").run(alice.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope) VALUES ('doorbell-trade', 'offer', 'other', 'Public trade', 'desc', 1, ?, 'public')").run(alice.pk);
         await sleep(100);
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade', transaction: { id: 'doorbell-trade-tx' } }, [alice.pk], { othersGetDoorbell: true });

@@ -46,7 +46,7 @@ function makeMember(callsign: string, opts: { status?: string; visitor?: boolean
     const id = newKey();
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
         .run(id.pubKeyHex, callsign, opts.status ?? 'active', opts.visitor ? 1 : 0);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
     return id;
 }
 

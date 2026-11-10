@@ -226,9 +226,9 @@ describe('the global showcase\'s example header, and Your Beans\' tier', () => {
         draw(createElement(ExampleHeader));
         expect(bypassing(host)).toEqual([]);
         setLanguage('pt', [{ 'Resident\u0004trust tier': 'Residente' }]);
-        expect(beansLines({ balance: 12, room: 200, tier: 'Resident', activated: true, frozen: false }).sub).toBe('Residente');
+        expect(beansLines({ balance_c: 1200, room_c: 20000, tier: 'Resident', activated: true, frozen: false }).sub).toBe('Residente');
         // A tier a newer node names that this build doesn't know: as it came.
-        expect(beansLines({ balance: 12, room: 200, tier: 'Sage', activated: true, frozen: false }).sub).toBe('Sage');
+        expect(beansLines({ balance_c: 1200, room_c: 20000, tier: 'Sage', activated: true, frozen: false }).sub).toBe('Sage');
     });
 });
 

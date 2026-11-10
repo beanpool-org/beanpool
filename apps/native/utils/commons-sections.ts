@@ -99,15 +99,18 @@ export function groupKindChips(features: NodeFeatures | null | undefined): Array
     ];
 }
 
-/** A project or an enterprise, as the Groups list needs it: a goal in Beans, or a bounded lifecycle, makes a project. */
+/**
+ * A project or an enterprise, as the Groups list needs it: a goal in Beans, or a bounded lifecycle, makes a project. The goal
+ * is whole hundredths of a Bean, as the node sends it (`goalAmount_c`).
+ */
 export interface CommonsEnterprise {
     publicKey: string;
     lifecycle?: string | null;
-    goalAmount?: number | null;
+    goalAmount_c?: number | null;
 }
 
 /** Whether a project or enterprise is a project (the card's 🌱), by the rule the old Projects filter used. */
-export const isProject = (e: CommonsEnterprise): boolean => e.lifecycle === 'bounded' || (e.goalAmount != null && e.goalAmount > 0);
+export const isProject = (e: CommonsEnterprise): boolean => e.lifecycle === 'bounded' || (e.goalAmount_c != null && e.goalAmount_c > 0);
 
 export type CommonsGroupRow<E extends CommonsEnterprise = CommonsEnterprise> =
     | { kind: 'enterprise'; key: string; item: E }

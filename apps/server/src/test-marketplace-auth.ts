@@ -45,7 +45,8 @@ function makeMember(callsign: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, callsign);
     setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
+    // 1,000 Beans: every figure is whole hundredths of a Bean.
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 100000, 0)`).run(pubkey);
     return pubkey;
 }
 
@@ -76,19 +77,19 @@ async function testMarketplaceActorAuth() {
     const bob = makeMember('bob');
     const eve = makeMember('eve');
 
-    transfer('genesis', alice, 100, 'seed', 'direct', true);
-    transfer('genesis', bob, 100, 'seed', 'direct', true);
-    transfer('genesis', eve, 100, 'seed', 'direct', true);
+    transfer('genesis', alice, 10000, 'seed', 'direct', true);
+    transfer('genesis', bob, 10000, 'seed', 'direct', true);
+    transfer('genesis', eve, 10000, 'seed', 'direct', true);
 
     // Create an enterprise and assign Bob as keeper
-    const treasury = createTreasury('CommunityFarm', 'data:image/png;base64,iVBORw0KGgo=', 500).publicKey;
+    const treasury = createTreasury('CommunityFarm', 'data:image/png;base64,iVBORw0KGgo=', 50000).publicKey;
     adminAssignTreasuryOperator(treasury, bob, 'admin');
 
     // Bob lists an offer to satisfy CONTRIBUTION_REQUIRED
-    createPost('offer', 'services', 'Bob repairs', 'Fixing tools', 5, 'fixed', bob, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo=']);
+    createPost('offer', 'services', 'Bob repairs', 'Fixing tools', 500, 'fixed', bob, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo=']);
 
     // Alice creates an offer post
-    const offer = createPost('offer', 'food', 'Fresh Carrots', 'Organic carrots', 10, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
+    const offer = createPost('offer', 'food', 'Fresh Carrots', 'Organic carrots', 1000, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
 
     // Bob requests the offer
     const tx = requestPost(offer.id, bob);
@@ -196,7 +197,7 @@ async function testMarketplaceActorAuth() {
     {
         // Bob is keeper of CommunityFarm and tries to post an offer in its name from here
         const ctx: any = {
-            requestBody: { type: 'offer', title: 'Farm tomatoes', authorPublicKey: treasury, credits: 5 },
+            requestBody: { type: 'offer', title: 'Farm tomatoes', authorPublicKey: treasury, price_c: 500 },
             state: { actor: bob }
         };
         await dispatch(router, 'POST', '/api/marketplace/posts', ctx);
@@ -228,7 +229,7 @@ async function testMarketplaceActorAuth() {
     // ── 7. Legitimate author and keeper can remove their own posts ──
     {
         // Alice removes her own post
-        const alicePostToRemove = createPost('offer', 'food', 'Extra Carrots', 'More carrots', 10, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
+        const alicePostToRemove = createPost('offer', 'food', 'Extra Carrots', 'More carrots', 1000, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
         const ctx: any = {
             requestBody: { id: alicePostToRemove.id, authorPublicKey: alice },
             state: { actor: alice }
@@ -238,7 +239,7 @@ async function testMarketplaceActorAuth() {
     }
     {
         // Bob is keeper of CommunityFarm and removes the enterprise post
-        const farmPost = createPost('offer', 'food', 'Farm Basil', 'Organic herbs', 5, 'fixed', treasury, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
+        const farmPost = createPost('offer', 'food', 'Farm Basil', 'Organic herbs', 500, 'fixed', treasury, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
         const ctx: any = {
             requestBody: { id: farmPost.id, authorPublicKey: treasury },
             state: { actor: bob }
@@ -252,7 +253,7 @@ async function testMarketplaceActorAuth() {
     // can_operate and the treasury_operators binding in place. Acting as the enterprise must still stop.
     {
         const carol = makeMember('carol');
-        transfer('genesis', carol, 100, 'seed', 'direct', true);
+        transfer('genesis', carol, 10000, 'seed', 'direct', true);
         adminAssignTreasuryOperator(treasury, carol, 'admin');
 
         // Listing AS the enterprise goes through the enterprise's own route (the marketplace route posts as
@@ -260,7 +261,7 @@ async function testMarketplaceActorAuth() {
         // because edit / pause / remove name the enterprise as the post's author, not as the actor.
         const offerCtx = (actor: string, title: string): any => ({
             params: { treasury }, state: { actor }, get: () => '', set: () => { },
-            requestBody: { category: 'food', title, credits: 5, photos: ['data:image/png;base64,iVBORw0KGgo='] },
+            requestBody: { category: 'food', title, price_c: 500, photos: ['data:image/png;base64,iVBORw0KGgo='] },
         });
         const beforeCtx = await dispatch(entRouter, 'POST', `/api/treasury/${treasury}/offer`, offerCtx(carol, 'Farm eggs'));
         check(beforeCtx.body?.success === true, 'Unsuspended keeper Carol can list an offer for CommunityFarm');

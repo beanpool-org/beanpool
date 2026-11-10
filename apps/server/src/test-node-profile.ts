@@ -203,7 +203,7 @@ async function main() {
     const alice: Id = { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'alice', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(alice.pubKeyHex);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(alice.pubKeyHex);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(alice.pubKeyHex);
 
     const checkInfo = async (want: 'local' | 'global', label: string) => {
         for (const [who, id] of [['unsigned', undefined], ['signed member', alice]] as const) {
@@ -214,8 +214,8 @@ async function main() {
                 `${label}, ${who}: features are exactly what this build does on ${want} (got ${JSON.stringify(r.body.features)})`);
             const b = r.body;
             assert(typeof b.memberCount === 'number' && typeof b.postCount === 'number' && typeof b.transactionCount === 'number'
-                && typeof b.commonsBalance === 'number' && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
-                `${label}, ${who}: every field from before is still there, same types`);
+                && Number.isInteger(b.commonsBalance_c) && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
+                `${label}, ${who}: every field from before is still there, same types (the Commons pot as commonsBalance_c, whole hundredths)`);
         }
     };
     await checkInfo('local', 'NODE_PROFILE unset');

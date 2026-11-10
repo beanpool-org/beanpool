@@ -546,7 +546,8 @@ END`;
             `a fresh install has idx_marketplace_transactions_post_status (indexes: ${freshDealIndexes.join(', ')})`);
         d.pragma('foreign_keys = OFF');
         d.exec('DROP INDEX IF EXISTS idx_marketplace_transactions_post_status');
-        const deal = d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)`);
+        // A deal of 1 Bean: whole hundredths (amount_c).
+        const deal = d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 100, ?)`);
         for (const [i, post, status] of [[1, 'post-a', 'requested'], [2, 'post-a', 'pending'], [3, 'post-b', 'pending'], [4, 'post-b', 'completed']] as const) {
             deal.run(`deal-${i}`, post, `${i}`.repeat(64), 'ab'.repeat(32), status);
         }

@@ -168,13 +168,13 @@ const AT = '2026-10-24T10:00:00.000Z';
 const ENT = 'farm-co-key';
 const listing = (over: Record<string, unknown>) => ({
     id: 'p-1', type: 'offer', status: 'active', title: 'Pottery course', description: 'Six weeks on the wheel', category: 'education',
-    author_pubkey: 'damo-key', author_callsign: 'Damo', credits: 45, price_type: 'fixed', photos: '[]', repeatable: 1,
+    author_pubkey: 'damo-key', author_callsign: 'Damo', price_c: 4500, price_type: 'fixed', photos: '[]', repeatable: 1,
     audience_scope: 'public', created_at: iso(Date.now() - 3 * 60 * 60_000), ...over,
 });
 /** A deal as utils/db.ts getMarketplaceTransactions and getDealsFor answer it (camelCase, the node's shape). */
 const deal = (over: Record<string, unknown>) => ({
     id: 'tx-1', postId: 'p-1', status: 'pending', buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'damo-key',
-    sellerCallsign: 'Damo', credits: 45, hours: null, createdAt: AT, ...over,
+    sellerCallsign: 'Damo', amount_c: 4500, hours: null, createdAt: AT, ...over,
 });
 
 const node = {
@@ -187,10 +187,10 @@ const node = {
 function answers(post: Record<string, unknown>) {
     // The phone's copy of a row (utils/db.ts applyDelta): a standing deal's current period keeps its phase in the `standing` column.
     const snake = (d: Record<string, any>) => ({ id: d.id, post_id: d.postId, status: d.status, buyer_pubkey: d.buyerPublicKey, buyer_callsign: d.buyerCallsign,
-        seller_pubkey: d.sellerPublicKey, seller_callsign: d.sellerCallsign, credits: d.credits, hours: d.hours, created_at: d.createdAt,
+        seller_pubkey: d.sellerPublicKey, seller_callsign: d.sellerCallsign, amount_c: d.amount_c, hours: d.hours, created_at: d.createdAt,
         standing_id: d.standingId ?? null, period_no: d.periodNo ?? null,
         standing: d.standingId && d.standingPhase ? JSON.stringify({
-            phase: d.standingPhase, beans: d.standingBeans ?? null, unit: d.standingUnit ?? null, max: d.standingMaxPeriods ?? null,
+            phase: d.standingPhase, beans_c: d.standingBeans_c ?? null, unit: d.standingUnit ?? null, max: d.standingMaxPeriods ?? null,
             nextDueAt: d.standingNextDueAt ?? null, startsAt: d.standingStartsAt ?? null, shortSince: d.standingShortSince ?? null, stopped: !!d.standingStopped,
         }) : null });
     const database = {
@@ -271,7 +271,7 @@ for (const theme of ['light', 'dark'] as const) {
         it('the author of a recurring Offer with two deals under way: one row each, the one the alert named first', async () => {
             node.mine = [
                 deal({ id: 'tx-a', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, createdAt: '2026-10-26T10:00:00.000Z' }),
-                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 3000, createdAt: AT }),
             ];
             await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-b' });
             const list = host.querySelector('[data-testid="deals-under-way"]') as HTMLElement;
@@ -288,7 +288,7 @@ for (const theme of ['light', 'dark'] as const) {
         it("a row's Cancel on a deal already over elsewhere: said so, the sync asked for, and that row gone at once", async () => {
             node.mine = [
                 deal({ id: 'tx-a', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, createdAt: '2026-10-26T10:00:00.000Z' }),
-                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 3000, createdAt: AT }),
             ];
             await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
             // The node: Marty cancelled tx-a on his side a moment ago.
@@ -314,7 +314,7 @@ for (const theme of ['light', 'dark'] as const) {
         it("the author messages each deal's other side from its row (its unread on it), and reaches all their deals", async () => {
             node.mine = [
                 deal({ id: 'tx-a', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, createdAt: '2026-10-26T10:00:00.000Z' }),
-                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 3000, createdAt: AT }),
             ];
             node.unread = { 'kofi-key': 2 };
             await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
@@ -331,7 +331,7 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it('Message on a listing (the quiet row) opens the chat with the listing as the chip: a Need says Need, and Free', async () => {
-            await open(listing({ id: 'p-apples', type: 'need', title: 'Apples needed', credits: 0, author_pubkey: 'marty-key', author_callsign: 'Marty' }));
+            await open(listing({ id: 'p-apples', type: 'need', title: 'Apples needed', price_c: 0, author_pubkey: 'marty-key', author_callsign: 'Marty' }));
             await press(host.querySelector('[data-testid="post-quiet-row"]') as HTMLElement, 'Message Marty');
             expect(node.chats).toEqual([['dm', ['marty-key', ME.publicKey], ME.publicKey, undefined, 'p-apples']]);
             expect(nav.to).toContain('/chat/conv-1');
@@ -339,16 +339,16 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {
-            node.mine = [deal({ id: 'tx-l', credits: 0, buyerPublicKey: 'mo-key', buyerCallsign: 'Mo', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
-            await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0, credits: 0, status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            node.mine = [deal({ id: 'tx-l', amount_c: 0, buyerPublicKey: 'mo-key', buyerCallsign: 'Mo', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
+            await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0, price_c: 0, status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
             expect(row('tx-l')?.textContent).toContain('Mo · no Beans held · since 24 Oct');
             expect(host.textContent).not.toContain('0 Beans held');
         });
 
         it("a keeper of the enterprise on its Need: its deal read for it, Release at the enterprise's door, no Cancel", async () => {
             node.keeperOf = [ENT];
-            node.kept = [deal({ id: 'tx-f', postId: 'p-1', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
-            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', credits: 20 }));
+            node.kept = [deal({ id: 'tx-f', postId: 'p-1', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', amount_c: 2000 })];
+            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', price_c: 2000 }));
             expect(net.calls).toContain('db.getDealsFor');
             expect(host.textContent).toContain('You act for Farm Co-op here.');
             const r = row('tx-f')!;
@@ -365,8 +365,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it("a Need's author, who pays, releases from their row: then asked to rate the helper, as the web asks", async () => {
-            node.mine = [deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
-            await open(listing({ type: 'need', title: 'Fix the fence', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20 }));
+            node.mine = [deal({ id: 'tx-h', amount_c: 2000, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Fix the fence', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000 }));
             const r = row('tx-h')!;
             expect(host.textContent).not.toContain('How was your experience');
             await press(r, '✅ Release Credits');
@@ -376,8 +376,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it("a daily Need's author releasing from their row is asked for DAYS, with what changing them does, as the panel asks", async () => {
-            node.mine = [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
-            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'daily' }));
+            node.mine = [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'daily' }));
             const r = row('tx-d')!;
             await press(r, '✅ Release Credits');
             expect(r.textContent).toContain('CONFIRM ACTUAL DAYS WORKED');
@@ -386,8 +386,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it("a daily Need's author changing 3 days to 5 on their row sees the 100 Beans that will go, not the 60 held, as the web says", async () => {
-            node.mine = [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
-            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'daily' }));
+            node.mine = [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'daily' }));
             const r = row('tx-d')!;
             await press(r, '✅ Release Credits');
             const line = () => r.querySelector('[data-testid="release-line-tx-d"]')?.textContent;
@@ -400,8 +400,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it("one who took up an hourly Offer releases from the panel: the deal's own total, to the one they pay", async () => {
-            node.mine = [deal({ id: 'tx-h', credits: 30, hours: 2 })];
-            await open(listing({ title: 'Garden help', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 15, price_type: 'hourly' }));
+            node.mine = [deal({ id: 'tx-h', amount_c: 3000, hours: 2 })];
+            await open(listing({ title: 'Garden help', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, price_c: 1500, price_type: 'hourly' }));
             await press(host, '✅ Release Credits');
             const line = () => host.querySelector('[data-testid="release-line-panel"]')?.textContent;
             expect(line()).toBe('Transferring 30 B to Damo');
@@ -411,8 +411,8 @@ for (const theme of ['light', 'dark'] as const) {
 
         it("a keeper denies a request on the enterprise's Need at its door: it leaves the page at once", async () => {
             node.keeperOf = [ENT];
-            node.kept = [deal({ id: 'tx-q', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
-            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', credits: 20 }));
+            node.kept = [deal({ id: 'tx-q', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', amount_c: 2000 })];
+            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', price_c: 2000 }));
             expect(host.textContent).toContain('✋ Fulfillment Requests (1)');
             await press(host, 'Deny');
             // The modal's own Decline (its overlay is a button around it, which closes it).
@@ -428,10 +428,10 @@ for (const theme of ['light', 'dark'] as const) {
 
         it("a keeper's own offer to help on the enterprise's Need: theirs to withdraw, never on the farm's list to approve or deny", async () => {
             node.keeperOf = [ENT];
-            const mine = deal({ id: 'tx-mine', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20 });
+            const mine = deal({ id: 'tx-mine', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, amount_c: 2000 });
             node.mine = [mine];
-            node.kept = [mine, deal({ id: 'tx-mo', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
-            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', credits: 20 }));
+            node.kept = [mine, deal({ id: 'tx-mo', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', amount_c: 2000 })];
+            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', price_c: 2000 }));
             // Mo's offer is the farm's to answer; the keeper's own is not.
             expect(host.textContent).toContain('✋ Fulfillment Requests (1)');
             expect(Array.from(host.querySelectorAll('button')).filter(b => b.textContent === 'Approve & Commit')).toHaveLength(1);
@@ -445,11 +445,11 @@ for (const theme of ['light', 'dark'] as const) {
         // Standing deals (DESIGN-standing-deals-upfront-fable §3): each period is paid at its start and nothing is held, so the
         // payer sees the standing panel (Stop, Message), never a Release, Cancel or Hold back. Month 1 (9 Oct – 9 Nov) paid.
         const standing = (over: Record<string, unknown> = {}) => deal({
-            id: 'tx-s', credits: 50, status: 'completed', standingId: 'sd-1', periodNo: 1, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month',
+            id: 'tx-s', amount_c: 5000, status: 'completed', standingId: 'sd-1', periodNo: 1, standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month',
             standingMaxPeriods: null, standingNextDueAt: '2026-11-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z',
             standingShortSince: null, standingStopped: false, ...over,
         });
-        const storage = { title: 'Vehicle Storage', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 50, price_type: 'monthly' };
+        const storage = { title: 'Vehicle Storage', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, price_c: 5000, price_type: 'monthly' };
         it('one who took up a monthly Offer, running: its panel with Stop and Message, never Release, Cancel or Hold back', async () => {
             node.mine = [standing()];
             await open(listing(storage));
@@ -492,11 +492,11 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).toContain('That deal is done.');
         });
         it('finding 1: a FREE monthly Offer: Accept opens the one-off box, never the take-up, and the accept carries no standing deal', async () => {
-            await open(listing({ title: 'Vehicle Storage', price_type: 'monthly', credits: 0 }));
+            await open(listing({ title: 'Vehicle Storage', price_type: 'monthly', price_c: 0 }));
             const asked: unknown[][] = [];
             const base = net.answer!;
             net.answer = (name, args) => {
-                if (name === 'acceptMarketplacePost') { asked.push(args); return Promise.resolve({ transaction: { id: 'tx-new', credits: 0, status: 'pending' } }); }
+                if (name === 'acceptMarketplacePost') { asked.push(args); return Promise.resolve({ transaction: { id: 'tx-new', amount_c: 0, status: 'pending' } }); }
                 return base(name, args);
             };
             await press(host, '🤝 Accept Offer');
@@ -508,8 +508,8 @@ for (const theme of ['light', 'dark'] as const) {
             expect(asked).toEqual([['p-1', ME.publicKey, 2]]);
         });
         it("finding 1: a FREE weekly Need: its author's Approve is the one-off approval, with no take-up to sign", async () => {
-            node.mine = [deal({ id: 'tx-req', status: 'requested', buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'kofi-key', sellerCallsign: 'Kofi', credits: 0 })];
-            await open(listing({ type: 'need', title: 'Dog minding', price_type: 'weekly', credits: 0, author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            node.mine = [deal({ id: 'tx-req', status: 'requested', buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'kofi-key', sellerCallsign: 'Kofi', amount_c: 0 })];
+            await open(listing({ type: 'need', title: 'Dog minding', price_type: 'weekly', price_c: 0, author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
             const base = net.answer!;
             net.answer = (name, args) => (name === 'approveMarketplaceRequest' ? Promise.resolve({ success: true }) : base(name, args));
             await press(host, 'Approve & Commit');
@@ -520,7 +520,7 @@ for (const theme of ['light', 'dark'] as const) {
         // The take-up's room (#3032 round 2, the deciding review's inline): only the node's own balance read can disable Agree.
         // The phone's cached getBalance reads floor 0 when its copy is missing or stale, so a member with room on the node
         // (10 Beans, usable floor −200) would read 10 and be refused on a guess; unknown room leaves Agree, and the node checks.
-        const MONTHLY = { title: 'Vehicle Storage', price_type: 'monthly', credits: 50 };
+        const MONTHLY = { title: 'Vehicle Storage', price_type: 'monthly', price_c: 5000 };
         const agree = () => host.querySelector('[data-testid="standing-agree"]') as HTMLElement;
         const agreeOff = () => JSON.parse(agree().getAttribute('data-style') ?? '{}').opacity === 0.6;
         const takeUp = async () => {
@@ -530,7 +530,7 @@ for (const theme of ['light', 'dark'] as const) {
         };
         const tapAgree = async () => { await act(async () => { agree().click(); }); await settle(4); };
         it("take-up room: the phone's cached balance alone (10 Beans, floor 0: a missing or stale copy) never disables Agree", async () => {
-            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
+            node.cached = { balance_c: 1000, floor_c: 0, usableFloor_c: 0 };
             await takeUp();
             expect(host.querySelector('[data-testid="standing-no-room"]')).toBeNull();
             expect(agreeOff()).toBe(false);
@@ -538,7 +538,7 @@ for (const theme of ['light', 'dark'] as const) {
             expect(net.calls).toContain('db.signStandingStart');
         });
         it("take-up room: the node's read failed: room unknown, Agree stays", async () => {
-            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
+            node.cached = { balance_c: 1000, floor_c: 0, usableFloor_c: 0 };
             node.fresh = null;
             await takeUp();
             expect(net.calls).toContain('db.refreshBalanceFromServer');
@@ -546,14 +546,14 @@ for (const theme of ['light', 'dark'] as const) {
             expect(agreeOff()).toBe(false);
         });
         it("take-up room: the node's own read with room (10 Beans, usable floor −200) over a stale cache: Agree stays", async () => {
-            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
-            node.fresh = { balance: 10, floor: -200, usableFloor: -200 };
+            node.cached = { balance_c: 1000, floor_c: 0, usableFloor_c: 0 };
+            node.fresh = { balance_c: 1000, floor_c: -20000, usableFloor_c: -20000 };
             await takeUp();
             expect(host.querySelector('[data-testid="standing-no-room"]')).toBeNull();
             expect(agreeOff()).toBe(false);
         });
         it("take-up room: the node's own read with no room (10 Beans, usable floor 0): Agree disabled, the plain line under it", async () => {
-            node.fresh = { balance: 10, floor: 0, usableFloor: 0 };
+            node.fresh = { balance_c: 1000, floor_c: 0, usableFloor_c: 0 };
             await takeUp();
             expect(host.querySelector('[data-testid="standing-no-room"]')?.textContent).toBe('You need 50 Beans of room; you have 10');
             expect(agreeOff()).toBe(true);
@@ -562,8 +562,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {
-            node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
-            await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20 }));
+            node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 2000 })];
+            await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', price_c: 2000 }));
             expect(host.textContent).toContain("You're helping with this · 20 Beans held for you");
             expect(host.textContent).toContain('⏳ Pending Release by Kofi');
             expect(host.textContent).toContain('❌ Cancel Trust Hold');
@@ -571,8 +571,8 @@ for (const theme of ['light', 'dark'] as const) {
         });
 
         it('a helper on a free Need, approved: no Beans held, never "0 Beans held for you"', async () => {
-            node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 0 })];
-            await open(listing({ type: 'need', title: 'Carry chairs', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 0 }));
+            node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 0 })];
+            await open(listing({ type: 'need', title: 'Carry chairs', author_pubkey: 'kofi-key', author_callsign: 'Kofi', price_c: 0 }));
             expect(host.textContent).toContain("You're helping with this · no Beans held");
             expect(host.textContent).not.toContain('0 Beans held');
         });
@@ -604,8 +604,8 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
     const kinds = [
         {
             push: '❌ Request Declined: a helper whose offer Kofi declined',
-            post: { type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 0 },
-            tx: { id: 'tx-r', status: 'rejected', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20 },
+            post: { type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', price_c: 2000, repeatable: 0 },
+            tx: { id: 'tx-r', status: 'rejected', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, amount_c: 2000 },
             takeUp: '✋ I can do this', said: 'That request was declined.',
         },
         {
@@ -622,14 +622,14 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         },
         {
             push: '⚖️ Escrow Dispute Resolved, refunded: a borrower on a lendable Offer',
-            post: { title: 'Ladder', lendable: 1, repeatable: 0, credits: 5 },
-            tx: { id: 'tx-x', status: 'cancelled', credits: 5 },
+            post: { title: 'Ladder', lendable: 1, repeatable: 0, price_c: 500 },
+            tx: { id: 'tx-x', status: 'cancelled', amount_c: 500 },
             takeUp: '📦 Ask to borrow', said: 'That deal was cancelled.',
         },
         {
             push: '⚖️ Escrow Dispute Resolved, released: a helper on a repeatable Need',
-            post: { type: 'need', title: 'Weekly weeding', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 1 },
-            tx: { id: 'tx-y', status: 'completed', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20, completedAt: '2026-10-27T10:00:00.000Z' },
+            post: { type: 'need', title: 'Weekly weeding', author_pubkey: 'kofi-key', author_callsign: 'Kofi', price_c: 2000, repeatable: 1 },
+            tx: { id: 'tx-y', status: 'completed', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, amount_c: 2000, completedAt: '2026-10-27T10:00:00.000Z' },
             takeUp: '✋ I can do this', said: 'That deal is done.',
         },
     ];
@@ -697,8 +697,8 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
     });
 
     it("a deal's alert while it is open still lands on it: an approved helper sees the Beans held for them, no take-up", async () => {
-        node.mine = [deal({ id: 'tx-a', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
-        await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-a' });
+        node.mine = [deal({ id: 'tx-a', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 2000 })];
+        await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', price_c: 2000, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-a' });
         expect(host.textContent).toContain("You're helping with this · 20 Beans held for you");
         expect(host.textContent).toContain('❌ Cancel Trust Hold');
         expect(buttons().some((b) => b.includes('✋ I can do this'))).toBe(false);
@@ -716,7 +716,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
     it("a recurring Offer's author opened on one finished deal by its alert: the other deal's row and Edit, and that one's line", async () => {
         node.mine = [
             deal({ id: 'tx-done', status: 'completed', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, completedAt: '2026-10-27T10:00:00.000Z' }),
-            deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, amount_c: 3000, createdAt: AT }),
         ];
         await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-done' });
         expect(over()).toBe('That deal is done.');
@@ -733,8 +733,8 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
  */
 describe("a member's copy on the global community, on the listing's page (slice G1′)", () => {
     const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
-    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '20 fixed' });
-    const copy = (over: Record<string, unknown> = {}) => listing({ credits: 0, repeatable: 0, author_pubkey: 'hidden', author_callsign: 'another member', shown_from: fromHome, ...over });
+    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '2000 fixed' });
+    const copy = (over: Record<string, unknown> = {}) => listing({ price_c: 0, repeatable: 0, author_pubkey: 'hidden', author_callsign: 'another member', shown_from: fromHome, ...over });
     const onGlobal = () => store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: { beans: false, escrow: false }, checkedAt: new Date().toISOString() } }));
     const offered = () => host.querySelector('[data-testid="show-on-global-host"]') !== null;
     const mine = (over: Record<string, unknown> = {}) => listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign, repeatable: 0, lat: -28.68731, lng: 153.52219, ...over });
@@ -864,7 +864,7 @@ describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.
     const PHOTO = JSON.stringify(['https://mullum.example/uploads/apples.webp']);
     const APPLES = (over: Record<string, unknown> = {}) => listing({
         id: 'p-apples', type: 'need', title: 'Apples needed', description: 'Looking for fresh apples', category: 'food',
-        author_pubkey: 'marty-key', author_callsign: 'Marty', credits: 0, repeatable: 1, photos: PHOTO, created_at: iso(Date.now() - 3 * DAY), ...over,
+        author_pubkey: 'marty-key', author_callsign: 'Marty', price_c: 0, repeatable: 1, photos: PHOTO, created_at: iso(Date.now() - 3 * DAY), ...over,
     });
     const POTTERY = (over: Record<string, unknown> = {}) => listing({ photos: PHOTO, ...over });
     /** The global community as Marty's shot has it: Beans off and shown as the local community's (showcase), deals on. */
@@ -973,7 +973,7 @@ describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.
     }
 
     it('an Offer with Beans: the price box left-aligned (45, its unit), Accept Offer on the brand fill, under it the photo', async () => {
-        await open(POTTERY({ price_type: 'hourly', credits: 30 }));
+        await open(POTTERY({ price_type: 'hourly', price_c: 3000 }));
         const terms = byId('price-terms')!;
         expect(terms.textContent).toContain('ASKING PRICE');
         expect(terms.textContent).toContain('30');

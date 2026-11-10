@@ -33,7 +33,8 @@ const joinFirstWords = () => t('Join the global community to show this there');
  */
 export function listingForCopy(post: any, photos: string[]): HomeEvent {
     return {
-        id: post.id, type: post.type, category: post.category, title: post.title, description: post.description, credits: post.credits, priceType: post.price_type ?? 'fixed',
+        // The row's price, whole hundredths of a Bean (the phone's copy keeps the node's price_c; null when it holds no figure).
+        id: post.id, type: post.type, category: post.category, title: post.title, description: post.description, price_c: post.price_c ?? undefined, priceType: post.price_type ?? 'fixed',
         authorPublicKey: post.author_pubkey, audienceScope: post.audience_scope ?? 'public', originNode: post.origin_node ?? null,
         lat: post.lat, lng: post.lng, photos: photos.map((p) => p.replace(/^https?:\/\/[^/]+(?=\/api\/)/, '')),
         tags: postTagsOf(post.tags), freeTags: listingFreeTags(post), status: post.status,

@@ -21,6 +21,8 @@ import { PROJECT_DEADLINE_FORMAT_ERROR } from './routes/project-deadline.js';
 
 let testsRun = 0;
 let testsPassed = 0;
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 const deps: RouteDeps = {
     checkAdminAuth: async () => false,
@@ -59,13 +61,15 @@ function assert(cond: boolean, msg: string): void {
     else { console.error(`✗ ${msg}`); }
 }
 
+/** A member holding `balance` Beans. */
 function seedMember(pk: string, balance: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
-    db.prepare(`UPDATE accounts SET balance=? WHERE public_key=?`).run(balance, pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, hc(balance));
+    db.prepare(`UPDATE accounts SET balance_c=? WHERE public_key=?`).run(hc(balance), pk);
 }
-const dbBalance = (pk: string): number => (db.prepare(`SELECT balance FROM accounts WHERE public_key=?`).get(pk) as { balance: number }).balance;
-const sumBalances = (): number => (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts`).get() as { s: number }).s;
+/** A stored balance, whole hundredths. */
+const dbBalance = (pk: string): number => (db.prepare(`SELECT balance_c FROM accounts WHERE public_key=?`).get(pk) as { balance_c: number }).balance_c;
+const sumBalances = (): number => (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts`).get() as { s: number }).s;
 
 async function run() {
     console.log('Running A2-1 crowdfund ledger-sync regression test...\n');
@@ -76,23 +80,23 @@ async function run() {
     // Pull the freshly-seeded DB balance into the in-memory ledger (as boot would).
     reconcileLedgerFromDb();
 
-    assert(getBalance(A).balance === 100, 'baseline: in-memory balance matches DB (100)');
+    assert(getBalance(A).balance_c === hc(100), 'baseline: in-memory balance matches DB (100)');
     const sumBefore = sumBalances();
 
     const projectId = 'proj-' + crypto.randomBytes(6).toString('hex');
     // goal (1000) >> pledge (30) so the auto-sweep-to-creator branch does NOT fire;
     // the pledged value stays parked in escrow.
-    createCrowdfundProject(projectId, A, 'Test Project', 'desc', [], 1000, null);
+    createCrowdfundProject(projectId, A, 'Test Project', 'desc', [], hc(1000), null);
 
-    pledgeToProject(crypto.randomUUID(), projectId, A, 30, 'pledge'); // hook fires → reconcile
+    pledgeToProject(crypto.randomUUID(), projectId, A, hc(30), 'pledge'); // hook fires → reconcile
 
-    assert(dbBalance(A) === 70, 'DB debited the pledger to 70');
-    assert(getBalance(A).balance === 70, 'in-memory ledger reflects the pledge debit (70, NOT the stale 100)');
-    assert(getBalance(A).balance === dbBalance(A),
+    assert(dbBalance(A) === hc(70), `DB debited the pledger to 70 (${dbBalance(A)} hundredths)`);
+    assert(getBalance(A).balance_c === hc(70), 'in-memory ledger reflects the pledge debit (70, NOT the stale 100)');
+    assert(getBalance(A).balance_c === dbBalance(A),
         'in-memory == DB after pledge — the next transfer() cannot write a stale balance back and mint');
 
     // Pledge only MOVES value (A −30 → escrow +30): the system-wide sum is unchanged.
-    assert(Math.abs(sumBalances() - sumBefore) < 1e-9, 'total balance sum unchanged by the pledge (no value minted)');
+    assert(sumBalances() === sumBefore, `total balance sum unchanged by the pledge (no value minted) (Δ ${sumBalances() - sumBefore} hundredths)`);
 
     console.log('\nTesting invalid deadlineAt handling on crowdfund project routes...');
     const commonsRouter = createCommonsRoutes(deps);
@@ -102,7 +106,7 @@ async function run() {
         body: {
             creatorPubkey: A,
             title: 'Invalid Deadline Project',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             deadlineAt: 'not-a-valid-date-string',
         },
     });
@@ -115,7 +119,7 @@ async function run() {
         body: {
             creatorPubkey: A,
             title: 'Valid Deadline Project',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             deadlineAt: validDeadline,
         },
     });
@@ -129,7 +133,7 @@ async function run() {
             id: createdProjectId,
             creatorPubkey: A,
             title: 'Valid Deadline Project Updated',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             deadlineAt: 'bogus-date',
         },
     });

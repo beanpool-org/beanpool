@@ -62,10 +62,10 @@ const DAY = 86400_000;
 const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
 /**
  * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 5 was this suite's (G3), 6 members' devices' (G4), 7 a
- * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events.
- * The one before G3's, a standby to re-seed.
+ * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events,
+ * 13 a poll's typed Other, 14 chat photos, 15 money in whole hundredths. The one before G3's, a standby to re-seed.
  */
-const FORMAT = '14';
+const FORMAT = '15';
 const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */
@@ -200,7 +200,7 @@ async function child(): Promise<void> {
         'tick-keepers': async (a: { asOf: number }) => (await import('./state-engine.js')).tickEnterpriseKeepers(a.asOf),
         'tick-decisions': async (a: { asOf: number }) => (await import('./decisions-engine.js')).tickDecisions(a.asOf),
         'tick-groups': async (a: { asOf: number }) => (await import('./state-engine.js')).tickGroupSuccession(a.asOf),
-        /** A link with another community: a peer connector with a credit cap, converged as a boot does (index.ts). */
+        /** A link with another community: a peer connector with a credit cap (whole hundredths), converged as a boot does (index.ts). */
         'link-peer': async (a: { cap: number }) => {
             const { addConnector, setConnectorCreditCap, getConnectors } = await import('./connector-manager.js');
             const { reconcileFederationLinks, getFederationLink } = await import('./federation-link.js');
@@ -215,9 +215,9 @@ async function child(): Promise<void> {
         links: async () => {
             const { db } = await import('./db/db.js');
             return {
-                treasuries: db.prepare(`SELECT m.public_key, m.callsign, a.balance FROM members m LEFT JOIN accounts a ON a.public_key = m.public_key
+                treasuries: db.prepare(`SELECT m.public_key, m.callsign, a.balance_c FROM members m LEFT JOIN accounts a ON a.public_key = m.public_key
                                         WHERE m.callsign LIKE '%Link%' ORDER BY m.rowid`).all(),
-                rows: db.prepare('SELECT peer_id, treasury_pubkey, commission_ceiling FROM federation_links ORDER BY peer_id').all(),
+                rows: db.prepare('SELECT peer_id, treasury_pubkey, commission_ceiling_c FROM federation_links ORDER BY peer_id').all(),
                 markers: db.prepare('SELECT treasury_pubkey, peer_id, created_at FROM federation_link_treasuries ORDER BY treasury_pubkey').all(),
             };
         },
@@ -342,7 +342,7 @@ async function child(): Promise<void> {
                 ['issueRekeyCode', () => wiz.issueRekeyCode(id.kip, 'owner:password')],
                 ['completeRekey', () => wiz.completeRekey(id.pam, crypto.randomBytes(32).toString('hex'), id.rekeyCode, 'owner:password')],
                 ['releaseHubFragment', () => rel.releaseHubFragment('no-such-collection')],
-                ['setCommissionCeiling', () => fl.setCommissionCeiling(LINK_PEER, 5)],
+                ['setCommissionCeiling', () => fl.setCommissionCeiling(LINK_PEER, 500)],
                 ['ensureFederationLink', () => fl.ensureFederationLink('12D3KooWAnotherPeer000000000000000000000000000000', 'Another', se.createTreasury)],
             ];
             const answers: Record<string, string> = {};
@@ -409,7 +409,7 @@ async function child(): Promise<void> {
                 convenor: one("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'", id.group)?.member_pubkey ?? null,
                 claim: one('SELECT status, paid_at FROM deferred_wage_claims WHERE id = ?', id.claim) ?? null,
                 payouts: (one("SELECT COUNT(*) AS n FROM transactions WHERE memo LIKE 'Deferred wage claim payout%' AND to_pubkey = ?", id.kip) as any).n,
-                kipBalance: one('SELECT balance FROM accounts WHERE public_key = ?', id.kip)?.balance ?? null,
+                kipBalance: one('SELECT balance_c FROM accounts WHERE public_key = ?', id.kip)?.balance_c ?? null,
             };
         },
         checkpoint: async () => {
@@ -541,8 +541,9 @@ async function main(): Promise<void> {
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         for (const who of [gwen, cy, nia]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+        const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string) => {
@@ -550,19 +551,19 @@ async function main(): Promise<void> {
             built(`${seller.name} approves: the Beans are held`, await S_(seller, '/api/marketplace/transactions/approve', { transactionId: tx.id, authorPublicKey: seller.pk }));
             built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
         };
-        await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
-        await deal(gwen, kip, (await offer(kip, 'Tune-up', 10)).id); // Kip has Beans
-        await deal(gwen, ann, (await offer(ann, 'Honey', 10)).id); // and Ann, to buy with later
-        await deal(gwen, nia, (await offer(nia, 'Jam', 6)).id); // and Nia, whose earned credit backs a pledge
+        await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
+        await deal(gwen, kip, (await offer(kip, 'Tune-up', 1000)).id); // Kip has Beans
+        await deal(gwen, ann, (await offer(ann, 'Honey', 1000)).id); // and Ann, to buy with later
+        await deal(gwen, nia, (await offer(nia, 'Jam', 600)).id); // and Nia, whose earned credit backs a pledge
         const probe = built('Cy starts an enterprise, Probe Co', await S_(cy, '/api/treasury', { name: 'Probe Co', purpose: 'Repairs for the street', avatar: TINY_PNG }));
         for (const who of [kip, bo, dee]) built(`the admin makes ${who.name} a keeper of Probe Co`, await A(`/api/local/admin/treasury/${probe.publicKey}/operators`, { pubkey: who.pk }));
-        built('Kip pledges backing to Probe Co (its credit floor, to hire with)', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
+        built('Kip pledges backing to Probe Co (its credit floor, to hire with)', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount_c: 200 }));
         // Probe Co hiring its own keeper while it holds nothing: refused, and the wage is owed (engine/escrow.ts isPayeeKeeper).
         const bikeCheck = built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', repeatable: true, photos: [TINY_PNG],
+            title: 'Bike check', description: 'At the workshop', price_c: 300, category: 'tools', repeatable: true, photos: [TINY_PNG],
         }));
         const job = built('and a job it needs done', await S_(cy, `/api/treasury/${probe.publicKey}/need`, {
-            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools', photos: [TINY_PNG],
+            title: 'Workshop tidy', description: 'Sort the parts bins', price_c: 200, category: 'tools', photos: [TINY_PNG],
         }));
         const bid = built('Kip offers to do it', await S_(kip, '/api/marketplace/posts/request', { postId: (job.post ?? job).id, buyerPublicKey: kip.pk })).transaction;
         const wage = await S_(cy, `/api/treasury/${probe.publicKey}/approve`, { transactionId: bid.id });
@@ -590,7 +591,7 @@ async function main(): Promise<void> {
 
         // ── 3. More on M, then a delta ──
         console.log('\n— 3. keeper and succession votes, Decisions, a suspension, codes, releases, a link; then a delta —');
-        const asked = built('Nia asks to keep Probe Co, pledging 1 Bean of backing', await S_(nia, `/api/treasury/${probe.publicKey}/keepers/request`, { pledgedBacking: 1 }));
+        const asked = built('Nia asks to keep Probe Co, pledging 1 Bean of backing', await S_(nia, `/api/treasury/${probe.publicKey}/keepers/request`, { pledgedBacking_c: 100 }));
         const requestId = asked.request?.id as string;
         const approved = built('Cy approves: a keeper change, open to objection for 3 days', await S_(cy, `/api/treasury/${probe.publicKey}/keepers/requests/${requestId}/approve`, {}));
         require_(JSON.stringify(approved).includes('pending'), `M: the change waits out its objection window (${JSON.stringify(approved).slice(0, 160)})`);
@@ -633,9 +634,9 @@ async function main(): Promise<void> {
         await main.send('record-release', { collectionId: 'collection-1', shareId: 2, releasedBy: bo.pk, owner: gwen.pk });
         const recovered: { session: string; ids: number[] } = await main.send('recover', { owner: moe.pk });
         require_(recovered.ids.length === 2, `M: Moe's account recovered through M, a sign-in and the hub released (${JSON.stringify(recovered.ids)})`);
-        const linked = await main.send('link-peer', { cap: 50 });
+        const linked = await main.send('link-peer', { cap: 5000 });
         require_(linked.created === 1 && !!linked.link?.treasuryPubkey, `M: a link with Eastgippy, and its treasury (${JSON.stringify(linked).slice(0, 160)})`);
-        built('Kip puts 3 Beans in the link\'s treasury', await S_(kip, '/api/ledger/transfer', { to: linked.link.treasuryPubkey, amount: 3, memo: 'for favours' }));
+        built('Kip puts 3 Beans in the link\'s treasury', await S_(kip, '/api/ledger/transfer', { to: linked.link.treasuryPubkey, amount_c: 300, memo: 'for favours' }));
         await sleep(Math.max(0, new Date(removal.closesAt).getTime() - Date.now() + 200));
         await main.send('tick-decisions', {});
         const m3: Tables = (await main.send('rows')).tables;
@@ -666,14 +667,14 @@ async function main(): Promise<void> {
         const routes: [string, Promise<Answer>][] = [
             ['an invite made', onS(gwen, '/api/invite/generate', { publicKey: gwen.pk })],
             ['an invite redeemed', (() => { const x = newId('X'); return api(sv, 'POST', '/api/invite/redeem', { as: x, body: { code: unused, publicKey: x.pk, callsign: 'Stranger' } }); })()],
-            ['a keeper request', onS(moe, `/api/treasury/${probe.publicKey}/keepers/request`, { pledgedBacking: 0 })],
+            ['a keeper request', onS(moe, `/api/treasury/${probe.publicKey}/keepers/request`, { pledgedBacking_c: 0 })],
             ['a keeper request approved', onS(cy, `/api/enterprise/${probe.publicKey}/keepers/requests/${requestId}/approve`)],
             ['a succession vote', onS(bo, `/api/treasury/${probe.publicKey}/succession/${successionId}/vote`, { choice: 'yes' })],
             ['a convenor vote', onS(kip, `/api/groups/${groupId}/succession/${convenorVoteId}/vote`, { choice: 'yes' })],
             ['a Decision vote', onS(dee, `/api/commons/decisions/${grant.id}/vote`, { support: true })],
             ['an admin suspension', onS(null, `/api/local/admin/users/${kip.pk}/suspend`, { reason: 'On a standby' })],
             ['a re-key code', onS(null, `/api/local/admin/members/${kip.pk}/rekey/issue-code`)],
-            ['a link\'s ceiling', onS(null, '/api/local/federation/links/ceiling', { peerId: LINK_PEER, ceiling: 5 })],
+            ['a link\'s ceiling', onS(null, '/api/local/federation/links/ceiling', { peerId: LINK_PEER, ceiling: 500 })],
         ];
         for (const [what, call] of routes) {
             const r = await call;
@@ -812,13 +813,13 @@ async function main(): Promise<void> {
         s = await standby.send('rows');
         assert(JSON.stringify(s.tables.recovery_releases) === JSON.stringify(onMain.recovery_releases),
             `the releases are M's, every column (${s.tables.recovery_releases.length})`);
-        const converged = await standby.send('link-peer', { cap: 50 });
+        const converged = await standby.send('link-peer', { cap: 5000 });
         const links = await standby.send('links');
         assert(converged.created === 0 && links.treasuries.length === 1 && links.treasuries[0].public_key === linked.link.treasuryPubkey
-            && links.treasuries[0].balance === 3 && links.rows.length === 1,
+            && links.treasuries[0].balance_c === 300 && links.rows.length === 1,
             `the boot's convergence makes no second link treasury: one, M's, with its 3 Beans (${JSON.stringify(links).slice(0, 200)})`);
         await standby.send('drop-link-row');
-        const refound = await standby.send('link-peer', { cap: 50 });
+        const refound = await standby.send('link-peer', { cap: 5000 });
         const relinked = await standby.send('links');
         assert(refound.created === 0 && relinked.treasuries.length === 1 && relinked.rows.length === 1
             && relinked.rows[0].treasury_pubkey === linked.link.treasuryPubkey,

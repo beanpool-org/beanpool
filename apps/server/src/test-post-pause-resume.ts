@@ -35,7 +35,7 @@ function makeMember(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -70,7 +70,7 @@ async function main() {
     // Create a post as author
     const createRes = await signedFetch('POST', '/api/marketplace/posts', author, {
         type: 'offer', category: 'general', title: 'Garden Tools', description: 'Rake and shovel',
-        credits: 10, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
+        price_c: 1000 /* 10 Beans, in whole hundredths */, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(createRes.status === 200, 'author created a post successfully');
     const postId = createRes.body?.post?.id;

@@ -119,11 +119,15 @@ describe('MembersModule helper functions', () => {
             expect(getMemberTier({ standing: 'Resident' })).toBe('Resident');
         });
 
+        // The node's earnedCredit is whole hundredths of a Bean (engine members.ts earned_credit_c), as core's thresholds are.
         it('calculates tier based on earned credit thresholds', () => {
-            expect(getMemberTier({ earnedCredit: 1500 })).toBe('Elder');
-            expect(getMemberTier({ earnedCredit: 700 })).toBe('Steward');
-            expect(getMemberTier({ earnedCredit: 250 })).toBe('Resident');
-            expect(getMemberTier({ earnedCredit: 50 })).toBe('Citizen');
+            expect(getMemberTier({ earnedCredit: 150000 })).toBe('Elder');
+            expect(getMemberTier({ earnedCredit: 70000 })).toBe('Steward');
+            expect(getMemberTier({ earnedCredit: 25000 })).toBe('Resident');
+            expect(getMemberTier({ earnedCredit: 5000 })).toBe('Citizen');
+            // Exactly at the line, to the hundredth: 1,400 Beans is Elder, 1,399.99 is not.
+            expect(getMemberTier({ earnedCredit: 140000 })).toBe('Elder');
+            expect(getMemberTier({ earnedCredit: 139999 })).toBe('Steward');
         });
     });
 });
@@ -217,7 +221,7 @@ describe('MembersModule seed offer', () => {
 
     it('says "📷 Add a photo" and posts nothing until a photo is chosen, then sends the Offer with it (the node refuses an Offer with none)', async () => {
         vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([
-            { publicKey: 'pk-eggs', name: 'Community Eggs', balance: 0, creditLine: 200, liveOffers: 0 },
+            { publicKey: 'pk-eggs', name: 'Community Eggs', balance_c: 0, creditLine_c: 20000, liveOffers: 0 },
         ]);
         vi.spyOn(nodeClient, 'fetchKnownFloorMarks').mockResolvedValue({});
         const seed = vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({ success: true, post: {} });
@@ -249,12 +253,91 @@ describe('MembersModule seed offer', () => {
         });
 
         expect(seed).toHaveBeenCalledTimes(1);
+        // The form's 12 Beans as the node takes a price: price_c, whole hundredths, never the old `credits`.
         expect(seed).toHaveBeenCalledWith(
             'https://node.example.com',
             'pk-eggs',
-            expect.objectContaining({ title: 'Dozen free-range eggs', photos: [PICKED_PHOTO], repeatable: true }),
+            expect.objectContaining({ title: 'Dozen free-range eggs', photos: [PICKED_PHOTO], repeatable: true, price_c: 1200 }),
             'admin-pw',
             undefined
         );
+        expect(seed.mock.calls[0][2]).not.toHaveProperty('credits');
+    });
+
+    it("marks a member whose known floor an admin changed, the amount whole hundredths in words", async () => {
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([]);
+        vi.spyOn(nodeClient, 'fetchKnownFloorMarks').mockResolvedValue({
+            'pk-kim-12345678': { amount_c: 49925, frozen: false },
+            'pk-lee-12345678': { amount_c: null, frozen: true },
+        });
+        await act(async () => {
+            render(
+                <MembersModule
+                    nodeData={{
+                        members: [{ publicKey: 'pk-kim-12345678', name: 'Kim' }, { publicKey: 'pk-lee-12345678', name: 'Lee' }],
+                        profiles: [], posts: [], health: { healthScore: 98, flags: [] }, reports: [],
+                    }}
+                    nodeDataLoading={false}
+                    onRefresh={vi.fn()}
+                    activeNodeUrl="https://node.example.com"
+                    adminPassword="admin-pw"
+                />
+            );
+        });
+        const marks = await screen.findAllByTestId('known-floor-mark');
+        expect(marks.map((m) => m.textContent)).toEqual(['Known floor 499.25', 'Known floor frozen']);
+    });
+
+    it("lists each treasury's balance and limit as whole hundredths in words", async () => {
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([
+            { publicKey: 'pk-eggs', name: 'Community Eggs', balance_c: 4925, creditLine_c: 20000, liveOffers: 2 },
+            { publicKey: 'pk-tools', name: 'Tool Shed', balance_c: -982, creditLine_c: 0, liveOffers: 0 },
+        ]);
+        vi.spyOn(nodeClient, 'fetchKnownFloorMarks').mockResolvedValue({});
+        await act(async () => {
+            render(
+                <MembersModule
+                    nodeData={{ members: [], profiles: [], posts: [], health: { healthScore: 98, flags: [] }, reports: [] }}
+                    nodeDataLoading={false}
+                    onRefresh={vi.fn()}
+                    activeNodeUrl="https://node.example.com"
+                    adminPassword="admin-pw"
+                />
+            );
+        });
+        expect(await screen.findByText('49.25 🫘 · Limit: 200 🫘 · 2 offer(s)')).toBeInTheDocument();
+        expect(screen.getByText('−9.82 🫘 · Limit: 0 🫘 · 0 offer(s)')).toBeInTheDocument();
+    });
+
+    it('creates a treasury with its typed credit line as creditLine_c', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([]);
+        vi.spyOn(nodeClient, 'fetchKnownFloorMarks').mockResolvedValue({});
+        const create = vi.spyOn(nodeClient, 'createNodeTreasury').mockResolvedValue({ success: true, publicKey: 'pk-new' });
+        await act(async () => {
+            render(
+                <MembersModule
+                    nodeData={{ members: [], profiles: [], posts: [], health: { healthScore: 98, flags: [] }, reports: [] }}
+                    nodeDataLoading={false}
+                    onRefresh={vi.fn()}
+                    activeNodeUrl="https://node.example.com"
+                    adminPassword="admin-pw"
+                />
+            );
+        });
+        await act(async () => {
+            fireEvent.click(await screen.findByRole('button', { name: /Create Treasury/ }));
+        });
+        fireEvent.change(screen.getByPlaceholderText('e.g. Community Eggs'), { target: { value: 'Seed Bank' } });
+        fireEvent.change(screen.getByPlaceholderText('200'), { target: { value: '150.75' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Create Treasury' }));
+        });
+        expect(create).toHaveBeenCalledWith(
+            'https://node.example.com',
+            expect.objectContaining({ name: 'Seed Bank', creditLine_c: 15075 }),
+            'admin-pw',
+            undefined,
+        );
+        expect(create.mock.calls[0][1]).not.toHaveProperty('creditLine');
     });
 });

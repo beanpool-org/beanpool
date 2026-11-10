@@ -63,7 +63,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { TRANSACTION_FEE_RATE, eventCopyOf, aboutOfPost, chatAboutDrafts } from '@beanpool/core';
+import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -96,6 +96,19 @@ import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
 import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
+
+/**
+ * core's dealAmountFor for a figure drawn while the member types: null where core refuses one (a price that isn't whole
+ * hundredths, from a peer's listing made before them; a quantity whose total passes what a deal can hold), so a render
+ * never throws. The Accept press computes it again inside its own try and says why.
+ */
+function dealAmountOrNull(perUnit: unknown, quantity: number): number | null {
+    try {
+        return dealAmountFor(perUnit as number, quantity);
+    } catch {
+        return null;
+    }
+}
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -1730,9 +1743,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             : undefined;
         // What the commission costs including the cross-node fee, which is inside the allowance — the server
         // checks `amount + fee`, so a button quoting the bare price would offer a number the route refuses.
-        // TRANSACTION_FEE_RATE lives in @beanpool/core; hardcoding the arithmetic here would be a second
-        // definition of the fee, so it is imported.
-        const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
+        // The fee is core's feeOf (whole hundredths, truncated once); hardcoding the arithmetic here would be a second
+        // definition of it. A listing without whole hundredths for a price (a peer's from before them, or its kept copy) has no
+        // figure: NaN, so nothing is offered for it, rather than feeOf throwing mid-render.
+        const commissionNeeded = isHundredths(selectedPost.price_c) && selectedPost.price_c >= 0 ? selectedPost.price_c + feeOf(selectedPost.price_c) : NaN;
 
         // A pinned deal (Your deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
@@ -1840,7 +1854,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
         // week or per month is taken up as one, the payer signing its authorisation. Hourly, daily and fixed stay one-off, and so
         // does a free one (0 Beans: nothing to hold each period), by core's one rule, as on the phone.
-        const standingUnit = standingUnitForListing(selectedPost.priceType, selectedPost.credits);
+        const standingUnit = standingUnitForListing(selectedPost.priceType, selectedPost.price_c);
         const standingOffer = !!standingUnit && selectedPost.type === 'offer' && !selectedPost.lendable;
         const standingNeed = !!standingUnit && selectedPost.type === 'need';
         // A standing deal running on it shows its panel: nothing of it is held, so it is never a deal to release.
@@ -1863,7 +1877,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setAccepting(true);
             try {
                 const standing = await signStandingStart(standingFieldsFor({
-                    listingId: selectedPost.id, payee, beansPerPeriod: selectedPost.credits, unit: standingUnit,
+                    listingId: selectedPost.id, payee, beansPerPeriod_c: selectedPost.price_c, unit: standingUnit,
                     maxPeriods: choice.periods, startsAt: choice.startsAt,
                 }));
                 if (approveTxId) await approveMarketplaceRequest(approveTxId, identity.publicKey, standing);
@@ -1900,7 +1914,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     className={`bg-white dark:bg-nature-900 border rounded-lg p-3 shadow-sm flex flex-col gap-2 ${tx.id === selectedTxId ? 'border-emerald-400 dark:border-emerald-600' : 'border-nature-200 dark:border-nature-800'}`}
                 >
                     <p className="text-sm font-bold text-nature-900 dark:text-white break-words">
-                        {listingDealLines.heldRow(otherName, tx.credits, formatDate(new Date(tx.createdAt), 'day-month'))}
+                        {listingDealLines.heldRow(otherName, tx.amount_c, formatDate(new Date(tx.createdAt), 'day-month'))}
                     </p>
                     {!m.release && (
                         <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
@@ -2127,20 +2141,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     its label is "Price", not "Willing to pay" over a figure that pays nothing. The words are the figure: no Beans
                                     sign, no unit, and a screen reader reads "Free", not "0 B". */}
                                 <p className={BOX_LABEL.muted}>
-                                    {freePriceLabel(selectedPost.credits, selectedPost.type) ?? (selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay'))}
+                                    {freePriceLabel(selectedPost.price_c, selectedPost.type) ?? (selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay'))}
                                 </p>
                                 <div className={`flex flex-row flex-wrap items-center gap-x-1 min-w-0 ${PAGE_TYPE.price} text-nature-950 dark:text-white`}>
-                                    {freePriceWords(selectedPost.credits, selectedPost.type, 'box') ?? (<>
-                                        <span>{formatNumber(selectedPost.credits)}</span>
+                                    {freePriceWords(selectedPost.price_c, selectedPost.type, 'box') ?? (<>
+                                        <span>{formatHundredths(selectedPost.price_c)}</span>
                                         <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
                                             <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                             {priceUnit(selectedPost.priceType)}
                                         </span>
                                     </>)}
                                 </div>
-                                {selectedPost.credits > 0 && (
+                                {selectedPost.price_c > 0 && (
                                     <p className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
-                                        {t('≈ {n} hrs', { n: formatNumber(selectedPost.credits / 40, 1) })}
+                                        {t('≈ {n} hrs', { n: formatNumber(selectedPost.price_c / 4000, 1) })}
                                     </p>
                                 )}
                             </div>
@@ -2184,7 +2198,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                      <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
                                          {t('✅ You took this up on {date} · {n} Beans held in trust', {
                                              date: formatDate(new Date(activeTx.createdAt), 'day-month'),
-                                             n: formatNumber(activeTx.credits ?? selectedPost.credits),
+                                             n: formatHundredths(activeTx.amount_c ?? selectedPost.price_c),
                                          })}
                                      </p>
                                  )}
@@ -2222,7 +2236,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                          
                                          <div className="text-center mb-4 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900 shadow-sm">
                                              {/* The deal's own rate, as each row's confirm and the node work it out; the listing's price while it loads. */}
-                                             {releaseLine(activeTx ?? { credits: selectedPost.credits, hours: 1 }, selectedPost,
+                                             {releaseLine(activeTx ?? { amount_c: selectedPost.price_c, hours: 1 }, selectedPost,
                                                  selectedPost.priceType !== 'fixed' ? completeHoursRead : null, targetPeerCallsign)}
                                          </div>
                                          
@@ -2302,7 +2316,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                  {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount (none on a free Need). */}
                                  {!isOwnPost && activeTx && (
                                      <p className="text-emerald-700 dark:text-emerald-400 text-sm font-bold text-center mt-2">
-                                         {listingDealLines.helping(activeTx.credits)}
+                                         {listingDealLines.helping(activeTx.amount_c)}
                                      </p>
                                  )}
                                  <p className="text-amber-700 dark:text-amber-400 text-sm font-semibold text-center mt-2 mb-2">
@@ -2460,7 +2474,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </button>
                                     </div>
                                     {approvingStanding === req.id && standingUnit && (
-                                        <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={requesterCallsign}
+                                        <StandingTakeUp unit={standingUnit} beans={selectedPost.price_c} title={selectedPost.title} payeeName={requesterCallsign}
                                             room={selectedPost.authorPublicKey === identity?.publicKey ? spendRoom : null}
                                             busy={accepting} onCancel={() => setApprovingStanding(null)}
                                             onAgree={(choice) => takeUpStanding(choice, req.sellerPublicKey, req.id)} />
@@ -2532,15 +2546,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-semibold text-nature-800 dark:text-nature-200 mb-1">
                                             {isLoan ? listingDealLines.askedToBorrow(selectedPost.authorCallsign) : listingDealLines.offeredToHelp(selectedPost.authorCallsign)}
                                         </p>
-                                        <p className={`text-xs text-nature-600 dark:text-nature-400 ${!isLoan && myRequest.credits > 0 ? 'mb-1' : 'mb-4'}`}>
+                                        <p className={`text-xs text-nature-600 dark:text-nature-400 ${!isLoan && myRequest.amount_c > 0 ? 'mb-1' : 'mb-4'}`}>
                                             {isLoan ? t('Nothing is held until the lender says yes.') : t('The author is reviewing your offer to fulfill this need.')}
                                         </p>
                                         {/* The 1.5% fee, now that "I can do this" says the plain thing: it is stated here on the deal, as the phone's request
                                             card says it, and again on the Payee's line once the deal is agreed (cold start N4). */}
-                                        {!isLoan && myRequest.credits > 0 && (
+                                        {!isLoan && myRequest.amount_c > 0 && (
                                             <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
                                                 <Sentence
-                                                    text={t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, net: formatNumber(Math.round(myRequest.credits * 0.985 * 100) / 100, 2) })}
+                                                    text={t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: formatHundredths(myRequest.amount_c), net: formatHundredths(myRequest.amount_c - feeOf(myRequest.amount_c)) })}
                                                     parts={{ owned: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span> }}
                                                 />
                                             </p>
@@ -2576,7 +2590,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             }
                             // A listing priced per week or per month (§2.2): the take-up screen, signed, in place of the hours.
                             return showAcceptConfirm && standingOffer && standingUnit ? (
-                                <StandingTakeUp unit={standingUnit} beans={selectedPost.credits} title={selectedPost.title} payeeName={selectedPost.authorCallsign}
+                                <StandingTakeUp unit={standingUnit} beans={selectedPost.price_c} title={selectedPost.title} payeeName={selectedPost.authorCallsign}
                                     room={spendRoom}
                                     busy={accepting || isRemotePost || !!authorEnterpriseInactive} onCancel={() => setShowAcceptConfirm(false)}
                                     onAgree={(choice) => takeUpStanding(choice, selectedPost.authorPublicKey)} />
@@ -2614,10 +2628,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     {(() => {
                                         if (selectedPost.priceType !== 'fixed' && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = standingNeed ? 1 : (acceptHoursValue || 0);
-                                        const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
+                                        // The node's own figure (core dealAmountFor: whole hundredths, truncated once).
+                                        const tot = selectedPost.priceType !== 'fixed' ? (hrs > 0 ? dealAmountOrNull(selectedPost.price_c, hrs) : 0) : selectedPost.price_c;
+                                        // A figure core can't make (a price that isn't whole hundredths, a quantity past what a deal can
+                                        // hold) is no sentence, never a throw mid-render: the Accept press says why (its own try).
+                                        if (!isHundredths(tot)) return null;
                                         // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
                                         // not free (as the phone's post/[id].tsx).
-                                        if (isLoan && !selectedPost.credits) return t('Free to borrow. Nothing is held: the lender says yes first.');
+                                        if (isLoan && !selectedPost.price_c) return t('Free to borrow. Nothing is held: the lender says yes first.');
                                         // A Need says the plain thing (cold start N4): what they'd be paid and who has to agree, with the deal's own
                                         // total and the name the Need shows. No usable quantity yet: no sentence, and never an amount that isn't one.
                                         // The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
@@ -2642,24 +2660,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     </span>
                                                 );
                                             }
-                                            const net = Math.round(tot * 0.985 * 100) / 100;
+                                            const net = tot - feeOf(tot);
                                             return (
                                                 <span>
                                                     <Sentence
-                                                        text={t('Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
+                                                        text={t('Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: formatHundredths(tot), net: formatHundredths(net) })}
                                                         parts={{ owned }}
                                                     />
                                                 </span>
                                             );
                                         }
                                         // An Offer (a loan and a Need returned above).
-                                        const net = Math.round(tot * 0.985 * 100) / 100;
+                                        const net = tot - feeOf(tot);
                                         return (
                                             <span>
                                                 <Sentence
                                                     text={duration
-                                                        ? t('By proceeding, you commit {total} B ({duration}) to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, duration, net: formatNumber(net, 2) })
-                                                        : t('By proceeding, you commit {total} B to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
+                                                        ? t('By proceeding, you commit {total} B ({duration}) to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: formatHundredths(tot), duration, net: formatHundredths(net) })
+                                                        : t('By proceeding, you commit {total} B to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: formatHundredths(tot), net: formatHundredths(net) })}
                                                     parts={{ owned }}
                                                 />
                                             </span>
@@ -2683,7 +2701,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 const isVariable = selectedPost.priceType !== 'fixed';
                                                 const estimatedHours = isVariable ? (standingNeed ? 1 : acceptHoursValue) : undefined;
-                                                const totalCredits = isVariable ? selectedPost.credits * (estimatedHours || 0) : selectedPost.credits;
+                                                const totalCredits = isVariable ? ((estimatedHours ?? 0) > 0 ? dealAmountFor(selectedPost.price_c, estimatedHours!) : 0) : selectedPost.price_c;
 
                                                 const remoteNode = (selectedPost as any)._remoteNode;
                                                 if (remoteNode) {
@@ -2778,9 +2796,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-[13px] leading-snug text-nature-700 dark:text-nature-400 mb-2">
                                             {/* The English has always said "beans" whatever the count: both forms keep it. */}
                                             {commissionLink.redeemable > 0
-                                                ? tn(commissionLink.redeemable, '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', { community: commissionLink.name.replace(/ Link$/, '') })
+                                                ? tn(commissionLink.redeemable / 100, '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', '{community} owes this community {n} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.', { community: commissionLink.name.replace(/ Link$/, ''), n: formatHundredths(commissionLink.redeemable) })
                                                 : commissionLink.ceiling > 0
-                                                    ? tn(commissionLink.ceiling, 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.', 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.')
+                                                    ? tn(commissionLink.ceiling / 100, 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.', 'Nothing is owed either way right now, so this would open a new tab of up to {n} beans — within the ceiling set for this link.', { n: formatHundredths(commissionLink.ceiling) })
                                                     : t('Nothing is owed either way right now, so this would open a new tab of beans — within the ceiling set for this link.')}
                                         </p>
                                         {/* CONTRAST, measured rather than eyeballed. This panel sits on
@@ -2796,13 +2814,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                             ⚠️ is aria-hidden: a screen reader saying "warning sign" before the
                                             sentence adds nothing the words do not. */}
-                                        {commissionNeeded > commissionLink.allowance ? (
+                                        {!isHundredths(commissionNeeded) ? null : commissionNeeded > commissionLink.allowance ? (
                                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
-                                                <span aria-hidden="true">⚠️ </span>{t('This listing needs {needed} 🫘 with the fee, which is more than the {allowance} available. An operator can raise the ceiling in Settings.', { needed: commissionNeeded, allowance: commissionLink.allowance })}
+                                                <span aria-hidden="true">⚠️ </span>{t('This listing needs {needed} 🫘 with the fee, which is more than the {allowance} available. An operator can raise the ceiling in Settings.', { needed: formatHundredths(commissionNeeded), allowance: formatHundredths(commissionLink.allowance) })}
                                             </p>
                                         ) : commissionNeeded > commissionLink.commonsBalance ? (
                                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
-                                                <span aria-hidden="true">⚠️ </span>{t('The Commons pot holds {pot} 🫘, less than the {needed} this needs. The pot fills from fees and demurrage.', { pot: commissionLink.commonsBalance, needed: commissionNeeded })}
+                                                <span aria-hidden="true">⚠️ </span>{t('The Commons pot holds {pot} 🫘, less than the {needed} this needs. The pot fills from fees and demurrage.', { pot: formatHundredths(commissionLink.commonsBalance), needed: formatHundredths(commissionNeeded) })}
                                             </p>
                                         ) : (
                                             <button
@@ -2831,7 +2849,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         // says: the confirmation should agree with what was pressed.
                                                         setCommissionResult(
                                                             r.status === 'settled'
-                                                                ? t('Commissioned. {amount} 🫘 to {community}, {drawn} of it drawn from the Commons.', { amount: r.amount, community, drawn: r.drawnFromCommons })
+                                                                ? t('Commissioned. {amount} 🫘 to {community}, {drawn} of it drawn from the Commons.', { amount: formatHundredths(r.amount_c), community, drawn: formatHundredths(r.drawnFromCommons) })
                                                                 : r.status === 'pending'
                                                                     ? t('Sent — still completing. It will finish on its own, or the beans come back.')
                                                                     : t('That did not go through, and nothing was spent.')
@@ -2851,7 +2869,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             >
                                                 {commissioning
                                                     ? t('Commissioning…')
-                                                    : t('Commission for the community — {n} 🫘', { n: commissionNeeded })}
+                                                    : t('Commission for the community — {n} 🫘', { n: formatHundredths(commissionNeeded) })}
                                             </button>
                                         )}
                                         {/* aria-live alongside role="status", which already implies polite — so
@@ -3078,7 +3096,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditTitle(selectedPost.title);
                                         setEditDescription(selectedPost.description);
                                         // In the language's way ("12,5"), so it reads back as the same price.
-                                        setEditCredits(formatNumber(selectedPost.credits));
+                                        // Plain decimal text the price box parses back (parseHundredths refuses a grouped figure).
+                                        setEditCredits(selectedPost.price_c ? formatHundredths(selectedPost.price_c).replace(/,(?=\d{3})/g, '') : '');
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
@@ -3336,9 +3355,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setError(t('Add a photo first'));
                                                 return;
                                             }
-                                            // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never
-                                            // saved as 0. Any decimals, as before; an empty box is 0, as before.
-                                            const price = parseAmount(editCredits, undefined, ANY_DECIMALS);
+                                            // The price in the language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5"
+                                            // is 1,250, never saved as 0; a third decimal is refused in words. An empty box is 0, as before.
+                                            const price = parseHundredths(editCredits);
                                             if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
                                             setSaving(true);
                                             try {
@@ -3351,7 +3370,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     category: editCategory,
                                                     title: editTitle.trim(),
                                                     description: editDescription.trim(),
-                                                    credits: price.ok ? price.value : 0,
+                                                    price_c: price.ok ? price.value : 0,
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,

@@ -28,7 +28,7 @@ export function myEventAsPost(row: MyEvent): MarketplacePost {
         category: 'community',
         title: row.title,
         description: '',
-        credits: 0,
+        price_c: 0,
         priceType: 'fixed',
         authorPublicKey: '',
         authorCallsign: '',

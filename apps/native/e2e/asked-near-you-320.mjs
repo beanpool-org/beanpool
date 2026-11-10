@@ -7,8 +7,9 @@
  * draw (the Needs here have none, so every row shows its category tile).
  *
  * Checks, per theme: no sideways scroll; nothing past the 320dp edge; every row and link at least 44dp tall; no title cut
- * without wrapping whole; the rows' second line reads "20 Beans · 2h ago". Screenshots with --shots <dir>:
- * asked-<scheme>, steps-<scheme>.
+ * without wrapping whole; the rows' second line reads "20.50 Beans /Hr · 2h ago" (the Home answer's price_c, whole hundredths).
+ * Your Beans (BeansBody) with the widest figures the card writes (1,234.56 held, this month's in and out): both its rows
+ * inside the card, 44dp, no words cut. Screenshots with --shots <dir>: asked-<scheme>, steps-<scheme>, beans-<scheme>.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -65,7 +66,7 @@ import { createRoot } from 'react-dom/client';
 import { View, ScrollView, Text } from 'react-native';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { HomeCard } from ${JSON.stringify(path.join(NATIVE, 'components/home/HomeParts'))};
-import { AskedBody, StepsBody } from ${JSON.stringify(path.join(NATIVE, 'components/home/HomeCardBodies'))};
+import { AskedBody, BeansBody, StepsBody } from ${JSON.stringify(path.join(NATIVE, 'components/home/HomeCardBodies'))};
 import { stepLines } from ${JSON.stringify(path.join(NATIVE, 'utils/home-cards'))};
 
 const q = new URLSearchParams(location.search);
@@ -74,11 +75,15 @@ const noop = () => {};
 const now = Date.now();
 const H = 3600000;
 const ago = (h) => new Date(now - h * H).toISOString();
+// The Home answer's asked-near-you rows: price_c, whole hundredths of a Bean (20.50 has its hundredths to show).
 const items = [
-    { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', credits: 300, priceType: 'monthly', createdAt: ago(26), photoUrl: null },
-    { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, priceType: 'hourly', createdAt: ago(2), photoUrl: null },
-    { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: ago(72), photoUrl: null },
+    { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', price_c: 30000, priceType: 'monthly', createdAt: ago(26), photoUrl: null },
+    { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', price_c: 2050, priceType: 'hourly', createdAt: ago(2), photoUrl: null },
+    { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', price_c: 0, createdAt: ago(72), photoUrl: null },
 ];
+// The Home answer's Your Beans: balance_c, room_c and this month's in_c, out_c and fees_c, whole hundredths, as wide as they come.
+const beans = { balance_c: 123456, room_c: 98765, tier: 'Resident', activated: true, frozen: false,
+    month: { trades: 12, in_c: 123456, out_c: 98765, fees_c: 1234, more: false } };
 const lines = stepLines({ joinedAt: ago(72), firstOffer: true, firstNeed: false, firstPost: true, photo: true, interests: true, invited: false, area: false, knocked: null }, true);
 
 createRoot(document.getElementById('root')).render(
@@ -89,6 +94,9 @@ createRoot(document.getElementById('root')).render(
             </HomeCard>
             <HomeCard id="asked" caption="Asked near you" colors={colors} hue="orange" testID="home-card-asked" onMenu={noop}>
                 <AskedBody items={items} nodeUrl={null} showsBeans colors={colors} now={now} onSeeAll={noop} />
+            </HomeCard>
+            <HomeCard id="beans" caption="Your Beans" colors={colors} hue="green" testID="home-card-beans" onMenu={noop}>
+                <BeansBody card={beans} colors={colors} />
             </HomeCard>
         </ScrollView>
     </View>
@@ -166,17 +174,28 @@ try {
             });
             const link = document.querySelector('[data-testid="home-asked-all"]').getBoundingClientRect();
             const step = document.querySelector('[data-testid="home-step-need"]').getBoundingClientRect();
-            return { rows, link: Math.round(link.height), step: Math.round(step.height), wide: document.documentElement.scrollWidth, text: document.querySelector('[data-testid="home-step-need"]').textContent };
+            const card = document.querySelector('[data-testid="home-card-beans"]').getBoundingClientRect();
+            const beans = ['home-beans-line', 'home-beans-month'].map((id) => {
+                const r = document.querySelector('[data-testid="' + id + '"]');
+                if (!r) return { id, text: '', h: 0, inside: false, cut: true };
+                const b = r.getBoundingClientRect();
+                const words = Array.from(r.querySelectorAll('div,span')).filter((e) => e.children.length === 0 && e.textContent.trim());
+                return { id, text: r.textContent.trim(), h: Math.round(b.height), inside: b.left >= card.left - 0.5 && b.right <= card.right + 0.5, cut: words.some((e) => e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > card.right + 0.5) };
+            });
+            return { rows, beans, link: Math.round(link.height), step: Math.round(step.height), wide: document.documentElement.scrollWidth, text: document.querySelector('[data-testid="home-step-need"]').textContent };
         });
         check(m.wide <= WIDTH, `${scheme}: no sideways scroll (${m.wide} wide)`);
         check(m.rows.length === 3, `${scheme}: three rows`);
         check(m.rows.every((r) => r.h >= 44 && r.inside && !r.cut), `${scheme}: every row is at least 44dp (least ${Math.min(...m.rows.map((r) => r.h))}), inside the card, no words cut`);
-        check(m.rows.some((r) => /20 Beans \/Hr · 2h ago/.test(r.text)) && m.rows.some((r) => /Free · 3d ago/.test(r.text)) && m.rows.some((r) => /300 Beans \/Mo · 1d ago/.test(r.text)), `${scheme}: the second lines read "20 Beans /Hr · 2h ago", "300 Beans /Mo · 1d ago", "Free · 3d ago"`);
+        check(m.rows.some((r) => /20\.50 Beans \/Hr · 2h ago/.test(r.text)) && m.rows.some((r) => /Free · 3d ago/.test(r.text)) && m.rows.some((r) => /300 Beans \/Mo · 1d ago/.test(r.text)), `${scheme}: the second lines read "20.50 Beans /Hr · 2h ago", "300 Beans /Mo · 1d ago", "Free · 3d ago"`);
+        check(m.beans.every((r) => r.h >= 44 && r.inside && !r.cut), `${scheme}: Your Beans' two rows are at least 44dp (${m.beans.map((r) => r.h).join(', ')}), inside the card, no words cut`);
+        check(/1,234\.56/.test(m.beans[0].text) && /987\.65/.test(m.beans[0].text) && /1,234\.56/.test(m.beans[1].text), `${scheme}: Your Beans reads 1,234.56 held, 987.65 room and 1,234.56 in, every figure from hundredths (${m.beans.map((r) => r.text).join(' | ')})`);
         check(m.link >= 44 && m.step >= 44, `${scheme}: See all Needs (${m.link}dp) and the step line (${m.step}dp) are at least 44dp`);
         check(/Ask for one thing you'd pay a neighbour for/.test(m.text), `${scheme}: the step line reads in full`);
         if (SHOTS) {
             await page.getByTestId('home-card-asked').screenshot({ path: path.join(SHOTS, `asked-${scheme}.png`) });
             await page.getByTestId('home-card-steps').screenshot({ path: path.join(SHOTS, `steps-${scheme}.png`) });
+            await page.getByTestId('home-card-beans').screenshot({ path: path.join(SHOTS, `beans-${scheme}.png`) });
         }
     }
 } finally {

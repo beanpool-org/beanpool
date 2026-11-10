@@ -31,7 +31,10 @@ import { peerIdFromString } from '@libp2p/peer-id';
  * another. Prefixing every payload with a context string and version makes that impossible, and gives us
  * a way to change the format later without ambiguity.
  */
-const RECEIPT_DOMAIN = 'beanpool-settlement-receipt/1';
+import { isHundredths } from '@beanpool/core';
+
+/** /2: the amount is whole hundredths of a Bean, an integer (DESIGN-atomic-beans-fable.md), so no /1 receipt verifies. */
+const RECEIPT_DOMAIN = 'beanpool-settlement-receipt/2';
 
 export interface SettlementReceipt {
     /** The idempotency key, minted by the buyer's node. */
@@ -44,20 +47,16 @@ export interface SettlementReceipt {
     sellerPublicKey: string;
     postId: string | null;
     /** The agreed price — NEVER price plus fee. The fee never crosses the border (§2.1). */
-    amount: number;
+    amount_c: number;
     /** ISO timestamp of the commit on the buyer's node. */
     committedAt: string;
 }
 
 /**
- * Canonicalise a number for signing.
- *
- * Both sides rebuild the payload from parsed fields, so the formatting must be identical on both or every
- * signature fails. Fixed decimal places rather than `String(n)`, because `String()` renders 5 as "5" and
- * 5.0 as "5" but 1e21 as "1e+21" — a representation that varies with magnitude is exactly what a
- * canonical form must not have.
+ * Canonicalise an amount for signing: whole hundredths, a safe integer, as its decimal digits. Both sides rebuild the
+ * payload from parsed fields, so the form must be one on both: a safe integer has exactly one String().
  */
-const canonicalAmount = (n: number): string => n.toFixed(4);
+const canonicalAmount = (n: number): string => String(n);
 
 /**
  * The exact bytes that get signed.
@@ -75,7 +74,7 @@ export function receiptPayload(r: SettlementReceipt): string {
         r.buyerHomeNode ?? '',
         r.sellerPublicKey,
         r.postId ?? '',
-        canonicalAmount(r.amount),
+        canonicalAmount(r.amount_c),
         r.committedAt,
     ].join('\n');
 }
@@ -83,10 +82,9 @@ export function receiptPayload(r: SettlementReceipt): string {
 /** Sign a receipt with this node's libp2p identity key. Returns base64. */
 export async function signReceipt(r: SettlementReceipt, privateKey: any): Promise<string> {
     if (!privateKey?.sign) throw new Error('No node identity key available to sign a settlement receipt');
-    // `canonicalAmount` calls toFixed, which throws a bare TypeError on a non-number. Fail with a message
-    // that says what is wrong, since a malformed receipt here means a caller bug, not a peer's input.
-    if (!r || typeof r.amount !== 'number' || !Number.isFinite(r.amount)) {
-        throw new Error('Cannot sign a settlement receipt without a finite numeric amount');
+    // Whole hundredths only: a malformed receipt here means a caller bug, not a peer's input.
+    if (!r || !isHundredths(r.amount_c) || r.amount_c <= 0) {
+        throw new Error('Cannot sign a settlement receipt without an amount in whole hundredths');
     }
     if (!r.key || !r.issuerPeerId) {
         throw new Error('Cannot sign a settlement receipt without a key and an issuer');

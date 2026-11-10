@@ -26,7 +26,11 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-function makeMember(callsign: string, initialBalance = 100) {
+/** The story's Beans as the node's whole hundredths: balances and a listing's `price_c`. */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** `initialBalance`: whole hundredths (100 Beans by default). */
+function makeMember(callsign: string, initialBalance = hc(100)) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
@@ -34,10 +38,10 @@ function makeMember(callsign: string, initialBalance = 100) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
 
     // Update audit baseline sum for ledger
-    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s;
+    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s;
     db.prepare(`UPDATE node_config SET value = ? WHERE key = 'ledger_audit_baseline'`).run(String(totalSum));
     reconcileLedgerFromDb();
 
@@ -78,17 +82,17 @@ async function main() {
     // Make sure members who request offers or create needs have listed an offer post first
     await signedFetch('POST', '/api/marketplace/posts', offerRequester, {
         type: 'offer', category: 'general', title: 'OfferRequester Offer', description: 'Sample offer',
-        credits: 5, priceType: 'fixed', authorPublicKey: offerRequester.pubKeyHex, photos: [PHOTO],
+        price_c: hc(5), priceType: 'fixed', authorPublicKey: offerRequester.pubKeyHex, photos: [PHOTO],
     });
     await signedFetch('POST', '/api/marketplace/posts', needAuthor, {
         type: 'offer', category: 'general', title: 'NeedAuthor Offer', description: 'Sample offer',
-        credits: 5, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
+        price_c: hc(5), priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
     });
 
     // Create an Offer post (OfferAuthor creates, OfferRequester requests -> OfferRequester is buyer)
     const offerPostRes = await signedFetch('POST', '/api/marketplace/posts', offerAuthor, {
         type: 'offer', category: 'general', title: 'Lawn Mowing', description: 'Mow front yard',
-        credits: 15, priceType: 'fixed', authorPublicKey: offerAuthor.pubKeyHex, photos: [PHOTO],
+        price_c: hc(15), priceType: 'fixed', authorPublicKey: offerAuthor.pubKeyHex, photos: [PHOTO],
     });
     assert(offerPostRes.status === 200, 'offer author created a post successfully');
     const offerPostId = offerPostRes.body?.post?.id;
@@ -97,7 +101,7 @@ async function main() {
     // Create a Need post (NeedAuthor creates, NeedRequester requests -> NeedAuthor is buyer, NeedRequester is seller)
     const needPostRes = await signedFetch('POST', '/api/marketplace/posts', needAuthor, {
         type: 'need', category: 'general', title: 'Need Math Tutor', description: 'Algebra tutoring',
-        credits: 20, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
+        price_c: hc(20), priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
     });
     assert(needPostRes.status === 200, 'need author created a post successfully');
     const needPostId = needPostRes.body?.post?.id;

@@ -93,7 +93,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -141,7 +141,7 @@ function keySession(id: Id): string {
 
 // ── what members do ─────────────────────────────────────────────────────────────────────────────────────────────
 let n = 0;
-const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
+const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
 const openDm = (from: Id, toPk: string) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, toPk], createdBy: from.pk });
 const line = (from: Id, conversationId: string, payload: Record<string, unknown> = lockedDm()) =>
     call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ...payload });
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
         minuteThrottle(true, PER_MINUTE);
         const ann = member('Ann');
         const routes: [string, unknown][] = [
-            ['/api/federation/purchase', { postId: 'none', amount: 1 }],
+            ['/api/federation/purchase', { postId: 'none', amount_c: 100 }],
             ['/api/federation/commission', { postId: 'none' }],
             ['/api/community/register', { publicKey: ann.pk, callsign: 'Ann' }],
             ['/api/community/me/area', { lat: -28.5, lng: 153.5 }],
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
             ['a DM opened', await openDm(dee, eve.pk)],
             ['an area set', await call('POST', dee, '/api/community/me/area', { lat: -28.6, lng: 153.4 })],
             ['a push token removed (DELETE)', await call('DELETE', dee, '/api/push-tokens', { publicKey: dee.pk, token: 'none' })],
-            ['a purchase asked', await call('POST', dee, '/api/federation/purchase', { postId: 'none', amount: 1 })],
+            ['a purchase asked', await call('POST', dee, '/api/federation/purchase', { postId: 'none', amount_c: 100 })],
         ];
         const conv = mixed.find(([what]) => what === 'a DM opened')![1].body?.conversation?.id;
         mixed.push(['a DM line (the 5,000th)', await line(dee, conv)]);
@@ -393,10 +393,10 @@ async function main(): Promise<void> {
         // Changed by W-money (Marty, 2026-09-29: "maybe needs to be higher for enterprise/project"): what a keeper puts up
         // for an enterprise used to count with their own 100, so a keeper stocking a shop had nothing left for themselves.
         // It now counts against the enterprise's own WRITER_LIMITS.enterprisePostsPerDay.
-        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
+        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', price_c: 0, photos: TEST_PHOTOS });
         const own = await many(WRITER_LIMITS.postsPerDay, 8, () => post(max));
         const overOwn = await post(max);
-        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
+        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', price_c: 0, photos: TEST_PHOTOS });
         assert(forEnt.status === 200 && own.every(s => s === 200) && overOwn.status === 429 && overOwn.body?.code === 'posts_per_day',
             `a keeper's post for the enterprise takes none of their 100: they still put up 100 of their own, and the 101st is 429 posts_per_day (${forEnt.status}, ${[...new Set(own)].join(',')}, ${show(overOwn)})`);
         assert(stillEnt.status === 200, `and past their own 100 they still post for the enterprise, against its own day (${show(stillEnt)})`);

@@ -54,7 +54,7 @@ async function bootRollBackAsStandby(world: World, root: string): Promise<{ main
         try { fn(conn); } finally { conn.close(); }
     };
     sqlite(crash, (conn) => {
-        conn.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey) VALUES ('ab-post', 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?)`)
+        conn.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES ('ab-post', 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?)`)
             .run(world.anna);
         conn.prepare("INSERT INTO post_photos (post_id, photo_data, order_num) VALUES ('ab-post', 'data:image/png;base64,iVBORw0KGgo=', 0)").run();
     });

@@ -10,10 +10,14 @@ import {
     type Shape,
     type ShapeSettings,
     type KnownFloorShape,
+    type KnownFloorDraft,
     fetchCommunityShape,
     updateCommunityShape,
     getConsequenceSentence,
     hoursWording,
+    knownFloorChange,
+    knownFloorDraftOf,
+    knownFloorUnchanged,
     RECOVERY_COPIES_CHOICES,
     recoveryCopiesName,
     DOOR_PRESETS,
@@ -26,6 +30,21 @@ import { RowControls, ShapeRow, joinDisplay, logSettingName, ADVICE_LINE_PREFIX 
 import { AdviseTheOwners } from './AdviseTheOwners';
 import { ChangesLog } from './ChangesLog';
 import { CoreWalkthrough, currentDoor, knownFloorProblem } from './CoreWalkthrough';
+import { isBudgetLevel, isMemberGiftSetting } from '@beanpool/core';
+import { beansFigure, beansInputText, parseBeans, beansRefusalText, typedHundredths } from '../../lib/beans';
+
+/** The rows whose value is a money figure an owner types in Beans: the draft holds the text, the node takes whole hundredths. */
+const TYPED_BEANS_ROWS = new Set<keyof ShapeSettings>(['voucherBudget', 'memberGift']);
+
+/**
+ * What a row's draft is sent as: the known floor's `{ on, floor_c, cap_c }` (knownFloorChange), a typed budget or gift as
+ * whole hundredths (null when the text isn't Beans to the cent), anything else as it is.
+ */
+function sentValueOf(key: keyof ShapeSettings, draft: unknown): unknown {
+    if (key === 'knownFloor') return knownFloorChange(draft as KnownFloorDraft);
+    if (TYPED_BEANS_ROWS.has(key)) return typeof draft === 'string' ? typedHundredths(draft) : null;
+    return draft;
+}
 
 /** The honest words under a rule for where members' copies go, as the row shows them closed. */
 function recoveryCopiesWords(rule: string): string | undefined {
@@ -140,8 +159,10 @@ export function CommunityShapeSection({
         setTyped('');
 
         if (settingKey === 'knownFloor') {
-            const kf = currentValue as KnownFloorShape;
-            setDraftValue({ on: kf.on, floor: kf.floor, cap: kf.cap });
+            // The shape's figures are whole hundredths: the boxes hold them as plain Beans text ("1000", "12.50").
+            setDraftValue(knownFloorDraftOf(currentValue as KnownFloorShape));
+        } else if (TYPED_BEANS_ROWS.has(settingKey)) {
+            setDraftValue(beansInputText(currentValue));
         } else {
             setDraftValue(currentValue);
         }
@@ -153,19 +174,33 @@ export function CommunityShapeSection({
         setRowError(null);
 
         if (settingKey === 'knownFloor') {
-            const problem = knownFloorProblem(draftValue as { on: boolean; floor: number; cap: number });
+            const problem = knownFloorProblem(draftValue as KnownFloorDraft);
             if (problem) {
                 setRowError(problem);
                 setSaving(false);
                 return;
             }
         }
+        // Typed Beans that aren't an amount are said here, in words, and nothing is sent (Save is off for them anyway).
+        if (TYPED_BEANS_ROWS.has(settingKey)) {
+            const typed = parseBeans(typeof draftValue === 'string' ? draftValue : '');
+            if (!typed.ok) {
+                setRowError(beansRefusalText(typed.refusal));
+                setSaving(false);
+                return;
+            }
+        }
+        const sent = sentValueOf(settingKey, draftValue);
+        if (sent === null) {
+            setSaving(false);
+            return;
+        }
 
         try {
             const res = await updateCommunityShape(
                 activeNode.url,
                 nodeCredential(activeNode),
-                { [settingKey]: draftValue },
+                { [settingKey]: sent },
                 note,
                 getTfaSessionToken(activeNode.id),
                 code,
@@ -193,7 +228,8 @@ export function CommunityShapeSection({
 
     const consequenceText = useMemo(() => {
         if (!openSetting || !shape || draftValue === null) return '';
-        return getConsequenceSentence(openSetting, draftValue, shape);
+        // The known floor's sentence reads its draft (the typed floor); a typed budget or gift, the hundredths it is sent as.
+        return getConsequenceSentence(openSetting, TYPED_BEANS_ROWS.has(openSetting) ? sentValueOf(openSetting, draftValue) : draftValue, shape);
     }, [openSetting, draftValue, shape]);
 
     if (loading) {
@@ -486,8 +522,8 @@ export function CommunityShapeSection({
                         icon="🤝"
                         name={t('Known floor for confirmed members')}
                         summary={t('An admin confirms a member on the names list; they can then owe up to this while they keep an offer listed.')}
-                        extraLine={t("Cap for one member's raise: {cap}.").replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
-                        displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', settings.knownFloor.value.floor.toLocaleString('en')) : t('Off')}
+                        extraLine={t("Cap for one member's raise: {cap}.").replace('{cap}', beansFigure(settings.knownFloor.value.cap))}
+                        displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', beansFigure(settings.knownFloor.value.floor)) : t('Off')}
                         lock={settings.knownFloor.lock}
                         {...rowProps('knownFloor', settings.knownFloor.value)}
                     >
@@ -512,12 +548,13 @@ export function CommunityShapeSection({
                                         <input
                                             id="shape-known-floor-floor"
                                             type="number"
+                                            step="0.01"
                                             value={draftValue.floor}
-                                            onChange={(e) => setDraftValue({ ...draftValue, floor: Number(e.target.value) })}
+                                            onChange={(e) => setDraftValue({ ...draftValue, floor: e.target.value })}
                                             className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
                                         />
                                         <p data-testid="known-floor-hours" className="text-[11px] text-nature-400 mt-1 m-0">
-                                            {hoursWording(draftValue.floor || 0)}
+                                            {hoursWording(typedHundredths(draftValue.floor) ?? 0)}
                                         </p>
                                     </div>
                                     <div>
@@ -527,8 +564,9 @@ export function CommunityShapeSection({
                                         <input
                                             id="shape-known-floor-cap"
                                             type="number"
+                                            step="0.01"
                                             value={draftValue.cap}
-                                            onChange={(e) => setDraftValue({ ...draftValue, cap: Number(e.target.value) })}
+                                            onChange={(e) => setDraftValue({ ...draftValue, cap: e.target.value })}
                                             className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
                                         />
                                     </div>
@@ -537,9 +575,10 @@ export function CommunityShapeSection({
 
                             {controls(
                                 'knownFloor',
-                                draftValue?.on === settings.knownFloor.value.on &&
-                                    draftValue?.floor === settings.knownFloor.value.floor &&
-                                    draftValue?.cap === settings.knownFloor.value.cap,
+                                // Off only when the draft, read as whole hundredths, is what the shape has: a figure that
+                                // isn't Beans to the cent leaves Save on, and Save says why.
+                                openSetting === 'knownFloor' && draftValue !== null
+                                    && knownFloorUnchanged(knownFloorChange(draftValue as KnownFloorDraft), settings.knownFloor.value),
                             )}
                         </div>
                     </ShapeRow>
@@ -551,7 +590,7 @@ export function CommunityShapeSection({
                             icon="🎟️"
                             name={t('Budget per voucher')}
                             summary={t('The budget each voucher starts with, to vouch for the people they invite (100 to 2,000 Beans in 100s; default 1,000).')}
-                            displayValue={t('{n} Beans').replace('{n}', settings.voucherBudget.value.toLocaleString('en'))}
+                            displayValue={t('{n} Beans').replace('{n}', beansFigure(settings.voucherBudget.value))}
                             lock={settings.voucherBudget.lock}
                             {...rowProps('voucherBudget', settings.voucherBudget.configured)}
                         >
@@ -565,11 +604,15 @@ export function CommunityShapeSection({
                                     min={100}
                                     max={2000}
                                     step={100}
-                                    value={typeof draftValue === 'number' ? draftValue : ''}
-                                    onChange={(e) => setDraftValue(e.target.value === '' ? null : Number(e.target.value))}
+                                    value={typeof draftValue === 'string' ? draftValue : ''}
+                                    onChange={(e) => setDraftValue(e.target.value)}
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
                                 />
-                                {controls('voucherBudget', typeof draftValue !== 'number' || draftValue === settings.voucherBudget.configured || draftValue < 100 || draftValue > 2000 || draftValue % 100 !== 0)}
+                                {/* Typed Beans read as whole hundredths: a budget level is 100 to 2,000 Beans in 100s (core isBudgetLevel). */}
+                                {controls('voucherBudget', (() => {
+                                    const v = typeof draftValue === 'string' ? typedHundredths(draftValue) : null;
+                                    return v === null || v === settings.voucherBudget!.configured || !isBudgetLevel(v);
+                                })())}
                             </div>
                         </ShapeRow>
                     )}
@@ -582,7 +625,7 @@ export function CommunityShapeSection({
                             name={t('Members giving part of their credit line')}
                             summary={t('A member may give another part of the credit line someone gave them, beside Beans on Send: up to this much at once.')}
                             displayValue={settings.memberGift.value > 0
-                                ? t('On · up to {n} Beans').replace('{n}', settings.memberGift.value.toLocaleString('en'))
+                                ? t('On · up to {n} Beans').replace('{n}', beansFigure(settings.memberGift.value))
                                 : t('Off')}
                             lock={settings.memberGift.lock}
                             {...rowProps('memberGift', settings.memberGift.configured)}
@@ -597,11 +640,15 @@ export function CommunityShapeSection({
                                     min={0}
                                     max={100}
                                     step={1}
-                                    value={typeof draftValue === 'number' ? draftValue : ''}
-                                    onChange={(e) => setDraftValue(e.target.value === '' ? null : Number(e.target.value))}
+                                    value={typeof draftValue === 'string' ? draftValue : ''}
+                                    onChange={(e) => setDraftValue(e.target.value)}
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
                                 />
-                                {controls('memberGift', typeof draftValue !== 'number' || draftValue === settings.memberGift.configured)}
+                                {/* Typed Beans read as whole hundredths: 0 (off) to 100 whole Beans (core isMemberGiftSetting). */}
+                                {controls('memberGift', (() => {
+                                    const v = typeof draftValue === 'string' ? typedHundredths(draftValue) : null;
+                                    return v === null || v === settings.memberGift!.configured || !isMemberGiftSetting(v);
+                                })())}
                             </div>
                         </ShapeRow>
                     )}

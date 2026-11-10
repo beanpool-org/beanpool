@@ -22,7 +22,7 @@ import {
 } from '../utils/db';
 import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder } from '../utils/beans-off';
-import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, word, type WordKey } from '@beanpool/core';
+import { amountRefusalWords, inCapitalsOf, isAmbiguousAmount, isHundredths, keeperWords, parseHundredths, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { signedRequestWords } from './signed-request-lines';
 
@@ -31,10 +31,14 @@ interface Props {
     onClose: () => void;
     onCreated: () => void;
     identity: any;
-    /** Not read since removal by vote S3: it fed the removal's debt line, and a removal is no longer proposed here. */
+    /**
+     * The Commons pot, whole hundredths of a Bean. Not read since removal by vote S3: it fed the removal's debt line, and a
+     * removal is no longer proposed here.
+     */
     commonsBalance: number;
-    members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
-    treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
+    members?: Array<{ publicKey: string; callsign?: string }>;
+    /** The Commons list's rows; each balance_c, whole hundredths, as the node sends it (not read here). */
+    treasuries?: Array<{ publicKey: string; name: string; balance_c?: number; lifecycle?: string | null }>;
     features?: NodeFeatures | null;
 }
 
@@ -341,19 +345,20 @@ export function ProposeDecisionModal({
 
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
-            // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
-            // could be a thousand, is refused in words that say so. The node's cents rule decides the decimals, as before.
-            const read = parseAmount(grantAmount, undefined, ANY_DECIMALS);
-            if (!read.ok && isAmbiguousAmount(read.refusal)) {
+            // The language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250, never refused as not a
+            // number; "1.000", which could be a thousand, and a third decimal are refused in words that say so. The node takes
+            // the grant as params.amount_c (decisions-engine.ts), the old `amount` refused.
+            const read = parseHundredths(grantAmount);
+            if (!read.ok && (isAmbiguousAmount(read.refusal) || read.refusal === 'too-many-decimals')) {
                 Alert.alert(t('Invalid Amount'), amountRefusalWords(read.refusal));
                 return;
             }
-            const amount = read.ok ? read.value : NaN;
-            if (!amount || amount <= 0) {
+            const amount_c = read.ok ? read.value : NaN;
+            if (!isHundredths(amount_c) || amount_c <= 0) {
                 Alert.alert(t('Invalid Amount'), t('Please specify a valid grant amount in Beans.'));
                 return;
             }
-            params = { amount };
+            params = { amount_c };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
                 Alert.alert(t('Missing project or enterprise'), t('Please pick the project or enterprise, or enter its public key.'));

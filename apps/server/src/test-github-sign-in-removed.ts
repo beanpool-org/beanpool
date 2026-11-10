@@ -102,7 +102,7 @@ async function child(): Promise<void> {
             if (a.addMember) {
                 db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                             VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'github-removed-test', 'TEST')`).run(pk, a.callsign);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             const b64 = (n: number) => crypto.randomBytes(n).toString('base64');
             const shares: any[] = a.carry ? getCurrentSharesToCarry(pk).map((s) => ({
@@ -162,7 +162,7 @@ async function child(): Promise<void> {
             const now = new Date().toISOString();
             db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', ?, ?, NULL)`).run(a.pk, a.callsign, now, `open:${a.provider}`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             db.prepare(`INSERT OR IGNORE INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at) VALUES (?, ?, ?, ?, NULL, ?)`)
                 .run(a.pk, a.provider, crypto.randomBytes(32).toString('base64url'), now, now);
             return true;

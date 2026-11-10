@@ -8,6 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { LANGS, setLanguage, t } from '../words.js';
 import { NEED_ANSWER_WORDS, needAnswerLine } from '../need-answer-words.js';
 import { NEEDS_COUNT_WORDS } from '../first-trade-words.js';
+import { dealAmountFor } from '../hundredths.js';
 
 const wordsDir = new URL('../../words/', import.meta.url);
 const catalog = (lang: string) => JSON.parse(readFileSync(new URL(`${lang}.json`, wordsDir), 'utf8'));
@@ -21,28 +22,30 @@ describe('the button and the sentence under it', () => {
         expect(t(NEED_ANSWER_WORDS.button)).not.toMatch(/Offer to Fulfill/i);
     });
 
-    it('a priced Need: the amount, the name, and when the Beans are theirs', () => {
-        expect(needAnswerLine(40, 'Sam')).toBe("You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.");
-        expect(needAnswerLine(1, 'Sam')).toBe("You'd do it for 1 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.");
+    it('a priced Need: the amount, the name, and when the Beans are theirs (the total in whole hundredths)', () => {
+        expect(needAnswerLine(4000, 'Sam')).toBe("You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.");
+        expect(needAnswerLine(100, 'Sam')).toBe("You'd do it for 1 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.");
     });
 
-    it('a total of a price times the quantity is rounded as every Beans amount is, never a long fraction', () => {
-        expect(needAnswerLine(12.5, 'Sam')).toContain('for 12.5 Beans.');
-        expect(needAnswerLine(33.333333, 'Sam')).toContain('for 33.33 Beans.');
-        expect(needAnswerLine(0.1 + 0.2, 'Sam')).toContain('for 0.3 Beans.');
+    it("a total of a price times the quantity is the node's own figure (dealAmountFor), two decimals when not whole", () => {
+        expect(needAnswerLine(1250, 'Sam')).toContain('for 12.50 Beans.');
+        // 10 Beans an hour for 3.3333 hours: 333 hundredths of an hour, 3,330 hundredths of a Bean, as the node holds it.
+        expect(needAnswerLine(dealAmountFor(1000, 3.3333), 'Sam')).toContain('for 33.30 Beans.');
+        expect(needAnswerLine(1, 'Sam')).toContain('for 0.01 Beans.');
     });
 
     it('no name: the person who asked, never a made-up name or an empty gap', () => {
-        const line = needAnswerLine(40);
+        const line = needAnswerLine(4000);
         expect(line).toBe("You'd do it for 40 Beans. The person who asked agrees, you do it, they confirm, and the Beans are yours.");
-        expect(needAnswerLine(40, null)).toBe(line);
-        expect(needAnswerLine(40, '')).toBe(line);
-        expect(needAnswerLine(40, '   ')).toBe(line);
-        expect(needAnswerLine(40, '  Sam ')).toContain('Sam agrees');
+        expect(needAnswerLine(4000, null)).toBe(line);
+        expect(needAnswerLine(4000, '')).toBe(line);
+        expect(needAnswerLine(4000, '   ')).toBe(line);
+        expect(needAnswerLine(4000, '  Sam ')).toContain('Sam agrees');
     });
 
     it('a Need with nothing to pay says so, and never claims Beans that will not come', () => {
-        for (const free of [0, -3, NaN, Infinity, 0.001]) {
+        // Not a positive whole number of hundredths (a float from a stale caller among them) never shows a figure.
+        for (const free of [0, -3, NaN, Infinity, 0.001, 12.5]) {
             const named = needAnswerLine(free, 'Sam');
             expect(named, String(free)).toBe("You'd do it for free. Sam agrees, you do it, and Sam confirms.");
             expect(named).not.toMatch(/Beans|0/);
@@ -51,7 +54,7 @@ describe('the button and the sentence under it', () => {
     });
 
     it('the fee is not on this screen, and no word we took out is in it', () => {
-        for (const line of [needAnswerLine(40, 'Sam'), needAnswerLine(40), needAnswerLine(0, 'Sam'), needAnswerLine(0)]) {
+        for (const line of [needAnswerLine(4000, 'Sam'), needAnswerLine(4000), needAnswerLine(0, 'Sam'), needAnswerLine(0)]) {
             expect(line).not.toMatch(/1\.5|fee|Commons|Trust Wallet|resilience|survival/i);
         }
     });
@@ -60,14 +63,14 @@ describe('the button and the sentence under it', () => {
 describe('in a language with its drafts', () => {
     it('Spanish: the amount in the language\'s Beans, the name and the plain steps', () => {
         setLanguage('es', [catalog('es')]);
-        expect(needAnswerLine(40, 'Sam')).toBe('Lo harías por 40 frijoles. Sam acepta, tú lo haces, Sam confirma y los frijoles son tuyos.');
+        expect(needAnswerLine(4000, 'Sam')).toBe('Lo harías por 40 frijoles. Sam acepta, tú lo haces, Sam confirma y los frijoles son tuyos.');
         expect(needAnswerLine(0)).toBe('Lo harías gratis. Quien lo pidió acepta, tú lo haces y confirma.');
         expect(t(NEED_ANSWER_WORDS.button)).toBe('✋ Puedo hacerlo');
     });
 
     it('French keeps the decimal comma', () => {
         setLanguage('fr', [catalog('fr')]);
-        expect(needAnswerLine(12.5, 'Sam')).toBe('Vous le feriez pour 12,5 haricots. Sam accepte, vous le faites, Sam confirme, et les haricots sont à vous.');
+        expect(needAnswerLine(1250, 'Sam')).toBe('Vous le feriez pour 12,50 haricots. Sam accepte, vous le faites, Sam confirme, et les haricots sont à vous.');
     });
 
     it('every language has every word this adds, with the same placeholders, and none of them is the English', () => {

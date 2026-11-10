@@ -107,7 +107,7 @@ async function main() {
     // Members two months old, past any new account's limits.
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'seed')`);
-    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
+    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)');
     const member = (callsign: string): Id => {
         const id = keypair();
         insertMember.run(id.pubKeyHex, callsign);

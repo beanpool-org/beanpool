@@ -1,5 +1,6 @@
 import { db } from './db/db.js';
 import crypto from 'crypto';
+import { beans } from '@beanpool/core';
 
 const MOCK_OFFERS = [
   {
@@ -7,7 +8,7 @@ const MOCK_OFFERS = [
     description: '1 Dozen farm-fresh eggs from happy hens. Pick up by the community garden gate.',
     type: 'offer',
     category: 'organic-produce',
-    price: 3.5,
+    price_c: 350, // 3.50 Beans: whole hundredths, as posts.price_c holds every price
     status: 'active'
   },
   {
@@ -15,7 +16,7 @@ const MOCK_OFFERS = [
     description: '2 bags of nitrogen-rich local compost available.',
     type: 'offer',
     category: 'organic-produce',
-    price: 2.0,
+    price_c: 200,
     status: 'active'
   },
   {
@@ -23,7 +24,7 @@ const MOCK_OFFERS = [
     description: 'Need a good home for 5 heirloom cherry tomato saplings. Grew too many!',
     type: 'offer',
     category: 'plants-seeds',
-    price: 5.0,
+    price_c: 500,
     status: 'active'
   },
   {
@@ -31,7 +32,7 @@ const MOCK_OFFERS = [
     description: 'I will help weed your garden bed for 2 hours on Sunday in exchange for produce.',
     type: 'offer',
     category: 'community-labor',
-    price: 4.0,
+    price_c: 400,
     status: 'active'
   },
   {
@@ -39,7 +40,7 @@ const MOCK_OFFERS = [
     description: 'Heavy-duty post hole digger available to borrow for the weekend. Pick up only.',
     type: 'offer',
     category: 'tools-hardware',
-    price: 1.0,
+    price_c: 100,
     status: 'active'
   }
 ];
@@ -57,15 +58,15 @@ function seed() {
   `).run(pubkey, 'Community_Garden', new Date().toISOString(), 'genesis', 'legacy', 'active');
   
   db.prepare(`
-        INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, ?)
-  `).run(pubkey, 100, 0);
+  `).run(pubkey, beans(100), 0); // 100 Beans, in whole hundredths
 
   console.log('✅ Synchronized mock user: Community_Garden');
 
   const insertPost = db.prepare(`
         INSERT OR IGNORE INTO posts (
-            id, type, category, title, description, credits, author_pubkey, created_at,
+            id, type, category, title, description, price_c, author_pubkey, created_at,
             active, status, repeatable, lat, lng
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
@@ -78,7 +79,7 @@ function seed() {
       offer.category,
       offer.title,
       offer.description,
-      offer.price,
+      offer.price_c,
       pubkey,
       new Date().toISOString(),
       1,

@@ -32,9 +32,9 @@ export interface EnterpriseDecisionsProps {
     myPubkey: string | null;
     /** The enterprise's keepers as its detail lists them; suspended ones are off the roll. */
     keepers: Array<{ publicKey: string; callsign?: string; role?: string; suspended?: boolean }>;
-    /** What it holds now, in Beans. */
+    /** What it holds now, whole hundredths of a Bean (the detail's balance_c). */
     balance: number;
-    /** What it has earned above its costs (the detail's earnedSurplus): the most it can pay a keeper. Null when not known. */
+    /** What it has earned above its costs, whole hundredths (the detail's earnedSurplus_c): the most it can pay a keeper. Null when not known. */
     earnedSurplus?: number | null;
     lifecycle?: string | null;
 }
@@ -210,7 +210,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
         setError(null);
         try {
             await proposeEnterpriseDecision(treasuryKey, effect === 'pay_out' && amount && 'amount' in amount
-                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount: amount.amount } }
+                ? { title: title.trim(), description: why.trim(), effect, params: { to: person.pubkey, amount_c: amount.amount } }
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e) {
@@ -258,7 +258,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
                     <label className={label} htmlFor="scoped-amount">{t('How many Beans?')}</label>
                     <input id="scoped-amount" className={input} inputMode="decimal" placeholder="40" value={amountText}
                         onChange={e => setAmountText(e.target.value)} aria-describedby="scoped-amount-help" />
-                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">{tn(Number(beansHeld(balance)), 'It holds {n} Beans now.', 'It holds {n} Beans now.')}</p>
+                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">{tn(Math.max(0, balance) / 100, 'It holds {n} Beans now.', 'It holds {n} Beans now.', { n: beansHeld(balance) })}</p>
                     {amountError && <p className="m-0 mt-1 text-sm text-amber-700 dark:text-amber-400 break-words">{amountError}</p>}
                     {amount && 'amount' in amount && person && (
                         <p className="m-0 mt-1 text-sm text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-fee">{payOutFeeWords(amount.amount, person.name)}</p>

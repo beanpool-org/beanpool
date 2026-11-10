@@ -2,9 +2,10 @@
  * How this community works: client model and helpers (scratch/fable-design/DESIGN-community-shape-settings-fable.md).
  * Reads GET /api/local/admin/community-shape (slice S1) and writes POST /api/local/admin/community-shape (slice S2).
  */
-import { juryRuleFor } from '@beanpool/core';
+import { CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, PROTOCOL_CONSTANTS, isHundredths, juryRuleFor } from '@beanpool/core';
 import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from './node-client';
 import { t, proofField, throwIfFreshProof } from './fresh-proof';
+import { beansFigure, beansInputText, parseBeans, typedHundredths } from './beans';
 
 export type ShapeSource = 'owner' | 'profile' | 'default' | 'server';
 
@@ -33,11 +34,45 @@ export type VisitorsView = 'nothing' | 'listings' | 'open';
 export type RecoveryCopies = 'vault' | 'server' | 'none';
 /** Who decides a removal (apps/server config/removal-decider.ts, DESIGN-removal-jury-fable.md §6). */
 export type RemovalDecider = 'automatic' | 'everyone' | 'jury';
+/**
+ * The known floor as the shape READS it (server config/community-shape.ts readShape): the dial, and the floor, the cap and
+ * the cap's ceiling under their old names, each whole hundredths of a Bean (100000 is 1,000 Beans). A change WRITES
+ * `{ on, floor_c, cap_c }` (config/community-shape-write.ts): knownFloorChange below.
+ */
 export interface KnownFloorShape {
     on: boolean;
     floor: number;
     cap: number;
     capMax: number;
+}
+
+/** The known floor as an owner edits it: the dial, and the floor and cap as typed, in Beans to the cent (text). */
+export interface KnownFloorDraft {
+    on: boolean;
+    floor: string;
+    cap: string;
+}
+
+/** What the known floor's boxes start from: the shape's figures (whole hundredths) as the plain Beans text a box holds. */
+export function knownFloorDraftOf(kf: { on: boolean; floor: number; cap: number }): KnownFloorDraft {
+    return { on: kf.on, floor: beansInputText(kf.floor), cap: beansInputText(kf.cap) };
+}
+
+/**
+ * The known floor's change as the node takes it: `{ on, floor_c, cap_c }`, the typed Beans read as whole hundredths
+ * (parseHundredths). Null while the dial is on and a typed figure isn't Beans to the cent (knownFloorProblem says why); with
+ * the dial off, a figure that isn't one is left out, and the node keeps what it has.
+ */
+export function knownFloorChange(d: KnownFloorDraft): { on: boolean; floor_c?: number; cap_c?: number } | null {
+    const floor = parseBeans(d.floor);
+    const cap = parseBeans(d.cap);
+    if (floor.ok && cap.ok) return { on: d.on, floor_c: floor.value, cap_c: cap.value };
+    return d.on ? null : { on: false };
+}
+
+/** Whether a known-floor change would change nothing: the dial and both figures as the shape has them. */
+export function knownFloorUnchanged(change: { on: boolean; floor_c?: number; cap_c?: number } | null, now: { on: boolean; floor: number; cap: number }): boolean {
+    return !!change && change.on === now.on && (change.floor_c ?? now.floor) === now.floor && (change.cap_c ?? now.cap) === now.cap;
 }
 
 export interface ShapeSettings {
@@ -52,9 +87,15 @@ export interface ShapeSettings {
         includes: { escrow: boolean; enterprises: boolean; treasuries: boolean; crowdfund: boolean };
     };
     knownFloor: ShapeSetting<KnownFloorShape>;
-    /** The budget each voucher starts with, 100 to 2,000 in 100s, default 1,000 (slice V5). Absent on a server from before it. */
+    /**
+     * The budget each voucher starts with, 100 to 2,000 Beans in 100s, default 1,000 (slice V5), as whole hundredths (100000
+     * is 1,000 Beans), read and written so (engine/vouchers.ts isBudgetLevel). Absent on a server from before it.
+     */
     voucherBudget?: ShapeSetting<number>;
-    /** The most of their credit line a member may give another at once, 0 (off) to 100 (slice G1). Absent on a server from before it. */
+    /**
+     * The most of their credit line a member may give another at once, 0 (off) to 100 Beans (slice G1), as whole hundredths
+     * (10000 is 100 Beans), read and written so (isMemberGiftSetting). Absent on a server from before it.
+     */
     memberGift?: ShapeSetting<number>;
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
@@ -143,12 +184,13 @@ export const coreLocked = (shape: Shape | null | undefined): boolean => Boolean(
 export const coreAwaitsOwner = (shape: Shape | null | undefined, isOwner: boolean): boolean =>
     isOwner && Boolean(shape) && !shape!.standby && Boolean(shape!.core) && !shape!.core!.lock;
 
-/** 40 Beans is an hour of work (PROTOCOL_CONSTANTS.REFERENCE_RATE). */
-export const BEANS_PER_HOUR = 40;
+/** An hour of work, in whole hundredths of a Bean: 40 Beans (PROTOCOL_CONSTANTS.REFERENCE_RATE, 4000). */
+export const HUNDREDTHS_PER_HOUR = PROTOCOL_CONSTANTS.REFERENCE_RATE;
 
-export function hoursWording(beans: number): string {
-    const hours = Math.round(beans / BEANS_PER_HOUR);
-    return `${beans.toLocaleString('en')} Beans is about ${hours.toLocaleString('en')} ${hours === 1 ? 'hour' : 'hours'} of work the community is trusting you for.`;
+/** A figure in whole hundredths as the hours of work it stands for: 100000 → "1,000 Beans is about 25 hours of work …". */
+export function hoursWording(c: number): string {
+    const hours = Math.round(c / HUNDREDTHS_PER_HOUR);
+    return `${beansFigure(c)} Beans is about ${hours.toLocaleString('en')} ${hours === 1 ? 'hour' : 'hours'} of work the community is trusting you for.`;
 }
 
 export const DOOR_PRESETS: ReadonlyArray<{ door: 'members' | 'admins'; name: string; plain: string; detail: string }> = [
@@ -254,30 +296,35 @@ export function unpauseConsequence(to: 'members' | 'admins'): string {
         : t('New members will be taken again: every member can make invites and answer requests to join.');
 }
 
+/**
+ * The known floor's settings as GET /api/local/admin/known-floor sends them (server config/known-floor.ts
+ * knownFloorSettings): every figure whole hundredths of a Bean, in a `*_c` field.
+ */
 export interface KnownFloorSettings {
     confirmation: boolean;
-    knownFloor: number;
-    creditCap: number;
-    creditCapDefault: number;
-    creditCapMax: number;
+    knownFloor_c: number;
+    creditCap_c: number;
+    creditCapDefault_c: number;
+    creditCapMax_c: number;
 }
 
 export function readKnownFloorSettings(v: unknown): KnownFloorSettings | null {
     const o = v as Partial<KnownFloorSettings> | null;
-    if (!o || typeof o.confirmation !== 'boolean' || !Number.isInteger(o.knownFloor) || !Number.isInteger(o.creditCap)) return null;
+    if (!o || typeof o.confirmation !== 'boolean' || !isHundredths(o.knownFloor_c) || !isHundredths(o.creditCap_c)) return null;
     return {
         confirmation: o.confirmation,
-        knownFloor: o.knownFloor!,
-        creditCap: o.creditCap!,
-        creditCapDefault: Number.isInteger(o.creditCapDefault) ? o.creditCapDefault! : 2000,
-        creditCapMax: Number.isInteger(o.creditCapMax) ? o.creditCapMax! : 5000,
+        knownFloor_c: o.knownFloor_c,
+        creditCap_c: o.creditCap_c,
+        creditCapDefault_c: isHundredths(o.creditCapDefault_c) ? o.creditCapDefault_c : CREDIT_CAP_DEFAULT,
+        creditCapMax_c: isHundredths(o.creditCapMax_c) ? o.creditCapMax_c : CREDIT_CAP_MAX,
     };
 }
 
+/** The same settings from a shape's known floor (its old names, hundredths: KnownFloorShape), with `before`'s default cap. */
 export function readShapeKnownFloor(shape: unknown, before: KnownFloorSettings): KnownFloorSettings | null {
     const v = (shape as { settings?: { knownFloor?: { value?: { on?: unknown; floor?: unknown; cap?: unknown; capMax?: unknown } } } } | null)
         ?.settings?.knownFloor?.value;
-    return v ? readKnownFloorSettings({ confirmation: v.on, knownFloor: v.floor, creditCap: v.cap, creditCapDefault: before.creditCapDefault, creditCapMax: v.capMax }) : null;
+    return v ? readKnownFloorSettings({ confirmation: v.on, knownFloor_c: v.floor, creditCap_c: v.cap, creditCapDefault_c: before.creditCapDefault_c, creditCapMax_c: v.capMax }) : null;
 }
 
 /**
@@ -465,21 +512,23 @@ export function getConsequenceSentence(
             return t('Members get a credit line as they trade, and posts can carry a price.');
         }
         case 'knownFloor': {
-            const kf = targetValue as { on?: boolean; floor?: number; cap?: number };
+            // The draft as typed (KnownFloorDraft): its floor read as whole hundredths, else the floor the shape has.
+            const kf = (targetValue ?? {}) as Partial<KnownFloorDraft>;
             if (kf.on === false) {
                 return t('Confirmed members go back to the credit they have earned. Anyone below it is spend-frozen, never charged.');
             }
-            const floor = kf.floor ?? s.knownFloor.value.floor;
-            return t('Confirmed members can owe up to {floor} Beans while they keep an offer listed.').replace('{floor}', floor.toLocaleString('en'));
+            const floor = (typeof kf.floor === 'string' ? typedHundredths(kf.floor) : null) ?? s.knownFloor.value.floor;
+            return t('Confirmed members can owe up to {floor} Beans while they keep an offer listed.').replace('{floor}', beansFigure(floor));
         }
         case 'voucherBudget':
-            if (typeof targetValue !== 'number' || !Number.isInteger(targetValue)) return '';
-            return t('New vouchers start with a budget of {n} Beans to vouch for people they invite. Existing vouchers keep their current budget.').replace('{n}', targetValue.toLocaleString('en'));
+            // The budget as the node takes it: whole hundredths (150000 is 1,500 Beans).
+            if (!isHundredths(targetValue)) return '';
+            return t('New vouchers start with a budget of {n} Beans to vouch for people they invite. Existing vouchers keep their current budget.').replace('{n}', beansFigure(targetValue));
         case 'memberGift':
-            if (typeof targetValue !== 'number' || !Number.isInteger(targetValue)) return '';
+            if (!isHundredths(targetValue)) return '';
             return targetValue === 0
                 ? t('Members can no longer give part of their credit line to each other. What was given stays given.')
-                : t("A member can give another up to {n} Beans of the credit line someone gave them, at once, after their first trade. Never the known floor or credit they earned.").replace('{n}', String(targetValue));
+                : t("A member can give another up to {n} Beans of the credit line someone gave them, at once, after their first trade. Never the known floor or credit they earned.").replace('{n}', beansFigure(targetValue));
         case 'dmRequests':
             return targetValue === true
                 ? t("A member's first message to someone who hasn't added them, written to them or traded with them waits until that person accepts.")

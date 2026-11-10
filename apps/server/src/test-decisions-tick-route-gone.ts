@@ -59,9 +59,9 @@ function makeMember(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
                 VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
     reconcileLedgerFromDb();
     return { pubKeyHex, privateKey };
 }
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
     const subject = makeMember('TickTom');
     // Tina's standing to propose is a completed trade (the earned_credit badge makeMember gives is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), author.pubKeyHex, subject.pubKeyHex, tradedAt, tradedAt);
 
     // A Decision past its close time: the tick has work to do, so "nothing happened" below is a real result.

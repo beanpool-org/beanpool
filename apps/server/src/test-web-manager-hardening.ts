@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     seedGenesisMember(owner.pub, 'Olive');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(mod.pub, 'Moe', new Date().toISOString(), owner.pub, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(mod.pub);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(mod.pub);
     grantNodeRole(mod.pub, 'moderator', owner.pub);
     setPassword(PW);
     set2fa(false);

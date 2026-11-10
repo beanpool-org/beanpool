@@ -27,7 +27,7 @@ import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
-import { POST_TYPE_LINES, formatNumber, t, upperCase } from '@beanpool/core';
+import { POST_TYPE_LINES, feeOf, formatHundredths, parseHundredths, t, upperCase } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
@@ -51,7 +51,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from '../components/ShowOnGlobalRow';
 import { getCachedNodeProfile } from '../utils/node-profile';
 import {
-    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
+    marketShowsBeans, postFormPrice_c, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
     NO_BEANS_EDIT_NOTE,
 } from '../utils/market-global';
 
@@ -644,7 +644,7 @@ export default function NewListingScreen() {
                 category: postCategory,
                 title: postTitle.trim(),
                 description: postDescription.trim(),
-                credits: postFormCredits(postCredits, nodeFeatures),
+                price_c: postFormPrice_c(postCredits, nodeFeatures),
                 price_type: postFormPriceType(postPriceType, nodeFeatures),
                 repeatable: postRepeatable ? 1 : 0,
                 cash_also_needed: postCashAlsoNeeded ? 1 : 0,
@@ -686,7 +686,7 @@ export default function NewListingScreen() {
     // Smart button label
     const submitLabel = postFormSubmitLabel({
         posting, needBlocked, postType, category: postCategory, hasLocation: postLat != null, photoCount: postPhotos.length, photoRequired,
-        credits: postCredits, title: postTitle, description: postDescription,
+        priceText: postCredits, title: postTitle, description: postDescription,
     }, nodeFeatures);
     const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || (photoRequired && postPhotos.length < 1);
 
@@ -991,10 +991,12 @@ export default function NewListingScreen() {
                             >
                                 <Text style={{ color: colors.text.secondary, fontSize: 13.5, lineHeight: 19 }}>
                                     {(() => {
-                                        const parsed = parseFloat(postCredits);
-                                        if (!isNaN(parsed) && parsed > 0) {
-                                            const net = Math.round(parsed * 0.985 * 100) / 100;
-                                            return postType === 'offer' ? t('1.5% fee: You will receive {amount} B.', { amount: formatNumber(net, 2) }) : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatNumber(net, 2) });
+                                        // The price as typed, in whole hundredths (core parseHundredths), less the fee the node takes
+                                        // (core feeOf, truncated once): what reaches the one paid, exactly.
+                                        const parsed = parseHundredths(postCredits);
+                                        if (parsed.ok && parsed.value > 0) {
+                                            const net = formatHundredths(parsed.value - feeOf(parsed.value));
+                                            return postType === 'offer' ? t('1.5% fee: You will receive {amount} B.', { amount: net }) : t('1.5% fee: Fulfiller receives {amount} B.', { amount: net });
                                         }
                                         return t('1.5% transaction fee funds community projects & solvency.');
                                     })()}{' '}<Text style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}>{t('Learn more ⓘ')}</Text>

@@ -346,8 +346,8 @@ describe('MemberDetailModal', () => {
             callsign: 'ChildMember',
             invitedBy: 'pubkey-1234567890-abcdef',
         };
-        // The root owing 150 and the child holding 350, as the node works them out over the whole branch.
-        const figures = vi.spyOn(nodeClient, 'fetchBranchPruneFigures').mockResolvedValue({ members: 2, badDebt: 150, surplus: 350, net: 200 });
+        // The root owing 150 and the child holding 350, as the node works them out over the whole branch (whole hundredths).
+        const figures = vi.spyOn(nodeClient, 'fetchBranchPruneFigures').mockResolvedValue({ members: 2, badDebt_c: 15000, surplus_c: 35000, net_c: 20000 });
 
         render(
             <MemberDetailModal
@@ -404,10 +404,10 @@ describe('MemberDetailModal', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 50,
-            commonsBalance: 200,
-            costToCommunity: 0,
-            projectedCommonsBalance: 250,
+            balance_c: 5000,
+            commonsBalance_c: 20000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 25000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [],

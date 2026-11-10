@@ -75,7 +75,7 @@ async function main() {
         const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pubKeyHex, callsign);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
     const alice = member('alice');
@@ -86,7 +86,7 @@ async function main() {
     if (!conv) throw new Error('setup: could not create the DM');
     const line = lockedDm(); // a DM goes in encrypted
     sendMessage(conv.id, alice.pubKeyHex, line.ciphertext, line.nonce);
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('tx-read-auth-default', alice.pubKeyHex, bob.pubKeyHex, 1, 'private memo', new Date().toISOString());
 
     const privateReads: Array<[string, string]> = [

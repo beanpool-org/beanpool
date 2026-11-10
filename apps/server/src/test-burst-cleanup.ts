@@ -91,7 +91,7 @@ function member(name: string, daysAgo: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -135,7 +135,7 @@ const as = (session: string) => (method: 'GET' | 'POST', path: string, body?: un
     call(method, null, path, body, { 'x-admin-session': session });
 
 const post = async (id: Id, title: string): Promise<string> => {
-    const r = await call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, cheap`, credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
+    const r = await call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, cheap`, price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
     if (r.status !== 200 || typeof r.body?.post?.id !== 'string') throw new Error(`post refused: ${r.status} ${JSON.stringify(r.body)}`);
     return r.body.post.id;
 };
@@ -163,7 +163,7 @@ function doorRow(name: string, label: string, daysAgo = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'open:google', 'OPEN', 'active')`).run(id.pk, name, at);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, join_cohort) VALUES (?, ?, ?, ?, ?)')
         .run(id.pk, 'google', crypto.randomBytes(32).toString('hex'), at, label);
     return id;
@@ -644,7 +644,7 @@ async function main(): Promise<void> {
     const early = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: vic.pk, targetPostId: chosenId, reason: 'spam' });
     assert(early.status === 404 && early.body?.error === 'not_found' && onChosen() === 0,
         `a report on a post id nobody has posted here is refused, and nothing is filed (${early.status} ${early.body?.error ?? ''}, ${onChosen()} row)`);
-    const samPost = await call('POST', sam, '/api/marketplace/posts', { id: chosenId, type: 'offer', category: 'other', title: 'Sam watches', description: 'Sam watches, cheap', credits: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
+    const samPost = await call('POST', sam, '/api/marketplace/posts', { id: chosenId, type: 'offer', category: 'other', title: 'Sam watches', description: 'Sam watches, cheap', price_c: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
     assert(samPost.status === 200 && samPost.body?.post?.id === chosenId, `setup: Sam posts under that id (${samPost.status} ${samPost.body?.post?.id === chosenId})`);
     // One that got in anyway: filed before this rule, or copied in from another server's rows.
     const earlyRow = crypto.randomUUID();

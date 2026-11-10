@@ -138,7 +138,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level: string }) => createElement('span', { 'data-badge': level }) }));
 
-import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, SAMPLE_COMMUNITY, TIER_LEVELS, formatHundredths, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
@@ -151,23 +151,26 @@ const NODE = 'https://mullum.example';
 const OFFER_ID = '123e4567-e89b-12d3-a456-426614174000';
 const DAY = Date.UTC(2026, 9, 3, 12);
 
-/** A Resident with 1200 Beans: spending paused below what one live offer unlocks, the known part of the line frozen. */
+/**
+ * A Resident with 1200 Beans: spending paused below what one live offer unlocks, the known part of the line frozen. Every
+ * figure is whole hundredths of a Bean, as getBalance answers them (db.ts: the node's `*_c` fields).
+ */
 const RESIDENT = {
-    balance: 1200, floor: -200, usableFloor: -150, liveOffers: 1, activated: true, frozen: true, creditFrozen: false, knownFrozen: true, knownGrant: 50,
-    tier: { name: 'Resident', emoji: '🏠' }, tierCredit: 200, earnedCredit: 150, qualifiedValue: 300, avgRating: 4.5, reviewCount: 3, commons: 12.5,
+    balance_c: 120000, floor_c: -20000, usableFloor_c: -15000, liveOffers: 1, activated: true, frozen: true, creditFrozen: false, knownFrozen: true, knownGrant_c: 5000,
+    tier: { name: 'Resident', emoji: '🏠' }, tierCredit_c: 20000, earnedCredit_c: 15000, qualifiedValue_c: 30000, avgRating: 4.5, reviewCount: 3, commons_c: 1250,
     trustStats: { uniquePartners: 4 },
 };
-/** The rows getTransactions answers: holds (to, from, no title), a project, Beans from someone blocked, an offer link. */
+/** The rows getTransactions answers (amount_c: whole hundredths): holds (to, from, no title), a project, Beans from someone blocked, an offer link. */
 const ROWS = [
-    { id: 't1', type: 'debit', amount: 30, peer: 'Held in Trust: Fix the gate (to Mia)', held: { title: 'Fix the gate', counterparty: 'Mia', toCounterparty: true }, projectWallet: false, peerPubkey: 'escrow_1', memo: 'Fresh eggs', timestamp: '03/10/2026', at: DAY },
-    { id: 't2', type: 'credit', amount: 12, peer: 'Held in Trust: Bike repair (from Mia)', held: { title: 'Bike repair', counterparty: 'Mia', toCounterparty: false }, projectWallet: false, peerPubkey: 'escrow_2', memo: '', timestamp: '03/10/2026', at: DAY },
-    { id: 't3', type: 'debit', amount: 5, peer: 'Held in Trust', held: { title: null, counterparty: null, toCounterparty: false }, projectWallet: false, peerPubkey: 'escrow_3', memo: '', timestamp: '03/10/2026', at: DAY },
-    { id: 't4', type: 'debit', amount: 25, peer: 'Project Wallet', held: null, projectWallet: true, peerPubkey: 'project_9', memo: 'Community garden', timestamp: '03/10/2026', at: DAY },
-    { id: 't5', type: 'credit', amount: 7, peer: 'Rex', held: null, projectWallet: false, peerPubkey: 'rex-key', memo: 'a note Ana never sees', timestamp: '03/10/2026', at: DAY },
-    { id: 't6', type: 'credit', amount: 40, peer: 'Mia', held: null, projectWallet: false, peerPubkey: 'mia-key', memo: `Paid for ${OFFER_ID} thanks`, timestamp: '03/10/2026', at: DAY },
+    { id: 't1', type: 'debit', amount_c: 3000, peer: 'Held in Trust: Fix the gate (to Mia)', held: { title: 'Fix the gate', counterparty: 'Mia', toCounterparty: true }, projectWallet: false, peerPubkey: 'escrow_1', memo: 'Fresh eggs', timestamp: '03/10/2026', at: DAY },
+    { id: 't2', type: 'credit', amount_c: 1200, peer: 'Held in Trust: Bike repair (from Mia)', held: { title: 'Bike repair', counterparty: 'Mia', toCounterparty: false }, projectWallet: false, peerPubkey: 'escrow_2', memo: '', timestamp: '03/10/2026', at: DAY },
+    { id: 't3', type: 'debit', amount_c: 500, peer: 'Held in Trust', held: { title: null, counterparty: null, toCounterparty: false }, projectWallet: false, peerPubkey: 'escrow_3', memo: '', timestamp: '03/10/2026', at: DAY },
+    { id: 't4', type: 'debit', amount_c: 2500, peer: 'Project Wallet', held: null, projectWallet: true, peerPubkey: 'project_9', memo: 'Community garden', timestamp: '03/10/2026', at: DAY },
+    { id: 't5', type: 'credit', amount_c: 700, peer: 'Rex', held: null, projectWallet: false, peerPubkey: 'rex-key', memo: 'a note Ana never sees', timestamp: '03/10/2026', at: DAY },
+    { id: 't6', type: 'credit', amount_c: 4000, peer: 'Mia', held: null, projectWallet: false, peerPubkey: 'mia-key', memo: `Paid for ${OFFER_ID} thanks`, timestamp: '03/10/2026', at: DAY },
 ];
 const MEMBERS = [{ publicKey: 'mia-key', callsign: 'Mia' }];
-const PLEDGES = [{ id: 'p1', projectTitle: 'Community garden', timestamp: DAY, amount: 25 }];
+const PLEDGES = [{ id: 'p1', projectTitle: 'Community garden', timestamp: DAY, amount_c: 2500 }];
 
 const ledger = vi.hoisted(() => ({ balance: null as any, rows: [] as any[], escrow: 0, send: null as null | (() => Promise<unknown>) }));
 
@@ -188,7 +191,7 @@ beforeEach(() => {
     blocked.keys = ['rex-key'];
     ledger.balance = RESIDENT;
     ledger.rows = ROWS;
-    ledger.escrow = 15;
+    ledger.escrow = 1500;
     ledger.send = null;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -333,9 +336,12 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain(xx('OPEN TO EVERYONE — NO TIER REQUIRED'));
         // The node's own table, never a copy: where Elder and Resident start, in trust. Never the credit floor: a confirmed
         // member's floor holds the known floor too, which no tier counts (Marty, 21 Oct: "Badge counts what they did only").
-        expect(text()).toContain(xx('Reached at **{trust}** trust').replace('{trust}', String(TIER_LEVELS[3].minCredit)).replace(/\*\*/g, ''));
+        // Trust is credit in whole hundredths (core's TIER_LEVELS), written as every figure is: Elder from 1400, and Resident
+        // up to one hundredth below Steward's 600 (599.99; "599" when trust was whole Beans).
+        expect(text()).toContain(xx('Reached at **{trust}** trust').replace('{trust}', formatHundredths(TIER_LEVELS[3].minCredit, 'xx')).replace(/\*\*/g, ''));
         expect(text()).toContain(xx('Reached at **{trust}** trust (up to {upTo})')
-            .replace('{trust}', String(TIER_LEVELS[1].minCredit)).replace('{upTo}', String(TIER_LEVELS[2].minCredit - 1)).replace(/\*\*/g, ''));
+            .replace('{trust}', formatHundredths(TIER_LEVELS[1].minCredit, 'xx')).replace('{upTo}', formatHundredths(TIER_LEVELS[2].minCredit - 1, 'xx')).replace(/\*\*/g, ''));
+        expect(text()).toContain(xx('Reached at **{trust}** trust (up to {upTo})').replace('{trust}', '200').replace('{upTo}', '599.99').replace(/\*\*/g, ''));
         expect(bypassing(), 'Tiers & Perks').toEqual([]);
     });
 
@@ -374,7 +380,8 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await type(byPlaceholder('Amount'), '5000');
         expect(text()).toContain(xx('Recipient receives:'));
         await click(row('Confirm Transfer'), 'Confirm Transfer');
-        expect(text()).toContain(xx('You can only send beans you hold — your balance is {balance}B.').replace('{balance}', '1200.00'));
+        // The balance as every figure is written (core formatHundredths): no decimals when whole ("1200.00" before).
+        expect(text()).toContain(xx('You can only send beans you hold — your balance is {balance}B.').replace('{balance}', '1200'));
         await type(byPlaceholder('Amount'), 'abc');
         await click(row('Confirm Transfer'), 'Confirm Transfer');
         expect(text()).toContain(xx('Enter a valid amount'));
@@ -407,7 +414,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
     });
 
     it('a member with no credit line and no trade yet: the starter card, the sends that wait for a first trade and their question, no rows yet', async () => {
-        ledger.balance = { ...RESIDENT, balance: 0, floor: 0, usableFloor: 0, liveOffers: 0, activated: false, frozen: false, knownFrozen: false, tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, reviewCount: 0, avgRating: 0, commons: 0, trustStats: { uniquePartners: 0 } };
+        ledger.balance = { ...RESIDENT, balance_c: 0, floor_c: 0, usableFloor_c: 0, liveOffers: 0, activated: false, frozen: false, knownFrozen: false, tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 0, earnedCredit_c: 0, qualifiedValue_c: 0, reviewCount: 0, avgRating: 0, commons_c: 0, trustStats: { uniquePartners: 0 } };
         ledger.rows = [];
         ledger.escrow = 0;
         await renderIn('xx');
@@ -423,7 +430,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
     });
 
     it('a line the admins froze, in debit; the highest level; a send that needs Beans held', async () => {
-        ledger.balance = { ...RESIDENT, balance: -40, creditFrozen: true, frozen: false, knownFrozen: false, tier: { name: 'Elder', emoji: '⛰️' }, tierCredit: 1500, earnedCredit: 900 };
+        ledger.balance = { ...RESIDENT, balance_c: -4000, creditFrozen: true, frozen: false, knownFrozen: false, tier: { name: 'Elder', emoji: '⛰️' }, tierCredit_c: 150000, earnedCredit_c: 90000 };
         await renderIn('xx');
         expect(text()).toContain(xx(KNOWN_FROZEN.title));
         expect(text()).toContain(xx(KNOWN_FROZEN.body));
@@ -436,14 +443,15 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
 
     it('a confirmed member (floor -1,000, 0 Trust Points): sees no level promising a floor, and their own line once', async () => {
         ledger.balance = {
-            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
-            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            balance_c: 0, floor_c: -100000, usableFloor_c: -100000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant_c: 100000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 0, earnedCredit_c: 0, qualifiedValue_c: 0, avgRating: 0, reviewCount: 0, commons_c: 0,
             trustStats: { uniquePartners: 0 },
         };
         await renderIn('en');
-        // Own line shown once from their real floor (-1000)
+        // Own line shown once from their real floor (-1000), written as every figure is (core formatHundredths: a true minus,
+        // grouped in English; "-1000" before)
         expect(text()).toContain('Your current floor');
-        expect(text()).toContain('-1000');
+        expect(text()).toContain('−1,000');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
         // Their line is open already: no 'your first completed trade … opens your credit line' above it
@@ -456,7 +464,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain('from 200 trust');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
-        expect(text()).not.toContain('-200');
+        expect(text()).not.toMatch(/[-−]200\b/);
 
         // Tap Steward shelf button
         const stewardBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Steward'));
@@ -464,12 +472,13 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain('from 600 trust');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
-        expect(text()).not.toContain('-600');
+        expect(text()).not.toMatch(/[-−]600\b/);
 
         // Tap Elder shelf button
         const elderBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Elder'));
         await click(elderBtn, 'Elder');
-        expect(text()).toContain('from 1400 trust');
+        // Trust as every figure is written (core formatHundredths), grouped in English ("from 1400 trust" before).
+        expect(text()).toContain('from 1,400 trust');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
     });
@@ -523,9 +532,11 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
             expect(text(), english).toContain(english);
         }
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
-        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Floor -200', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'Community Circulation ⓘ', 'per month → commons pool',
+        // The floor and the balance as every figure is written (core formatHundredths): a true minus, no decimals when whole,
+        // grouped in English ("Floor -200" and "+1200.0" before).
+        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Floor −200', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'Community Circulation ⓘ', 'per month → commons pool',
             'PROJECT PLEDGES', '-25 B', '3 Oct 2026', 'RECENT TRANSACTIONS', 'Export CSV', 'Held in Trust: Fix the gate (to Mia)', 'Held in Trust: Bike repair (from Mia)',
-            'Held in Trust', 'Project Wallet', BLOCKED_BEANS_NOTE, 'View Offer', '+1200.0']) {
+            'Held in Trust', 'Project Wallet', BLOCKED_BEANS_NOTE, 'View Offer', '+1,200']) {
             expect(text(), english).toContain(english);
         }
         expect(text()).toMatch(/\d{1,2} [A-Z][a-z]{2} · \d+d/);
@@ -537,10 +548,11 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
 describe('the lines the Ledger takes from utils/credit-line-card.ts, in English exactly as before', () => {
     it('the frozen card and the debit line', () => {
         expect(KNOWN_FROZEN.title).toBe('Your credit line is frozen');
-        expect(frozenDebitLine(-400)).toBe('You are 400 Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.');
-        expect(frozenDebitLine(-12.34)).toMatch(/^You are 12\.4 Beans in debit\./);
+        // The balance in whole hundredths (getBalance's balance_c): the figure is exact now, never rounded up to the tenth.
+        expect(frozenDebitLine(-40000)).toBe('You are 400 Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.');
+        expect(frozenDebitLine(-1234)).toMatch(/^You are 12\.34 Beans in debit\./);
         setLanguage('xx');
-        expect(frozenDebitLine(-12.34)).toBe(xx('You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.').replace('{n}', '12.4'));
+        expect(frozenDebitLine(-1234)).toBe(xx('You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.').replace('{n}', '12.34'));
         setLanguage('en');
     });
 });
@@ -628,8 +640,8 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
 
     it('a confirmed member\'s levels card at 320 dp with 1.3× text in the pseudo-locale', async () => {
         ledger.balance = {
-            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
-            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            balance_c: 0, floor_c: -100000, usableFloor_c: -100000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant_c: 100000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 0, earnedCredit_c: 0, qualifiedValue_c: 0, avgRating: 0, reviewCount: 0, commons_c: 0,
             trustStats: { uniquePartners: 0 },
         };
         await renderIn('xx');
@@ -659,7 +671,7 @@ describe('the Ledger follows a language picked in Settings', () => {
     const MENU = { menuBtn: {}, menuIconWrap: {}, menuIcon: {}, menuText: {}, menuSub: {}, menuChevron: {} };
 
     it('a pick redraws it in the new language: the tier, Send Beans, the Commons line, with nothing by hand', async () => {
-        ledger.balance = { ...RESIDENT, balance: 150, frozen: false };
+        ledger.balance = { ...RESIDENT, balance_c: 15000, frozen: false };
         await act(async () => {
             root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'] },
                 createElement(DrawnInLanguage, null, createElement(LanguageRow as any, { styles: MENU }), createElement(LedgerScreen))) as any);
@@ -676,7 +688,7 @@ describe('the Ledger follows a language picked in Settings', () => {
         expect(text()).toContain(fr['Resident\u0004trust tier']);
         expect(text()).not.toContain('Send Beans');
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
-        expect(text()).toContain(fr['Nothing goes to the Commons while you hold {free} Beans or less.'].replace('{free}', String(CIRCULATION_FREE_BEANS)));
+        expect(text()).toContain(fr['Nothing goes to the Commons while you hold {free} Beans or less.'].replace('{free}', formatHundredths(CIRCULATION_FREE_BEANS, 'fr')));
         expect(text()).toContain('Ana');
     });
 });
@@ -705,20 +717,21 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
     it('fr "12,5": the confirmation reads 12,50 and 12.5 Beans are sent, never the 12 parseFloat read', async () => {
         const { sent, receives } = await sendIn('fr', '12,5');
         expect(receives).toContain('12,50');
-        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+        // Whole hundredths: 12.5 Beans is 1250, never a float.
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 1250, '']]);
         expect(text()).toContain(said('fr', '✓ Sent!'));
     });
 
     it('fr "12.5" is 12.5 too, shown the French way', async () => {
         const { sent, receives } = await sendIn('fr', '12.5');
         expect(receives).toContain('12,50');
-        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 1250, '']]);
     });
 
     it('en "12.5" exactly as before: 12.50 shown, 12.5 sent', async () => {
         const { sent, receives } = await sendIn('en', '12.5');
         expect(receives).toContain('12.50');
-        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 12.5, '']]);
+        expect(sent).toEqual([[me.identity.publicKey, 'mia-key', 1250, '']]);
         expect(text()).toContain('✓ Sent!');
     });
 
@@ -839,5 +852,18 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+describe("the member's balance on the Ledger is whole hundredths, written as every figure is (M2)", () => {
+    /** The hero's balance as drawn: the figure beside "BEANS" in the header's balance (the bean icon's space trimmed). */
+    const heroBalance = () => spanSaying('BEANS')?.parentElement?.textContent?.replace(/BEANS$/, '').trim() ?? null;
+
+    it.each([
+        [1, '+0.01'], [100, '+1'], [4925, '+49.25'], [-982, '−9.82'], [50000, '+500'], [0, '+0'], [123456, '+1,234.56'],
+    ])('balance_c %i reads %s', async (balance_c, shown) => {
+        ledger.balance = { ...RESIDENT, balance_c, frozen: false, knownFrozen: false };
+        await renderIn('en');
+        expect(heroBalance()).toBe(shown);
     });
 });

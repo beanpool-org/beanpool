@@ -121,12 +121,12 @@ async function child(): Promise<void> {
             for (const [pk, callsign] of [[a.ann, 'Ann'], [a.bo, 'Bo'], [a.cy, 'Cy']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                     .run(pk, callsign, new Date().toISOString(), a.gwen, 'TEST');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             grantNodeRole(a.ann, 'admin', a.gwen);
             grantNodeRole(a.bo, 'moderator', a.gwen);
-            // Beans that moved, so a copy that makes more is one the ledger check refuses.
-            payFromCommons(a.cy, 5, 'a commons grant', { allowDeficit: true });
+            // Beans that moved, so a copy that makes more is one the ledger check refuses: 5 Beans, 500 hundredths.
+            payFromCommons(a.cy, 500, 'a commons grant', { allowDeficit: true });
             // Every one of them has a phone that registered with this server.
             for (const [pk, token] of [[a.gwen, 'ExponentPushToken[gwen-owner]'], [a.ann, 'ExponentPushToken[ann-admin]'],
                 [a.bo, 'ExponentPushToken[bo-moderator]'], [a.cy, 'ExponentPushToken[cy-member]']]) {
@@ -216,7 +216,10 @@ async function child(): Promise<void> {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('test_touch', ?)").run(new Date().toISOString());
             return true;
         },
-        /** A payload the main server signs that makes 50 Beans for one account: only the ledger's check stands in its way. */
+        /**
+         * A payload the main server signs that makes 50 Beans (5000 hundredths, the copy's `balance_c`) for one account: only
+         * the ledger's check stands in its way.
+         */
         'forge-mint': async (a: { publicKey: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
@@ -224,7 +227,7 @@ async function child(): Promise<void> {
             const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
             delete payload.signature;
             delete payload.publicKey;
-            payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
+            payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance_c: x.balance_c + 5000 } : x));
             payload.generatedAt = new Date().toISOString();
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
             return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
@@ -233,8 +236,8 @@ async function child(): Promise<void> {
         'photo-main-cannot-read': async (a: { author: string }) => {
             const { db } = await import('./db/db.js');
             const at = new Date().toISOString();
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, created_at, updated_at)
-                VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 2, ?, 'active', ?, ?)`).run(a.author, at, at);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, created_at, updated_at)
+                VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 200, ?, 'active', ?, ?)`).run(a.author, at, at);
             return db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, mime)
                 VALUES ('plums-lost-photo', NULL, 0, ?, 'photos/lost-on-the-main-server.webp', 'image/webp')`).run(at).changes;
         },
@@ -248,8 +251,8 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             const at = new Date().toISOString();
             payload.accounts = [
-                { publicKey: '', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
-                { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+                { publicKey: '', balance_c: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+                { publicKey: 'zz\ud800', balance_c: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
             ];
             payload.generatedAt = at;
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
@@ -502,7 +505,8 @@ async function main(): Promise<void> {
         // Version 26: join_requests with via_post_id and via_sharer_pubkey (where a request to join came from, door A3).
         // Version 27: standing_deals without held_back_reason (standing deals paid at the start of each period, U1).
         // Version 28: members with inviter_shown (a member's "Show who invited me to other members", slice I3).
-        assert(snap?.tableHashes?.v === 28 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+        // Version 29: money in whole hundredths: every money column INTEGER and named *_c, members without legacy_credit_floor.
+        assert(snap?.tableHashes?.v === 29 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
             'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'recovery_shares', 'join_requests'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
@@ -528,7 +532,7 @@ async function main(): Promise<void> {
         // no search keywords, and a standby restarted on its own fills them in at its boot, before its main server does.
         const cachedListing = await main.send('cache-peer-listing', {
             peerId: '12D3KooWHealthNeighbourPeer000000000000000000000',
-            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', credits: 2,
+            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', price_c: 200,
                 priceType: 'fixed', authorPublicKey: newId('Nia').pk, authorCallsign: 'Nia', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         });
         require_(cachedListing?.cached === 1, `M caches a linked community's listing (${brief(cachedListing)})`);

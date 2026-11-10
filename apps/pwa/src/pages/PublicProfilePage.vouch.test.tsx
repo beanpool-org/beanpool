@@ -13,7 +13,7 @@ vi.mock('../lib/api', async (importOriginal) => {
         })),
         getMemberRatings: vi.fn(async () => ({ average: 5, count: 1, ratings: [], asProvider: 1, asReceiver: 0 })),
         getMarketplacePosts: vi.fn(async () => []),
-        getBalance: vi.fn(async () => ({ balance: 100, earnedCredit: 50, allowance: 100 })),
+        getBalance: vi.fn(async () => ({ balance_c: 10000, earnedCredit_c: 5000, allowance: 100 })),
         getRatingsGiven: vi.fn(async () => []),
         getFriends: vi.fn(async () => []),
         getTrustProfile: vi.fn(async () => ({
@@ -24,19 +24,19 @@ vi.mock('../lib/api', async (importOriginal) => {
         })),
         getMyVouching: vi.fn(async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [],
         })),
         vouchForMember: vi.fn(async () => ({
             id: 'gift-1',
             memberPubkey: 'target-pk',
-            amount: 25,
-            total: 25,
-            budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 5, level: 1000 },
+            amount: 2500,
+            total: 2500,
+            budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 5, level: 100000 },
         })),
     };
 });
@@ -81,9 +81,9 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('does not render profile vouch when viewer is not a voucher', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: false,
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -131,15 +131,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('offers raise when voucher already vouched for that member', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'hold',
-                    amount: -50,
+                    amount_c: -5000,
                     actor: IDENTITY.publicKey,
                     actorCallsign: 'ana',
                     at: '2026-11-01T00:00:00.000Z',
@@ -165,17 +165,18 @@ describe('PublicProfilePage Vouching (§9)', () => {
         expect(screen.getByText(/You already vouched 50 Beans for @sam/)).toBeInTheDocument();
     });
 
-    const vouchedBefore = (amount: number) => ({
+    /** A voucher who vouched `amount_c` (whole hundredths) for sam before; budget, presets and caps in hundredths too. */
+    const vouchedBefore = (amount_c: number) => ({
         voucher: true,
-        budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-        presets: [25, 50, 75, 100],
-        vouchMax: 100,
-        budgetMax: 2000,
+        budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+        presets: [2500, 5000, 7500, 10000],
+        vouchMax: 10000,
+        budgetMax: 200000,
         vouchedBy: [],
         history: [
             {
                 kind: 'hold',
-                amount: -amount,
+                amount_c: -amount_c,
                 actor: IDENTITY.publicKey,
                 actorCallsign: 'ana',
                 at: '2026-11-01T00:00:00.000Z',
@@ -187,7 +188,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     const chips =() => screen.getAllByRole('radio').map((r) => r.getAttribute('data-testid')?.replace('invite-vouch-', ''));
 
     it('a raise from 50 offers Raise to 75 · 100, never None or an amount to add, with nothing greyed (slice I6)', async () => {
-        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(50));
+        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(5000));
         render(
             <PublicProfilePage
                 identity={IDENTITY}
@@ -207,13 +208,13 @@ describe('PublicProfilePage Vouching (§9)', () => {
     });
 
     it('a raise posts the total it ends at, and the success line reads the node’s new total', async () => {
-        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(25));
+        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(2500));
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-2',
             memberPubkey: TARGET_PK,
-            amount: 50,
-            total: 75,
-            budget: { left: 500, held: 100, heldInvites: 1, vouched: 400, peopleVouched: 4, level: 1000 },
+            amount: 5000,
+            total: 7500,
+            budget: { left: 50000, held: 10000, heldInvites: 1, vouched: 40000, peopleVouched: 4, level: 100000 },
         });
         render(
             <PublicProfilePage
@@ -231,7 +232,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 75 Beans.'));
         expect(vouchForMember).toHaveBeenCalledTimes(1);
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 75 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 7500 });
         // The card follows the node's total: 75 is vouched now, so only 100 is left to raise to.
         expect(screen.getByText(/You already vouched 75 Beans for @sam/)).toBeInTheDocument();
         expect(screen.queryByText(/You already vouched 25 Beans/)).toBeNull();
@@ -240,17 +241,17 @@ describe('PublicProfilePage Vouching (§9)', () => {
 
     it('an owner’s raise from 100 offers Raise to 200 · 500 with None gone and nothing greyed, and posts the target (slice I6)', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
-            ...vouchedBefore(100),
+            ...vouchedBefore(10000),
             noLimit: true,
-            presets: [25, 50, 75, 100, 200, 500],
-            vouchMax: 500,
+            presets: [2500, 5000, 7500, 10000, 20000, 50000],
+            vouchMax: 50000,
         });
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-3',
             memberPubkey: TARGET_PK,
-            amount: 100,
-            total: 200,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+            amount: 10000,
+            total: 20000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
         });
         render(
             <PublicProfilePage
@@ -273,13 +274,13 @@ describe('PublicProfilePage Vouching (§9)', () => {
         fireEvent.click(screen.getByTestId('profile-vouch-submit'));
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 200 Beans.'));
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 200 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 20000 });
     });
 
     it('a first vouch the node says was a raise turns the card into the raise card: no confirm prompt, the node’s sentence beside it', async () => {
         const error: any = new Error("You've already vouched for @sam.");
         error.code = 'already_vouched';
-        error.prior = 25;
+        error.prior = 2500;
         vi.mocked(vouchForMember).mockRejectedValueOnce(error);
         render(
             <PublicProfilePage
@@ -302,22 +303,22 @@ describe('PublicProfilePage Vouching (§9)', () => {
         expect(chips()).toEqual(['50', '75', '100']);
         expect(screen.getByTestId('profile-vouch-submit')).toBeDisabled();
         expect(vouchForMember).toHaveBeenCalledTimes(1);
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { vouchAmount: 25 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { vouchAmount: 2500 });
     });
 
     it('after that refusal a raise from the new card sends the total it names (#2915 round 4, finding 2)', async () => {
         // The earlier vouch (50) is outside the history window: only the node's refusal knows it.
         const error: any = new Error('You’ve already vouched for @sam.');
         error.code = 'already_vouched';
-        error.prior = 50;
+        error.prior = 5000;
         vi.mocked(vouchForMember)
             .mockRejectedValueOnce(error)
             .mockResolvedValueOnce({
                 id: 'gift-2',
                 memberPubkey: TARGET_PK,
-                amount: 25,
-                total: 75,
-                budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 4, level: 1000 },
+                amount: 2500,
+                total: 7500,
+                budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 4, level: 100000 },
             });
         render(
             <PublicProfilePage
@@ -340,7 +341,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 75 Beans.'));
         expect(vouchForMember).toHaveBeenCalledTimes(2);
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 75 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 7500 });
         expect(screen.getByText(/You already vouched 75 Beans for @sam/)).toBeInTheDocument();
         expect(screen.queryByText(/You already vouched 50 Beans/)).toBeNull();
         expect(chips()).toEqual(['100']);
@@ -350,9 +351,9 @@ describe('PublicProfilePage Vouching (§9)', () => {
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-1',
             memberPubkey: TARGET_PK,
-            amount: 75,
-            total: 75,
-            budget: { left: 475, held: 100, heldInvites: 1, vouched: 425, peopleVouched: 5, level: 1000 },
+            amount: 7500,
+            total: 7500,
+            budget: { left: 47500, held: 10000, heldInvites: 1, vouched: 42500, peopleVouched: 5, level: 100000 },
         });
         render(
             <PublicProfilePage
@@ -369,7 +370,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
         fireEvent.click(screen.getByTestId('profile-vouch-submit'));
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Vouched 75 Beans for @sam.'));
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { vouchAmount: 75 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { vouchAmount: 7500 });
         expect(screen.getByRole('heading', { name: 'Raise vouch for @sam' })).toBeInTheDocument();
         expect(screen.getByText(/You already vouched 75 Beans for @sam/)).toBeInTheDocument();
         expect(chips()).toEqual(['100']);
@@ -378,7 +379,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('an already_vouched refusal at 100 hides the card’s choices and keeps the node’s sentence (#2915 round 4, self-check)', async () => {
         const error: any = new Error('You’ve already vouched for @sam.');
         error.code = 'already_vouched';
-        error.prior = 100;
+        error.prior = 10000;
         vi.mocked(vouchForMember).mockRejectedValueOnce(error);
         render(
             <PublicProfilePage
@@ -429,7 +430,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     });
 
     it('at 100 (the most a vouch can be) the person’s card hides Raise vouch', async () => {
-        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(100));
+        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(10000));
         render(
             <PublicProfilePage
                 identity={IDENTITY}
@@ -472,13 +473,13 @@ describe('PublicProfilePage Vouching (§9)', () => {
     });
 
     it('when raised to 100, success is shown and Raise vouch is no longer offered', async () => {
-        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(75));
+        vi.mocked(getMyVouching).mockResolvedValueOnce(vouchedBefore(7500));
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-100',
             memberPubkey: TARGET_PK,
-            amount: 25,
-            total: 100,
-            budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 4, level: 1000 },
+            amount: 2500,
+            total: 10000,
+            budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 4, level: 100000 },
         });
         render(
             <PublicProfilePage
@@ -496,7 +497,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
         fireEvent.click(screen.getByTestId('profile-vouch-submit'));
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 100 Beans.'));
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 100 });
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, { raiseTo: 10000 });
         // Card is at max: no heading or submit button offering to raise further
         expect(screen.queryByRole('heading', { name: 'Raise vouch for @sam' })).not.toBeInTheDocument();
         expect(screen.queryByTestId('profile-vouch-submit')).not.toBeInTheDocument();

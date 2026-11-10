@@ -11,7 +11,7 @@
  */
 
 import { inviteAndShareLink } from './invite-and-share.js';
-import { formatNumber } from './words.js';
+import { formatHundredths } from './hundredths.js';
 
 /** What the node did with a binding when the invite was used (server engine/names-list.ts InviteBindOutcome). */
 export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
@@ -68,7 +68,7 @@ export function boundInviteLine(
     const said = inv.voucherOutcome ? wordsFor(VOUCHER_OUTCOME_WORDS, inv.voucherOutcome) : '';
     if (!said) return line;
     const clause = said
-        .replace('{level}', formatNumber(inv.voucherLevel ?? 0))
+        .replace('{level}', formatHundredths(inv.voucherLevel ?? 0))
         .replace('{maker}', inv.createdBy ? nameOf(inv.createdBy) : 'whoever made the invite');
     return `${line}; ${clause}`;
 }

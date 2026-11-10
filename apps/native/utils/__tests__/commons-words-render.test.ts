@@ -192,7 +192,8 @@ vi.mock('../member-area', async (importOriginal) => ({
 vi.mock('../db', () => ({
     // The poll form asks when this member may start their next poll (poll-once-a-week): null = now.
     getPollNextStart: async () => null,
-    getBalance: async () => ({ earnedCredit: 0, commons: 1234.5, canOperate: true }),
+    // db.ts getBalance's answer: every figure whole hundredths of a Bean (`*_c`): a pot of 1,234.50 Beans.
+    getBalance: async () => ({ earnedCredit_c: 0, commons_c: 123450, canOperate: true }),
     getTreasuries: async () => node.treasuries,
     getDecisions: async () => ({ decisions: node.decisions, myPoolVoting: node.voice, canPropose: node.canPropose }),
     getAllCommunityMembers: async () => [{ publicKey: 'd'.repeat(64), callsign: 'Dave' }],
@@ -262,9 +263,10 @@ const GROUPS = [
     { id: 'g4', name: 'Drummers', description: 'Rhythm', category: 'drum_circle', joinPolicy: 'by_vote', memberCount: 3 },
 ];
 const TREASURIES = [
-    { publicKey: 'p'.repeat(64), name: 'New hall roof', purpose: 'A dry roof for the hall', balance: 40, liveOffers: 0, goalAmount: 300, currentAmount: 40, lifecycle: 'bounded', status: 'active', paused: false, keepers: [{ memberPubkey: 'x' }], deadlineAt: iso(Date.now() + 10 * DAY) },
-    { publicKey: 'e'.repeat(64), name: 'Egg flock', purpose: '', balance: -12.5, liveOffers: 3, goalAmount: null, currentAmount: null, lifecycle: 'ongoing', status: 'active', paused: true, keepers: [{ memberPubkey: 'x' }, { memberPubkey: 'y' }], deadlineAt: null },
-    { publicKey: 'w'.repeat(64), name: 'Old mill', purpose: 'Flour', balance: 0, liveOffers: 1, goalAmount: 50, currentAmount: 10, lifecycle: 'bounded', status: 'active', paused: false, keepers: [], deadlineAt: iso(Date.now() - 2 * DAY) },
+    // Every figure whole hundredths of a Bean, as the node's /api/treasuries rows send them (`*_c`).
+    { publicKey: 'p'.repeat(64), name: 'New hall roof', purpose: 'A dry roof for the hall', balance_c: 4000, liveOffers: 0, goalAmount_c: 30000, currentAmount_c: 4000, lifecycle: 'bounded', status: 'active', paused: false, keepers: [{ memberPubkey: 'x' }], deadlineAt: iso(Date.now() + 10 * DAY) },
+    { publicKey: 'e'.repeat(64), name: 'Egg flock', purpose: '', balance_c: -1250, liveOffers: 3, goalAmount_c: null, currentAmount_c: null, lifecycle: 'ongoing', status: 'active', paused: true, keepers: [{ memberPubkey: 'x' }, { memberPubkey: 'y' }], deadlineAt: null },
+    { publicKey: 'w'.repeat(64), name: 'Old mill', purpose: 'Flour', balance_c: 0, liveOffers: 1, goalAmount_c: 5000, currentAmount_c: 1000, lifecycle: 'bounded', status: 'active', paused: false, keepers: [], deadlineAt: iso(Date.now() - 2 * DAY) },
 ];
 const tally = (over: Record<string, unknown> = {}) => ({
     totalVoters: 4, quorumRequired: 6, quorumMet: false, supportRatio: 0.75, thresholdRequired: 0.5, yesWeight: 3, noWeight: 1, passed: false,
@@ -276,10 +278,11 @@ const decision = (id: string, over: Record<string, unknown>) => ({
 });
 const OPEN = [
     // The member's own: one open Decision each, so a second is refused.
-    decision('11111111', { authorPubkey: KEY, effect: 'remove_member', params: { memberName: 'Dave', debt: -20, commonsPool: 500 } }),
+    // A removal's figures are whole hundredths, as the node writes them (decisions-engine.ts removalBalanceParams).
+    decision('11111111', { authorPubkey: KEY, effect: 'remove_member', params: { memberName: 'Dave', debt_c: -2000, commonsPool_c: 50000 } }),
     // A member's proposal carrying a pause vote's mark is no pause's vote (removal by vote S2): it gets no pause box.
     decision('22222222', { effect: 'remove_member', params: { memberName: 'Mia', rule: 2 }, closesAt: iso(Date.now() + 30 * 60_000) }),
-    decision('33333333', { effect: 'remove_member', params: { memberName: 'Kofi', balance: 15 }, closesAt: iso(Date.now() + 5 * 3600_000) }),
+    decision('33333333', { effect: 'remove_member', params: { memberName: 'Kofi', balance_c: 1500 }, closesAt: iso(Date.now() + 5 * 3600_000) }),
     decision('44444444', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: iso(Date.now()) }, tally: tally({ quorumMet: true, quorumRequired: 3, electorate: 2 }) }),
     decision('55555555', { effect: 'keep_suspension', params: { memberName: 'Ana', suspendedAt: iso(new Date(2026, 9, 3, 12).getTime()) }, myVote: { support: true, voteCount: 1, creditsUsed: 1, updatedAt: iso(Date.now()) } }),
     decision('66666666', { effect: 'reach_the_moon', touches: 'sky', closesAt: iso(Date.now() - 1000) }),
@@ -723,8 +726,9 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         }
         await click(byLabel('Decide Section'), 'Decide');
         for (const english of ['TOUCHES: MEMBER', 'Remove Member', "Dave's balance is −20 beans. Removing them charges that 20 to the Commons pool, which currently holds 500.",
-            "Balances are private: only the members who can vote in this see Mia's balance and any debt. The Commons pool holds 1235 beans.",
-            'Kofi has no debt. Removing them charges nothing to the Commons pool, which currently holds 1235.', 'Turnout: 4 of 6 votes needed', 'Pending', 'Turnout: 4 of 3 votes needed', 'Met ✅',
+            // The pot exactly, as every figure is written (formatHundredths), as the web's card says it: never rounded to 1235.
+            "Balances are private: only the members who can vote in this see Mia's balance and any debt. The Commons pool holds 1,234.50 beans.",
+            'Kofi has no debt. Removing them charges nothing to the Commons pool, which currently holds 1,234.50.', 'Turnout: 4 of 6 votes needed', 'Pending', 'Turnout: 4 of 3 votes needed', 'Met ✅',
             '30% of 4 members active in the last 30 days (at least 3)', 'Tally: Yes 3 (75%) · No 1', 'Needs 50%', 'Votes: 3 (Cost: 9 credits)',
             'You have 16 voice credits: up to 4 votes on this Decision.', 'You voted No (3 votes)', 'Change to Yes', 'Voted No', 'You voted Yes',
             'An admin suspended Ana on 3 Oct 2026. Keep the suspension?', '🔒 Secret ballot: members see the totals, never who voted how.', '3 days left', 'Closing now',

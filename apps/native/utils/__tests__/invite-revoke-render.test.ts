@@ -60,8 +60,9 @@ import { lightColors, darkColors } from '../../constants/colors';
 const NOW = Date.parse('2026-11-10T12:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
 const made = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString();
-const plain: InviteRowSource = { code: 'INV-AAAA-1111', createdAt: made(2), vouchAmount: 100, expiresAt: new Date(NOW + 28 * DAY).toISOString() };
-const bound: InviteRowSource = { code: 'INV-BBBB-2222', createdAt: made(7), namesEntryId: 'e1', vouchAmount: 200, voucherLevel: 1000 };
+// The node kept the names `vouchAmount` and `voucherLevel` and sends them in whole hundredths of a Bean (10000 is a vouch of 100).
+const plain: InviteRowSource = { code: 'INV-AAAA-1111', createdAt: made(2), vouchAmount: 10000, expiresAt: new Date(NOW + 28 * DAY).toISOString() };
+const bound: InviteRowSource = { code: 'INV-BBBB-2222', createdAt: made(7), namesEntryId: 'e1', vouchAmount: 20000, voucherLevel: 100000 };
 const ticket: InviteRowSource = { code: 'BP-eyJ0aWNrZXQiOiJ0aGlzIn0', createdAt: made(1) };
 
 let host: HTMLDivElement;

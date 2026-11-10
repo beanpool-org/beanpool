@@ -431,7 +431,7 @@ async function main(): Promise<void> {
         body: {
             creatorPubkey: alice,
             title: 'Project with too many photos',
-            goalAmount: 500,
+            goalAmount_c: 50000,
             photos: excessPhotos,
         },
     });

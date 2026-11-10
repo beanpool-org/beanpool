@@ -126,7 +126,9 @@ describe('what it gives back', () => {
 
     it('in another language, the parts of a sentence it fills in keep what they hold', () => {
         setLanguage('xx');
-        expect(chatLineWords('Payment of 12.5 Beans released to you.')).toBe(pseudoLocalise('Payment of {n} Beans released to you.').replace('{n}', '12.5'));
+        // db.ts writes the figure as whole hundredths in plain ASCII (core hundredthsAsDecimalText: 1250 is "12.50"); the line
+        // keeps it, written as core formatHundredths writes it.
+        expect(chatLineWords('Payment of 12.50 Beans released to you.')).toBe(pseudoLocalise('Payment of {n} Beans released to you.').replace('{n}', '12.50'));
         expect(chatLineWords(earlierKeyDetails('Ana', '2026-10-03T00:00:00Z'))).toContain('Ana');
         // A notice holding a stand-in: both in the member's language.
         expect(chatLineWords('Notice: 🔒 Encrypted message')).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('🔒 Encrypted message')));

@@ -125,11 +125,11 @@ async function callRouter(
 function makeMember(callsign: string): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, updated_at)
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c, updated_at)
         VALUES (?, ?, ?, 'active', 100, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(pk, callsign, new Date(Date.now() - 60 * 86400_000).toISOString());
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
     return pk;
 }
 
@@ -142,7 +142,7 @@ const closeForTick = (id: string) => db.prepare("UPDATE decisions SET closes_at 
 function pendingEscrowRow(buyer: string, seller: string): string {
     const id = 'mt-' + crypto.randomUUID();
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, 10, 'pending', ?)
     `).run(id, 'post-' + crypto.randomUUID(), buyer, seller, new Date().toISOString());
     return id;

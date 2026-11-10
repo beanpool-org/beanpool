@@ -11,7 +11,8 @@
  * stamp in the schema is written with): a stamp of its own on a copied row, a touch trigger's, shows as a difference.
  *
  *  1. The main server M: an enterprise, Probe Co, with a purpose, a map pin, a working capital ceiling, two keepers who
- *     each pledge backing, an external sale (earned surplus) and a legacy credit floor; a project with a goal and a
+ *     each pledge backing, an external sale (earned surplus) and no legacy credit floor (E29's line is gone with whole
+ *     hundredths: members has no legacy_credit_floor column); a project with a goal and a
  *     deadline; Elders (granted credit), two members given a Resident badge (granted credit too), a frozen
  *     Elder, a member on holiday and one with a notification opt-out, a reminder default, and a Home layout and interests
  *     (slice H1 of scratch/global-node/DESIGN-home-dashboard-fable.md). A preference save moves the member's row, as
@@ -32,8 +33,11 @@
  *     route wrote one before it refused) is counted by the whole-copy check, and a whole copy deletes it: Probe Co's
  *     floor, allowance and backing on S are M's again (before, it stayed through every copy and a take-over).
  *  8. A value the standby's own table refuses (#1276 review 4118882942). M's members table is a community's from before
- *     the enterprise unification (Slice 3's columns came from ALTERs, with no CHECK); S's is a fresh install's. M refuses a
- *     goal below 0 now, and holds one as an older build wrote it. The running S's delta and whole copy land, the goal
+ *     the enterprise unification (Slice 3's columns came from ALTERs, with no CHECK); S's is a fresh install's. With whole
+ *     hundredths the goal column is goal_amount_c, which the step to whole hundredths adds with the schema's CHECK
+ *     (db/hundredths-step.ts), so no older build's goal below 0 survives the upgrade and M's own table refuses one. M
+ *     refuses a goal below 0 at its routes too, and holds one written around its table's rule (as only a raw write or a
+ *     damaged page leaves now). The running S's delta and whole copy land, the goal
  *     left out (S keeps its own), a listing made after it arrives, and the whole-copy check reports the value; a fresh
  *     standby's first copy lands with the goal at its default, and so do its next pulls (before, every copy was refused
  *     on the CHECK, and a fresh standby held no member). Neither copy is exact, and neither asks for a force-resync (one
@@ -72,9 +76,10 @@ const AHEAD_MS = 3600_000;
 /**
  * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 4 was this suite's (G2), 5 in-flight money's (G3), 6
  * members' devices' (G4), 7 a whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4),
- * 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events.
+ * 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events, 13 a poll's typed Other, 14 chat
+ * photos, 15 money in whole hundredths.
  */
-const FORMAT = '14';
+const FORMAT = '15';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -173,13 +178,13 @@ async function child(): Promise<void> {
                 touch: (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'members_touch_%' ORDER BY name`).all() as { name: string }[]).map((r) => r.name),
             };
         },
-        /** An enterprise's grandfathered credit floor, as the Slice 4 migration wrote it on a node older than it (db.ts). */
-        'legacy-floor': async (a: { pk: string; floor: number }) => {
+        /**
+         * Whether members still has the grandfathered enterprise credit floor's column (E29). It is gone with whole
+         * hundredths (db/hundredths-step.ts drops it, with nothing in its place), so no enterprise keeps a legacy floor.
+         */
+        'has-legacy-floor': async () => {
             const { db } = await import('./db/db.js');
-            const { clearEnterpriseFloorCache } = await import('./state-engine.js');
-            db.prepare('UPDATE members SET legacy_credit_floor = ? WHERE public_key = ?').run(a.floor, a.pk);
-            clearEnterpriseFloorCache(a.pk);
-            return true;
+            return (db.prepare(`SELECT name FROM pragma_table_info('members')`).all() as { name: string }[]).some((c) => c.name === 'legacy_credit_floor');
         },
         rekey: async (a: { oldPk: string; newPk: string; operator: string }) => {
             const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
@@ -230,7 +235,7 @@ async function child(): Promise<void> {
         'plant-pledge': async (a: { keeper: string; enterprise: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { clearEnterpriseFloorCache } = await import('./state-engine.js');
-            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                         VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL)`).run(crypto.randomUUID(), a.keeper, a.enterprise, a.amount);
             clearEnterpriseFloorCache(a.enterprise);
             return true;
@@ -273,16 +278,27 @@ async function child(): Promise<void> {
             const consistency = checkWholeCopy(payload, a.leftOut);
             return { hashes: !!payload?.tableHashes, consistency, lastWhole: readCopyRecord().lastWhole };
         },
-        /** Whether this database's members.goal_amount has the fresh schema's CHECK (an ALTER'd column has none). */
+        /** Whether this database's members.goal_amount_c has the fresh schema's CHECK (db/hundredths-step.ts adds it with it). */
         'goal-rule': async () => {
             const { db } = await import('./db/db.js');
             const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'members'`).get() as { sql: string }).sql;
-            return /goal_amount IS NULL OR goal_amount >= 0/.test(sql);
+            return /goal_amount_c IS NULL OR goal_amount_c >= 0/.test(sql);
         },
-        /** A goal as an older build wrote it: POST /api/treasury passed Number(goalAmount) on unchecked. */
-        'plant-goal': async (a: { pk: string; goal: number }) => {
+        /**
+         * A goal (whole hundredths) written to a members row: refused by the table's CHECK, or, `aroundRule`, written around it
+         * (`ignore_check_constraints`), as only a raw write or a damaged page leaves one now that an older build's goal is
+         * dropped by the step to whole hundredths. True when written; the refusal's words when the table refused it.
+         */
+        'plant-goal': async (a: { pk: string; goal: number; aroundRule?: boolean }) => {
             const { db } = await import('./db/db.js');
-            return db.prepare('UPDATE members SET goal_amount = ? WHERE public_key = ?').run(a.goal, a.pk).changes === 1;
+            if (a.aroundRule) db.pragma('ignore_check_constraints = ON');
+            try {
+                return db.prepare('UPDATE members SET goal_amount_c = ? WHERE public_key = ?').run(a.goal, a.pk).changes === 1;
+            } catch (e: any) {
+                return { refused: e?.message || String(e) };
+            } finally {
+                if (a.aroundRule) db.pragma('ignore_check_constraints = OFF');
+            }
         },
         /** This node's record that its members rows keep the fresh schema's rules (db.ts bringMembersToSchemaRules). */
         marker: async () => {
@@ -385,13 +401,14 @@ const homeRows = (r: Rows) => r.member_preferences.filter((p) => p.pref_key === 
 
 /**
  * The members table of a community from before the enterprise unification: every column a fresh install's has but Slice 3's
- * five (purpose, goal_amount, deadline_at, lifecycle, paused), which db.ts then adds with ALTERs that carry no CHECK.
+ * five (purpose, goal_amount_c, deadline_at, lifecycle, paused). db.ts adds four with ALTERs that carry no CHECK; the goal,
+ * money, is added by the step to whole hundredths (db/hundredths-step.ts) with the schema's CHECK.
  */
 function membersBeforeSlice3(): string {
     const schema = fs.readFileSync(path.join(path.dirname(SCRIPT), 'db', 'schema.sql'), 'utf-8');
     const create = /CREATE TABLE IF NOT EXISTS members \([\s\S]*?\n\);/.exec(schema)?.[0] ?? '';
     const lines = create.split('\n');
-    const kept = lines.filter((l) => !/^\s*(purpose|goal_amount|deadline_at|lifecycle|paused)\s/.test(l));
+    const kept = lines.filter((l) => !/^\s*(purpose|goal_amount_c|deadline_at|lifecycle|paused)\s/.test(l));
     if (lines.length - kept.length !== 5) throw new Error(`schema.sql's members table: expected Slice 3's five columns, found ${lines.length - kept.length}`);
     return kept.join('\n');
 }
@@ -402,12 +419,15 @@ function withDb(dir: string, fn: (db: Database.Database) => void): void {
     try { fn(db); } finally { db.close(); }
 }
 
-/** A member's balance answer, as it decides what they can do: the floor, the granted credit; the balance to the cent. */
+/**
+ * A member's balance answer, as it decides what they can do: the floor, the granted credit; the balance exact. Every figure
+ * is whole hundredths (`balance_c`, `floor_c`; `grantedCredit` keeps its name and carries hundredths: routes/community.ts).
+ */
 function standingOf(a: Answer): unknown {
     if (a.status !== 200) return a.status;
     const b = a.body ?? {};
     return {
-        balance: typeof b.balance === 'number' ? Math.round(b.balance * 100) / 100 : b.balance, floor: b.floor, tier: b.tier?.name ?? b.tier,
+        balance_c: b.balance_c, floor_c: b.floor_c, tier: b.tier?.name ?? b.tier,
         grantedCredit: b.grantedCredit, callsign: b.callsign,
     };
 }
@@ -445,8 +465,9 @@ async function main(): Promise<void> {
             built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+        const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string) => {
@@ -456,21 +477,21 @@ async function main(): Promise<void> {
             return tx.id as string;
         };
         for (const who of [gwen, cy, fay]) built(`the admin makes ${who.name} an Elder (granted credit)`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
-        await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
-        await offer(cy, 'Bike repair', 6);
-        await deal(gwen, ann, (await offer(ann, 'Honey', 8)).id); // Ann has Beans to buy with
-        await deal(cy, kip, (await offer(kip, 'Tune-up', 6)).id); // Kip has earned credit to pledge
-        await deal(gwen, dee, (await offer(dee, 'Firewood', 6)).id); // and Dee
-        const walking = await offer(hal, 'Dog walking', 2);
+        await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
+        await offer(cy, 'Bike repair', 600);
+        await deal(gwen, ann, (await offer(ann, 'Honey', 800)).id); // Ann has Beans to buy with
+        await deal(cy, kip, (await offer(kip, 'Tune-up', 600)).id); // Kip has earned credit to pledge
+        await deal(gwen, dee, (await offer(dee, 'Firewood', 600)).id); // and Dee
+        const walking = await offer(hal, 'Dog walking', 200);
         const probe = built('Cy starts an enterprise, Probe Co, with a purpose, a map pin and a working capital ceiling', await S_(cy, '/api/treasury', {
-            name: 'Probe Co', purpose: 'Repairs for the street', lat: -28.55, lng: 153.5, avatar: TINY_PNG, workingCapitalCeiling: 50,
+            name: 'Probe Co', purpose: 'Repairs for the street', lat: -28.55, lng: 153.5, avatar: TINY_PNG, workingCapitalCeiling_c: 5000,
         }));
         for (const who of [kip, dee]) built(`the admin makes ${who.name} a keeper of Probe Co`, await A(`/api/local/admin/treasury/${probe.publicKey}/operators`, { pubkey: who.pk }));
-        built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
-        built('Dee pledges backing to Probe Co', await S_(dee, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 1 }));
-        require_(await main.send('legacy-floor', { pk: probe.publicKey, floor: 200 }), 'M: Probe Co keeps a legacy credit floor of 200 (an enterprise older than Slice 4)');
+        built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount_c: 200 }));
+        built('Dee pledges backing to Probe Co', await S_(dee, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount_c: 100 }));
+        require_(await main.send('has-legacy-floor') === false, 'M: no enterprise keeps a legacy credit floor: E29\'s line is gone with whole hundredths (members has no legacy_credit_floor column)');
         const check = built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', photos: [TINY_PNG],
+            title: 'Bike check', description: 'At the workshop', price_c: 300, category: 'tools', photos: [TINY_PNG],
         }));
         const checkId = (check.post ?? check).id as string;
         const sale = built('Ann, no keeper, asks for it', await S_(ann, '/api/marketplace/posts/request', { postId: checkId, buyerPublicKey: ann.pk })).transaction;
@@ -478,7 +499,7 @@ async function main(): Promise<void> {
         built('Ann confirms: an external sale, earned surplus for Probe Co', await S_(ann, '/api/marketplace/transactions/complete', { transactionId: sale.id, confirmerPublicKey: ann.pk }));
         const deadline = new Date(Date.now() + 30 * 86400_000).toISOString();
         const seed = built('Eve starts a project with a goal and a deadline', await S_(eve, '/api/treasury', {
-            name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100, deadlineAt: deadline,
+            name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: 10000, deadlineAt: deadline,
         }));
         built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
         built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
@@ -495,9 +516,9 @@ async function main(): Promise<void> {
         }));
         const m1: Rows = await main.send('rows');
         const probeRow = m1.members.find((r) => r.public_key === probe.publicKey);
-        require_(probeRow?.is_treasury === 1 && probeRow.earned_surplus > 0 && probeRow.legacy_credit_floor === 200 && probeRow.lat !== null
+        require_(probeRow?.is_treasury === 1 && probeRow.earned_surplus_c > 0 && !('legacy_credit_floor' in probeRow) && probeRow.lat !== null
             && m1.treasury_operators.filter((o) => o.treasury_pubkey === probe.publicKey).length >= 3 && m1.enterprise_pledges.length >= 2,
-            `M: Probe Co is an enterprise with earned surplus, a legacy floor, a pin, keepers and pledges (${JSON.stringify({ surplus: probeRow?.earned_surplus, legacy: probeRow?.legacy_credit_floor, keepers: m1.treasury_operators.length, pledges: m1.enterprise_pledges.length })})`);
+            `M: Probe Co is an enterprise with earned surplus, no legacy floor (E29 gone), a pin, keepers and pledges (${JSON.stringify({ surplus: probeRow?.earned_surplus_c, legacy: 'legacy_credit_floor' in (probeRow ?? {}), keepers: m1.treasury_operators.length, pledges: m1.enterprise_pledges.length })})`);
         const annAfter = m1.members.find((r) => r.public_key === ann.pk)?.updated_at;
         assert(typeof annBefore === 'string' && typeof annAfter === 'string' && annAfter > annBefore,
             `M: a preference save moves the member's row, so a delta carries it (${annBefore} → ${annAfter})`);
@@ -524,26 +545,26 @@ async function main(): Promise<void> {
         console.log('\n— 3. between two pulls: a badge taken back, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
         built("the admin takes Lou's badge back, which the first copy copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
         built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: await main.send('owner-session') }));
-        built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount: 1 }));
+        built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount_c: 100 }));
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
-        built('the admin changes Probe Co\'s working capital ceiling (that column alone)', await A(`/api/local/admin/treasury/${probe.publicKey}/ceiling`, { ceiling: 80 }));
+        built('the admin changes Probe Co\'s working capital ceiling (that column alone)', await A(`/api/local/admin/treasury/${probe.publicKey}/ceiling`, { ceiling_c: 8000 }));
         built('Ann switches off chat pushes too', await S_(ann, '/api/members/preferences', { publicKey: ann.pk, preferences: { notify_chat: false } }));
         built('Ann moves Your Beans to the top of her Home and stars Tools too', await S_(ann, '/api/members/preferences', {
             publicKey: ann.pk, preferences: { 'home.layout': { ...annHome, order: ['beans', 'events', 'market'], updatedAt: new Date().toISOString() }, interests: ['food', 'garden', 'tools'] },
         }));
         const m3: Rows = await main.send('rows');
-        require_(m3.members.find((r) => r.public_key === lou.pk)?.earned_credit === 0
+        require_(m3.members.find((r) => r.public_key === lou.pk)?.earned_credit_c === 0
             && m3.members.find((r) => r.public_key === probe.publicKey)?.paused === 1
-            && m3.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling === 80
+            && m3.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling_c === 8000
             && !m3.treasury_operators.some((o) => o.member_pubkey === dee.pk)
             && m3.enterprise_pledges.some((p) => p.keeper === kip.pk && p.released_at !== null),
             'M: Lou\'s badge is gone, Probe Co is paused with its new ceiling, Dee is no keeper, and a pledge of Kip\'s is released');
         const delta = await standby.send('pull', {});
         s = await standby.send('rows');
         assert(delta.ok === true && delta.mode === 'delta', `the delta lands (${delta.ok ? delta.mode : delta.error})`);
-        assert(s.members.find((r) => r.public_key === lou.pk)?.earned_credit === 0,
-            `the badge taken back is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.earned_credit)})`);
-        assert(s.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling === 80, 'the ceiling the admin changed alone arrives');
+        assert(s.members.find((r) => r.public_key === lou.pk)?.earned_credit_c === 0,
+            `the badge taken back is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.earned_credit_c)})`);
+        assert(s.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling_c === 8000, 'the ceiling the admin changed alone arrives');
         assert(!s.treasury_operators.some((o) => o.member_pubkey === dee.pk), 'the unbound keeper is no keeper on S');
         assert(rowsDiff(m3, s).length === 0, `every row and stamp is M's after the delta (differences ${first(rowsDiff(m3, s))})`);
         assert(JSON.stringify(homeRows(s)) === JSON.stringify(homeRows(m3)) && homeRows(s).some((r) => r.pref_key === 'home.layout' && r.pref_value.includes('"beans"'))
@@ -581,8 +602,8 @@ async function main(): Promise<void> {
         withDb(dir('old'), (db) => {
             // What the old import wrote: no standing; nothing of member_preferences, treasury_operators or enterprise_pledges.
             for (const t of ['members_touch_updated_at', 'members_touch_board_standing']) db.exec(`DROP TRIGGER IF EXISTS ${t}`);
-            db.prepare(`UPDATE members SET is_treasury = 0, credit_frozen = 0, earned_credit = 0, earned_surplus = 0,
-                        working_capital_ceiling = NULL, legacy_credit_floor = NULL, purpose = NULL, goal_amount = NULL, deadline_at = NULL,
+            db.prepare(`UPDATE members SET is_treasury = 0, credit_frozen = 0, earned_credit_c = 0, earned_surplus_c = 0,
+                        working_capital_ceiling_c = NULL, purpose = NULL, goal_amount_c = NULL, deadline_at = NULL,
                         lifecycle = 'ongoing', paused = 0, lat = NULL, lng = NULL`).run();
             db.prepare('DELETE FROM member_preferences').run();
             db.prepare('DELETE FROM treasury_operators').run();
@@ -616,9 +637,10 @@ async function main(): Promise<void> {
             const b = await api(base, 'GET', '/api/marketplace/posts', { as: gwen });
             return (Array.isArray(b.body) ? b.body : b.body?.posts ?? []).map((p: any) => p.id).sort();
         };
+        // Whole hundredths (`floor_c`, `allowance_c`, `derivedAllowance_c`); no legacy floor: E29's line is gone.
         const backingOn = async (base: string) => {
             const b = (await api(base, 'GET', `/api/treasury/${probe.publicKey}/pledges`, { as: cy })).body ?? {};
-            return { floor: b.floor, allowance: b.allowance, derived: b.derivedAllowance, legacy: b.legacyFloor, pledges: Array.isArray(b.pledges) ? b.pledges.length : null };
+            return { floor: b.floor_c, allowance: b.allowance_c, derived: b.derivedAllowance_c, pledges: Array.isArray(b.pledges) ? b.pledges.length : null };
         };
         const caught7 = await standby.send('pull', {});
         const m7: Rows = await main.send('rows');
@@ -628,30 +650,30 @@ async function main(): Promise<void> {
             `S has caught up with M, where Kip is one of Probe Co's two keepers and holds a pledge (${caught7.ok ? caught7.mode : caught7.error}; differences ${first(rowsDiff(m7, s7))})`);
         await standby.send('standby-owner', { owner: gwen.pk });
         const pledgeWrites: [string, Answer][] = [
-            ['Kip releases 1 of his backing (the review\'s sequence)', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/release`, { as: kip2, body: { amount: 1 } })],
-            ['by /pledge/release', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge/release`, { as: kip2, body: { amount: 1 } })],
-            ['by /backing/release', await api(sb, 'POST', `/api/enterprise/${probe.publicKey}/backing/release`, { as: kip2, body: { amount: 1 } })],
+            ['Kip releases 1 of his backing (the review\'s sequence)', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/release`, { as: kip2, body: { amount_c: 100 } })],
+            ['by /pledge/release', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge/release`, { as: kip2, body: { amount_c: 100 } })],
+            ['by /backing/release', await api(sb, 'POST', `/api/enterprise/${probe.publicKey}/backing/release`, { as: kip2, body: { amount_c: 100 } })],
             ['by DELETE /pledge', await api(sb, 'DELETE', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: {} })],
-            ['by DELETE /backing', await api(sb, 'DELETE', `/api/enterprise/${probe.publicKey}/backing`, { as: kip2, body: {} })],
-            ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount: 1 } })],
-            ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount: 1 } })],
+            ['by DELETE /backing_c', await api(sb, 'DELETE', `/api/enterprise/${probe.publicKey}/backing`, { as: kip2, body: {} })],
+            ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount_c: 100 } })],
+            ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount_c: 100 } })],
             ['Kip steps down, which releases his pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/keepers/step-down`, { as: kip2, body: {} })],
             ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: await standby.send('owner-session', { owner: gwen.pk }) })],
         ];
         const through = pledgeWrites.filter(([, a]) => !(a.status === 409 && a.body?.code === 'standby')).map(([w, a]) => `${w}: ${brief(a)}`);
         assert(through.length === 0, `on S every write of a pledge answers 409 standby (${through.length} did not: ${through.join(' | ') || 'none'})`);
         const engine7 = [
-            await standby.send('engine-pledge', { kind: 'release', enterprise: probe.publicKey, keeper: kip2.pk, amount: 1 }),
-            await standby.send('engine-pledge', { kind: 'pledge', enterprise: probe.publicKey, keeper: kip2.pk, amount: 1 }),
+            await standby.send('engine-pledge', { kind: 'release', enterprise: probe.publicKey, keeper: kip2.pk, amount: 100 }),
+            await standby.send('engine-pledge', { kind: 'pledge', enterprise: probe.publicKey, keeper: kip2.pk, amount: 100 }),
         ];
         assert(engine7.every((r) => r.ok === false && r.code === 'standby'), `and its engine under the routes refuses a release and a pledge (${JSON.stringify(engine7)})`);
         s7 = await standby.send('rows');
         assert(rowsDiff(m7, s7).length === 0, `nothing was written: S's keepers and pledges are still M's (differences ${first(rowsDiff(m7, s7))})`);
 
         const unplanted7 = await backingOn(sb);
-        await standby.send('plant-pledge', { keeper: kip2.pk, enterprise: probe.publicKey, amount: 1 });
+        await standby.send('plant-pledge', { keeper: kip2.pk, enterprise: probe.publicKey, amount: 100 });
         const planted7 = { m: await backingOn(m), s: await backingOn(sb) };
-        require_(planted7.s.derived === (unplanted7.derived ?? NaN) + 1 && planted7.s.pledges === (unplanted7.pledges ?? NaN) + 1,
+        require_(planted7.s.derived === (unplanted7.derived ?? NaN) + 100 && planted7.s.pledges === (unplanted7.pledges ?? NaN) + 1,
             `S holds a pledge of its own, as its release route wrote one before it refused: Probe Co has 1 Bean more backing there (${JSON.stringify({ before: unplanted7, ...planted7 })})`);
         const audit7 = await standby.send('check-copy');
         const counted7 = (audit7?.tables ?? []).filter((t: any) => ['treasury_operators', 'enterprise_pledges', 'member_preferences'].includes(t.name));
@@ -673,21 +695,28 @@ async function main(): Promise<void> {
         // ── 8. A value the standby's own table refuses ──
         console.log('\n— 8. an older main server\'s row holds a goal below 0, which a standby\'s table refuses: left out, reported, and copying goes on —');
         const shapes8 = { m: await main.send('goal-rule'), s: await standby.send('goal-rule') };
-        require_(shapes8.m === false && shapes8.s === true, `M's goal column came from an ALTER, with no CHECK; S's, from schema.sql, has one (${JSON.stringify(shapes8)})`);
-        const minus8 = await S_(eve, '/api/treasury', { name: 'Minus Fund', purpose: 'Below zero', lifecycle: 'bounded', goalAmount: -5 });
-        const minusCrowd8 = await S_(eve, '/api/crowdfund/projects', { title: 'Minus Crowd', description: 'Below zero', goalAmount: -5, creatorPubkey: eve.pk });
-        assert(minus8.status === 400 && /goal/i.test(JSON.stringify(minus8.body)) && minusCrowd8.status === 400 && /goal/i.test(JSON.stringify(minusCrowd8.body)),
+        require_(shapes8.m === true && shapes8.s === true,
+            `M's goal column has the schema's CHECK though its members table predates Slice 3: the step to whole hundredths adds goal_amount_c with it (db/hundredths-step.ts), so no older build's goal below 0 survives; S's, from schema.sql, has it too (${JSON.stringify(shapes8)})`);
+        // Whole hundredths at the door: -5 Beans is -500. An enterprise's goal is a money field (money-body.ts optionalHundredthsOf
+        // refuses one below 0 as amount_c_required); a crowdfund's is checked against the goal rule (db.ts isAcceptableGoal).
+        const minus8 = await S_(eve, '/api/treasury', { name: 'Minus Fund', purpose: 'Below zero', lifecycle: 'bounded', goalAmount_c: -500 });
+        const minusCrowd8 = await S_(eve, '/api/crowdfund/projects', { title: 'Minus Crowd', description: 'Below zero', goalAmount_c: -500, creatorPubkey: eve.pk });
+        assert(minus8.status === 400 && minus8.body?.code === 'amount_c_required' && minusCrowd8.status === 400 && /goal/i.test(JSON.stringify(minusCrowd8.body)),
             `M refuses a goal below 0 now, for an enterprise and a crowdfund (${brief(minus8)}; ${brief(minusCrowd8)})`);
-        require_(await main.send('plant-goal', { pk: seed.publicKey, goal: -5 }), 'M: Seed Fund\'s goal is -5, as an older build wrote it (POST /api/treasury passed it on unchecked)');
+        const tableRefuses8 = await main.send('plant-goal', { pk: seed.publicKey, goal: -500 });
+        assert(typeof tableRefuses8 === 'object' && /CHECK constraint failed/.test(tableRefuses8?.refused ?? ''),
+            `and M's own table refuses one written to it (${JSON.stringify(tableRefuses8)})`);
+        require_(await main.send('plant-goal', { pk: seed.publicKey, goal: -500, aroundRule: true }) === true,
+            'M: Seed Fund\'s goal is -5 Beans, written around its table\'s rule (as only a raw write or a damaged page leaves one now)');
         const m8: Rows = await main.send('rows');
-        const goalOf = (r: Rows, pk: string) => r.members.find((x) => x.public_key === pk)?.goal_amount;
-        const example8 = `${seed.publicKey.slice(0, 16)}.goal_amount`;
-        const onlyTheGoal = (d: string[]) => d.length === 1 && d[0].startsWith(`members ${seed.publicKey.slice(0, 12)}.goal_amount:`);
+        const goalOf = (r: Rows, pk: string) => r.members.find((x) => x.public_key === pk)?.goal_amount_c;
+        const example8 = `${seed.publicKey.slice(0, 16)}.goal_amount_c`;
+        const onlyTheGoal = (d: string[]) => d.length === 1 && d[0].startsWith(`members ${seed.publicKey.slice(0, 12)}.goal_amount_c:`);
         const delta8 = await standby.send('pull', {});
         let s8: Rows = await standby.send('rows');
-        assert(delta8.ok === true && delta8.mode === 'delta' && goalOf(s8, seed.publicKey) === 100 && onlyTheGoal(rowsDiff(m8, s8)),
+        assert(delta8.ok === true && delta8.mode === 'delta' && goalOf(s8, seed.publicKey) === 10000 && onlyTheGoal(rowsDiff(m8, s8)),
             `the running standby's delta lands: Seed Fund's row is M's but for the goal, which S keeps (${JSON.stringify({ ok: delta8.ok, mode: delta8.mode, error: delta8.error })}; differences ${first(rowsDiff(m8, s8))})`);
-        const plums = await offer(ann, 'Late plums', 3);
+        const plums = await offer(ann, 'Late plums', 300);
         const next8 = await standby.send('pull', {});
         assert(next8.ok === true && (await boardOn(sb)).includes(plums.id), `and so does the next: a listing M makes after it arrives (${next8.ok ? next8.mode : next8.error})`);
         const before8 = await standby.send('record');
@@ -735,7 +764,7 @@ async function main(): Promise<void> {
         // The value left out is read as the copy's only where the import left it out: a members row that differs anywhere
         // else is still a copy a force-resync mends. Checked on M's next whole copy, not imported, so the bio stays S's.
         require_(await fresh.send('plant-bio', { pk: ann.pk, bio: 'Only on this standby' }), 'the fresh standby: Ann\'s bio changed there alone');
-        const guard8 = await fresh.send('check-whole', { leftOut: [{ publicKey: seed.publicKey, column: 'goal_amount' }] });
+        const guard8 = await fresh.send('check-whole', { leftOut: [{ publicKey: seed.publicKey, column: 'goal_amount_c' }] });
         assert(guard8.hashes === true && guard8.consistency?.valuesLeftOut?.examples?.[0] === example8 && guard8.lastWhole?.exact === false
             && JSON.stringify(guard8.lastWhole.differs) === '["members"]' && guard8.lastWhole.resyncAsked === true,
             `a members row that differs beside the value left out still asks for the force-resync (${JSON.stringify({ hashes: guard8.hashes, lastWhole: guard8.lastWhole })})`);
@@ -754,8 +783,8 @@ async function main(): Promise<void> {
         const u8: Rows = await upgraded.send('rows');
         const seedBefore = m8c.members.find((r) => r.public_key === seed.publicKey);
         const seedAfter = u8.members.find((r) => r.public_key === seed.publicKey);
-        assert(seedBefore?.goal_amount === -5 && seedAfter?.goal_amount === null && seedAfter.updated_at > seedBefore.updated_at && await upgraded.send('marker') === '1',
-            `its goal is the column's default, none, and the row is stamped so a delta carries it (${JSON.stringify({ before: [seedBefore?.goal_amount, seedBefore?.updated_at], after: [seedAfter?.goal_amount, seedAfter?.updated_at] })})`);
+        assert(seedBefore?.goal_amount_c === -500 && seedAfter?.goal_amount_c === null && seedAfter.updated_at > seedBefore.updated_at && await upgraded.send('marker') === '1',
+            `its goal is the column's default, none, and the row is stamped so a delta carries it (${JSON.stringify({ before: [seedBefore?.goal_amount_c, seedBefore?.updated_at], after: [seedAfter?.goal_amount_c, seedAfter?.updated_at] })})`);
         const others8 = rowsDiff(m8c, u8).filter((d) => !d.startsWith(`members ${seed.publicKey.slice(0, 12)}.`));
         assert(others8.length === 0, `nothing else changes (${first(others8)})`);
         refused.push(...(await upgraded.send('fetches')).blocked);
@@ -773,8 +802,9 @@ async function main(): Promise<void> {
             everyone.map(async ([n, pk, reader]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: reader }))])));
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
-        require_((onMain.standing as any).Eve?.grantedCredit === 200 && (onMain.standing as any).Lou?.grantedCredit === 0
-            && (onMain.standing as any).Fay?.floor === 0 && (onMain.standing as any).Fay?.grantedCredit > 0
+        // 200 Beans of a Resident badge's credit: 20000 hundredths.
+        require_((onMain.standing as any).Eve?.grantedCredit === 20000 && (onMain.standing as any).Lou?.grantedCredit === 0
+            && (onMain.standing as any).Fay?.floor_c === 0 && (onMain.standing as any).Fay?.grantedCredit > 0
             && !onMain.board.includes(checkId) && !onMain.board.includes(walking.id),
             `M: Eve holds her badge's credit and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
         refused.push(...(await main.send('fetches')).blocked);
@@ -827,7 +857,7 @@ async function main(): Promise<void> {
         assert(pins.status === 200 && JSON.stringify(pins.body).includes(probe.publicKey), `Probe Co is on the map (${brief(pins)})`);
         const resumed = await P_(cy, `/api/treasury/${probe.publicKey}/resume`);
         assert(resumed.status === 200, `its lead resumes it (${brief(resumed)})`);
-        const posted = await P_(kip2, `/api/treasury/${probe.publicKey}/offer`, { title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools', photos: [TINY_PNG] });
+        const posted = await P_(kip2, `/api/treasury/${probe.publicKey}/offer`, { title: 'Puncture kits', description: 'Made in the workshop', price_c: 200, category: 'tools', photos: [TINY_PNG] });
         assert(posted.status === 200, `and its keeper, re-keyed, posts for it (${brief(posted)})`);
         const board = await boardOn(p);
         assert(board.includes(checkId), 'the resumed enterprise\'s listing is back on the board');

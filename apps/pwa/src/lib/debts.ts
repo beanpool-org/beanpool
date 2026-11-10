@@ -3,29 +3,30 @@
  * off (GET /api/commons/repayment), and paying the Commons, for a debt with the pay-back code an admin shared (POST
  * /api/commons/pay). Both through `request`, signed by the member's key as every request is. The admins' side (an
  * entry's debt history, work off, settle, forgive) is on the phone's names list: the web app has no names list.
- * Amounts are Beans to the cent.
+ * Every amount is whole hundredths of a Bean (`*_c` on the wire, as the node's commons routes read and answer them).
  */
-import { formatNumber, parseAmount, t, tn, word } from '@beanpool/core';
+import { formatHundredths, hundredthsAsDecimalText, parseHundredths, t, tn, word } from '@beanpool/core';
 import { request } from './api';
 import { confirmPayment, sendConfirmedPayment, isNoAnswer, type ConfirmedPayment } from './payment-request';
 
-export interface Repayment { amount: number; repaid: number; left: number; debtId?: string }
+/** A member's own repayment as the node sends it (GET /api/commons/repayment): whole hundredths, each. */
+export interface Repayment { amount_c: number; repaid_c: number; left_c: number; debtId?: string }
 
 export async function getMyRepayment(): Promise<Repayment | null> {
     const r = await request<{ repayment: Repayment | null }>('GET', '/api/commons/repayment');
     return r?.repayment ?? null;
 }
 
-/** A payment to the Commons as the member confirmed it: the fields every send of it carries, with its id. */
-export type CommonsPayment = { amount: number; debtId?: string };
+/** A payment to the Commons as the member confirmed it: the fields every send of it carries (amount_c, whole hundredths), with its id. */
+export type CommonsPayment = { amount_c: number; debtId?: string };
 
-/** The node's answer to a payment: its reference, the Beans paid, and for a debt what was left before and after it, and whether it settled it. */
-export type PaidToCommons = { transactionId: string; amount: number; left?: number; leftAfter?: number; settled?: boolean };
+/** The node's answer to a payment (state-engine.ts PaidToCommons): its reference, what was paid, and for a debt what was left before and after it, whole hundredths each, and whether it settled it. */
+export type PaidToCommons = { transactionId: string; amount_c: number; left_c?: number; leftAfter_c?: number; settled?: boolean };
 
-/** The member confirmed paying `amount`, for the debt with pay-back code `debtCode` if given: one id for every send of it. */
-export function confirmCommonsPayment(amount: number, debtCode?: string): ConfirmedPayment<CommonsPayment> {
+/** The member confirmed paying `amount_c` (whole hundredths), for the debt with pay-back code `debtCode` if given: one id for every send of it. */
+export function confirmCommonsPayment(amount_c: number, debtCode?: string): ConfirmedPayment<CommonsPayment> {
     const debtId = debtCode?.trim().toLowerCase();
-    return confirmPayment<CommonsPayment>({ amount, ...(debtId ? { debtId } : {}) });
+    return confirmPayment<CommonsPayment>({ amount_c, ...(debtId ? { debtId } : {}) });
 }
 
 /**
@@ -47,21 +48,19 @@ export async function payTheCommons(payment: ConfirmedPayment<CommonsPayment>, o
     return r.value!;
 }
 
-/** Beans to the cent: 300 Beans, 12.50 Beans. */
-export function beans(n: number): string {
-    const cents = Math.round(n * 100);
-    return `${cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2)} Beans`;
+/** Whole hundredths as plain Beans text: 30000 is 300 Beans, 1250 is 12.50 Beans. */
+export function beans(c: number): string {
+    return `${hundredthsAsDecimalText(c)} Beans`;
 }
 
 /**
- * Beans typed by a member, to the cent; null if it isn't an amount above 0 with at most two decimals. Read as every
- * typed amount is (core parseAmount): the language's decimal mark and digits; "1.000" or "1,000" is refused, never a guess.
+ * Beans typed by a member, as whole hundredths; null if it isn't an amount above 0 with at most two decimals. Read as every
+ * typed amount is (core parseHundredths): the language's decimal mark and digits; "1.000" or "1,000" is refused, never a
+ * guess, and a third decimal is refused, never rounded.
  */
 export function parseBeans(text: string): number | null {
-    const read = parseAmount(text);
-    if (!read.ok) return null;
-    const n = Math.round(read.value * 100) / 100;
-    return n > 0 ? n : null;
+    const read = parseHundredths(text);
+    return read.ok && read.value > 0 ? read.value : null;
 }
 
 /**
@@ -99,18 +98,16 @@ export function payFailureWords(e: unknown): string {
     return typeof message === 'string' && message.trim() ? message : t(PAY_WORDS.refusedUnsaid);
 }
 
-/** Whether a payment of `amount` covers what is left: one that does settles the debt as it is paid. */
-export const coversLeft = (amount: number, left: number | null): boolean => left !== null && Math.round(amount * 100) >= Math.round(left * 100);
+/** Whether a payment of `amount_c` covers what is left (`left_c`), both whole hundredths: one that does settles the debt as it is paid. */
+export const coversLeft = (amount_c: number, left_c: number | null): boolean => left_c !== null && amount_c >= left_c;
 
 /** A pay-back code as an admin shares it: the debt record's id, 32 hexadecimal characters. */
 export const debtCodeOk = (code: string): boolean => /^[0-9a-f]{32}$/.test(code.trim().toLowerCase());
 
-/** beans(n) in the member's language: "12 Beans", "12.50 Beans", to the cent, in the member's numbers (the phone's). */
-function beansWords(n: number): string {
-    const cents = Math.round(n * 100);
-    const amount = cents % 100 === 0 ? formatNumber(cents / 100) : formatNumber(cents / 100, 2);
+/** Whole hundredths in the member's language: "12 Beans", "12.50 Beans", as every figure is written (formatHundredths). */
+function beansWords(c: number): string {
     // One English form for every count, as beans() writes it; a language with more forms has them.
-    return tn(cents / 100, '{amount} Beans', '{amount} Beans', { amount });
+    return tn(c / 100, '{amount} Beans', '{amount} Beans', { amount: formatHundredths(c) });
 }
 
 /**
@@ -119,7 +116,7 @@ function beansWords(n: number): string {
  */
 export const REPAYMENT_WORDS = {
     banner: (r: Repayment) => t('You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once. Then you keep what you receive, as everyone does.',
-        { left: beansWords(r.left), amount: beansWords(r.amount) }),
+        { left: beansWords(r.left_c), amount: beansWords(r.amount_c) }),
     payTitle: word('Pay the Commons'),
     payIntro: word('Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin gave you (working one off, yours is filled in): what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.'),
     /** The admin's link's amount: what was left when they shared it (a work-off may have lowered it since). */
@@ -142,7 +139,7 @@ export const REPAYMENT_WORDS = {
             ? t('Pay {amount} to the Commons for your debt? {shared} was what was left when the admin shared this. It comes off your debt at once. If less is left now, your server refuses it and says how much, and nothing is paid. This can’t be undone.', { ...values, shared: beansWords(shared) })
             : t('Pay {amount} to the Commons for your debt? It comes off your debt at once. If less is left now, your server refuses it and says how much, and nothing is paid. This can’t be undone.', values);
     },
-    /** The node's answer for a debt: `settled` when this payment left nothing, else `leftAfter`, what is left now. */
+    /** The node's answer for a debt: `settled` when this payment left nothing, else `leftAfter_c`, what is left now. */
     paid: (amount: number, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}, openDebt = false): string => {
         const values = { amount: beansWords(amount), ref };
         if (!forDebt) {
@@ -151,7 +148,7 @@ export const REPAYMENT_WORDS = {
                 : t('Paid {amount} to the Commons.', values);
         }
         if (answer.settled) return t('Paid {amount} to the Commons. Your debt is paid off and settled.', values);
-        if (typeof answer.leftAfter === 'number') return t('Paid {amount} to the Commons. That came off your debt: {left} left.', { ...values, left: beansWords(answer.leftAfter) });
+        if (typeof answer.leftAfter_c === 'number') return t('Paid {amount} to the Commons. That came off your debt: {left} left.', { ...values, left: beansWords(answer.leftAfter_c) });
         return t('Paid {amount} to the Commons. Reference: {ref}', values);
     },
     badAmount: word('Write an amount of Beans above 0, to the cent (for example 12.50).'),

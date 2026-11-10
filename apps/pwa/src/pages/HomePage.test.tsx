@@ -87,13 +87,13 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
             events: { items: [{ id: 'e1', title: 'Seed swap', startsAt: new Date(Date.now() + 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: 'going' }], radiusKm: null },
             market: {
                 items: [
-                    { id: 'p1', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null },
-                    { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
-                    { id: 'p3', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null, credits: 0 },
+                    { id: 'p1', type: 'offer', title: 'Pottery lessons', category: 'arts', price_c: 2000, photoUrl: null },
+                    { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', price_c: 1200, photoUrl: null },
+                    { id: 'p3', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null, price_c: 0 },
                 ], total14d: 3, more: false,
             },
             pulse: { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }] },
-            beans: { balance: 12, room: 200, tier: 'Resident', activated: true, frozen: false },
+            beans: { balance_c: 1200, room_c: 20000, tier: 'Resident', activated: true, frozen: false },
             community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             ...cards,
         },
@@ -612,7 +612,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
+            beans: { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false },
             steps: { joinedAt: NOW, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null },
         })));
         const nav = vi.fn();
@@ -646,7 +646,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('market cards with no photo render CategoryTile instead of bare emoji on grey', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 150000, photoUrl: null }], total14d: 1, more: false },
         })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const marketCard = await screen.findByTestId('home-card-market');
@@ -655,7 +655,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('a Market price of a thousand Beans or more in the language\'s number style: "1,500" in English, never in pt or es, where it reads as 1.5', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 150000, photoUrl: null }], total14d: 1, more: false },
         })));
         // As App does: the root re-renders when the language changes (lib/useLanguage.ts).
         const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
@@ -676,21 +676,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         }
     });
 
-    it('a fractional Market price to the cent: "1,234.5 Beans" grouped in English as it always was, "1234,5" in pt and es', async () => {
+    it('a fractional Market price to the cent: "1,234.50 Beans" grouped in English, "1234,50" in pt and es (formatHundredths: two decimals whenever there are cents)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             market: { items: [
-                { id: 'p10', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1234.5, photoUrl: null },
-                { id: 'p11', type: 'offer', title: 'Trailer', category: 'tools', credits: 33.333333, photoUrl: null },
-                { id: 'p12', type: 'offer', title: 'Pump', category: 'tools', credits: 10.1 + 10.2, photoUrl: null },
+                { id: 'p10', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 123450, photoUrl: null },
+                { id: 'p11', type: 'offer', title: 'Trailer', category: 'tools', price_c: 3333, photoUrl: null },
+                { id: 'p12', type: 'offer', title: 'Pump', category: 'tools', price_c: 1010 + 1020, photoUrl: null },
             ], total14d: 3, more: false },
         })));
         const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
         try {
             render(<Live />);
             await screen.findByTestId('home-card-market');
-            // Never "1234.5", "33.333333" or the float's "20.299999999999997".
-            expect(marketTitles()).toEqual(['Offer, Cargo bike, 1,234.5 Beans', 'Offer, Trailer, 33.33 Beans', 'Offer, Pump, 20.3 Beans']);
-            for (const [lang, beans] of [['pt', ['1234,5 feijões', '33,33 feijões', '20,3 feijões']], ['es', ['1234,5 frijoles', '33,33 frijoles', '20,3 frijoles']]] as const) {
+            // Never "1234.5", "123450" (a count of hundredths shown as Beans) or a float's "20.299999999999997".
+            expect(marketTitles()).toEqual(['Offer, Cargo bike, 1,234.50 Beans', 'Offer, Trailer, 33.33 Beans', 'Offer, Pump, 20.30 Beans']);
+            for (const [lang, beans] of [['pt', ['1234,50 feijões', '33,33 feijões', '20,30 feijões']], ['es', ['1234,50 frijoles', '33,33 frijoles', '20,30 frijoles']]] as const) {
                 await act(async () => { await chooseAndShowLanguage(lang); });
                 const rows = within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item');
                 expect(rows.map(r => r.textContent), lang).toEqual(beans.map(b => expect.stringContaining(b)));
@@ -2698,7 +2698,7 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
 });
 
 describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
-    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', credits: 5, photoUrl: null, distanceKm: km });
+    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', price_c: 500, photoUrl: null, distanceKm: km });
     const layout = (q = 'eggs') => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q, kind: 'any', km: 5 } }]);
     const withBody = (body: unknown) => answer({}, { ...answer().cards, 'search-k7mq': body } as never);
 
@@ -4467,9 +4467,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             others: 1,
             lifecycle: 'ongoing',
             keepers: 3,
-            balance: 340,
-            month: { trades: 5, in: 120, out: 60 },
-            latest: { amount: 12, at: new Date(Date.now() - 2 * 3600_000).toISOString(), kind: 'member', who: 'Ana' },
+            balance_c: 34000,
+            month: { trades: 5, in_c: 12000, out_c: 6000 },
+            latest: { amount_c: 1200, at: new Date(Date.now() - 2 * 3600_000).toISOString(), kind: 'member', who: 'Ana' },
         },
         decide: {
             open: 1,
@@ -4497,28 +4497,28 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             ],
         },
         beans: {
-            balance: -35,
-            room: 165,
+            balance_c: -3500,
+            room_c: 16500,
             tier: 'Resident',
             activated: true,
             frozen: false,
-            month: { trades: 3, in: 40, out: 25, fees: 0, more: false },
+            month: { trades: 3, in_c: 4000, out_c: 2500, fees_c: 0, more: false },
         },
         community: {
             name: 'Mullumbimby',
             members: 81,
             joined7d: 4,
             tradesThisMonth: 23,
-            commonsPot: 310,
+            commonsPot_c: 31000,
             listings: 37,
             eventsSoon: 3,
         },
         market: {
             items: [
-                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: 'https://example.com/m1.jpg', distanceKm: 2 },
-                { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', credits: 0, photoUrl: null, distanceKm: 5 },
-                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', credits: 6, photoUrl: 'https://example.com/m3.jpg', distanceKm: 1 },
-                { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', credits: 20, photoUrl: null, distanceKm: 3 },
+                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', price_c: 800, photoUrl: 'https://example.com/m1.jpg', distanceKm: 2 },
+                { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', price_c: 0, photoUrl: null, distanceKm: 5 },
+                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', price_c: 600, photoUrl: 'https://example.com/m3.jpg', distanceKm: 1 },
+                { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', price_c: 2000, photoUrl: null, distanceKm: 3 },
             ],
             total14d: 4,
             more: false,
@@ -4748,7 +4748,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
                 tradesThisMonth: 0,
                 joined7d: 1,
                 eventsSoon: 0,
-                commonsPot: 0,
+                commonsPot_c: 0,
             },
         });
 
@@ -5203,8 +5203,8 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fable.md §2.2; 320 px wide, light and dark)', () => {
     const PINNED_CARDS = (): HomeAnswer['cards'] => ({
         market: { items: [
-            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null, pinned: true },
-            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
+            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', price_c: 2000, photoUrl: null, pinned: true },
+            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', price_c: 1200, photoUrl: null },
             { id: 'p4', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null },
         ], total14d: 3, more: false },
         events: { items: [
@@ -5265,9 +5265,9 @@ describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fa
 
 describe('Asked near you, and the First steps line for a Need (cold-start N2)', () => {
     const askedItems = () => [
-        { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), photoUrl: null },
-        { id: 'n2', title: 'Someone to dig a bed', category: 'arts', credits: 40, createdAt: new Date(Date.now() - 26 * 3_600_000).toISOString(), photoUrl: null },
-        { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), photoUrl: null },
+        { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', price_c: 2000, createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), photoUrl: null },
+        { id: 'n2', title: 'Someone to dig a bed', category: 'arts', price_c: 4000, createdAt: new Date(Date.now() - 26 * 3_600_000).toISOString(), photoUrl: null },
+        { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', price_c: 0, createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), photoUrl: null },
     ];
     const MEMBER = { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: true, standing: 'member' as const, tour: TOUR_ENDED };
     /** A member whose list holds the card after the Market; `steps` as the node sends it; the star `arts`. */
@@ -5305,9 +5305,9 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     it('a Need priced by the hour or the month says so, on the row and in its label; a fixed price and Free are as before', async () => {
         const [first, , free] = askedItems();
         vi.mocked(api.getHome).mockResolvedValue(fresh(asked([
-            { ...first, id: 'n1', title: 'Borrow a trailer Saturday', credits: 20, priceType: 'hourly' },
-            { ...first, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
-            { ...first, id: 'n3', title: 'Dig a bed', credits: 25, priceType: 'fixed' },
+            { ...first, id: 'n1', title: 'Borrow a trailer Saturday', price_c: 2000, priceType: 'hourly' },
+            { ...first, id: 'n2', title: 'Someone to mind the shop', price_c: 30000, priceType: 'monthly' },
+            { ...first, id: 'n3', title: 'Dig a bed', price_c: 2500, priceType: 'fixed' },
             { ...free, id: 'n4', title: 'Lift to Lismore Thursday', priceType: 'hourly' },
         ])));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -5343,7 +5343,7 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     });
 
     it('Beans are off (the worldwide community): no price, only how long ago', async () => {
-        const noPrice = askedItems().map(({ credits: _c, ...rest }) => rest);
+        const noPrice = askedItems().map(({ price_c: _c, ...rest }) => rest);
         vi.mocked(api.getHome).mockResolvedValue(fresh(asked(noPrice as never, {}, { profile: 'global', features: { beans: false, guestListingsOnly: true } as never })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-asked');

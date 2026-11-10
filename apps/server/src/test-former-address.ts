@@ -73,7 +73,7 @@ async function child(): Promise<void> {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
                     .run(m.pk, m.callsign);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
             }
             return true;
         },

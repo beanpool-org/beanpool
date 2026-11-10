@@ -44,12 +44,14 @@ const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'viewer-private-
 const LISTING = '123e4567-e89b-12d3-a456-426614174000';
 const OTHER_LISTING = '223e4567-e89b-12d3-a456-426614174001';
 
-const deal = (id: string, postId: string, status: MarketplaceTransaction['status'], credits: number, side: { buyer?: string; seller?: string } = {}): MarketplaceTransaction => ({
+/** A deal of `amount_c` whole hundredths of a Bean. */
+const deal = (id: string, postId: string, status: MarketplaceTransaction['status'], amount_c: number, side: { buyer?: string; seller?: string } = {}): MarketplaceTransaction => ({
     id, postId, postTitle: 'Fix the gate', buyerPublicKey: side.buyer ?? ME, buyerCallsign: 'Visitor', sellerPublicKey: side.seller ?? MIA, sellerCallsign: 'Mia',
-    credits, status, createdAt: '2026-10-16T09:00:00.000Z',
+    amount_c, status, createdAt: '2026-10-16T09:00:00.000Z',
 });
-const line = (id: string, from: string, to: string, memo: string, amount = 30) =>
-    ({ id, from, to, amount, taxFee: 0, memo, timestamp: '2026-10-16T10:00:00.000Z' });
+/** A ledger line of `amount_c` whole hundredths. */
+const line = (id: string, from: string, to: string, memo: string, amount_c = 3000) =>
+    ({ id, from, to, amount_c, fee_c: 0, memo, timestamp: '2026-10-16T10:00:00.000Z' });
 
 async function wallet(deals: MarketplaceTransaction[], onNavigate = vi.fn()) {
     render(<LedgerPage identity={identity} isMember={true} onNavigate={onNavigate} deals={deals} />);
@@ -61,23 +63,23 @@ async function wallet(deals: MarketplaceTransaction[], onNavigate = vi.fn()) {
 describe('the Ledger opens the deals behind what is held in trust (deals S6)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 5, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 500, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
     });
 
     it('the Held in Trust total is a button, at least 44 px, that opens Your deals on In Progress', async () => {
-        // Two deals held as the payer (30 + 12.5), a request (holds nothing), a deal held from the other side, and a finished one.
+        // Two deals held as the payer (30 + 12.50), a request (holds nothing), a deal held from the other side, and a finished one.
         const onNavigate = await wallet([
-            deal('d1', LISTING, 'pending', 30),
-            deal('d2', OTHER_LISTING, 'pending', 12.5),
-            deal('d3', LISTING, 'requested', 99),
-            deal('d4', LISTING, 'pending', 70, { buyer: MIA, seller: ME }),
-            deal('d5', LISTING, 'completed', 8),
+            deal('d1', LISTING, 'pending', 3000),
+            deal('d2', OTHER_LISTING, 'pending', 1250),
+            deal('d3', LISTING, 'requested', 9900),
+            deal('d4', LISTING, 'pending', 7000, { buyer: MIA, seller: ME }),
+            deal('d5', LISTING, 'completed', 800),
         ]);
         const total = await screen.findByTestId('ledger-in-escrow');
         expect(total.tagName).toBe('BUTTON');
         expect(total).toHaveClass('min-h-[44px]');
         expect(total).toHaveTextContent('Held in Trust');
-        expect(total).toHaveTextContent('42.5');
+        expect(total).toHaveTextContent('42.50');
         expect(total).toHaveTextContent('Your deals in progress');
 
         fireEvent.click(total);
@@ -86,14 +88,14 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
     });
 
     it('nothing held, no total and no door', async () => {
-        await wallet([deal('d1', LISTING, 'requested', 30), deal('d2', LISTING, 'completed', 30), deal('d3', LISTING, 'pending', 30, { buyer: MIA, seller: ME })]);
+        await wallet([deal('d1', LISTING, 'requested', 3000), deal('d2', LISTING, 'completed', 3000), deal('d3', LISTING, 'pending', 3000, { buyer: MIA, seller: ME })]);
         await screen.findByText('Commons Pool');
         expect(screen.queryByTestId('ledger-in-escrow')).not.toBeInTheDocument();
     });
 
     it('a hold whose deal the member has is one button, at least 44 px, that opens the deal\'s listing', async () => {
         vi.mocked(getTransactions).mockResolvedValue([line('t1', ME, 'escrow_d1', `Escrow hold for offer ${LISTING}`)] as any);
-        const onNavigate = await wallet([deal('d1', LISTING, 'pending', 30)]);
+        const onNavigate = await wallet([deal('d1', LISTING, 'pending', 3000)]);
         const held = await screen.findByTestId('ledger-held-row');
         expect(held.tagName).toBe('BUTTON');
         expect(held).toHaveClass('min-h-[44px]');
@@ -109,7 +111,7 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
 
     it('the row is the one door: no listing id and no View Offer link inside the button', async () => {
         vi.mocked(getTransactions).mockResolvedValue([line('t1', ME, 'escrow_d1', `Escrow hold for offer ${LISTING}`)] as any);
-        await wallet([deal('d1', LISTING, 'pending', 30)]);
+        await wallet([deal('d1', LISTING, 'pending', 3000)]);
         const held = await screen.findByTestId('ledger-held-row');
         expect(held.textContent).not.toContain(LISTING);
         expect(within(held).queryByText('View Offer')).not.toBeInTheDocument();
@@ -118,10 +120,10 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
 
     it("finds the deal by the account's deal id, not the listing the note names: the payout and an older hold keyed by the listing too", async () => {
         vi.mocked(getTransactions).mockResolvedValue([
-            line('t1', 'escrow_d2', ME, 'Escrow payout for completed post (none)', 12.5),
-            line('t2', ME, `escrow_${LISTING}`, 'Escrow hold', 8),
+            line('t1', 'escrow_d2', ME, 'Escrow payout for completed post (none)', 1250),
+            line('t2', ME, `escrow_${LISTING}`, 'Escrow hold', 800),
         ] as any);
-        const onNavigate = await wallet([deal('d2', OTHER_LISTING, 'completed', 12.5), deal('d9', LISTING, 'pending', 8)]);
+        const onNavigate = await wallet([deal('d2', OTHER_LISTING, 'completed', 1250), deal('d9', LISTING, 'pending', 800)]);
         const rows = await screen.findAllByTestId('ledger-held-row');
         expect(rows).toHaveLength(2);
         fireEvent.click(rows[0]);
@@ -133,8 +135,8 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
     it("a hold the member's deals don't have falls back to the listing its note names; with neither it is just a row", async () => {
         vi.mocked(getTransactions).mockResolvedValue([
             line('t1', ME, 'escrow_gone', `Escrow hold for offer ${LISTING}`),
-            line('t2', ME, 'escrow_gone2', 'Adjust escrow for 3 hours', 5),
-            line('t3', MIA, ME, `Paid for ${LISTING} thanks`, 40),
+            line('t2', ME, 'escrow_gone2', 'Adjust escrow for 3 hours', 500),
+            line('t3', MIA, ME, `Paid for ${LISTING} thanks`, 4000),
         ] as any);
         const onNavigate = await wallet([]);
         const rows = await screen.findAllByTestId('ledger-held-row');
@@ -150,7 +152,7 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
 
     it('a Ledger drawn without a way to navigate has no doors', async () => {
         vi.mocked(getTransactions).mockResolvedValue([line('t1', ME, 'escrow_d1', `Escrow hold for offer ${LISTING}`)] as any);
-        render(<LedgerPage identity={identity} isMember={true} deals={[deal('d1', LISTING, 'pending', 30)]} />);
+        render(<LedgerPage identity={identity} isMember={true} deals={[deal('d1', LISTING, 'pending', 3000)]} />);
         await waitFor(() => expect(getTransactions).toHaveBeenCalled());
         fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
         await screen.findByText('Commons Pool');

@@ -9,12 +9,11 @@
 import { useRef, useState } from 'react';
 import {
     t, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading, makeVoucherNobodyWords, voucherCandidateWords,
-    makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords, VOUCH_PRESET_WORDS, VOUCHER_BUDGET_MAX, isBudgetLevel,
+    makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords, VOUCH_PRESET_WORDS, VOUCHER_BUDGET_DEFAULT, VOUCHER_BUDGET_MAX,
+    VOUCHER_BUDGET_MIN, VOUCHER_BUDGET_STEP, isBudgetLevel,
 } from '@beanpool/core';
 import { makeVoucher, type VoucherCandidate, type VouchersBlockData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
-
-const STEP = 100;
 
 export function MakeVoucherSheet({ candidates, defaultBudget, onClose, onMade }: {
     candidates: VouchersBlockData['candidates'];
@@ -26,7 +25,8 @@ export function MakeVoucherSheet({ candidates, defaultBudget, onClose, onMade }:
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose);
     const [picked, setPicked] = useState<VoucherCandidate | null>(null);
-    const [amount, setAmount] = useState(() => (isBudgetLevel(defaultBudget) ? defaultBudget : 1000));
+    // Whole hundredths, as the node takes a budget (core isBudgetLevel): the community's default, else 1,000 Beans.
+    const [amount, setAmount] = useState(() => (isBudgetLevel(defaultBudget) ? defaultBudget : VOUCHER_BUDGET_DEFAULT));
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
@@ -104,8 +104,8 @@ export function MakeVoucherSheet({ candidates, defaultBudget, onClose, onMade }:
                         <div className="flex items-center gap-3 mb-3">
                             <button
                                 type="button"
-                                onClick={() => setAmount((a) => Math.max(STEP, a - STEP))}
-                                disabled={amount <= STEP || busy}
+                                onClick={() => setAmount((a) => Math.max(VOUCHER_BUDGET_MIN, a - VOUCHER_BUDGET_STEP))}
+                                disabled={amount <= VOUCHER_BUDGET_MIN || busy}
                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                 aria-label={t(VOUCH_PRESET_WORDS.decreaseBudget)}
                             >
@@ -116,7 +116,7 @@ export function MakeVoucherSheet({ candidates, defaultBudget, onClose, onMade }:
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setAmount((a) => Math.min(VOUCHER_BUDGET_MAX, a + STEP))}
+                                onClick={() => setAmount((a) => Math.min(VOUCHER_BUDGET_MAX, a + VOUCHER_BUDGET_STEP))}
                                 disabled={amount >= VOUCHER_BUDGET_MAX || busy}
                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                 aria-label={t(VOUCH_PRESET_WORDS.increaseBudget)}

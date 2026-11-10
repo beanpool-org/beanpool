@@ -37,21 +37,26 @@ function assert(cond: boolean, msg: string): void {
 const voiceCredits = (pk: string) => getDecisionVoiceCredits('no-such-decision', pk).totalCredits;
 function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
+/**
+ * The story's Beans as the node's whole hundredths: a trade's and a gift's amount, a listing's price. Voice credits stay a
+ * count of Beans of value traded (decisions-engine getVoiceCredits: the value over 100), so the A2-26 checks read Beans.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 let txc = 0;
-// A direct peer-to-peer transfer (gift) — must NOT grant governance credit.
+// A direct peer-to-peer transfer (gift) — must NOT grant governance credit. `amount`: whole hundredths.
 function tx(from: string, to: string, amount: number) {
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('etx' + (txc++), from, to, amount, 'm', new Date().toISOString());
 }
 // A COMPLETED marketplace (escrow) trade — the qualified value that backs trust AND votes.
-// FK enforcement is on, so back each trade with a real post (authored by the seller).
+// FK enforcement is on, so back each trade with a real post (authored by the seller). `credits`: whole hundredths.
 function mtx(buyer: string, seller: string, credits: number) {
     const pid = 'ehp-' + (txc++);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
         .run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?,?,?,?,?, 'completed')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?,?,?,?,?, 'completed')`)
         .run('emtx-' + (txc++), pid, buyer, seller, credits);
 }
 
@@ -69,20 +74,20 @@ async function main() {
         // per-counterparty capped. Wash (concentrated) volume is capped; diverse is not.
         const wash = 'wash-' + Date.now();
         seedMember(wash); seedMember('sybilPartner');
-        for (let i = 0; i < 10; i++) mtx(wash, 'sybilPartner', 2000); // 20000 traded with ONE counterparty
+        for (let i = 0; i < 10; i++) mtx(wash, 'sybilPartner', hc(2000)); // 20000 traded with ONE counterparty
         assert(voiceCredits(wash) === 500,
             'A2-26: 20000 traded with one counterparty counts as only 500 (per-counterparty cap)');
 
         const diverse = 'diverse-' + Date.now();
         seedMember(diverse);
-        for (let i = 0; i < 6; i++) { seedMember('partner' + i); mtx(diverse, 'partner' + i, 1000); } // 6 distinct counterparties
+        for (let i = 0; i < 6; i++) { seedMember('partner' + i); mtx(diverse, 'partner' + i, hc(1000)); } // 6 distinct counterparties
         assert(voiceCredits(diverse) === 3000,
             'A2-26: 6000 across 6 counterparties counts capped at 500 each = 3000 (per-counterparty cap)');
 
         // A2-26 (F3 alignment) — direct gifts build NO governance credit, at any size.
         const gifter = 'gifter-' + Date.now();
         seedMember(gifter); seedMember('giftee');
-        for (let i = 0; i < 10; i++) tx(gifter, 'giftee', 2000); // 20000 gifted directly
+        for (let i = 0; i < 10; i++) tx(gifter, 'giftee', hc(2000)); // 20000 gifted directly
         assert(voiceCredits(gifter) === 0,
             'A2-26: 20000 in direct gifts grants 0 governance credit (gifts ≠ qualified trade)');
 
@@ -91,7 +96,7 @@ async function main() {
         pinMainServerForTests(`/ip4/127.0.0.1/tcp/4025/p2p/${nodeId}`);
         const payload: SyncPayload = await signSyncPayload({
             nodeId,
-            transactions: [{ id: 'zero-tx', from: 'A', to: 'B', amount: 0, memo: 'bad', timestamp: new Date().toISOString() } as any],
+            transactions: [{ id: 'zero-tx', from: 'A', to: 'B', amount_c: 0, memo: 'bad', timestamp: new Date().toISOString() } as any],
         });
         const result = await importRemoteState(payload);
         assert(result.conflictsSkipped >= 1 && result.newTransactions === 0,
@@ -101,22 +106,23 @@ async function main() {
 
         // F1 (review FABLE-sec-input, 2026-10-01): a copied account whose balance is NULL (a NaN, as JSON carries it) or
         // text is refused, never imported: the row here keeps the balance it had, and no row is made for a new one.
-        const heldHere = db.prepare('SELECT public_key AS publicKey, balance, last_updated_at AS lastUpdatedAt, last_demurrage_epoch AS lastDemurrageEpoch FROM accounts').all() as any[];
+        const heldHere = db.prepare('SELECT public_key AS publicKey, balance_c, last_updated_at AS lastUpdatedAt, last_demurrage_epoch AS lastDemurrageEpoch FROM accounts').all() as any[];
         const victim = 'giftee';
-        const before = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(victim) as any).balance;
+        const before = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(victim) as any).balance_c;
         const brokenCopy: SyncPayload = await signSyncPayload({
             nodeId,
             accounts: [
-                ...heldHere.map((a) => a.publicKey === victim ? { ...a, balance: null } : a),
-                { publicKey: 'texted-account', balance: 'abc', lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+                ...heldHere.map((a) => a.publicKey === victim ? { ...a, balance_c: null } : a),
+                { publicKey: 'texted-account', balance_c: 'abc', lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
             ],
         } as any);
         let imported: any = null;
         try { imported = await importRemoteState(brokenCopy); } catch (e: any) { imported = { error: e?.message || String(e) }; }
-        const after = db.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(victim) as any;
+        const after = db.prepare('SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = ?').get(victim) as any;
         const texted = db.prepare(`SELECT 1 FROM accounts WHERE public_key = 'texted-account'`).get();
-        const nulls = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE balance IS NULL OR typeof(balance) NOT IN ('integer', 'real')`).get() as any).c;
-        assert(!imported?.error && imported.conflictsSkipped >= 2 && after.t === 'real' && after.balance === before && !texted && nulls === 0,
+        const nulls = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE balance_c IS NULL OR typeof(balance_c) NOT IN ('integer', 'real')`).get() as any).c;
+        // The column is INTEGER whole hundredths now: the row keeps an integer, the one it had.
+        assert(!imported?.error && imported.conflictsSkipped >= 2 && after.t === 'integer' && typeof before === 'number' && after.balance_c === before && !texted && nulls === 0,
             `F1: a copied NULL or text balance is refused, not imported: ${victim} keeps ${before}, no row for the text one, no NULL anywhere (${JSON.stringify({ imported: imported?.error ?? { conflictsSkipped: imported?.conflictsSkipped, accountChanges: imported?.accountChanges }, after, texted: !!texted, nulls })})`);
         // A standby only for that import: A2-18 is the main server's send route. A standby refuses every send before it
         // looks at the recipient (409 standby, config/node-role.ts; test-standby-ledger-copy step 17).
@@ -127,7 +133,7 @@ async function main() {
         const pubHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
         seedMember(pubHex);
         const path = '/api/ledger/transfer';
-        const body = JSON.stringify({ from: pubHex, to: 'escrow_attacker', amount: 5 });
+        const body = JSON.stringify({ from: pubHex, to: 'escrow_attacker', amount_c: hc(5) });
         const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
         const sig = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${body}`), privateKey).toString('base64');
         const res = await fetch(`${BASE}${path}`, {

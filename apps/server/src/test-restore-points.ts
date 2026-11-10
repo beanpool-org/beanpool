@@ -263,7 +263,7 @@ async function child(): Promise<void> {
             const pk = crypto.randomBytes(32).toString('hex');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, is_treasury) VALUES (?, ?, ?, ?, 'TEST', ?)`)
                 .run(pk, callsign, new Date().toISOString(), owner, treasury ? 1 : 0);
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
             return pk;
         };
         if (scenario === 'lived-in') {
@@ -281,7 +281,8 @@ async function child(): Promise<void> {
             // Claimed and poked around in: the owner's own post and an enterprise, nobody else.
             db.prepare("UPDATE members SET avatar_ref = 'members/vera.jpg' WHERE public_key = ?").run(owner);
             try {
-                createPost('offer', 'general', "The owner's first post", 'Trying the server out', 1, 'fixed', owner);
+                // 1 Bean: the price is whole hundredths.
+                createPost('offer', 'general', "The owner's first post", 'Trying the server out', 100, 'fixed', owner);
                 result.post = (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(owner) as { n: number }).n;
             } catch (e: any) { result.post = `ERR ${e?.message}`; }
             join('Vera & Co', true);
@@ -610,7 +611,7 @@ async function main(): Promise<void> {
     seedGenesisMember(owner, 'Olive');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin, 'Adam', new Date().toISOString(), owner, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     grantNodeRole(admin, 'admin', owner);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run('ab'.repeat(32), 'RoundTripMarker', new Date().toISOString(), owner, 'TEST');

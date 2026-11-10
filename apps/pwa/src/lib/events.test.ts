@@ -12,7 +12,7 @@ const HOUR = 60 * 60 * 1000;
 function event(startMs: number, endMs?: number, extra: Partial<MarketplacePost> = {}): MarketplacePost {
     return {
         id: `ev-${startMs}`, type: 'event', category: 'community', title: 'Working bee', description: '',
-        credits: 0, priceType: 'fixed', authorPublicKey: 'host', authorCallsign: 'Host', createdAt: new Date(0).toISOString(),
+        price_c: 0, priceType: 'fixed', authorPublicKey: 'host', authorCallsign: 'Host', createdAt: new Date(0).toISOString(),
         active: true, status: 'active', repeatable: false, lat: -28.5, lng: 153.5,
         eventStartAt: new Date(startMs).toISOString(),
         ...(endMs != null ? { eventEndAt: new Date(endMs).toISOString() } : {}),

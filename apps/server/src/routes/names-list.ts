@@ -36,8 +36,8 @@
  * `profile_no_beans`), and never their own budget (403 `own_budget`):
  *   GET    /api/names/vouchers                      → { vouchers: [row], waiting, candidates: { admins, confirmed }, settings }
  *                                                     (the vouchers block: owners and committee)
- *   POST   /api/names/vouchers                      { entryId, amount? } → 201 card: a confirmed entry's member made a voucher;
- *                                                   { memberPubkey, amount? } → 201 card: an admin made one by an owner (I5)
+ *   POST   /api/names/vouchers                      { entryId, amount_c? } → 201 card: a confirmed entry's member made a voucher;
+ *                                                   { memberPubkey, amount_c? } → 201 card: an admin made one by an owner (I5)
  *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange, canStop } (any owner or admin; logged)
  *   DELETE /api/names/vouchers/:member              → card: Stop vouching (409 role_voucher for an owner's; an admin's by an owner)
  *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)

@@ -202,7 +202,7 @@ async function main() {
     const shop = member('Bangalow Bakery', null, 1);
     db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, 'lead', ?)").run(shop.pubKeyHex, kim.pubKeyHex, iso(T0));
 
-    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    event_start_at, event_end_at, event_private_note, event_host_lets_in, audience_scope)
                                 VALUES (@id, @type, 'general', @title, '', 0, @author, @at, @at, @lat, @lng, @start, @end, @note, @letsIn, 'public')`);
     const place = new Map<string, { lat: number; lng: number }>();
@@ -466,7 +466,7 @@ async function main() {
         const authorSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
         await sleep(300);
         const made = await post('/api/marketplace/posts', { type: 'offer', category: 'general', title: `Reach ${k}`, description: 'Spare seedlings',
-            credits: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng, photos: TEST_PHOTOS }, alice);
+            price_c: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng, photos: TEST_PHOTOS }, alice);
         const newId = made.body?.id ?? made.body?.post?.id;
         await sleep(800);
         const got = (s: Sock) => s.raw.some(x => { try { const e = JSON.parse(x); return (e.post?.id ?? e.id) === newId; } catch { return false; } });
@@ -619,7 +619,7 @@ async function main() {
     const SP = { lat: -28.664321, lng: 153.587654 };
     const SC = cellOf(SP.lat, SP.lng);
     const madeSeries = await post('/api/marketplace/posts', {
-        type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', credits: 0, authorPublicKey: hana.pubKeyHex,
+        type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', price_c: 0, authorPublicKey: hana.pubKeyHex,
         lat: SP.lat, lng: SP.lng, photos: TEST_PHOTOS, eventPrivateNote: 'Side gate, number 7', eventHostLetsIn: true,
         eventStartLocal: '2098-01-03T19:00', eventEndLocal: '2098-01-03T21:00', eventTz: 'Australia/Sydney',
         eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },

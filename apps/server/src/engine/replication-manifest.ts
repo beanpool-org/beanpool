@@ -172,9 +172,9 @@ export const TABLES: Record<string, TableEntry> = {
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
         columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_ref avatar_bytes bio contact_value contact_visibility status
-            credit_frozen is_treasury can_operate credit_committee earned_credit earned_surplus working_capital_ceiling
-            legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
-            paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
+            credit_frozen is_treasury can_operate credit_committee earned_credit_c earned_surplus_c working_capital_ceiling_c
+            profile_updated_at archetype purpose goal_amount_c deadline_at lifecycle paused paused_at paused_by
+            paused_floor_snapshot_c wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
             location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
             board_standing_changed_at inviter_shown`),
         except: {
@@ -202,12 +202,12 @@ export const TABLES: Record<string, TableEntry> = {
     // tombstone.
     treasury_operators: {
         kind: 'replicated', payload: 'treasuryOperators', watermark: WHOLE_SET,
-        columns: cols('treasury_pubkey member_pubkey role granted_at granted_by backing auto_promoted_at'),
+        columns: cols('treasury_pubkey member_pubkey role granted_at granted_by backing_c auto_promoted_at'),
     },
     // Keepers' pledges (G2c): made (pledged_at) and released (released_at), never deleted.
     enterprise_pledges: {
         kind: 'replicated', payload: 'enterprisePledges', watermark: 'pledged_at', orWatermark: 'released_at',
-        columns: cols('id keeper enterprise amount pledged_at released_at'),
+        columns: cols('id keeper enterprise amount_c pledged_at released_at'),
     },
     // A listing, its photos, a deal and a crowdfund project are the main server's rows verbatim, stamps included: the
     // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
@@ -217,7 +217,7 @@ export const TABLES: Record<string, TableEntry> = {
     // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions'),
+        columns: cols('id type category title description price_c author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -243,7 +243,7 @@ export const TABLES: Record<string, TableEntry> = {
     // (routes/treasury.ts, db.ts pledgeToProject).
     projects: {
         kind: 'replicated', payload: 'projects', watermark: 'updated_at',
-        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at keeper_left_at'),
+        columns: cols('id creator_pubkey title description photos goal_amount_c current_amount_c deadline_at status migrated_at enterprise_pubkey created_at updated_at keeper_left_at'),
     },
     ratings: {
         kind: 'replicated-except', payload: 'ratings', watermark: 'created_at',
@@ -256,18 +256,18 @@ export const TABLES: Record<string, TableEntry> = {
     // importRemoteState, G0). The Commons row's stamp is every server's own boot (BOOT_STAMPED).
     accounts: {
         kind: 'replicated', payload: 'accounts', watermark: WHOLE_SET,
-        columns: cols('public_key balance last_updated_at last_demurrage_epoch'),
+        columns: cols('public_key balance_c last_updated_at last_demurrage_epoch'),
     },
     transactions: {
         kind: 'replicated', payload: 'transactions', watermark: 'timestamp',
-        columns: cols('id from_pubkey to_pubkey amount tax_fee memo timestamp auth_signer auth_signature auth_payload project_id'),
+        columns: cols('id from_pubkey to_pubkey amount_c fee_c memo timestamp auth_signer auth_signature auth_payload project_id'),
         clearedByTombstone: {
             project_id: { tombstone: 'projects', reason: "a crowdfund project's delete stops its trades naming it (db.ts deleteCrowdfundProject)" },
         },
     },
     marketplace_transactions: {
         kind: 'replicated', payload: 'marketplaceTransactions', watermark: 'updated_at',
-        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at updated_at last_reminded_at dispute_resolution dispute_resolved_at dispute_resolved_by standing_id period_no'),
+        columns: cols('id post_id buyer_pubkey seller_pubkey amount_c hours status created_at completed_at updated_at last_reminded_at dispute_resolution dispute_resolved_at dispute_resolved_by standing_id period_no'),
     },
     friends: {
         kind: 'replicated-except', payload: 'friends', watermark: 'updated_at',
@@ -320,7 +320,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     settlements: {
         kind: 'replicated', payload: 'settlements', watermark: 'updated_at',
-        columns: cols('key direction peer_id buyer_pubkey buyer_home_node seller_pubkey post_id amount fee reserved_until state receipt receipt_payload failure_reason created_at updated_at'),
+        columns: cols('key direction peer_id buyer_pubkey buyer_home_node seller_pubkey post_id amount_c fee_c reserved_until state receipt receipt_payload failure_reason created_at updated_at'),
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
@@ -407,10 +407,10 @@ export const TABLES: Record<string, TableEntry> = {
 
     // ── In-flight money and governance, on the generic path (design G3; PLAIN_TABLES_PAYLOAD) ──
     // A keeper's wage owed and not yet paid: paid once after a take-over, since one the main server paid arrives paid.
-    deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
+    deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount_c status created_at paid_at updated_at'),
     // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
     // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
-    standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
+    standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period_c period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
@@ -430,14 +430,14 @@ export const TABLES: Record<string, TableEntry> = {
                 + 'unsealed in every copy. An owner a promoted server gives the role back to makes a new code',
         },
     } }),
-    enterprise_keeper_requests: plain('id enterprise_pubkey member_pubkey pledged_backing status created_at decided_at decided_by updated_at'),
-    enterprise_keeper_changes: plain('id enterprise_pubkey kind member_pubkey request_id pledged_backing proposed_by status created_at applies_at resolved_at resolved_by reason updated_at'),
+    enterprise_keeper_requests: plain('id enterprise_pubkey member_pubkey pledged_backing_c status created_at decided_at decided_by updated_at'),
+    enterprise_keeper_changes: plain('id enterprise_pubkey kind member_pubkey request_id pledged_backing_c proposed_by status created_at applies_at resolved_at resolved_by reason updated_at'),
     enterprise_succession_proposals: plain('id enterprise_pubkey lead_pubkey candidate_pubkey proposer_pubkey status created_at executed_at deadline_at closed_reason updated_at'),
     enterprise_succession_votes: plain('proposal_id voter_pubkey voted_at choice updated_at'),
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome vouch_amount voucher_level voucher_outcome updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome vouch_amount_c voucher_level_c voucher_outcome updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches kind'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
@@ -451,7 +451,7 @@ export const TABLES: Record<string, TableEntry> = {
     // community's seal key by the take-over, brings the same members back.
     community_copies: plain('owner_pubkey copy_ct copy_iv copy_tag kdf_params created_at updated_at'),
     // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
-    federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
+    federation_links: plain('peer_id treasury_pubkey commission_ceiling_c created_at updated_at'),
     // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
     // its treasury again, never a member's enterprise of the same name.
     federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
@@ -471,20 +471,20 @@ export const TABLES: Record<string, TableEntry> = {
     confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason stepped_back_owing updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
-    known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
+    known_floor_exceptions: plain('member_pubkey amount_c frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),
-    voucher_allocations: plain('id member_pubkey kind amount actor ref at updated_at'),
-    room_gifts: plain('id from_pubkey to_pubkey root_pubkey kind amount source_gift_id invite_code at written_off written_off_at updated_at'),
+    voucher_allocations: plain('id member_pubkey kind amount_c actor ref at updated_at'),
+    room_gifts: plain('id from_pubkey to_pubkey root_pubkey kind amount_c source_gift_id invite_code at written_off_c written_off_at updated_at'),
     // Every change to how this community works (config/community-shape.ts): the owners' accountability, as the known floor's
     // log is, and a server that takes over shows the same lines and carries on the same ids.
     community_settings_log: plain('id actor_pubkey actor_role setting old_value new_value note at updated_at'),
     health_access_log: plain('id actor_pubkey action subject_pubkey detail token_id token_name at updated_at'),
     known_consent_log: plain('id member_pubkey action version at updated_at'),
-    names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at hardship_held updated_at'),
-    names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
+    names_debts: plain('id entry_id amount_c reason removed_at status repaying_pubkey repaid_c settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at hardship_held_c updated_at'),
+    names_debt_payments: plain('transaction_id debt_id payer_pubkey amount_c paid_at updated_at'),
     // A member's retried payment gets its first answer (engine/money-requests.ts), on a standby that took over too. Its
     // week-old ids go without tombstones, on each server (engine/money-requests.ts pruneMoneyRequests; the age rule).
     money_requests: plain('payer_pubkey request_id route fingerprint answer created_at updated_at', { agedOut: { column: 'created_at', days: 7 } }),

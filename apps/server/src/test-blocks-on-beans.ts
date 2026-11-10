@@ -46,6 +46,8 @@ const PW_MAIN = 'Beans-Note-Main-Pw-417!';
 const PW_STANDBY = 'Beans-Note-Standby-Pw-93!';
 /** What the member who blocked the sender reads in place of the note (@beanpool/core BLOCKED_BEANS_NOTE). */
 const NEUTRAL = 'Beans from a member you blocked';
+/** The story's Beans as the node's whole hundredths (every send, price, balance and row here is hundredths: exact). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -80,14 +82,14 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), ?, ?, 'active',
                                     strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, name, a.genesis, `INV-${name}`);
                 setMemberPhoto(db, key, 'data:image/png;base64,iVBORw0KGgo=');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
                 putPushTokenRow(key, `ExponentPushToken[${name}]`, 'android');
             }
             // Each sender holds Beans and has a completed trade behind them: a direct send needs both (state-engine transfer).
-            const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk, undefined, undefined, TEST_PHOTOS)!;
+            const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, hc(10), 'fixed', pk, undefined, undefined, TEST_PHOTOS)!;
             offer(a.seller, 'Dee eggs');
             for (const pk of a.senders) {
-                se.transfer('genesis', pk, 100, 'seed', 'direct', true);
+                se.transfer('genesis', pk, hc(100), 'seed', 'direct', true);
                 offer(pk, `Seedlings ${pk.slice(0, 6)}`);
                 se.completePostTransaction(se.acceptPost(offer(a.seller, `Bread ${pk.slice(0, 6)}`).id, pk).id, pk);
             }
@@ -109,9 +111,9 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             const se = await import('./state-engine.js');
             const row = a.txId ? db.prepare('SELECT * FROM transactions WHERE id = ?').get(a.txId) as any : null;
-            const balances = Object.fromEntries(a.keys.map(k => [k, (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(k) as any)?.balance ?? null]));
-            const memory = Object.fromEntries(a.keys.map(k => [k, se.getBalance(k)?.balance ?? null]));
-            const sum = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            const balances = Object.fromEntries(a.keys.map(k => [k, (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(k) as { balance_c: number } | undefined)?.balance_c ?? null]));
+            const memory = Object.fromEntries(a.keys.map(k => [k, se.getBalance(k)?.balance_c ?? null]));
+            const sum = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
             let audit: unknown;
             try { audit = se.runLedgerAudit(); } catch (e: any) { audit = { error: e?.message }; }
             return { row, balances, memory, sum, audit };
@@ -249,7 +251,7 @@ async function main(): Promise<void> {
 
         // ── 1. before any block ─────────────────────────────────────────────────────────────────
         console.log('── 1. before any block ──');
-        const cySend = await signedCall(base, 'POST', '/api/ledger/transfer', cy, { to: ann.pk, amount: 2, memo: CY_NOTE });
+        const cySend = await signedCall(base, 'POST', '/api/ledger/transfer', cy, { to: ann.pk, amount_c: hc(2), memo: CY_NOTE });
         const cyTx: string = cySend.body?.transaction?.id;
         require_(cySend.status === 200 && cySend.body?.success === true && !!cyTx, `Cy sends Ann 2 Beans with a note (${show(cySend)})`);
         await sleep(150);
@@ -266,30 +268,30 @@ async function main(): Promise<void> {
         annSock.events.length = 0;
         const pushesBefore = (await main.send('pushes') as any[]).filter(p => p.to === 'ExponentPushToken[Ann]').length;
         const before = await main.send('ledger', { keys: [ann.pk, bo.pk] });
-        const boSend = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount: 3, memo: NOTE });
+        const boSend = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount_c: hc(3), memo: NOTE });
         const boTx: string = boSend.body?.transaction?.id;
         require_(boSend.status === 200 && boSend.body?.success === true && !!boTx, `the send is accepted (${show(boSend)})`);
         await sleep(200);
         assert(keysOf(boSend.body) === keysOf(cySend.body) && keysOf(boSend.body.transaction) === keysOf(cySend.body.transaction),
             `answered in the shape Cy's send was (${keysOf(boSend.body.transaction)} vs ${keysOf(cySend.body.transaction)})`);
-        assert(boSend.body.transaction.memo === NOTE && boSend.body.transaction.amount === 3 && boSend.body.transaction.to === ann.pk
+        assert(boSend.body.transaction.memo === NOTE && boSend.body.transaction.amount_c === hc(3) && boSend.body.transaction.to === ann.pk
             && boSend.body.transaction.from === bo.pk, `with his note in it, as he wrote it (${JSON.stringify(boSend.body.transaction.memo)})`);
         const after = await main.send('ledger', { txId: boTx, keys: [ann.pk, bo.pk] });
-        assert(Math.abs(after.balances[ann.pk] - before.balances[ann.pk] - 3) < 1e-9 && Math.abs(before.balances[bo.pk] - after.balances[bo.pk] - 3) < 1e-9,
-            `the Beans arrive in full: Ann ${before.balances[ann.pk]} -> ${after.balances[ann.pk]}, Bo ${before.balances[bo.pk]} -> ${after.balances[bo.pk]}`);
+        assert(after.balances[ann.pk] - before.balances[ann.pk] === hc(3) && before.balances[bo.pk] - after.balances[bo.pk] === hc(3),
+            `the Beans arrive in full: Ann ${before.balances[ann.pk]} -> ${after.balances[ann.pk]}, Bo ${before.balances[bo.pk]} -> ${after.balances[bo.pk]} (hundredths)`);
         assert(after.memory[ann.pk] === after.balances[ann.pk] && after.memory[bo.pk] === after.balances[bo.pk], 'the in-memory ledger agrees with the rows');
-        assert(after.row?.amount === 3 && after.row?.from_pubkey === bo.pk && after.row?.to_pubkey === ann.pk && after.row?.tax_fee === 0,
-            `one ledger row, the amount sent, fee-free as any direct send (${JSON.stringify({ amount: after.row?.amount, fee: after.row?.tax_fee })})`);
+        assert(after.row?.amount_c === hc(3) && after.row?.from_pubkey === bo.pk && after.row?.to_pubkey === ann.pk && after.row?.fee_c === 0,
+            `one ledger row, the amount sent, fee-free as any direct send (${JSON.stringify({ amount_c: after.row?.amount_c, fee_c: after.row?.fee_c })})`);
         assert(after.row?.auth_signer === bo.pk && typeof after.row?.auth_signature === 'string' && String(after.row?.auth_payload).includes('/api/ledger/transfer'),
             'its signed request is kept, as any send\'s is (SRV-20)');
-        assert(Math.abs(after.sum - before.sum) < 1e-9, `the ledger conserves: the accounts sum ${before.sum} -> ${after.sum}`);
-        assert(after.audit?.ok === true && Math.abs(after.audit?.drift ?? 1) < 1e-6, `the ledger audit holds (${JSON.stringify(after.audit)})`);
+        assert(after.sum === before.sum, `the ledger conserves: the accounts sum ${before.sum} -> ${after.sum}`);
+        assert(after.audit?.ok === true && after.audit?.drift === 0, `the ledger audit holds (${JSON.stringify(after.audit)})`);
 
         // ── 3. Ann never sees the note ──────────────────────────────────────────────────────────
         console.log('── 3. the member who blocked him never sees the note ──');
         const annHistory = await historyOf(ann);
         const annRow = rowIn(annHistory, boTx);
-        assert(annHistory.status === 200 && !!annRow && annRow.amount === 3 && annRow.from === bo.pk,
+        assert(annHistory.status === 200 && !!annRow && annRow.amount_c === hc(3) && annRow.from === bo.pk,
             `the send is in Ann's history, 3 Beans from Bo (${JSON.stringify(annRow)?.slice(0, 140)})`);
         assert(!annHistory.text.includes(NOTE), 'with no note anywhere in what she reads');
         assert(annRow?.memo === NEUTRAL, `she reads "${NEUTRAL}" in its place (${JSON.stringify(annRow?.memo)})`);
@@ -315,7 +317,7 @@ async function main(): Promise<void> {
         const boHistory = await historyOf(bo);
         const boRow = rowIn(boHistory, boTx);
         const cyRow = rowIn(await historyOf(cy), cyTx);
-        assert(boRow?.memo === NOTE && boRow?.amount === 3 && keysOf(boRow) === keysOf(cyRow),
+        assert(boRow?.memo === NOTE && boRow?.amount_c === hc(3) && keysOf(boRow) === keysOf(cyRow),
             `his history shows his note, in the shape Cy's has (${JSON.stringify(boRow)?.slice(0, 140)})`);
         const boExport = await exportOf(bo);
         assert(boExport.status === 200 && boExport.text.includes(NOTE) && !boExport.text.includes(NEUTRAL), 'his export has his note, and no neutral line');
@@ -329,7 +331,7 @@ async function main(): Promise<void> {
         console.log("── 5. a standby's copy ──");
         const copy = JSON.parse(await main.send('copy', { nodeId: main.ready.peerId }));
         const copied = (copy.transactions ?? []).find((t: any) => t.id === boTx);
-        assert(!!copied && copied.memo === '' && copied.amount === 3, `the copy carries the send, with no note (${JSON.stringify(copied?.memo)})`);
+        assert(!!copied && copied.memo === '' && copied.amount_c === hc(3), `the copy carries the send, with no note (${JSON.stringify(copied?.memo)})`);
         const withoutSigned = JSON.stringify(copy, (k, v) => (k === 'authPayload' ? undefined : v));
         assert(!withoutSigned.includes(NOTE) && !JSON.stringify(Object.keys(copy)).includes('withheld'),
             'and nothing in it holds the note, but the sender\'s own signed request');
@@ -341,7 +343,7 @@ async function main(): Promise<void> {
         const seeded = await standby.send('resync');
         require_(seeded.ok, `the standby copies its main server (${JSON.stringify(seeded)?.slice(0, 160)})`);
         const sLedger = await standby.send('ledger', { txId: boTx, keys: [ann.pk, bo.pk] });
-        assert(sLedger.row?.amount === 3 && sLedger.row?.from_pubkey === bo.pk && sLedger.row?.to_pubkey === ann.pk,
+        assert(sLedger.row?.amount_c === hc(3) && sLedger.row?.from_pubkey === bo.pk && sLedger.row?.to_pubkey === ann.pk,
             'the send is on the standby, its authorship re-checked (ENFORCE_LEDGER_AUTH)');
         assert(sLedger.row?.memo === '' && sLedger.balances[ann.pk] === after.balances[ann.pk] && sLedger.balances[bo.pk] === after.balances[bo.pk],
             `with no note, and the same balances (${JSON.stringify(sLedger.row?.memo)})`);
@@ -359,7 +361,7 @@ async function main(): Promise<void> {
         require_(unblk.status === 200, `Ann unblocks Bo (${show(unblk)})`);
         const annAfter = await historyOf(ann);
         assert(!annAfter.text.includes(NOTE) && rowIn(annAfter, boTx)?.memo === NEUTRAL, 'nothing old arrives: the send still shows the neutral line');
-        const later = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount: 1, memo: LATER });
+        const later = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount_c: hc(1), memo: LATER });
         const laterTx: string = later.body?.transaction?.id;
         const annLater = await historyOf(ann);
         assert(later.status === 200 && rowIn(annLater, laterTx)?.memo === LATER, `a note sent after it arrives (${show(later)})`);
@@ -370,22 +372,22 @@ async function main(): Promise<void> {
         const blkAgain = await signedCall(base, 'POST', '/api/blocks', ann, { targetPubkey: bo.pk });
         require_(blkAgain.status === 200, `Ann blocks Bo again (${show(blkAgain)})`);
         annSock.events.length = 0;
-        const control = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: dee.pk, amount: 1, memo: NUM });
+        const control = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: dee.pk, amount_c: hc(1), memo: NUM });
         const controlTx: string = control.body?.transaction?.id;
         require_(control.status === 200 && !!controlTx, `Bo sends Dee (who has not blocked him) a number note: the shape to hold his send to Ann to (${show(control)})`);
-        const numSend = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount: 1, memo: NUM });
+        const numSend = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount_c: hc(1), memo: NUM });
         const numTx: string = numSend.body?.transaction?.id;
         require_(numSend.status === 200 && numSend.body?.success === true && !!numTx, `Bo sends Ann a number note; accepted (${show(numSend)})`);
         await sleep(200);
         const annNum = await historyOf(ann);
-        assert(rowIn(annNum, numTx)?.memo === NEUTRAL && rowIn(annNum, numTx)?.amount === 1, `Ann's history has the send with the neutral line (${JSON.stringify(rowIn(annNum, numTx)?.memo)})`);
+        assert(rowIn(annNum, numTx)?.memo === NEUTRAL && rowIn(annNum, numTx)?.amount_c === hc(1), `Ann's history has the send with the neutral line (${JSON.stringify(rowIn(annNum, numTx)?.memo)})`);
         assert(!annNum.text.includes(String(NUM)), 'and no digit of the number note');
         const annNumExport = await exportOf(ann);
         assert(annNumExport.status === 200 && annNumExport.text.includes(numTx) && !annNumExport.text.includes(String(NUM)), 'her export has the send and not the number');
         assert(txnEvents(annSock, numTx).length === 1 && txnEvents(annSock, numTx)[0].txn?.memo === NEUTRAL && !annSock.events.some(e => JSON.stringify(e).includes(String(NUM))),
             `her socket hears it with the neutral line, and never the number (${JSON.stringify(txnEvents(annSock, numTx).map(e => e.txn?.memo))})`);
         const numLedger = await main.send('ledger', { txId: numTx, keys: [ann.pk] });
-        assert(numLedger.row?.memo === '' && numLedger.row?.amount === 1, `the ledger row stores no note (${JSON.stringify(numLedger.row?.memo)})`);
+        assert(numLedger.row?.memo === '' && numLedger.row?.amount_c === hc(1), `the ledger row stores no note (${JSON.stringify(numLedger.row?.memo)})`);
         const numCopy = await main.send('copy', { nodeId: main.ready.peerId });
         const numCopied = (JSON.parse(numCopy).transactions ?? []).find((t: any) => t.id === numTx);
         assert(!!numCopied && numCopied.memo === '' && !JSON.stringify(numCopied, (k, v) => (k === 'authPayload' ? undefined : v)).includes(String(NUM))
@@ -415,7 +417,7 @@ async function main(): Promise<void> {
         assert((await exportOf(ann)).text.split(NEUTRAL).length - 1 >= 2, 'her export still says it');
         const EVE_NOTE = `from eve ${crypto.randomBytes(4).toString('hex')}`;
         const blkEve = await signedCall(base, 'POST', '/api/blocks', ann, { targetPubkey: eve.pk });
-        const eveSend = await signedCall(base, 'POST', '/api/ledger/transfer', eve, { to: ann.pk, amount: 2, memo: EVE_NOTE });
+        const eveSend = await signedCall(base, 'POST', '/api/ledger/transfer', eve, { to: ann.pk, amount_c: hc(2), memo: EVE_NOTE });
         const eveKept = await main.send('holding', { text: EVE_NOTE, recipient: ann.pk });
         assert(blkEve.status === 200 && eveSend.status === 200 && eveKept.withheld === 1 && eveKept.memos === 0,
             `Ann blocks Eve, and Eve's note is kept for Eve alone (${show(eveSend)})`);

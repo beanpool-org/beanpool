@@ -76,7 +76,11 @@ function assert(cond: boolean, msg: string): void {
 }
 const DAY = 24 * 60 * 60 * 1000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-const r4 = (n: number) => Math.round(n * 10_000) / 10_000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths
+ * at the door, and every balance below is read as the integer its row holds, so each check is exact.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 const uuid = () => crypto.randomUUID();
 
 // ── members and signed requests ─────────────────────────────────────────────────────────────────────────────────
@@ -134,14 +138,14 @@ async function runChild(): Promise<void> {
             insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
             setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
             // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, hc(m.balance), ledger.getCurrentEpoch());
         }
         reconcileLedgerFromDb();
     }
     const { addConnector, setConnectorCreditCap } = await import('./connector-manager.js');
     if (first) {
         addConnector(seed.peer.address, 'peer', 'Faraway', seed.peer.url);
-        setConnectorCreditCap(seed.peer.address, 500);
+        setConnectorCreditCap(seed.peer.address, hc(500));
     }
     // This node's own transport, listening on this machine only for the test's life: the settlement routes ask it.
     const { startP2P } = await import('./p2p.js');
@@ -149,13 +153,13 @@ async function runChild(): Promise<void> {
     const { ensureFederationLink, setCommissionCeiling } = await import('./federation-link.js');
     const link = ensureFederationLink(seed.peer.peerId, 'Faraway', createTreasury, seed.link.keeper)!;
     if (first) {
-        setCommissionCeiling(seed.peer.peerId, 500);
-        db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), link.treasuryPubkey);
+        setCommissionCeiling(seed.peer.peerId, hc(500));
+        db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(hc(seed.link.balance), ledger.getCurrentEpoch(), link.treasuryPubkey);
         // The seller is a member of the other community (a visitor's row with its home), and the listing came from there.
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, home_node_url, is_visitor) VALUES (?, 'Far Seller', ?, ?, 1)`)
             .run(seed.link.seller, ago(7 * DAY), seed.peer.url);
-        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, origin_node)
-                    VALUES (?, 'offer', 'other', 'A far thing', 'test', 1, ?, 'active', 1, ?)`).run(seed.link.postId, seed.link.seller, seed.peer.url);
+        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, origin_node)
+                    VALUES (?, 'offer', 'other', 'A far thing', 'test', ?, ?, 'active', 1, ?)`).run(seed.link.postId, hc(1), seed.link.seller, seed.peer.url);
         reconcileLedgerFromDb();
     }
     const port = await startHttpsServer(0);
@@ -211,7 +215,7 @@ function startNode(dataDir: string, seed: Seed): Promise<Node> {
 
 /** Outbound settlements under a key this node did not make (`xn-` or `xc-` and a 36-character UUID). */
 const SQL_FOREIGN_KEYS = `
-SELECT s.key, s.state, s.buyer_pubkey, s.amount, s.fee, s.failure_reason, s.created_at
+SELECT s.key, s.state, s.buyer_pubkey, s.amount_c, s.fee_c, s.failure_reason, s.created_at
 FROM settlements s
 WHERE s.direction = 'outbound'
   AND NOT (length(s.key) = 39 AND substr(s.key, 1, 3) IN ('xn-', 'xc-'))
@@ -219,7 +223,7 @@ ORDER BY s.created_at`;
 
 /** What each of those moved, and from or to whose escrow: every ledger row naming its key, or its escrow. */
 const SQL_FOREIGN_KEY_MOVES = `
-SELECT s.key, t.id, t.from_pubkey, t.to_pubkey, t.amount, t.memo, t.timestamp
+SELECT s.key, t.id, t.from_pubkey, t.to_pubkey, t.amount_c, t.memo, t.timestamp
 FROM settlements s
 JOIN transactions t ON t.from_pubkey = 'escrow_' || s.key OR t.to_pubkey = 'escrow_' || s.key
 WHERE s.direction = 'outbound'
@@ -228,7 +232,7 @@ ORDER BY s.key, t.timestamp`;
 
 /** A projects row under an enterprise's key whose creator is not one of that enterprise's keepers (#1329's last clause). */
 const SQL_PROJECT_ON_ANOTHERS_ENTERPRISE = `
-SELECT p.id, p.creator_pubkey, p.status, p.current_amount
+SELECT p.id, p.creator_pubkey, p.status, p.current_amount_c
 FROM projects p JOIN members m ON m.public_key = p.id AND m.is_treasury = 1
 WHERE p.creator_pubkey IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM treasury_operators o WHERE o.treasury_pubkey = p.id AND o.member_pubkey = p.creator_pubkey)`;
@@ -238,8 +242,8 @@ WHERE p.creator_pubkey IS NOT NULL
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /** Every account row but the COMMONS_POOL shadow, plus the live Commons. */
-const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
-const bal = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact();
+const bal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0;
 const hasAccount = (pk: string) => !!db.prepare('SELECT 1 FROM accounts WHERE public_key = ?').get(pk);
 
 function seedMember(name: string, balance: number, isTreasury = false): string {
@@ -247,7 +251,7 @@ function seedMember(name: string, balance: number, isTreasury = false): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury) VALUES (?, ?, ?, 'active', ?)`)
         .run(pk, name, ago(7 * DAY), isTreasury ? 1 : 0);
     setMemberPhoto(db, pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, hc(balance), ledger.getCurrentEpoch());
     return pk;
 }
 
@@ -264,18 +268,18 @@ async function engineChecks(): Promise<void> {
     const holder = seedMember('Holder', 0);
     const shop = seedMember('Shop', 20, true);
     const project = uuid();
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Orchard', 'test', '[]', 1000, 'ACTIVE')`).run(project, holder);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, ?)').run(`escrow_${project}`, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Orchard', 'test', '[]', ?, 'ACTIVE')`).run(project, holder, hc(1000));
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(`escrow_${project}`, hc(50), ledger.getCurrentEpoch());
     const bareProject = uuid();     // a project nobody has pledged to yet: no escrow account
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Hall', 'test', '[]', 1000, 'ACTIVE')`).run(bareProject, holder);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Hall', 'test', '[]', ?, 'ACTIVE')`).run(bareProject, holder, hc(1000));
     const deal = uuid();
     const dealPost = uuid();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'other', 'Mowing', 'test', 4, ?, 'pending')`).run(dealPost, holder);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 4, 'pending', ?)`)
-        .run(deal, dealPost, buyer, holder, new Date().toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 4, ?)').run(`escrow_${deal}`, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'other', 'Mowing', 'test', ?, ?, 'pending')`).run(dealPost, hc(4), holder);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
+        .run(deal, dealPost, buyer, holder, hc(4), new Date().toISOString());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(`escrow_${deal}`, hc(4), ledger.getCurrentEpoch());
     const emptyEscrow = uuid();     // an escrow account at 0: one that held Beans and paid them out
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(`escrow_${emptyEscrow}`, ledger.getCurrentEpoch());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(`escrow_${emptyEscrow}`, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
 
     const baseline = nodeTotal();
@@ -294,7 +298,7 @@ async function engineChecks(): Promise<void> {
     for (const [key, what] of clashes) {
         let thrown: unknown = null;
         try {
-            beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 10 });
+            beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(10) });
         } catch (e) { thrown = e; }
         const reason = thrown instanceof SettlementError ? thrown.reason : String((thrown as any)?.message ?? thrown);
         const row = getSettlement(key)?.state ?? null;
@@ -311,22 +315,22 @@ async function engineChecks(): Promise<void> {
 
     // A key the node makes: funds from the buyer, once.
     const key = `xn-${uuid()}`;
-    const opened = beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 10 });
-    assert(opened.state === 'escrowed' && bal(buyer) === 89.85 && bal(`escrow_${key}`) === 10.15,
+    const opened = beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(10) });
+    assert(opened.state === 'escrowed' && bal(buyer) === hc(89.85) && bal(`escrow_${key}`) === hc(10.15),
         `1. a new key the node made is funded from the buyer: 10 and its fee of 0.15 (${opened.state}, buyer ${bal(buyer)}, escrow ${bal(`escrow_${key}`)})`);
-    const again = beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 10 });
-    assert(again.key === key && again.state === 'escrowed' && bal(buyer) === 89.85 && bal(`escrow_${key}`) === 10.15,
+    const again = beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(10) });
+    assert(again.key === key && again.state === 'escrowed' && bal(buyer) === hc(89.85) && bal(`escrow_${key}`) === hc(10.15),
         `1. the same key again is a retry: it finds its row and debits nobody a second time (buyer ${bal(buyer)}, escrow ${bal(`escrow_${key}`)})`);
     abandonOutboundSettlement(key, 'ASK_UNREACHABLE');
-    assert(bal(buyer) === 100 && bal(`escrow_${key}`) === 0 && getSettlement(key)?.state === 'abandoned' && nodeTotal() === baseline,
+    assert(bal(buyer) === hc(100) && bal(`escrow_${key}`) === 0 && getSettlement(key)?.state === 'abandoned' && nodeTotal() === baseline,
         `1. abandoning it gives the buyer back exactly their own 10.15, and the escrow ends at 0 (buyer ${bal(buyer)}, escrow ${bal(`escrow_${key}`)}, total ${nodeTotal()})`);
     assert(held() === heldBefore, `1. and the project's, the deal's and the enterprise's Beans are where they were (${held()})`);
 
     // An inbound settlement's key is the peer's choice and names no account here, so it takes no id the node makes itself.
     const pulseDay = new Date('2026-08-16T05:00:00Z');
     const pulseKey = `pulse_${new Date(pulseDay.getTime() - pulseDay.getTimezoneOffset() * 60_000).toISOString().split('T')[0]}`;
-    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state)
-                VALUES (?, 'inbound', ?, ?, ?, 1, 0, 'reserved')`).run(pulseKey, PEER, crypto.randomBytes(32).toString('hex'), holder);
+    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount_c, fee_c, state)
+                VALUES (?, 'inbound', ?, ?, ?, ?, 0, 'reserved')`).run(pulseKey, PEER, crypto.randomBytes(32).toString('hex'), holder, hc(1));
     let pulsePost: any = null;
     let pulseError = '';
     try { pulsePost = rotateDailyPulse(pulseDay).post; } catch (e: any) { pulseError = String(e?.message ?? e); }
@@ -339,19 +343,19 @@ async function engineChecks(): Promise<void> {
     // A settlement made the old way, under a project's id, and the release it paid out of that project's escrow. Planted:
     // this build refuses to make one, which is the point.
     const legacy = uuid();
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Pool', 'test', '[]', 1000, 'ACTIVE')`).run(legacy, holder);
-    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state, failure_reason)
-                VALUES (?, 'outbound', ?, ?, ?, 40, 0.6, 'abandoned', 'ASK_UNREACHABLE')`).run(legacy, PEER, holder, seller);
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 40.6, ?, ?)`)
-        .run(uuid(), `escrow_${legacy}`, holder, `Released cross-community hold (${legacy})`, new Date().toISOString());
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Pool', 'test', '[]', ?, 'ACTIVE')`).run(legacy, holder, hc(1000));
+    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount_c, fee_c, state, failure_reason)
+                VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'abandoned', 'ASK_UNREACHABLE')`).run(legacy, PEER, holder, seller, hc(40), hc(0.6));
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(uuid(), `escrow_${legacy}`, holder, hc(40.6), `Released cross-community hold (${legacy})`, new Date().toISOString());
     const foreign = db.prepare(SQL_FOREIGN_KEYS).all() as { key: string }[];
     assert(foreign.length === 1 && foreign[0].key === legacy,
         `7. the first check lists the settlement under a project's id, and not the one under a key the node made (${JSON.stringify(foreign.map(f => f.key))})`);
-    const moves = db.prepare(SQL_FOREIGN_KEY_MOVES).all() as { key: string; from_pubkey: string; amount: number }[];
-    assert(moves.length === 1 && moves[0].from_pubkey === `escrow_${legacy}` && moves[0].amount === 40.6,
+    const moves = db.prepare(SQL_FOREIGN_KEY_MOVES).all() as { key: string; from_pubkey: string; amount_c: number }[];
+    assert(moves.length === 1 && moves[0].from_pubkey === `escrow_${legacy}` && moves[0].amount_c === hc(40.6),
         `7. the second lists what it moved: 40.6 out of that project's escrow (${JSON.stringify(moves)})`);
     // A projects row under an enterprise's key, made by someone who does not keep it (the old crowdfund route took ids).
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Taken', 'test', '[]', 10, 'ACTIVE')`).run(shop, holder);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Taken', 'test', '[]', ?, 'ACTIVE')`).run(shop, holder, hc(10));
     const taken = db.prepare(SQL_PROJECT_ON_ANOTHERS_ENTERPRISE).all() as { id: string }[];
     assert(taken.length === 1 && taken[0].id === shop,
         `7. the third lists a projects row made under another's enterprise (${JSON.stringify(taken.map(t => t.id))})`);
@@ -380,45 +384,45 @@ async function httpChecks(): Promise<void> {
     };
     let node = await startNode(dir, seed);
     let their = new Database(path.join(dir, 'state.db'), { readonly: true, fileMustExist: true });
-    const balOf = (pk: string) => r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+    const balOf = (pk: string) => (their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0;
     // Every row's balance, the Commons row included: nothing below moves Beans into or out of the node.
-    const total = () => r4((their.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s);
+    const total = () => (their.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
     const outbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound'`).get() as { n: number }).n;
     const postsBy = (pk: string) => (their.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(pk) as { n: number }).n;
     const call = (who: Id, urlPath: string, body: unknown) => callAt(node.base, 'POST', who, urlPath, body);
     try {
         const link = node.link;
         // A project holding Pat's 50, a second holding 30, and a deal whose escrow holds Bea's 4: all made the way members make them.
-        const made = await call(cara, '/api/crowdfund/projects', { title: 'A community orchard', description: 'test', goalAmount: 1000 });
+        const made = await call(cara, '/api/crowdfund/projects', { title: 'A community orchard', description: 'test', goalAmount_c: hc(1000) });
         const projectA = made.body?.project?.id as string;
-        const pledgedA = await call(pat, `/api/crowdfund/projects/${projectA}/pledge`, { amount: 50 });
-        const madeB = await call(cara, '/api/crowdfund/projects', { title: 'A tool library', description: 'test', goalAmount: 1000 });
+        const pledgedA = await call(pat, `/api/crowdfund/projects/${projectA}/pledge`, { amount_c: hc(50) });
+        const madeB = await call(cara, '/api/crowdfund/projects', { title: 'A tool library', description: 'test', goalAmount_c: hc(1000) });
         const projectB = madeB.body?.project?.id as string;
-        const pledgedB = await call(pat, `/api/crowdfund/projects/${projectB}/pledge`, { amount: 30 });
-        assert(!!projectA && !!projectB && pledgedA.status === 200 && pledgedB.status === 200 && balOf(`escrow_${projectA}`) === 50 && balOf(`escrow_${projectB}`) === 30,
+        const pledgedB = await call(pat, `/api/crowdfund/projects/${projectB}/pledge`, { amount_c: hc(30) });
+        assert(!!projectA && !!projectB && pledgedA.status === 200 && pledgedB.status === 200 && balOf(`escrow_${projectA}`) === hc(50) && balOf(`escrow_${projectB}`) === hc(30),
             `setup: Cara's two projects, with Pat's 50 and 30 in their escrows (${show(made)}; ${show(pledgedA)}; ${show(pledgedB)})`);
-        const offer = await call(sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Lawn mowing', description: 'test', credits: 4, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
+        const offer = await call(sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Lawn mowing', description: 'test', price_c: hc(4), authorPublicKey: sam.pk, photos: TEST_PHOTOS });
         // A member takes an offer once they have listed one of their own (CONTRIBUTION_REQUIRED).
-        const beasOwn = await call(bea, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sourdough', description: 'test', credits: 2, authorPublicKey: bea.pk, photos: TEST_PHOTOS });
+        const beasOwn = await call(bea, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sourdough', description: 'test', price_c: hc(2), authorPublicKey: bea.pk, photos: TEST_PHOTOS });
         const accepted = await call(bea, '/api/marketplace/posts/accept', { postId: offer.body?.post?.id, buyerPublicKey: bea.pk });
         const deal = accepted.body?.transaction?.id as string;
-        assert(!!deal && balOf(`escrow_${deal}`) === 4, `setup: Bea takes Sam's mowing, and the deal's escrow holds her 4 (${show(offer)}; ${show(beasOwn)}; ${show(accepted)})`);
+        assert(!!deal && balOf(`escrow_${deal}`) === hc(4), `setup: Bea takes Sam's mowing, and the deal's escrow holds her 4 (${show(offer)}; ${show(beasOwn)}; ${show(accepted)})`);
         if (!projectA || !projectB || !deal) throw new Error('setup failed: the checks below would aim at nothing');
 
         // ── Jo's own purchase, and its retry ──────────────────────────────────────────────────────────────────
-        const purchase = (who: Id, body: Record<string, unknown>) => call(who, '/api/federation/purchase', { peerAddress, sellerPublicKey: remoteSeller, amount: 10, ...body });
+        const purchase = (who: Id, body: Record<string, unknown>) => call(who, '/api/federation/purchase', { peerAddress, sellerPublicKey: remoteSeller, amount_c: hc(10), ...body });
         const baseline = total();
         const jos = await purchase(jo, {});
         const joKey = jos.body?.key as string;
-        assert(jos.status === 409 && jos.body?.status === 'refused' && /^xn-[0-9a-f-]{36}$/.test(joKey ?? '') && balOf(jo.pk) === 100 && balOf(`escrow_${joKey}`) === 0,
+        assert(jos.status === 409 && jos.body?.status === 'refused' && /^xn-[0-9a-f-]{36}$/.test(joKey ?? '') && balOf(jo.pk) === hc(100) && balOf(`escrow_${joKey}`) === 0,
             `2. Jo buys with no key: the node makes one, the ask fails, and he has exactly his own 100 back (${show(jos)}, Jo ${balOf(jo.pk)})`);
         assert(outbound() === 1 && total() === baseline, `2. one settlement, and the node's total unchanged (${outbound()}, ${baseline} → ${total()})`);
         const retried = await purchase(jo, { key: joKey });
-        assert(retried.status === 409 && retried.body?.status === 'refused' && retried.body?.key === joKey && outbound() === 1 && balOf(jo.pk) === 100,
+        assert(retried.status === 409 && retried.body?.status === 'refused' && retried.body?.key === joKey && outbound() === 1 && balOf(jo.pk) === hc(100),
             `2. sent again with the key the node gave him, it is answered from its row: no second settlement, nothing charged (${show(retried)}, ${outbound()}, Jo ${balOf(jo.pk)})`);
-        const otherAmount = await purchase(jo, { key: joKey, amount: 11 });
+        const otherAmount = await purchase(jo, { key: joKey, amount_c: hc(11) });
         const otherSeller = await purchase(jo, { key: joKey, sellerPublicKey: crypto.randomBytes(32).toString('hex') });
-        assert([otherAmount, otherSeller].every(r => r.status === 409 && r.body?.reason === 'key_conflict') && outbound() === 1 && balOf(jo.pk) === 100,
+        assert([otherAmount, otherSeller].every(r => r.status === 409 && r.body?.reason === 'key_conflict') && outbound() === 1 && balOf(jo.pk) === hc(100),
             `2. his key with another amount or another seller is 409 key_conflict, and nothing moves (${show(otherAmount)}; ${show(otherSeller)})`);
 
         // ── Mallory aims a purchase's key at other people's money ─────────────────────────────────────────────
@@ -427,7 +431,8 @@ async function httpChecks(): Promise<void> {
         const before = heldBy();
         const keys: [unknown, string, number][] = [
             [projectA, 'the project\'s id', 40],
-            [deal, 'the deal\'s id', 3.9409],
+            // 3.95 and its fee of 0.05 (1.5% of 395 hundredths is 5.925, truncated) are the deal's whole 4.
+            [deal, 'the deal\'s id', 3.95],
             [`escrow_${deal}`, 'escrow_<deal>', 1],
             [link, 'an enterprise\'s key', 1],
             ['COMMONS_POOL', 'the Commons', 1],
@@ -443,15 +448,15 @@ async function httpChecks(): Promise<void> {
             ['', 'an empty key', 1],
         ];
         for (const [key, what, amount] of keys) {
-            const r = await purchase(mallory, { key, amount });
+            const r = await purchase(mallory, { key, amount_c: hc(amount) });
             assert((r.status === 400 && r.body?.reason === 'invalid_key') || (r.status === 409 && r.body?.reason === 'key_conflict'),
                 `3. Mallory buys ${amount} with ${what} as the key: refused (${show(r)})`);
             assert(outbound() === 1 && heldBy() === before && total() === baseline,
                 `3. no settlement is written and nothing moves: Mallory, both projects' escrows, the deal's, the link, Jo (${before} → ${heldBy()}, ${outbound()} settlements, total ${total()})`);
         }
         const released = await call(bea, '/api/marketplace/transactions/complete', { transactionId: deal, confirmerPublicKey: bea.pk });
-        assert(released.status === 200 && balOf(`escrow_${deal}`) === 0 && balOf(sam.pk) > 3.9,
-            `3. the deal's escrow is whole, so Bea's confirmation still pays Sam his 4 less the fee (${show(released)}, Sam ${balOf(sam.pk)})`);
+        assert(released.status === 200 && balOf(`escrow_${deal}`) === 0 && balOf(sam.pk) === hc(3.94),
+            `3. the deal's escrow is whole, so Bea's confirmation still pays Sam his 4 less the fee of 0.06: 3.94 (${show(released)}, Sam ${balOf(sam.pk)} hundredths)`);
 
         // ── Kit aims a commission's key at other people's money ───────────────────────────────────────────────
         console.log('\n--- 4. commissions whose key names other money ---');
@@ -461,8 +466,8 @@ async function httpChecks(): Promise<void> {
         const cBefore = [heldBy(), commons()].join('|');
         const linkOutbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound' AND buyer_pubkey = ?`).get(link) as { n: number }).n;
         const commissionKeys: [unknown, string, number | undefined][] = [
-            [projectB, 'the second project\'s id', 20],
-            [projectA, 'the first project\'s id', 1],
+            [projectB, 'the second project\'s id', hc(20)],
+            [projectA, 'the first project\'s id', hc(1)],
             [`escrow_${projectB}`, 'escrow_<project>', undefined],
             [link, 'the link\'s own key', undefined],
             [joKey, 'Jo\'s purchase key', undefined],
@@ -471,7 +476,7 @@ async function httpChecks(): Promise<void> {
             [7, 'a number', undefined],
         ];
         for (const [key, what, amount] of commissionKeys) {
-            const r = await commission(amount === undefined ? { key } : { key, amount });
+            const r = await commission(amount === undefined ? { key } : { key, amount_c: amount });
             assert((r.status === 400 && r.body?.reason === 'invalid_key') || (r.status === 409 && r.body?.reason === 'key_conflict'),
                 `4. Kit commissions with ${what} as the key: refused (${show(r)})`);
             assert(linkOutbound() === 0 && [heldBy(), commons()].join('|') === cBefore && total() === cBaseline,
@@ -485,7 +490,7 @@ async function httpChecks(): Promise<void> {
         const kitAgain = await commission({ key: kitKey });
         assert(kitAgain.status === 409 && kitAgain.body?.status === 'refused' && kitAgain.body?.key === kitKey && linkOutbound() === 1 && balOf(link) === linkBefore && total() === cBaseline,
             `4. sent again with its own key, it is answered from its row: no second settlement, nothing moves (${show(kitAgain)})`);
-        const kitOther = await commission({ key: kitKey, amount: 2 });
+        const kitOther = await commission({ key: kitKey, amount_c: hc(2) });
         assert(kitOther.status === 409 && kitOther.body?.reason === 'key_conflict' && linkOutbound() === 1 && balOf(link) === linkBefore,
             `4. its key with another amount is 409 key_conflict (${show(kitOther)})`);
         const joWithKits = await purchase(jo, { key: kitKey });
@@ -494,7 +499,7 @@ async function httpChecks(): Promise<void> {
 
         // ── A post's id ───────────────────────────────────────────────────────────────────────────────────────
         console.log('\n--- 5. a post\'s id names no money ---');
-        const post = (id: unknown) => call(vic, '/api/marketplace/posts', { id, type: 'offer', category: 'other', title: 'Firewood', description: 'test', credits: 1, authorPublicKey: vic.pk, photos: TEST_PHOTOS });
+        const post = (id: unknown) => call(vic, '/api/marketplace/posts', { id, type: 'offer', category: 'other', title: 'Firewood', description: 'test', price_c: hc(1), authorPublicKey: vic.pk, photos: TEST_PHOTOS });
         const postIds: [unknown, string][] = [
             [projectA, 'a project\'s id'], [deal, 'a deal\'s id'], [`escrow_${deal}`, 'escrow_<deal>'], [joKey, 'a settlement\'s key'],
             [link, 'an enterprise\'s key'], ['COMMONS_POOL', 'the Commons'], [7, 'a number'], [['x'], 'a list'],
@@ -517,13 +522,13 @@ async function httpChecks(): Promise<void> {
         // whose escrow is empty (an escrow drained as in step 3, before this fix).
         const w = new Database(path.join(dir, 'state.db'));
         const pendingDeal = uuid();
-        w.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'other', 'Planted', 'test', 5, ?, 'pending')`).run(projectB, vic.pk);
-        w.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)`)
-            .run(pendingDeal, projectB, mallory.pk, vic.pk, new Date().toISOString());
+        w.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'other', 'Planted', 'test', ?, ?, 'pending')`).run(projectB, hc(5), vic.pk);
+        w.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
+            .run(pendingDeal, projectB, mallory.pk, vic.pk, hc(5), new Date().toISOString());
         w.close();
         node = await startNode(dir, seed);
         their = new Database(path.join(dir, 'state.db'), { readonly: true, fileMustExist: true });
-        assert(balOf(`escrow_${projectB}`) === 30 && balOf(`escrow_${pendingDeal}`) === 0,
+        assert(balOf(`escrow_${projectB}`) === hc(30) && balOf(`escrow_${pendingDeal}`) === 0,
             `6. after the restart, project B's escrow still holds its 30, and the empty deal took none of it (${balOf(`escrow_${projectB}`)}, ${balOf(`escrow_${pendingDeal}`)})`);
         assert(!/Escrow wallet key migration/.test(node.output()), '6. and the boot log has no escrow-key migration');
     } finally {

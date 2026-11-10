@@ -13,7 +13,7 @@
  *     kind: an old bug's drift, accepted by the admin).
  *  2. A brand-new standby S takes its first copy with the loop's own pull, no operator (G9: refused before, on the
  *     callsign index, because every server's boot made a BeanPool enterprise of its own). Its accounts are M's, row for
- *     row and column for column, and so are the ledger columns of its trades (`tax_fee`, `project_id`).
+ *     row and column for column, and so are the ledger columns of its trades (`fee_c`, `project_id`).
  *  3. Trades after the first copy, moving accounts that held Beans at it, and the project deleted (its pledges refunded,
  *     its trades no longer naming it): a delta brings them (before, every later copy was refused once one of those moved).
  *  4. A whole copy: the same, and the whole-copy check compares every account.
@@ -167,9 +167,9 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             const cfg = (k: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(k) as { value: string } | undefined)?.value ?? null;
             return {
-                accounts: db.prepare('SELECT public_key, balance, last_updated_at, last_demurrage_epoch FROM accounts ORDER BY public_key').all(),
-                sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
-                transactions: db.prepare('SELECT id, from_pubkey, to_pubkey, amount, tax_fee, project_id, memo, timestamp FROM transactions ORDER BY id').all(),
+                accounts: db.prepare('SELECT public_key, balance_c, last_updated_at, last_demurrage_epoch FROM accounts ORDER BY public_key').all(),
+                sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
+                transactions: db.prepare('SELECT id, from_pubkey, to_pubkey, amount_c, fee_c, project_id, memo, timestamp FROM transactions ORDER BY id').all(),
                 beanpool: db.prepare("SELECT public_key, callsign FROM members WHERE callsign LIKE 'BeanPool%' ORDER BY public_key").all(),
                 members: (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c,
                 posts: (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c,
@@ -195,7 +195,7 @@ async function child(): Promise<void> {
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.amount, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.amount, a.publicKey);
             reconcileLedgerFromDb();
             return true;
         },
@@ -208,8 +208,8 @@ async function child(): Promise<void> {
         forge: async (a: {
             kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint' | 'surrogate' | 'add' | 'unreadable-only';
             publicKey?: string;
-            /** For `add`: accounts put in after the real ones, in this order. A balance of null here is sent as Infinity. */
-            add?: { publicKey: string; balance: number | null }[];
+            /** For `add`: accounts put in after the real ones, in this order (whole hundredths). A balance of null here is sent as Infinity. */
+            add?: { publicKey: string; balance_c: number | null }[];
         }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
@@ -217,47 +217,47 @@ async function child(): Promise<void> {
             const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
             delete payload.signature;
             delete payload.publicKey;
-            if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
+            if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance_c: x.balance_c + hc(50) } : x));
             else if (a.kind === 'drop') payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
             else if (a.kind === 'empty') payload.accounts = [];
             else if (a.kind === 'add') {
                 // Signed as JSON.stringify writes Infinity (null), which is what the standby checks the signature against:
                 // a body carrying 1e400 there parses to Infinity and still verifies (the orchestrator's door sends it).
                 for (const x of a.add ?? []) {
-                    payload.accounts.push({ publicKey: x.publicKey, balance: x.balance === null ? Infinity : x.balance, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
+                    payload.accounts.push({ publicKey: x.publicKey, balance_c: x.balance_c === null ? Infinity : x.balance_c, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
                 }
             } else if (a.kind === 'unreadable-only') {
                 // An account list whose every entry has no key this server can store: none, and half a surrogate pair.
                 payload.accounts = [
-                    { publicKey: '', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
-                    { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+                    { publicKey: '', balance_c: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+                    { publicKey: 'zz\ud800', balance_c: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
                 ];
             }
             else if (a.kind === 'commons-only' || a.kind === 'commons-mint') {
                 // The Commons holding what every account holds between them, and no other account; then, for the mint, a
                 // new key holding 1000 beside it.
-                const total = payload.accounts.reduce((t: number, x: any) => t + x.balance, 0);
+                const total = payload.accounts.reduce((t: number, x: any) => t + x.balance_c, 0);
                 const commons = payload.accounts.find((x: any) => x.publicKey === 'COMMONS_POOL');
-                payload.accounts = [{ ...commons, balance: total }];
+                payload.accounts = [{ ...commons, balance_c: total }];
                 if (a.kind === 'commons-mint') {
-                    payload.accounts.push({ publicKey: crypto.randomBytes(32).toString('hex'), balance: 1000, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
+                    payload.accounts.push({ publicKey: crypto.randomBytes(32).toString('hex'), balance_c: hc(1000), lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
                 }
             } else if (a.kind === 'surrogate') {
                 // Half of a surrogate pair: SQLite stores the key with U+FFFD in its place, another string.
-                payload.accounts.push({ publicKey: 'mallory\ud800', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
+                payload.accounts.push({ publicKey: 'mallory\ud800', balance_c: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
             } else if (a.kind === 'throws-later') {
                 // The real ledger, and one trade for no listing: the import throws in the marketplace section, after the
                 // accounts section has written the ledger and before the copy commits (as a disk error there would).
                 payload.marketplaceTransactions = [...(payload.marketplaceTransactions ?? []), {
                     id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: a.publicKey, sellerPubkey: a.publicKey,
-                    credits: 1, status: 'pending', createdAt: new Date().toISOString(),
+                    amount_c: hc(1), status: 'pending', createdAt: new Date().toISOString(),
                 }];
             } else {
                 // The account named twice: 50 more, then 50 less than it holds. Each one against what the row held before
                 // the copy, the two cancel out, and 50 Beans would go.
                 const x = payload.accounts.find((y: any) => y.publicKey === a.publicKey);
-                payload.accounts = payload.accounts.map((y: any) => (y === x ? { ...x, balance: x.balance + 50 } : y));
-                payload.accounts.push({ ...x, balance: x.balance - 50 });
+                payload.accounts = payload.accounts.map((y: any) => (y === x ? { ...x, balance_c: x.balance_c + hc(50) } : y));
+                payload.accounts.push({ ...x, balance_c: x.balance_c - hc(50) });
             }
             payload.generatedAt = new Date().toISOString();
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
@@ -288,7 +288,7 @@ async function child(): Promise<void> {
         /** A raw write on this server's own ledger, as a bug would make it. */
         'plant-balance': async (a: { publicKey: string; add: number }) => {
             const { db } = await import('./db/db.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.add, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.add, a.publicKey);
             return true;
         },
         /**
@@ -300,7 +300,7 @@ async function child(): Promise<void> {
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
             const today = Math.floor(Date.now() / 86_400_000);
             for (const m of a.moves) {
-                db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(m.add, m.publicKey);
+                db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(m.add, m.publicKey);
                 if (typeof m.epochsAgo === 'number') db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?').run(today - m.epochsAgo, m.publicKey);
             }
             reconcileLedgerFromDb();
@@ -311,14 +311,14 @@ async function child(): Promise<void> {
             const { getBalance } = await import('./state-engine.js');
             const realNow = Date.now;
             if (a.daysAgo) Date.now = () => realNow() - a.daysAgo! * 86_400_000;
-            try { return getBalance(a.publicKey).balance; } finally { Date.now = realNow; }
+            try { return getBalance(a.publicKey).balance_c; } finally { Date.now = realNow; }
         },
         /** The ledger this server holds in memory: every account (no demurrage applied by the read) and the Commons pot. */
         'memory-ledger': async () => {
             const { ledger } = await import('./engine/ledger.js');
             const { getCommonsBalanceExact } = await import('./state-engine.js');
             return {
-                accounts: ledger.getAllAccounts().map((x) => ({ public_key: x.id, balance: x.balance, last_demurrage_epoch: x.lastDemurrageEpoch }))
+                accounts: ledger.getAllAccounts().map((x) => ({ public_key: x.id, balance_c: x.balance_c, last_demurrage_epoch: x.lastDemurrageEpoch }))
                     .sort((p, q) => (p.public_key < q.public_key ? -1 : 1)),
                 pot: getCommonsBalanceExact(),
             };
@@ -348,7 +348,7 @@ async function child(): Promise<void> {
         /** A trade as this server holds it. */
         trade: async (a: { id: string }) => {
             const { db } = await import('./db/db.js');
-            return db.prepare('SELECT id, status, credits FROM marketplace_transactions WHERE id = ?').get(a.id) ?? null;
+            return db.prepare('SELECT id, status, amount_c FROM marketplace_transactions WHERE id = ?').get(a.id) ?? null;
         },
         /**
          * The whole-copy check, on M's current whole copy fetched with the replication token and not imported: what the
@@ -384,6 +384,11 @@ async function child(): Promise<void> {
 
 let testsRun = 0;
 let testsPassed = 0;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), in its rows, its copies (`balance_c`) and
+ * its bodies (`amount_c`, `price_c`). `hc` turns a Beans figure into hundredths, and every sum below is compared exactly.
+ */
+function hc(beans: number): number { return Math.round(beans * 100); }
 function assert(cond: unknown, msg: string): void {
     testsRun++;
     if (cond) {
@@ -448,7 +453,7 @@ function ledgerDiff(m: Ledger, s: Ledger): string[] {
     for (const [k, r] of ma) {
         const o = sa.get(k);
         if (!o) { out.push(`account ${k.slice(0, 12)} missing`); continue; }
-        for (const c of ['balance', 'last_updated_at', 'last_demurrage_epoch']) {
+        for (const c of ['balance_c', 'last_updated_at', 'last_demurrage_epoch']) {
             // persistCommonsBalance (audit.ts:62) runs INSERT OR REPLACE INTO accounts, which deletes the row and resets
             // last_updated_at to schema default (now) on every main flush, even if balance is unchanged. Standbys do not
             // run this flush; their last_updated_at only updates when a copy imports. When main flushes between pull and
@@ -457,7 +462,7 @@ function ledgerDiff(m: Ledger, s: Ledger): string[] {
             if (JSON.stringify(r[c]) !== JSON.stringify(o[c])) out.push(`account ${k.slice(0, 12)}.${c}: main ${JSON.stringify(r[c])}, standby ${JSON.stringify(o[c])}`);
         }
     }
-    for (const k of sa.keys()) if (!ma.has(k)) out.push(`account ${k.slice(0, 12)} extra (${JSON.stringify(sa.get(k).balance)})`);
+    for (const k of sa.keys()) if (!ma.has(k)) out.push(`account ${k.slice(0, 12)} extra (${JSON.stringify(sa.get(k).balance_c)})`);
     const mt = byKey(m.transactions, 'id');
     const st = byKey(s.transactions, 'id');
     for (const [k, r] of mt) {
@@ -472,7 +477,7 @@ function ledgerDiff(m: Ledger, s: Ledger): string[] {
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 4).join(' | ')}`);
 
-type Memory = { accounts: { public_key: string; balance: number; last_demurrage_epoch: number }[]; pot: number };
+type Memory = { accounts: { public_key: string; balance_c: number; last_demurrage_epoch: number }[]; pot: number };
 /** Where the ledger a server holds in memory differs from its rows: every account, and the Commons pot. */
 function memoryVsRows(mem: Memory, rows: Ledger): string[] {
     const out: string[] = [];
@@ -481,11 +486,11 @@ function memoryVsRows(mem: Memory, rows: Ledger): string[] {
     for (const r of rows.accounts) {
         const m = inMemory.get(r.public_key);
         if (!m) { out.push(`${r.public_key.slice(0, 12)} not in memory`); continue; }
-        if (m.balance !== r.balance) out.push(`${r.public_key.slice(0, 12)}.balance: memory ${m.balance}, row ${r.balance}`);
+        if (m.balance_c !== r.balance_c) out.push(`${r.public_key.slice(0, 12)}.balance_c: memory ${m.balance_c}, row ${r.balance_c}`);
         if (m.last_demurrage_epoch !== r.last_demurrage_epoch) out.push(`${r.public_key.slice(0, 12)}.epoch: memory ${m.last_demurrage_epoch}, row ${r.last_demurrage_epoch}`);
     }
-    for (const k of inMemory.keys()) if (!inRows.has(k)) out.push(`${k.slice(0, 12)} only in memory (${inMemory.get(k)!.balance})`);
-    const potRow = rows.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance;
+    for (const k of inMemory.keys()) if (!inRows.has(k)) out.push(`${k.slice(0, 12)} only in memory (${inMemory.get(k)!.balance_c})`);
+    const potRow = rows.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance_c;
     if (mem.pot !== potRow) out.push(`pot: memory ${mem.pot}, row ${potRow}`);
     return out;
 }
@@ -581,8 +586,8 @@ async function main(): Promise<void> {
         // memoised for 10 s, so the suite passed whenever the memo still predated its first trade and failed when a slow run let it expire.
         // The check is right; these fixture members are older than a fortnight, as the members of a real community who trade are.
         require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip].map((w) => w.pk), days: 20 }) === 6, 'M: the six members joined twenty days ago');
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        const offer = async (who: Id, title: string, beans: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
@@ -596,17 +601,17 @@ async function main(): Promise<void> {
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 6);
         await deal(gwen, ann, (await offer(ann, 'Honey', 20)).id, true); // the Commons takes its fee
-        built('Ann gives Bo 5 Beans', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount: 5, memo: 'for the seedlings' }));
+        built('Ann gives Bo 5 Beans', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount_c: hc(5), memo: 'for the seedlings' }));
         await deal(cy, kip, (await offer(kip, 'Tune-up', 10)).id, true);
         const held = await deal(cy, dee, (await offer(dee, 'Firewood', 7)).id, false); // held in escrow
-        const seed = built('Ann starts a project with a goal', await S_(ann, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100 }));
-        built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 2 }));
-        built('an old bug left -9.82 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: -9.82 })) ? 200 : 500, body: {} });
+        const seed = built('Ann starts a project with a goal', await S_(ann, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: hc(100) }));
+        built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount_c: hc(2) }));
+        built('an old bug left -9.82 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: hc(-9.82) })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
         const m1: Ledger = await main.send('ledger');
-        const holding = (l: Ledger, prefix: string) => l.accounts.filter((a) => a.public_key.startsWith(prefix) && Math.abs(a.balance) > 0.001);
-        require_(holding(m1, 'escrow_').length >= 2 && holding(m1, 'COMMONS_POOL').length === 1 && m1.transactions.some((t) => t.project_id) && m1.transactions.some((t) => t.tax_fee > 0) && Math.abs(m1.sum + 9.82) < 1e-6,
-            `M: Beans in escrow and in a project pot, a Commons balance, a fee and a project on its trades, and a ledger that sums to its baseline (${JSON.stringify({ escrows: holding(m1, 'escrow_').length, commons: holding(m1, 'COMMONS_POOL').map((a) => a.balance), sum: m1.sum })})`);
+        const holding = (l: Ledger, prefix: string) => l.accounts.filter((a) => a.public_key.startsWith(prefix) && a.balance_c !== 0);
+        require_(holding(m1, 'escrow_').length >= 2 && holding(m1, 'COMMONS_POOL').length === 1 && m1.transactions.some((t) => t.project_id) && m1.transactions.some((t) => t.fee_c > 0) && m1.sum === hc(-9.82),
+            `M: Beans in escrow and in a project pot, a Commons balance, a fee and a project on its trades, and a ledger that sums to its baseline, exactly (${JSON.stringify({ escrows: holding(m1, 'escrow_').length, commons: holding(m1, 'COMMONS_POOL').map((a) => a.balance_c), sum: m1.sum })})`);
         const mainBeanPool = m1.beanpool.find((r) => r.callsign === 'BeanPool')?.public_key;
         require_(!!mainBeanPool, 'M: its BeanPool enterprise');
 
@@ -637,9 +642,9 @@ async function main(): Promise<void> {
 
         // ── 3. Trades after the first copy ──
         console.log('\n— 3. trades after the first copy, then a delta —');
-        built('Ann, who held Beans at the first copy, gives Cy 3', await S_(ann, '/api/ledger/transfer', { to: cy.pk, amount: 3, memo: 'thanks' }));
+        built('Ann, who held Beans at the first copy, gives Cy 3', await S_(ann, '/api/ledger/transfer', { to: cy.pk, amount_c: hc(3), memo: 'thanks' }));
         built('Cy confirms the held trade: Dee is paid from escrow', await S_(cy, '/api/marketplace/transactions/complete', { transactionId: held, confirmerPublicKey: cy.pk }));
-        built('Kip puts 1 more Bean in the pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 1 }));
+        built('Kip puts 1 more Bean in the pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount_c: hc(1) }));
         // Its trades stop naming it, in a write that moves no trade's stamp: the project's tombstone carries it.
         built('Ann deletes the project: Kip\'s pledges come back', await S_(ann, '/api/crowdfund/projects/delete', { id: seed.publicKey, creatorPubkey: ann.pk }));
         const delta = await standby.send('pull', {});
@@ -671,7 +676,7 @@ async function main(): Promise<void> {
         s = await standby.send('ledger');
         assert(s.beanpool.length === 1 && s.beanpool[0].public_key === mainBeanPool && s.beanpool[0].callsign === 'BeanPool',
             `its boot makes no BeanPool of its own and leaves M's as it is (${JSON.stringify(s.beanpool)})`);
-        built('Kip gives Dee 1 Bean', await S_(kip, '/api/ledger/transfer', { to: dee.pk, amount: 1, memo: 'kindling' }));
+        built('Kip gives Dee 1 Bean', await S_(kip, '/api/ledger/transfer', { to: dee.pk, amount_c: hc(1), memo: 'kindling' }));
         const afterRestart = await standby.send('pull', {});
         const m5: Ledger = await main.send('ledger');
         s = await standby.send('ledger');
@@ -698,8 +703,8 @@ async function main(): Promise<void> {
         assert(afterSur.ok === true && afterSur.mode === 'delta', `the next pull is a delta, not a force-resync (${JSON.stringify({ ok: afterSur.ok, mode: afterSur.mode, error: afterSur.error })})`);
 
         console.log('\n— 6. a copy whose sum is right and whose accounts are not —');
-        await standby.send('plant-balance', { publicKey: ann.pk, add: 4 });
-        await standby.send('plant-balance', { publicKey: bo.pk, add: -4 });
+        await standby.send('plant-balance', { publicKey: ann.pk, add: hc(4) });
+        await standby.send('plant-balance', { publicKey: bo.pk, add: hc(-4) });
         const checked = await standby.send('check-copy');
         const c6 = checked.consistency;
         assert(c6.sumBalances?.match === true && c6.ok === false && c6.ledger?.match === false && c6.ledger?.differing === 2,
@@ -713,8 +718,8 @@ async function main(): Promise<void> {
         const m6: Ledger = await main.send('ledger');
         assert(healing.ok === true && healing.mode === 'resync' && ledgerDiff(m6, s).length === 0,
             `the next pull is that force-resync, and the ledger is M's again (${JSON.stringify({ ok: healing.ok, mode: healing.mode, error: healing.error })}; differences ${first(ledgerDiff(m6, s))})`);
-        await standby.send('plant-balance', { publicKey: ann.pk, add: 1 });
-        await standby.send('plant-balance', { publicKey: bo.pk, add: -1 });
+        await standby.send('plant-balance', { publicKey: ann.pk, add: hc(1) });
+        await standby.send('plant-balance', { publicKey: bo.pk, add: hc(-1) });
         const again = await standby.send('check-copy');
         const againNote = JSON.parse((await standby.send('ledger') as Ledger).mismatch ?? 'null');
         const quiet = await standby.send('pull', {});
@@ -750,7 +755,7 @@ async function main(): Promise<void> {
         const m7: Ledger = await main.send('ledger');
         s = await standby.send('ledger');
         assert(mint7.ok === false && /Conservation violation/.test(mint7.error ?? ''), `the copy after it, minting 1000 for a new key, is refused (${mint7.ok ? 'imported' : mint7.error})`);
-        assert(Math.abs(s.sum - m7.sum) < 1e-6 && !s.accounts.some((a) => Math.abs(a.balance - 1000) < 1e-9),
+        assert(s.sum === m7.sum && !s.accounts.some((a) => a.balance_c === hc(1000)),
             `S's ledger still sums to M's, and holds no minted account (S ${s.sum}, M ${m7.sum})`);
         const real7 = await standby.send('pull', {});
         s = await standby.send('ledger');
@@ -759,27 +764,27 @@ async function main(): Promise<void> {
 
         // ── 8. A copy that throws after its accounts are written ──
         console.log('\n— 8. a copy that throws after the accounts section, the standby\'s own flush, then a real pull —');
-        built('the Commons grants Gwen 5 Beans', { status: (await main.send('grant', { publicKey: gwen.pk, amount: 5 })) ? 200 : 500, body: {} });
+        built('the Commons grants Gwen 5 Beans', { status: (await main.send('grant', { publicKey: gwen.pk, amount: hc(5) })) ? 200 : 500, body: {} });
         const before8: Ledger = await standby.send('ledger');
-        const commonsRow = (l: Ledger) => l.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance ?? null;
+        const commonsRow = (l: Ledger) => l.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance_c ?? null;
         const thrown = await standby.send('import', { payload: await main.send('forge', { kind: 'throws-later', publicKey: ann.pk }) });
         require_(thrown.ok === false && !/Conservation violation/.test(thrown.error),
             `M's real ledger with one trade for no listing throws after the accounts section, past the guard (${thrown.error ?? 'imported'})`);
         const after8: Ledger = await standby.send('ledger');
         const memPot = await standby.send('memory-commons');
         assert(ledgerDiff(before8, after8).length === 0, `the copy rolled back: S's rows are its last good copy (differences ${first(ledgerDiff(before8, after8))})`);
-        assert(Math.abs(memPot - (commonsRow(after8) ?? NaN)) < 1e-9,
+        assert(memPot === commonsRow(after8),
             `and so is the Commons pot S holds in memory, not the refused copy's (memory ${memPot}, row ${commonsRow(after8)}, the copy's ${commonsRow(await main.send('ledger'))})`);
         await standby.send('persist');
         const flushed: Ledger = await standby.send('ledger');
-        assert(Math.abs(flushed.sum - before8.sum) < 1e-9, `S's own flush leaves its ledger summing to its last good copy's (${before8.sum} → ${flushed.sum})`);
+        assert(flushed.sum === before8.sum, `S's own flush leaves its ledger summing to its last good copy's (${before8.sum} → ${flushed.sum})`);
         const landed = await standby.send('pull', {});
         const m8: Ledger = await main.send('ledger');
         s = await standby.send('ledger');
         assert(landed.ok === true && ledgerDiff(m8, s).length === 0,
             `the next real pull lands and S's ledger is M's, the grant included (${JSON.stringify({ ok: landed.ok, mode: landed.mode, error: landed.error })}; differences ${first(ledgerDiff(m8, s))})`);
         const potNow = await standby.send('memory-commons');
-        assert(Math.abs(potNow - (commonsRow(s) ?? NaN)) < 1e-9, `and the pot S holds in memory is the copy's (memory ${potNow}, row ${commonsRow(s)})`);
+        assert(potNow === commonsRow(s), `and the pot S holds in memory is the copy's (memory ${potNow}, row ${commonsRow(s)})`);
 
         // ── 9. A standby as today's importer left it ──
         console.log('\n— 9. a standby left all-zero by the old importer heals in one pull —');
@@ -792,8 +797,8 @@ async function main(): Promise<void> {
             // The old members import: a zero account for each member, stamped with the standby's clock, SYSTEM's too; the
             // accounts import then kept those over the main server's older rows. And no record of the importer's format.
             const now = new Date().toISOString();
-            db.prepare('UPDATE accounts SET balance = 0, last_updated_at = ?, last_demurrage_epoch = 0').run(now);
-            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('SYSTEM', 0, 0)").run();
+            db.prepare('UPDATE accounts SET balance_c = 0, last_updated_at = ?, last_demurrage_epoch = 0').run(now);
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('SYSTEM', 0, 0)").run();
             db.prepare("DELETE FROM node_config WHERE key IN ('replica_format', 'replica_ledger_mismatch')").run();
         });
         const old = await spawnNode(SCRIPT, dir('old'), env(PW_STANDBY, 'backup'));
@@ -825,7 +830,7 @@ async function main(): Promise<void> {
         const ok9 = await promote('promoted-ok');
         assert(ok9.ran && ok9.rec?.copy?.match === true,
             `on the copy as it is, the audit finds the ledger is M's as last copied (${JSON.stringify(ok9.rec)})`);
-        const zero9 = await promote('promoted-zero', (db) => db.prepare('UPDATE accounts SET balance = 0').run());
+        const zero9 = await promote('promoted-zero', (db) => db.prepare('UPDATE accounts SET balance_c = 0').run());
         assert(zero9.ran && zero9.rec?.ok === false && zero9.rec?.copy?.match === false,
             `with every balance 0 it does not say ok: the ledger is not M's (${JSON.stringify(zero9.rec)})`);
         const empty9 = await promote('promoted-empty', (db) => db.prepare('DELETE FROM accounts').run());
@@ -849,8 +854,8 @@ async function main(): Promise<void> {
         // with no earned credit, so each of Yan's sends (steps 11 and 17) would pass only on a wash analysis cached before it.
         require_(await main0.send('backdate-members', { publicKeys: [gwen0.pk, yan.pk], days: 30 }) === 2, 'M0: Gwen and Yan joined a month ago');
         built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: await main0.send('owner-session'), body: { grant: true } }));
-        const offer0 = async (who: Id, title: string, credits: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        const offer0 = async (who: Id, title: string, beans: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         await offer0(gwen0, 'Jam', 3);
@@ -858,9 +863,9 @@ async function main(): Promise<void> {
         const tx0 = built('M0: Gwen asks for the eggs', await Z_(gwen0, '/api/marketplace/posts/request', { postId: eggs.id, buyerPublicKey: gwen0.pk })).transaction;
         built('M0: Yan approves', await Z_(yan, '/api/marketplace/transactions/approve', { transactionId: tx0.id, authorPublicKey: yan.pk }));
         built('M0: Gwen confirms: Yan is paid, the Commons takes its fee', await Z_(gwen0, '/api/marketplace/transactions/complete', { transactionId: tx0.id, confirmerPublicKey: gwen0.pk }));
-        built('M0: Yan gives Gwen 2 Beans back', await Z_(yan, '/api/ledger/transfer', { to: gwen0.pk, amount: 2, memo: 'for the jar' }));
+        built('M0: Yan gives Gwen 2 Beans back', await Z_(yan, '/api/ledger/transfer', { to: gwen0.pk, amount_c: hc(2), memo: 'for the jar' }));
         const z1: Ledger = await main0.send('ledger');
-        require_(Math.abs(z1.sum) < 1e-9 && z1.accounts.some((a) => a.balance > 1), `M0: a ledger that sums to 0, with Beans held (${JSON.stringify(z1.accounts.map((a) => a.balance))})`);
+        require_(z1.sum === 0 && z1.accounts.some((a) => a.balance_c > hc(1)), `M0: a ledger that sums to 0, with Beans held (${JSON.stringify(z1.accounts.map((a) => a.balance_c))})`);
         fs.mkdirSync(dir('standby0'), { recursive: true });
         fs.copyFileSync(path.join(dir('main0'), 'genesis.json'), path.join(dir('standby0'), 'genesis.json'));
         const standby0 = await spawnNode(SCRIPT, dir('standby0'), env(PW_STANDBY, 'backup'));
@@ -906,8 +911,8 @@ async function main(): Promise<void> {
         // standby's boot sweeps nothing now: its accounts are M's, state-engine.ts sweepSettledEscrowAccounts.)
         require_((await heldS.send('pull', {})).ok === true, 'the restarted copy of S pulls');
         const m12: Ledger = await main.send('ledger');
-        await heldS.send('plant-balance', { publicKey: ann.pk, add: 4 });
-        await heldS.send('plant-balance', { publicKey: bo.pk, add: -4 });
+        await heldS.send('plant-balance', { publicKey: ann.pk, add: hc(4) });
+        await heldS.send('plant-balance', { publicKey: bo.pk, add: hc(-4) });
         const c12 = await heldS.send('check-copy');
         const n12 = JSON.parse((await heldS.send('ledger') as Ledger).mismatch ?? 'null');
         require_(c12.consistency?.ledger?.differing === 2 && n12?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n12)})`);
@@ -997,34 +1002,37 @@ async function main(): Promise<void> {
         const eve = hexKey();
         // The review's pair (4116975493): +1e20, Eve 1000 and −1e20 measured 0 in the guard's running sum of doubles, and the
         // copy after it, dropping the two big accounts, measured 0 too. The standby held 1000 Beans M0's ledger doesn't have.
-        const bigPair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance: 1e20 }, { publicKey: eve, balance: 1000 }, { publicKey: hexKey(), balance: -1e20 }] }) });
-        const evePair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: eve, balance: 1000 }] }) });
+        // (±1e20 hundredths: past any balance a copy may carry now, so the first is refused at its balances.)
+        const bigPair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance_c: 1e20 }, { publicKey: eve, balance_c: hc(1000) }, { publicKey: hexKey(), balance_c: -1e20 }] }) });
+        const evePair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: eve, balance_c: hc(1000) }] }) });
         let z14: Ledger = await main0.send('ledger');
         s0l = await standby0.send('ledger');
         assert(bigPair.ok === false && evePair.ok === false, `the review's pair of copies is refused, both (${JSON.stringify([bigPair.error ?? 'imported', evePair.error ?? 'imported'])})`);
-        assert(ledgerDiff(z14, s0l).length === 0 && Math.abs(s0l.sum) < 1e-9,
+        assert(ledgerDiff(z14, s0l).length === 0 && s0l.sum === 0,
             `S0's ledger stays M0's, summing to 0, with no Beans for Eve (S0 sums to ${s0l.sum}; differences ${first(ledgerDiff(z14, s0l))})`);
-        // The same trick inside any bound on a balance: 10,000 accounts holding 9e11 take a running sum to 9e15, where a
-        // double's step is 1, so 2,500 accounts holding 0.4 each add nothing to it, and 10,000 at −9e11 bring it back to 0.
-        const many = (n: number, balance: number) => Array.from({ length: n }, () => ({ publicKey: hexKey(), balance }));
-        const hidden = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [...many(10_000, 9e11), ...many(2_500, 0.4), ...many(10_000, -9e11)] }) });
+        // The same trick inside the bound on a balance: was 10,000 accounts holding 9e11 taking a running sum of doubles to 9e15,
+        // where a double's step is 1, so 2,500 accounts holding 0.4 each added nothing to it, and 10,000 at −9e11 brought it back
+        // to 0. In whole hundredths SQLite sums the rows exactly: 10,000 accounts holding 3.6e10 hundredths (inside the bound a
+        // copy may carry), 2,500 holding 40 (0.40 each), 10,000 at −3.6e10, and the guard measures the 100,000 (1000 Beans) hidden.
+        const many = (n: number, balance_c: number) => Array.from({ length: n }, () => ({ publicKey: hexKey(), balance_c }));
+        const hidden = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [...many(10_000, 36_000_000_000), ...many(2_500, hc(0.4)), ...many(10_000, -36_000_000_000)] }) });
         z14 = await main0.send('ledger');
         s0l = await standby0.send('ledger');
-        assert(hidden.ok === false && /Conservation violation: import shifted total balance by 1000\.0000/.test(hidden.error ?? ''),
-            `a copy that hides 1000 Beans in 2,500 accounts between 20,000 that cancel is refused, measured at 1000 (${hidden.ok ? 'imported' : hidden.error})`);
+        assert(hidden.ok === false && /Conservation violation: import shifted total balance by 100000 hundredths/.test(hidden.error ?? ''),
+            `a copy that hides 1000 Beans in 2,500 accounts between 20,000 that cancel is refused, measured at exactly 1000 (${hidden.ok ? 'imported' : hidden.error})`);
         assert(ledgerDiff(z14, s0l).length === 0, `S0's ledger stays M0's (S0 sums to ${s0l.sum}; differences ${first(ledgerDiff(z14, s0l))})`);
         // A balance no ledger holds, before anything is written: one that parses to Infinity (1e400, which the signature
         // doesn't see: it is checked against JSON.stringify's text, where Infinity is null), and a pair of ±1e15 that cancel.
         built('M0: Gwen lists plums (a change the next copy carries)', await Z_(gwen0, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title: 'Plums', description: 'Plums, from Gwen', credits: 2, priceType: 'fixed', authorPublicKey: gwen0.pk,
+            type: 'offer', category: 'food', title: 'Plums', description: 'Plums, from Gwen', price_c: hc(2), priceType: 'fixed', authorPublicKey: gwen0.pk,
             photos: [TINY_PNG],
         }));
         const inf = hexKey();
-        const infRaw = JSON.stringify(await main0.send('forge', { kind: 'add', add: [{ publicKey: inf, balance: null }] }))
-            .replace(`"publicKey":"${inf}","balance":null`, `"publicKey":"${inf}","balance":1e400`);
+        const infRaw = JSON.stringify(await main0.send('forge', { kind: 'add', add: [{ publicKey: inf, balance_c: null }] }))
+            .replace(`"publicKey":"${inf}","balance_c":null`, `"publicKey":"${inf}","balance_c":1e400`);
         require_(infRaw.includes('1e400'), 'a copy M0 signed that carries a balance of 1e400');
         const infinite = await pull0({ status: 200, raw: infRaw });
-        const absurd = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance: 1e15 }, { publicKey: hexKey(), balance: -1e15 }] }) });
+        const absurd = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance_c: 1e15 }, { publicKey: hexKey(), balance_c: -1e15 }] }) });
         const after14: Ledger = await standby0.send('ledger');
         assert(infinite.ok === false && /beyond what any ledger holds/.test(infinite.error ?? ''), `a balance that parses to Infinity is refused (${infinite.ok ? 'imported' : infinite.error})`);
         assert(absurd.ok === false && /beyond what any ledger holds/.test(absurd.error ?? ''), `so are two of ±1e15 that cancel (${absurd.ok ? 'imported' : absurd.error})`);
@@ -1043,7 +1051,7 @@ async function main(): Promise<void> {
         console.log('\n— 15. a copy naming no account that re-keys a member: the standby\'s memory follows its rows —');
         const yan2 = newId('Yan');
         // Yan holds 500 more, not read since long ago (the review's probe: demurrage due on a read).
-        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: -500 }, { publicKey: yan.pk, add: 500, epochsAgo: 20_000 }] });
+        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: hc(-500) }, { publicKey: yan.pk, add: hc(500), epochsAgo: 20_000 }] });
         const p15 = await standby0.send('pull', {});
         let r15: Ledger = await standby0.send('ledger');
         require_(p15.ok === true && ledgerDiff(await main0.send('ledger'), r15).length === 0, `S0 copies it (${p15.ok ? 'imported' : p15.error})`);
@@ -1051,14 +1059,14 @@ async function main(): Promise<void> {
         const rekeyed = await pull0({ status: 200, body: await main0.send('forge', { kind: 'empty' }) });
         r15 = await standby0.send('ledger');
         const yanRow = r15.accounts.find((a) => a.public_key === yan2.pk);
-        assert(rekeyed.ok === true && !!yanRow && yanRow.balance > 500 && !r15.accounts.some((a) => a.public_key === yan.pk),
+        assert(rekeyed.ok === true && !!yanRow && yanRow.balance_c > hc(500) && !r15.accounts.some((a) => a.public_key === yan.pk),
             `the copy lands, and S0's rows hold Yan's account under the new key (${rekeyed.ok ? 'imported' : rekeyed.error}; ${JSON.stringify(yanRow ?? null)})`);
         assert(memoryVsRows(await standby0.send('memory-ledger'), r15).length === 0,
             `S0's memory is its rows: Yan's account under the new key and none under the old (differences ${first(memoryVsRows(await standby0.send('memory-ledger'), r15))})`);
         await standby0.send('read-balance', { publicKey: yan.pk });
         await standby0.send('persist');
         const flushed15: Ledger = await standby0.send('ledger');
-        assert(Math.abs(flushed15.sum) < 1e-9 && ledgerDiff(r15, flushed15).length === 0,
+        assert(flushed15.sum === 0 && ledgerDiff(r15, flushed15).length === 0,
             `a read of the old key and S0's own flush move nothing: its rows still sum to M0's 0 (${flushed15.sum}; differences ${first(ledgerDiff(r15, flushed15))})`);
         const next15 = await standby0.send('pull', {});
         let z15: Ledger = await main0.send('ledger');
@@ -1080,8 +1088,8 @@ async function main(): Promise<void> {
         const after15 = await standby0.send('pull', {});
         assert(unreadable.consistency?.ledger === null && note15?.resync !== 'scheduled' && after15.mode === 'delta',
             `the whole-copy check reads no ledger in it either, and asks for no force-resync (${JSON.stringify({ ledger: unreadable.consistency?.ledger, note: note15, next: after15.mode })})`);
-        await standby0.send('plant-balance', { publicKey: gwen0.pk, add: 4 });
-        await standby0.send('plant-balance', { publicKey: yan2.pk, add: -4 });
+        await standby0.send('plant-balance', { publicKey: gwen0.pk, add: hc(4) });
+        await standby0.send('plant-balance', { publicKey: yan2.pk, add: hc(-4) });
         const c15 = await standby0.send('check-copy');
         const n15 = JSON.parse((await standby0.send('ledger') as Ledger).mismatch ?? 'null');
         require_(c15.consistency?.ledger?.differing === 2 && n15?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n15)})`);
@@ -1100,7 +1108,7 @@ async function main(): Promise<void> {
         console.log('\n— 16. a standby\'s own demurrage flush: no trade of its own stays through a copy —');
         // Yan holds Beans last read 40 days ago. M0 reads her balance on a day 20 days ago and again today (two decays, two
         // rows); S0 reads it today, between them, over the whole 40 days, and flushes (a row M0 never made).
-        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: -400 }, { publicKey: yan2.pk, add: 400, epochsAgo: 40 }] });
+        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: hc(-400) }, { publicKey: yan2.pk, add: hc(400), epochsAgo: 40 }] });
         require_((await standby0.send('pull', {})).ok === true, 'S0 copies it');
         await main0.send('read-balance', { publicKey: yan2.pk, daysAgo: 20 });
         await main0.send('persist');
@@ -1127,8 +1135,8 @@ async function main(): Promise<void> {
         withDb(dir('format1'), (db) => {
             // Format 2 (#1272's listings): the last one whose standby still flushed demurrage of its own.
             db.prepare("UPDATE node_config SET value = '2' WHERE key = 'replica_format'").run();
-            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1.5, 0, 'Circulation fee (demurrage, 40d)', ?)`)
-                .run(`demurrage_${yan2.pk.slice(0, 16)}_1_41`, yan2.pk, new Date().toISOString());
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', ?, 0, 'Circulation fee (demurrage, 40d)', ?)`)
+                .run(`demurrage_${yan2.pk.slice(0, 16)}_1_41`, yan2.pk, hc(1.5), new Date().toISOString());
         });
         const format1 = await spawnNode(SCRIPT, dir('format1'), env(PW_STANDBY, 'backup'));
         nodes.push(format1);
@@ -1152,12 +1160,12 @@ async function main(): Promise<void> {
         const figs = await offer0(gwen0, 'Figs', 4);
         const tx17 = built('M0: Yan asks for Gwen\'s figs', await Z_(yan2, '/api/marketplace/posts/request', { postId: figs.id, buyerPublicKey: yan2.pk })).transaction;
         // Zed owes 2,100 Beans; Yan holds them, last read 60 days ago, so a read applies demurrage (the review's second probe).
-        await main0.send('plant-ledger', { moves: [{ publicKey: zed.pk, add: -2100 }, { publicKey: yan2.pk, add: 2100, epochsAgo: 60 }] });
+        await main0.send('plant-ledger', { moves: [{ publicKey: zed.pk, add: hc(-2100) }, { publicKey: yan2.pk, add: hc(2100), epochsAgo: 60 }] });
         require_((await format1.send('pull', {})).ok === true, 'S0 copies it');
         const f = `https://localhost:${await format1.send('serve')}`;
         const z17: Ledger = await main0.send('ledger');
         const before17: Ledger = await format1.send('ledger');
-        require_(ledgerDiff(z17, before17).length === 0 && (before17.accounts.find((a) => a.public_key === zed.pk)?.balance ?? 0) < -2000
+        require_(ledgerDiff(z17, before17).length === 0 && (before17.accounts.find((a) => a.public_key === zed.pk)?.balance_c ?? 0) < hc(-2000)
             && (await format1.send('trade', { id: tx17.id }))?.status === 'requested',
             `S0 holds M0's ledger, Zed owing 2,100 Beans, and Yan's request (differences ${first(ledgerDiff(z17, before17))})`);
         const F_ = (who: Id, route: string, body: unknown = {}) => api(f, 'POST', route, { as: who, body });
@@ -1165,7 +1173,7 @@ async function main(): Promise<void> {
         const engineRefusal = (r: any) => r?.ok === false && r.name === 'StandbyLedgerError' && r.code === 'standby' && r.status === 409;
         const unchanged = async (what: string) => {
             const now: Ledger = await format1.send('ledger');
-            assert(ledgerDiff(before17, now).length === 0 && Math.abs(now.sum - z17.sum) < 1e-9,
+            assert(ledgerDiff(before17, now).length === 0 && now.sum === z17.sum,
                 `${what}: nothing is written, and S0's rows still sum to M0's (${now.sum}, M0 ${z17.sum}; differences ${first(ledgerDiff(before17, now))})`);
         };
 
@@ -1175,8 +1183,8 @@ async function main(): Promise<void> {
         assert(engineRefusal(purgeEngine), `and so is the same delete asked of S0's engine, under its routes (${JSON.stringify(purgeEngine)})`);
         await unchanged('the delete');
 
-        const sendHttp = await F_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount: 5, memo: 'on the standby' });
-        const sendEngine = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: 5 });
+        const sendHttp = await F_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount_c: hc(5), memo: 'on the standby' });
+        const sendEngine = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: hc(5) });
         assert(standbyRefusal(sendHttp) && engineRefusal(sendEngine), `a send on S0 is refused, by its route and by its engine (${brief(sendHttp)}; ${JSON.stringify(sendEngine)})`);
         await unchanged('the send');
 
@@ -1189,7 +1197,7 @@ async function main(): Promise<void> {
         assert(trade17?.status === 'requested', `the trade is as M0 holds it, still asked for (${JSON.stringify(trade17)})`);
         await unchanged('the trade');
 
-        const payEngine = await format1.send('engine-move', { kind: 'commons-pay', publicKey: gwen0.pk, amount: 50 });
+        const payEngine = await format1.send('engine-move', { kind: 'commons-pay', publicKey: gwen0.pk, amount: hc(50) });
         // Step 7c: S0's admin calls go under an owner's key session S0 makes, so each refusal is S0's 409 standby, not a
         // refused credential.
         await format1.send('standby-owner', { owner: gwen0.pk });
@@ -1202,8 +1210,8 @@ async function main(): Promise<void> {
         // The review's second probe: a read that applies demurrage in memory, a move, then another; now both are refused
         // before any transaction opens, so nothing puts back a pot holding that decay, and S0's own flush writes nothing.
         await format1.send('read-balance', { publicKey: yan2.pk });
-        const afterRead1 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: zed.pk, amount: 1e9 });
-        const afterRead2 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: 1 });
+        const afterRead1 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: zed.pk, amount: hc(1e9) });
+        const afterRead2 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: hc(1) });
         await format1.send('persist');
         assert(engineRefusal(afterRead1) && engineRefusal(afterRead2), `after a read with 60 days of demurrage due, S0's moves are refused (${JSON.stringify([afterRead1.error, afterRead2.error])})`);
         await unchanged('a read, two moves and S0\'s own flush');
@@ -1234,7 +1242,7 @@ async function main(): Promise<void> {
         }
         assert(notRefused.length === 0, `every route that moves Beans or steps a trade answers 409 standby on S0 (${notRefused.length} did not: ${notRefused.join(' | ') || 'none'})`);
         const read17 = await api(f, 'GET', `/api/ledger/balance/${yan2.pk}`, { as: yan2 });
-        assert(read17.status === 200 && typeof read17.body?.balance === 'number', `a read still answers on S0 (${brief(read17)})`);
+        assert(read17.status === 200 && Number.isSafeInteger(read17.body?.balance_c), `a read still answers on S0, whole hundredths (${brief(read17)})`);
         // The admin's Decisions list is a POST that only reads (#1268 review 4118052544): it answers on a standby too.
         const decisions17 = await api(f, 'POST', '/api/local/admin/decisions', { admin: fOwner, body: {} });
         assert(decisions17.status === 200 && Array.isArray(decisions17.body?.decisions), `the admin's Decisions list still answers on S0 (${brief(decisions17)})`);
@@ -1250,15 +1258,15 @@ async function main(): Promise<void> {
         console.log('\n— 17. the same moves on the main server still work, and S0 copies them —');
         built('M0: Gwen approves Yan\'s request: the Beans are held', await Z_(gwen0, '/api/marketplace/transactions/approve', { transactionId: tx17.id, authorPublicKey: gwen0.pk }));
         built('M0: Yan confirms: Gwen is paid', await Z_(yan2, '/api/marketplace/transactions/complete', { transactionId: tx17.id, confirmerPublicKey: yan2.pk }));
-        built('M0: Yan gives Gwen 5 Beans', await Z_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount: 5, memo: 'on the main server' }));
-        require_(await main0.send('grant', { publicKey: gwen0.pk, amount: 7 }), 'M0: the Commons pays Gwen 7 Beans');
+        built('M0: Yan gives Gwen 5 Beans', await Z_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount_c: hc(5), memo: 'on the main server' }));
+        require_(await main0.send('grant', { publicKey: gwen0.pk, amount: hc(7) }), 'M0: the Commons pays Gwen 7 Beans');
         built('M0: Zed, who owes 2,100 Beans, deletes their own account', await Z_(zed, '/api/member/purge'));
         const z17b: Ledger = await main0.send('ledger');
-        require_(Math.abs(z17b.sum - z17.sum) < 1e-6 && z17b.transactions.length > z17.transactions.length,
+        require_(z17b.sum === z17.sum && z17b.transactions.length > z17.transactions.length,
             `M0: its ledger moved, and still sums to what it did (${z17.sum} → ${z17b.sum})`);
         const landed17 = await format1.send('pull', {});
         s17 = await format1.send('ledger');
-        assert(landed17.ok === true && ledgerDiff(z17b, s17).length === 0 && Math.abs(s17.sum - z17b.sum) < 1e-9,
+        assert(landed17.ok === true && ledgerDiff(z17b, s17).length === 0 && s17.sum === z17b.sum,
             `the next copy lands, and S0's ledger is M0's, with no trade of its own (${JSON.stringify({ ok: landed17.ok, mode: landed17.mode, error: landed17.error })}; differences ${first(ledgerDiff(z17b, s17))})`);
         assert(memoryVsRows(await format1.send('memory-ledger'), s17).length === 0, 'and its memory is its rows');
         refused.push(...(await format1.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);

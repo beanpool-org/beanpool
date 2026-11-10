@@ -90,7 +90,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(a.pk, a.name, a.owner);
             setMemberPhoto(db, a.pk, `https://example.org/${a.name}.jpg`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             return true;
         },
         'make-group': async (a: { name: string; createdBy: string; members: string[] }) => {

@@ -6,7 +6,7 @@
  *
  * A debt record names an entry of the names list by its id, never a person: the name is this phone's, from the list it
  * opened. Every request here is signed by the member's own key (node-post), as the node's middleware requires. Amounts
- * are Beans to the cent.
+ * are whole hundredths of a Bean (`*_c`, @beanpool/core hundredths.ts), as the node sends and takes them.
  */
 import {
     DEBT_UNREACHABLE, PAY_UNANSWERED, PAY_REFUSED_UNSAID, SETTLE_UNANSWERED,
@@ -22,7 +22,7 @@ import { confirmPayment, sendConfirmedPayment, isNoAnswer, type ConfirmedPayment
  * ids (payment-request).
  */
 export {
-    DEBT_UNREACHABLE, PAY_UNANSWERED, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID, SETTLE_UNANSWERED, coversLeft, beans, leftOf,
+    DEBT_UNREACHABLE, PAY_UNANSWERED, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID, SETTLE_UNANSWERED, coversLeft, debtBeans, leftOf,
     debtsOfEntry, openDebtOf, debtLine, DEBT_COPY, sameName, openDebtForName, debtCodeOk, parseBeans, oneAtATime, REPAYMENT_COPY,
 } from '@beanpool/core';
 export type { NamesDebt, Repayment, DebtResult, CommonsPayment, PaidToCommons } from '@beanpool/core';
@@ -70,10 +70,13 @@ export function fetchMyRepayment(node: string, identity: BeanPoolIdentity): Prom
     return answer(signedGet(node, '/api/commons/repayment', identity), (b) => (b.repayment ? b.repayment as Repayment : null));
 }
 
-/** The member confirmed paying `amount`, for debt `debtId` if given: one id for every send of this payment. */
-export function confirmCommonsPayment(amount: number, debtId?: string): ConfirmedPayment<CommonsPayment> {
+/**
+ * The member confirmed paying `amount_c` (whole hundredths of a Bean: the typed figure through parseBeans, so a typed 5 is
+ * 500), for debt `debtId` if given: one id for every send of this payment. The signed body carries the integer exactly.
+ */
+export function confirmCommonsPayment(amount_c: number, debtId?: string): ConfirmedPayment<CommonsPayment> {
     const code = debtId?.trim().toLowerCase();
-    return confirmPayment<CommonsPayment>({ amount, ...(code ? { debtId: code } : {}) });
+    return confirmPayment<CommonsPayment>({ amount_c, ...(code ? { debtId: code } : {}) });
 }
 
 /**

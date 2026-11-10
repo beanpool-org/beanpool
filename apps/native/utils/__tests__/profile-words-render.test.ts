@@ -126,6 +126,7 @@ import { bypassing, bracketed, unfit } from './profile-events-words-harness';
 const NODE_WORDS = ['New here — take normal precautions', 'New member with no completed trades yet.', 'Meet somewhere public the first time.'];
 const MEMBERS = ['Kofi', 'Rosa', 'Wren', 'Grows tomatoes and fixes bikes.', 'Bike repair', 'Tomato seedlings', 'Great tomatoes, on time.', 'Lovely to deal with.', 'Kofi Tube'];
 
+// The trust profile's earnedCredit keeps its name on the node and carries whole hundredths of a Bean.
 const TRUST = (over: Record<string, unknown> = {}) => ({
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
     risk: { band: 'red', headline: NODE_WORDS[0], reasons: [NODE_WORDS[1]], tips: [NODE_WORDS[2]] },
@@ -141,9 +142,10 @@ const RATINGS = {
         { stars: 4, role: 'receiver', createdAt: '2026-08-02T00:00:00.000Z', comment: '' },
     ],
 };
+// The copy's listings keep their price as whole hundredths of a Bean (price_c): 1500 is 15 Beans.
 const POSTS = [
-    { id: 'p1', type: 'offer', title: 'Bike repair', credits: 15, photos: '["/uploads/a.jpg"]' },
-    { id: 'p2', type: 'need', title: 'Tomato seedlings', credits: 4, photos: null },
+    { id: 'p1', type: 'offer', title: 'Bike repair', price_c: 1500, photos: '["/uploads/a.jpg"]' },
+    { id: 'p2', type: 'need', title: 'Tomato seedlings', price_c: 400, photos: null },
 ];
 
 let host: HTMLDivElement;
@@ -168,7 +170,8 @@ beforeEach(() => {
     data.posts = POSTS;
     data.ratings = RATINGS;
     data.given = [];
-    data.balance = { balance: 12.5, earnedCredit: 40, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 3 } };
+    // getBalance's figures are whole hundredths (balance_c, earnedCredit_c): 12.50 Beans and 40 trust.
+    data.balance = { balance_c: 1250, earnedCredit_c: 4000, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 3 } };
     data.friends = [{}, {}];
     data.trust = TRUST();
     data.friendError = null;
@@ -229,7 +232,7 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
 
     it('a mixed track record invited by a member, and blocking', async () => {
         data.trust = TRUST({
-            stats: { tradeCount: 4, uniquePartners: 1 }, completionRate: 0.5, tier: { name: 'Steward', emoji: '🌿' }, earnedCredit: 120,
+            stats: { tradeCount: 4, uniquePartners: 1 }, completionRate: 0.5, tier: { name: 'Steward', emoji: '🌿' }, earnedCredit: 12000,
             vouchedInBy: { kind: 'member', publicKey: ROSA, callsign: 'Rosa', avatarUrl: null, tier: 'Elder' },
             mutualCount: 2, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }, { publicKey: '4'.repeat(64), callsign: null, avatarUrl: null }],
         });
@@ -361,7 +364,8 @@ describe('the member\'s own profile in the pseudo-locale', () => {
         expect(host.textContent).toContain(xx('Edit'));
         expect(host.textContent).toContain(xx('Resident'));
         expect(host.textContent).toContain(xx('{n} trust points').replace('{n}', '40'));
-        expect(host.textContent).toContain('+12.5');
+        // A balance with hundredths shows both places (core formatHundredths), as every Beans figure does.
+        expect(host.textContent).toContain('+12.50');
         expect(host.textContent).toContain(xx('Friends'));
         expect(host.textContent).toContain(xx('Your Working Style'));
         expect(host.textContent).toContain(xx('Received ({n})').replace('{n}', '2'));
@@ -437,7 +441,7 @@ describe('in English nothing is bracketed, and the words are as they were', () =
         nav.params = { publicKey: OWN };
         await renderIn('en');
         expect(bracketed(host)).toBe(0);
-        for (const english of ['My Profile', 'Edit', 'Resident', '40 trust points', '+12.5', 'Beans', 'Friends', 'Trades', 'Your Working Style',
+        for (const english of ['My Profile', 'Edit', 'Resident', '40 trust points', '+12.50', 'Beans', 'Friends', 'Trades', 'Your Working Style',
             'Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.', 'Received (2)', 'Given']) {
             expect(host.textContent, english).toContain(english);
         }

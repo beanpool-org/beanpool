@@ -114,7 +114,7 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
             if (addMember) {
                 db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                             VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'recovery-seal-test', 'TEST')`).run(id.pk, callsign);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
             }
             const sealed = await sealSeedToSso(new Uint8Array(seed), 'google', GOOGLE_SUB, { words }) as
                 { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string };

@@ -26,6 +26,8 @@ function assert(cond: boolean, msg: string): void {
 }
 const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 40)); };
 const DAY = 86400_000;
+/** The story's figures are Beans; the node's are whole hundredths: `hc` turns one into the other at the door. */
+const hc = (beans: number) => Math.round(beans * 100);
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 
 interface Id { pk: string; priv: crypto.KeyObject; name: string }
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const posts: any = await import('./engine/posts.js');
     const escrow: any = await import('./engine/escrow.js');
+    const notices: any = await import('./engine/push-notices.js').catch(() => null);
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
     await initTls();
     se.initStateEngine();
@@ -93,14 +96,15 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, ?, ?, 'active')`)
             .run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk, `INV-${name.toUpperCase()}`);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
-        if (beans > 0 && !(se as any).transfer('genesis', id.pk, beans, 'Seed grant', 'direct', true)) throw new Error('seed grant failed');
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        if (beans > 0 && !(se as any).transfer('genesis', id.pk, hc(beans), 'Seed grant', 'direct', true)) throw new Error('seed grant failed');
         const token = `ExponentPushToken[${name}-${crypto.randomBytes(8).toString('hex')}]`;
         putPushTokenRow(id.pk, token, 'android');
         tokenOwner.set(token, id);
         return id;
     };
-    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    /** A balance as the ledger holds it: whole hundredths. */
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance_c;
     const realNow = Date.now;
 
     try {
@@ -151,8 +155,8 @@ async function main(): Promise<void> {
         // ── 2. Request and cancel ──────────────────────────────────────────────────────────────────────────
         console.log('\n--- 2. A request cancelled and made again ---');
         const sid = member('Sid'), bea = member('Bea', 10), cal = member('Cal', 10);
-        for (const b of [bea, cal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
-        const eggs = createPost('offer', 'goods', 'Fresh eggs', 'A dozen', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        for (const b of [bea, cal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', hc(1), 'fixed', b.pk, -28.55, 153.5, [], false);
+        const eggs = createPost('offer', 'goods', 'Fresh eggs', 'A dozen', hc(1), 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         const request = (b: Id) => call('POST', b, '/api/marketplace/posts/request', { postId: eggs.id, buyerPublicKey: b.pk });
         const cancel = (b: Id, txId: string) => call('POST', b, '/api/marketplace/transactions/cancel-request', { transactionId: txId, buyerPublicKey: b.pk });
         await flush(); sent.length = 0;
@@ -194,7 +198,7 @@ async function main(): Promise<void> {
         assert(ok.status === 200 && pushesTo(bea, 'market.answer').length === 1, `Sid's approval tells Bea (${ok.status}, ${pushesTo(bea).length})`);
 
         // E. A decline of a folded request tells the requester (1)
-        const tea = createPost('offer', 'goods', 'Tea', 'A tin', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        const tea = createPost('offer', 'goods', 'Tea', 'A tin', hc(1), 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const t1 = await call('POST', bea, '/api/marketplace/posts/request', { postId: tea.id, buyerPublicKey: bea.pk });
         await call('POST', bea, '/api/marketplace/transactions/cancel-request', { transactionId: t1.body?.transaction?.id, buyerPublicKey: bea.pk });
@@ -207,8 +211,8 @@ async function main(): Promise<void> {
 
         // B. On a Need the author's cancel tells the helper (1)
         const ana = member('Ana', 20), hal = member('Hal', 0);
-        for (const b of [ana, hal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
-        const fence = createPost('need', 'services', 'Fix my fence', 'Two posts down', 2, 'fixed', ana.pk, -28.55, 153.5, [], true)!;
+        for (const b of [ana, hal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', hc(1), 'fixed', b.pk, -28.55, 153.5, [], false);
+        const fence = createPost('need', 'services', 'Fix my fence', 'Two posts down', hc(2), 'fixed', ana.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const h1 = await call('POST', hal, '/api/marketplace/posts/request', { postId: fence.id, buyerPublicKey: hal.pk });
         await call('POST', hal, '/api/marketplace/transactions/cancel-request', { transactionId: h1.body?.transaction?.id, buyerPublicKey: hal.pk });
@@ -223,8 +227,8 @@ async function main(): Promise<void> {
 
         // C. An honest second request after a completed deal pushes the author (1)
         const cara = member('Cara', 20);
-        createPost('offer', 'goods', "Cara's seeds", 'A packet', 1, 'fixed', cara.pk, -28.55, 153.5, [], false);
-        const honey = createPost('offer', 'goods', 'Honey', 'A jar', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Cara's seeds", 'A packet', hc(1), 'fixed', cara.pk, -28.55, 153.5, [], false);
+        const honey = createPost('offer', 'goods', 'Honey', 'A jar', hc(1), 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const c1 = await call('POST', cara, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: cara.pk });
         await call('POST', sid, '/api/marketplace/transactions/approve', { transactionId: c1.body?.transaction?.id, authorPublicKey: sid.pk });
@@ -238,8 +242,8 @@ async function main(): Promise<void> {
         // ── 3. 1-step accept and cancel ────────────────────────────────────────────────────────────────────
         console.log('\n--- 3. A 1-step accept and its cancel, over and over ---');
         const sue = member('Sue'), bix = member('Bix', 10);
-        createPost('offer', 'goods', "Bix's seeds", 'A packet', 1, 'fixed', bix.pk, -28.55, 153.5, [], false);
-        const jam = createPost('offer', 'goods', 'Jam', 'A jar', 1, 'fixed', sue.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Bix's seeds", 'A packet', hc(1), 'fixed', bix.pk, -28.55, 153.5, [], false);
+        const jam = createPost('offer', 'goods', 'Jam', 'A jar', hc(1), 'fixed', sue.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const start = balanceOf(bix);
         let turnsOk = true, refunded = true;
@@ -248,7 +252,7 @@ async function main(): Promise<void> {
             const held = balanceOf(bix);
             const can = await call('POST', bix, '/api/marketplace/transactions/cancel', { transactionId: acc.body?.transaction?.id, cancellerPublicKey: bix.pk });
             turnsOk &&= acc.status === 200 && can.status === 200;
-            refunded &&= held === start - 1 && balanceOf(bix) === start;
+            refunded &&= held === start - hc(1) && balanceOf(bix) === start;
         }
         await flush();
         const kinds = pushesTo(sue).map(m => m.data?.k);
@@ -264,12 +268,19 @@ async function main(): Promise<void> {
 
         // D. A second one-step buy pushes (1)
         const dan = member('Dan', 20);
-        createPost('offer', 'goods', "Dan's seeds", 'A packet', 1, 'fixed', dan.pk, -28.55, 153.5, [], false);
-        const bread = createPost('offer', 'goods', 'Bread', 'A loaf', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Dan's seeds", 'A packet', hc(1), 'fixed', dan.pk, -28.55, 153.5, [], false);
+        const bread = createPost('offer', 'goods', 'Bread', 'A loaf', hc(1), 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const a1 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
         const d1 = await call('POST', dan, '/api/marketplace/transactions/complete', { transactionId: a1.body?.transaction?.id, confirmerPublicKey: dan.pk });
-        await flush(); sent.length = 0;
+        await flush();
+        // Each push's words keep its figure in Beans, not hundredths (the deciding review of #3033, escrow.ts): the 1-Bean
+        // loaf is "1 Beans" in escrow, and its payment out, less the 1.5% fee truncated, "0.99 Beans" released.
+        const noticeBody = (m: any, who: Id) => notices?.readPushNotice(m?.data?.i, who.pk)?.body ?? m?.body ?? '';
+        const sidWords = pushesTo(sid).map(m => noticeBody(m, sid));
+        assert(sidWords.some(b => b.includes('— 1 Beans are now in escrow.')) && sidWords.some(b => b.includes('Payment of 0.99 Beans was released')),
+            `the accept and the release push Sid their figures in Beans (${JSON.stringify(sidWords)})`);
+        sent.length = 0;
         const a2 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
         await flush();
         assert(a1.status === 200 && d1.status === 200 && a2.status === 200 && pushesTo(sid, 'market.request').length === 1,

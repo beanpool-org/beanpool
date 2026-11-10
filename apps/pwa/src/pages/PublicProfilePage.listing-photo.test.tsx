@@ -14,7 +14,7 @@ vi.mock('../lib/features', async (importOriginal) => ({
     useFeatureMode: vi.fn(() => 'live'),
 }));
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../components/ImageLightbox', () => ({ ImageLightbox: () => null }));

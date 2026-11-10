@@ -249,20 +249,21 @@ const DAY = 86400000;
 const LOCAL = { profile: 'local', checkedAt: new Date().toISOString(), features: { beans: true, escrow: true, invites: true, knocks: true, door: 'members', enterprises: true } };
 // The worldwide community as Marty's shot has it: Beans off and shown as a local community's (the showcase), deals on.
 const GLOBAL = { profile: 'global', checkedAt: new Date().toISOString(), features: { beans: false, escrow: true, showcase: true, invites: true, decisions: false } };
+// Rows of the phone's copy (db.ts posts, marketplace_transactions): a price is price_c and a deal's figure amount_c, whole hundredths.
 const apples = {
     id: 'p-apples', type: 'need', status: 'active', title: 'Apples needed', description: 'Looking for fresh apples', category: 'food',
-    author_pubkey: MARTY, author_callsign: 'Marty', credits: 0, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
+    author_pubkey: MARTY, author_callsign: 'Marty', price_c: 0, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
     photos: c === 'apples-nophoto' ? '[]' : JSON.stringify([c === 'photo-whole' ? PORTRAIT : PHOTO]), created_at: new Date(Date.now() - 3 * DAY).toISOString(),
 };
 const offer = {
     id: 'p-pots', type: 'offer', status: 'active', title: 'Pottery lessons on the wheel', description: 'Six weeks on the wheel, clay and glazes included. Bring an apron.',
-    category: 'education', author_pubkey: DAMO, author_callsign: 'Damo', credits: 30, price_type: 'hourly', repeatable: 1, audience_scope: 'public',
+    category: 'education', author_pubkey: DAMO, author_callsign: 'Damo', price_c: 3000, price_type: 'hourly', repeatable: 1, audience_scope: 'public',
     photos: JSON.stringify([PHOTO]), created_at: new Date(Date.now() - 2 * DAY).toISOString(),
 };
 // Cold start N4: another member's Need on a community with Beans, the take-up tapped (the case's own -open ending).
 const fence = {
     id: 'p-fence', type: 'need', status: 'active', title: 'Help mending the fence', description: 'Saturday morning, tools provided.', category: 'labour',
-    author_pubkey: KOFI, author_callsign: 'Kofi', credits: 40, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
+    author_pubkey: KOFI, author_callsign: 'Kofi', price_c: 4000, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
     photos: JSON.stringify([PHOTO]), created_at: new Date(Date.now() - 2 * DAY).toISOString(),
 };
 let post = apples;
@@ -270,15 +271,15 @@ let profile = GLOBAL;
 if (c === 'offer') { post = offer; profile = LOCAL; }
 if (c === 'own') { post = { ...offer, author_pubkey: ME, author_callsign: 'Wren' }; profile = LOCAL; }
 if (c === 'need-open') { post = fence; profile = LOCAL; }
-if (c === 'need-hours-open') { post = { ...fence, id: 'p-bed', title: 'Dig a vegetable bed', price_type: 'hourly', credits: 20 }; profile = LOCAL; }
-if (c === 'need-free-open') { post = { ...fence, id: 'p-chairs', title: 'Carry chairs to the hall', credits: 0 }; profile = LOCAL; }
+if (c === 'need-hours-open') { post = { ...fence, id: 'p-bed', title: 'Dig a vegetable bed', price_type: 'hourly', price_c: 2000 }; profile = LOCAL; }
+if (c === 'need-free-open') { post = { ...fence, id: 'p-chairs', title: 'Carry chairs to the hall', price_c: 0 }; profile = LOCAL; }
 if (c === 'deal') {
     // A one-off Offer the member took up two days ago: the Beans held for Damo until the member releases them.
-    post = { ...offer, id: 'p-ladder', title: 'Ladder and a hand to clean the gutters', repeatable: 0, credits: 45, price_type: 'fixed', status: 'pending', accepted_by: ME, pending_transaction_id: 'tx-1' };
+    post = { ...offer, id: 'p-ladder', title: 'Ladder and a hand to clean the gutters', repeatable: 0, price_c: 4500, price_type: 'fixed', status: 'pending', accepted_by: ME, pending_transaction_id: 'tx-1' };
     profile = LOCAL;
     const at = new Date(Date.now() - 2 * DAY).toISOString();
-    globalThis.__txs = [{ id: 'tx-1', postId: 'p-ladder', status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Wren', sellerPublicKey: DAMO, sellerCallsign: 'Damo', credits: 45, hours: null, createdAt: at }];
-    globalThis.__dbTx = { id: 'tx-1', post_id: 'p-ladder', status: 'pending', buyer_pubkey: ME, buyer_callsign: 'Wren', seller_pubkey: DAMO, seller_callsign: 'Damo', credits: 45, hours: null, created_at: at };
+    globalThis.__txs = [{ id: 'tx-1', postId: 'p-ladder', status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Wren', sellerPublicKey: DAMO, sellerCallsign: 'Damo', amount_c: 4500, hours: null, createdAt: at }];
+    globalThis.__dbTx = { id: 'tx-1', post_id: 'p-ladder', status: 'pending', buyer_pubkey: ME, buyer_callsign: 'Wren', seller_pubkey: DAMO, seller_callsign: 'Damo', amount_c: 4500, hours: null, created_at: at };
 }
 globalThis.__post = post;
 globalThis.__profile = profile;

@@ -90,7 +90,7 @@ describe('ActivityWaterfall Live Pulse strip', () => {
             actorCallsign: 'Sam',
             targetPubkey: 'pk-bea',
             targetCallsign: 'Bea',
-            metadata: { postId: 'post-2', postTitle: 'Bike repair', credits: 12 },
+            metadata: { postId: 'post-2', postTitle: 'Bike repair', amount_c: 1200 },
             createdAt: now,
         },
         rated: {
@@ -180,7 +180,7 @@ describe('ActivityWaterfall Live Pulse strip', () => {
     });
 
     it('a completed trade with no listing opens the other member', async () => {
-        mockFeed = [{ ...items.traded, metadata: { credits: 12 } }];
+        mockFeed = [{ ...items.traded, metadata: { amount_c: 1200 } }];
         await renderStrip();
         const chip = await screen.findByRole('button', { name: /Sam traded with Bea/ });
         fireEvent.click(chip);

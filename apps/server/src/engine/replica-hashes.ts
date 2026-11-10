@@ -167,7 +167,13 @@ export interface TableHashes {
  * writeMemberStanding); what an older importer drops is a member's switch, and after a take-over from such a copy their
  * inviter shows again until they switch it off again.
  */
-export const TABLE_HASHES_VERSION = 28;
+/**
+ * 29: money is whole hundredths (DESIGN-atomic-beans-fable.md): every money column is INTEGER and named *_c (accounts.balance_c,
+ * transactions.amount_c and fee_c, posts.price_c, marketplace_transactions.amount_c, ...), and members loses
+ * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
+ * copy never crosses the change.
+ */
+export const TABLE_HASHES_VERSION = 29;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

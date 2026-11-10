@@ -4,7 +4,7 @@
  * 1. Entry decompression and date-based indexing modulo 300.
  * 2. Treasury auto-provisioning for "Daily Pulse" and callsign collision safety.
  * 3. Daily rotation: atomic soft-deletion of previous pulse offer and creation of today's 0-bean offer.
- * 4. Pinned marketplace post attributes (credits=0, reach='local', status='active', deterministic ID).
+ * 4. Pinned marketplace post attributes (price_c=0, reach='local', status='active', deterministic ID).
  * 5. Re-rotation idempotency: exactly one active Pulse post remains at any time.
  * 6. Zero notification / DM generation.
  * 7. Escrow API rejection for inspirational posts.
@@ -85,7 +85,7 @@ async function main() {
     const dateDay1 = new Date('2026-08-16T05:00:00Z');
     const { post: postDay1, entry: entryDay1, pulseItem: pulseItemDay1 } = rotateDailyPulse(dateDay1);
     assert(postDay1.id === 'pulse_2026-08-16', `Pulse post ID is deterministic: "${postDay1.id}"`);
-    assert(postDay1.credits === 0, `Pulse post is 0 Beans (got ${postDay1.credits})`);
+    assert(postDay1.price_c === 0, `Pulse post is 0 Beans (got price_c ${postDay1.price_c})`);
     assert(postDay1.title === entryDay1.headline, `Pulse post title matches headline: "${postDay1.title}"`);
     assert(postDay1.description === entryDay1.body, 'Pulse post description matches body');
     assert(postDay1.authorPublicKey === pulsePubkey, 'Pulse post author is the Daily Pulse Treasury');
@@ -138,7 +138,7 @@ async function main() {
     const peerPubkey = 'peer_test_pubkey_1234567890123456';
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
     setMemberPhoto(db, peerPubkey, 'https://example.com/avatar.jpg');
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance) VALUES (?, ?)").run(peerPubkey, 50);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance_c) VALUES (?, ?)").run(peerPubkey, 5000); // 50 Beans, in hundredths
 
     let requestBlocked = false;
     try {
@@ -167,14 +167,14 @@ async function main() {
     assert(getActiveMemberListingCount() === 0, 'Active member listing count is 0 (Daily Pulse excluded)');
 
     // 1 member listing created: Daily Pulse remains eligible
-    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'fixed', peerPubkey);
+    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 500, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 1, 'Active member listing count is 1 after 1 member post');
     const { post: postWith1Listing } = rotateDailyPulse(dateDay2);
     assert(!!postWith1Listing, 'Daily Pulse post is created/retained when 1 member listing exists (< 2)');
     assert(!!getActivePulsePost(), 'getActivePulsePost() returns post when 1 member listing exists');
 
     // 2 member listings created: Daily Pulse is SUPPRESSED (>= 2)
-    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'fixed', peerPubkey);
+    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 1000, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 2, 'Active member listing count is 2 after 2nd member post');
     const { post: postWith2Listings, pulseItem: pulseItemWith2 } = rotateDailyPulse(dateDay2);
     assert(postWith2Listings === null, 'Daily Pulse post is suppressed when 2 member listings exist (post is null)');
@@ -188,7 +188,7 @@ async function main() {
     assert(activeMarketplacePulse.length === 0, 'Zero active Daily Pulse posts in marketplace when >= 2 member listings');
 
     // 3 member listings: Still suppressed
-    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'fixed', peerPubkey);
+    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 1500, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 3, 'Active member listing count is 3');
     assert(getActivePulsePost() === null, 'getActivePulsePost() still null with 3 member listings');
     const { post: postWith3Listings } = rotateDailyPulse(dateDay2);

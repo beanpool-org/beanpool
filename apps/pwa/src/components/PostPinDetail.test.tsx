@@ -40,7 +40,7 @@ describe('PostPinDetail', () => {
         repeatable: false,
         title: 'Sourdough starter',
         description: 'Active culture',
-        credits: 5,
+        price_c: 500,
         priceType: 'fixed',
         status: 'active',
         active: true,

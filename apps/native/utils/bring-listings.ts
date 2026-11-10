@@ -29,7 +29,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { BRING_MOST_PHOTOS, photosOf, t, tn } from '@beanpool/core';
+import { BRING_MOST_PHOTOS, isHundredths, photosOf, t, tn } from '@beanpool/core';
 import { BRING_LISTINGS_STORE_KEY } from './storage-keys';
 import { getCachedNodeProfile, GLOBAL_NODE_URL } from './node-profile';
 import { plainOriginOf } from './node-url';
@@ -80,7 +80,8 @@ export interface OwnListing {
     category: string;
     title: string;
     description?: string;
-    credits?: number;
+    /** Its price, whole hundredths of a Bean (the node's `price_c`). */
+    price_c?: number;
     priceType?: string;
     authorPublicKey: string;
     shownCopy?: boolean;
@@ -324,7 +325,8 @@ function postBody(post: OwnListing, id: string, publicKey: string, photos: strin
         category: post.category,
         title: post.title,
         description: post.description ?? '',
-        credits: Number(post.credits) || 0,
+        // The price exactly as the community it comes from holds it, whole hundredths of a Bean (0, Free, for anything else).
+        price_c: isHundredths(post.price_c) && post.price_c >= 0 ? post.price_c : 0,
         priceType: post.priceType || 'fixed',
         authorPublicKey: publicKey,
         ...(typeof post.lat === 'number' && typeof post.lng === 'number' ? { lat: post.lat, lng: post.lng } : {}),

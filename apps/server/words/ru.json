@@ -86,7 +86,6 @@
   "A new project needs an id nothing else has": "Новому проекту нужен идентификатор, которого нет ни у чего другого",
   "A pay-out needs an amount in Beans above 0.": "Для выплаты нужна сумма в бобах больше 0.",
   "A pending request already exists for this enterprise": "Для этого предприятия уже есть ожидающий запрос",
-  "A positive amount is required": "Нужна положительная сумма",
   "A post can have at most {n} photos": "В записи может быть не более {n} фото",
   "A post can have at most {n} photos. Take one off to add another.": "В записи может быть не более {n} фото. Уберите одно, чтобы добавить другое.",
   "A project can have at most 10 photos": "В проекте может быть не более 10 фото",

@@ -41,7 +41,7 @@ function stubNode(info: unknown, handlers: Record<string, Handler> = {}) {
     return calls;
 }
 
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
 const GLOBAL_BY_AREA = { ...GLOBAL_OPEN, features: { openJoin: true, nearbyListings: { radiusKm: 250, max: 500 } } };
 
 function b64url(s: string): string {

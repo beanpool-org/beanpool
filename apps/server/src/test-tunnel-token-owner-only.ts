@@ -147,7 +147,7 @@ async function main() {
     const seed = (who: Identity, callsign: string, role: 'owner' | 'admin') => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(who.pub, callsign);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(who.pub);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(who.pub);
         grantNodeRole(who.pub, role, 'SYSTEM');
     };
     const owner = keypair(); seed(owner, 'tokOwner', 'owner');

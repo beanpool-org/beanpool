@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     seedGenesisMember(owner.pub, 'Olive');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'Adam', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(admin.pub);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pub);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pub);
     grantNodeRole(admin.pub, 'admin', owner.pub);
     const { hash, salt } = hashPassword(PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: true, totpSecret: SECRET, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });

@@ -64,7 +64,6 @@
   "A new project needs an id nothing else has": "새 프로젝트에는 다른 어디에도 없는 ID가 필요해요",
   "A pay-out needs an amount in Beans above 0.": "지출에는 0보다 큰 콩 금액이 필요해요.",
   "A pending request already exists for this enterprise": "이 기업에는 이미 보류 중인 요청이 있어요",
-  "A positive amount is required": "0보다 큰 금액이 필요해요",
   "A post can have at most {n} photos": "게시물에는 사진을 최대 {n}장까지 올릴 수 있어요",
   "A post can have at most {n} photos. Take one off to add another.": "게시물에는 사진을 최대 {n}장까지 올릴 수 있어요. 새로 추가하려면 하나를 빼세요.",
   "A project can have at most 10 photos": "프로젝트에는 사진을 최대 10장까지 올릴 수 있어요",

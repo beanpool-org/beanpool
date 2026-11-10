@@ -76,7 +76,9 @@ if (!listRes.ok || !Array.isArray(list?.treasuries)) {
 }
 let eggs = list.treasuries.find(t => t.name === 'Community Eggs');
 if (!eggs) {
-    const res = await toNode('/api/local/admin/treasury', { method: 'POST', headers: admin, body: JSON.stringify({ name: 'Community Eggs', avatar, creditLine: 200 }) }, 'create the treasury');
+    // Money goes to the node in whole hundredths under a *_c name (its money-body.ts): the 200-Bean line is 20000. The old
+    // `creditLine` is refused (400 amount_c_required), as `credits` is on the offer below.
+    const res = await toNode('/api/local/admin/treasury', { method: 'POST', headers: admin, body: JSON.stringify({ name: 'Community Eggs', avatar, creditLine_c: 20000 }) }, 'create the treasury');
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.success) { console.error(`✗ create failed (HTTP ${res.status}):`, d.error || d); process.exit(1); }
     eggs = { publicKey: d.publicKey, liveOffers: 0 };
@@ -92,9 +94,10 @@ if ((eggs.liveOffers ?? 0) > 0) {
     console.error('✗ The eggs Offer was not posted: every Offer in the Market needs a photo. Set EGGS_PHOTO to a JPEG, PNG or WebP of the eggs and run this again; it reuses "Community Eggs".');
     process.exit(1);
 } else {
+    // 12 Beans a dozen: price_c 1200.
     const res = await toNode(`/api/local/admin/treasury/${eggs.publicKey}/offer`, {
         method: 'POST', headers: admin,
-        body: JSON.stringify({ category: 'food', title: 'Dozen free-range eggs', description: 'Fresh daily from the community flock — pays for the feed.', credits: 12, priceType: 'fixed', repeatable: true, photos: [offerPhoto] }),
+        body: JSON.stringify({ category: 'food', title: 'Dozen free-range eggs', description: 'Fresh daily from the community flock — pays for the feed.', price_c: 1200, priceType: 'fixed', repeatable: true, photos: [offerPhoto] }),
     }, 'post the offer');
     const d = await res.json().catch(() => ({}));
     if (res.ok && d.success) {

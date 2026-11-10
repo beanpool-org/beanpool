@@ -79,6 +79,8 @@ function attempt<T>(fn: () => T): T | undefined {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const DAY = 86_400_000;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hundredthsOf = (beans: number) => Math.round(beans * 100);
 
 let BASE = '';
 
@@ -120,7 +122,7 @@ function member(name: string, made?: Id): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     putPushTokenRow(id.pk, tokenOf(id), 'android');
     return id;
 }
@@ -528,9 +530,9 @@ async function main(): Promise<void> {
     // ── 7. a deal request ───────────────────────────────────────────────────────────────────────
     console.log('── 7. a deal request ──');
     // A Need asks its author to have listed an Offer first, and the Beans to pay for it.
-    const jars = attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', 1, 'fixed', ann.pk));
-    attempt(() => transfer('genesis', ann.pk, 10, 'Seed grant', 'direct', true));
-    const need = attempt(() => createPost('need', 'goods', 'A lift to town', 'Thursday morning', 1, 'fixed', ann.pk));
+    const jars = attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', hundredthsOf(1), 'fixed', ann.pk));
+    attempt(() => transfer('genesis', ann.pk, hundredthsOf(10), 'Seed grant', 'direct', true));
+    const need = attempt(() => createPost('need', 'goods', 'A lift to town', 'Thursday morning', hundredthsOf(1), 'fixed', ann.pk));
     pushes.length = 0;
     const boReq = attempt(() => requestPost(need!.id, bo.pk));
     await sleep(50);
@@ -543,10 +545,11 @@ async function main(): Promise<void> {
     // NON-BLOCKING): from Bo they push her nothing. The trade itself is as it was: the Beans go into escrow and come back,
     // and the deal's SYSTEM lines are written in their chat as for anyone. Cy, whom she never blocked, is the control.
     for (const who of [bo, cy]) {
-        attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', 1, 'fixed', who.pk));
-        attempt(() => transfer('genesis', who.pk, 5, 'Seed grant', 'direct', true));
+        attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', hundredthsOf(1), 'fixed', who.pk));
+        attempt(() => transfer('genesis', who.pk, hundredthsOf(5), 'Seed grant', 'direct', true));
     }
-    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    /** A member's balance row, whole hundredths. */
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance_c;
     const systemLinesWith = (id: Id) => (db.prepare(`SELECT COUNT(*) AS n FROM messages m
         JOIN conversation_participants a ON a.conversation_id = m.conversation_id AND a.public_key = ?
         JOIN conversation_participants b ON b.conversation_id = m.conversation_id AND b.public_key = ?
@@ -562,7 +565,7 @@ async function main(): Promise<void> {
     };
     const boDeal = await acceptAndCancel(bo);
     const cyDeal = await acceptAndCancel(cy);
-    assert(boDeal.acc.status === 200 && boDeal.can.status === 200 && boDeal.held === boDeal.bal - 1 && boDeal.after === boDeal.bal && boDeal.lines === 2,
+    assert(boDeal.acc.status === 200 && boDeal.can.status === 200 && boDeal.held === boDeal.bal - hundredthsOf(1) && boDeal.after === boDeal.bal && boDeal.lines === 2,
         `Bo's accept and cancel go through as anyone's: escrowed, refunded, two SYSTEM lines (${show(boDeal.acc)}; ${boDeal.bal}→${boDeal.held}→${boDeal.after}; ${boDeal.lines})`);
     assert(boDeal.kinds.length === 0, `and push Ann nothing (${JSON.stringify(boDeal.kinds)})`);
     assert(cyDeal.acc.status === 200 && cyDeal.can.status === 200 && cyDeal.lines === 2
@@ -582,10 +585,10 @@ async function main(): Promise<void> {
     // ── 8. a listing addressed to her ───────────────────────────────────────────────────────────
     console.log('── 8. a listing addressed to her ──');
     let refused = '';
-    try { createPost('offer', 'goods', 'For you', 'words', 1, 'fixed', bo.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }); }
+    try { createPost('offer', 'goods', 'For you', 'words', hundredthsOf(1), 'fixed', bo.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }); }
     catch (e: any) { refused = e?.message ?? String(e); }
     assert(refused === 'Target member not found or pruned', `Bo's listing addressed to Ann is refused as one to someone who isn't here (${refused || 'made'})`);
-    const cyDirect = attempt(() => createPost('offer', 'goods', 'For you', 'words', 1, 'fixed', cy.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }));
+    const cyDirect = attempt(() => createPost('offer', 'goods', 'For you', 'words', hundredthsOf(1), 'fixed', cy.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }));
     assert(!!cyDirect, "Cy's is made");
 
     // ── 9. a member of another community ────────────────────────────────────────────────────────

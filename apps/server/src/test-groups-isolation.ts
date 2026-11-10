@@ -69,13 +69,13 @@ function makeMember(baseCallsign: string): { pubKeyHex: string; callsign: string
     const pubKeyHex = crypto.randomBytes(32).toString('hex');
     const callsign = `${baseCallsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, status, earned_credit, joined_at)
-        VALUES (?, ?, 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        INSERT INTO members (public_key, callsign, status, earned_credit_c, joined_at)
+        VALUES (?, ?, 'active', 5000, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'bundled://sprout');
 
     // Give member an initial offer to satisfy the contribution covenant
-    createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 10, 'fixed', pubKeyHex, undefined, undefined, [], false);
+    createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 1000, 'fixed', pubKeyHex, undefined, undefined, [], false);
     return { pubKeyHex, callsign };
 }
 
@@ -114,9 +114,9 @@ async function runTests() {
         // - 1 public post
         // - 1 group post in Gardeners
         // - 1 direct post to Dave
-        const pubPost = createPost('offer', 'food', 'Fresh Kale', 'Organically grown kale', 3, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
-        const grpPost = createPost('offer', 'tools', 'Rototiller Rental', 'Heavy duty rototiller for gardeners', 15, 'daily', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
-        const dirPost = createPost('need', 'help', 'Urgent Ride to Town', 'Need a lift to the depot', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        const pubPost = createPost('offer', 'food', 'Fresh Kale', 'Organically grown kale', 300, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
+        const grpPost = createPost('offer', 'tools', 'Rototiller Rental', 'Heavy duty rototiller for gardeners', 1500, 'daily', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const dirPost = createPost('need', 'help', 'Urgent Ride to Town', 'Need a lift to the depot', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
 
         assert(!!pubPost && !!grpPost && !!dirPost, '1a. All three posts created successfully');
 
@@ -152,7 +152,7 @@ async function runTests() {
     console.log('\n─── CONSUMER 2: Map Pins Isolation ───');
     {
         // Public post with location
-        const pubMapPost = createPost('offer', 'produce', 'Oranges at Gate', 'Pick your own oranges', 4, 'fixed', alice.pubKeyHex, -28.55, 153.50, [], false, undefined, false, { audienceScope: 'public' });
+        const pubMapPost = createPost('offer', 'produce', 'Oranges at Gate', 'Pick your own oranges', 400, 'fixed', alice.pubKeyHex, -28.55, 153.50, [], false, undefined, false, { audienceScope: 'public' });
         // Private group post with location
         const grpMapPost = createPost('offer', 'equipment', 'Secret Seed Bank Location', 'Come grab seeds from the shed', 0, 'fixed', alice.pubKeyHex, -28.56, 153.51, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
 
@@ -178,7 +178,7 @@ async function runTests() {
     console.log('\n─── CONSUMER 3: Search Isolation ───');
     {
         const secretTerm = `zyzzyva_${Date.now()}`;
-        const secretPost = createPost('offer', 'tools', `Rare ${secretTerm} artifact`, 'Top secret equipment', 50, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const secretPost = createPost('offer', 'tools', `Rare ${secretTerm} artifact`, 'Top secret equipment', 5000, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         assert(!!secretPost, '3a. Group post with unique search term created');
 
         // Anonymous search
@@ -198,11 +198,11 @@ async function runTests() {
     {
         const peerId = 'peer_neighbour_node_1';
         // Public federated post
-        const pubFedPost = createPost('offer', 'crafts', 'Handmade Soap Everywhere', 'Soap for all communities', 8, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'public' });
+        const pubFedPost = createPost('offer', 'crafts', 'Handmade Soap Everywhere', 'Soap for all communities', 800, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'public' });
         // Group post with reach: 'everywhere' (should NEVER federate!)
-        const grpFedPost = createPost('offer', 'crafts', 'Private Guild Soap', 'Only for our group members', 8, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const grpFedPost = createPost('offer', 'crafts', 'Private Guild Soap', 'Only for our group members', 800, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'group', targetGroupId: gardenGroup.id });
         // Direct post with reach: 'everywhere' (should NEVER federate!)
-        const dirFedPost = createPost('need', 'help', 'Private Direct Help', 'Only for Dave', 10, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        const dirFedPost = createPost('need', 'help', 'Private Direct Help', 'Only for Dave', 1000, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { reach: 'everywhere', audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
 
         assert(!!pubFedPost && !!grpFedPost && !!dirFedPost, '4a. Federated test posts created');
 
@@ -229,14 +229,14 @@ async function runTests() {
         const beforeCount = getPulseListingCount('some_pulse_pubkey');
 
         // Create a group post and a direct post
-        createPost('offer', 'tools', 'Garden Post Count Test', 'Desc', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
-        createPost('offer', 'tools', 'Direct Post Count Test', 'Desc', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
+        createPost('offer', 'tools', 'Garden Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        createPost('offer', 'tools', 'Direct Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
 
         const afterPrivateCount = getPulseListingCount('some_pulse_pubkey');
         assert(afterPrivateCount === beforeCount, `5a. Daily pulse active listings count is unchanged after group/direct posts (was ${beforeCount}, now ${afterPrivateCount})`);
 
         // Create a public post
-        createPost('offer', 'tools', 'Public Post Count Test', 'Desc', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
+        createPost('offer', 'tools', 'Public Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
         const afterPublicCount = getPulseListingCount('some_pulse_pubkey');
         assert(afterPublicCount === beforeCount + 1, `5b. Daily pulse count increments ONLY for public posts (now ${afterPublicCount})`);
     }
@@ -250,9 +250,9 @@ async function runTests() {
         const initialCount = getRecentActivities().length;
 
         // Create group post
-        const privateGroupPost = createPost('offer', 'tools', 'Secret Garden Plan', 'Desc', 10, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const privateGroupPost = createPost('offer', 'tools', 'Secret Garden Plan', 'Desc', 1000, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         // Create direct post
-        const privateDirectPost = createPost('offer', 'tools', 'Secret Dave Trade', 'Desc', 10, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        const privateDirectPost = createPost('offer', 'tools', 'Secret Dave Trade', 'Desc', 1000, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
 
         const afterPrivateActivities = getRecentActivities();
         assert(afterPrivateActivities.length === initialCount, '6a. Creating group/direct posts writes ZERO entries to activity_feed');
@@ -283,7 +283,7 @@ async function runTests() {
         addWsClient(wsAnon);
 
         // 1. Broadcast group post in Gardeners (Bob is member, Carol is not)
-        const grpPostWs = createPost('offer', 'tools', 'Broadcast Shovel', 'Shovel', 1, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const grpPostWs = createPost('offer', 'tools', 'Broadcast Shovel', 'Shovel', 100, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
 
         const bobGotGrp = receivedBob.some(e => e.type === 'new_post' && e.post.id === grpPostWs!.id);
         const carolGotGrp = receivedCarol.some(e => e.type === 'new_post' && e.post.id === grpPostWs!.id);
@@ -294,7 +294,7 @@ async function runTests() {
         assert(!anonGotGrp, '7c. Anonymous socket DID NOT receive group post WebSocket broadcast');
 
         // 2. Broadcast direct post to Carol
-        const dirPostWs = createPost('need', 'help', 'Direct Secret to Carol', 'Need advice', 2, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
+        const dirPostWs = createPost('need', 'help', 'Direct Secret to Carol', 'Need advice', 200, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
 
         const bobGotDir = receivedBob.some(e => e.type === 'new_post' && e.post.id === dirPostWs!.id);
         const carolGotDir = receivedCarol.some(e => e.type === 'new_post' && e.post.id === dirPostWs!.id);
@@ -422,14 +422,14 @@ async function runTests() {
         const infoBefore = getCommunityInfo();
 
         // Create group post and direct post
-        createPost('offer', 'other', 'Counter Group Post', 'Desc', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
-        createPost('offer', 'other', 'Counter Direct Post', 'Desc', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        createPost('offer', 'other', 'Counter Group Post', 'Desc', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        createPost('offer', 'other', 'Counter Direct Post', 'Desc', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
 
         assert(getActivePostCount() === activeCountBefore, '8a. getActivePostCount() does NOT increment on group or direct posts');
         assert(getCommunityInfo().postCount === infoBefore.postCount, '8b. getCommunityInfo().postCount does NOT increment on group or direct posts');
 
         // Create public post
-        createPost('offer', 'other', 'Counter Public Post', 'Desc', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
+        createPost('offer', 'other', 'Counter Public Post', 'Desc', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
 
         assert(getActivePostCount() === activeCountBefore + 1, '8c. getActivePostCount() increments on public post');
         assert(getCommunityInfo().postCount === infoBefore.postCount + 1, '8d. getCommunityInfo().postCount increments on public post');
@@ -437,7 +437,7 @@ async function runTests() {
 
     console.log('\n─── CONSUMER 9: Direct Query Isolation (getPosts({ id })) ───');
     {
-        const directTestPost = createPost('offer', 'tools', 'Private Secret Post', 'Desc', 10, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const directTestPost = createPost('offer', 'tools', 'Private Secret Post', 'Desc', 1000, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         const pid = directTestPost!.id;
 
         // Anonymous query by ID
@@ -529,7 +529,7 @@ async function runTests() {
         assert(daveActive.status === 'active', '10j. Invited member joins and becomes active');
 
         // 4. Convenor post deletion
-        const bobPostInGarden = createPost('offer', 'tools', 'Garden Rake', 'Sturdy rake', 2, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const bobPostInGarden = createPost('offer', 'tools', 'Garden Rake', 'Sturdy rake', 200, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         assert(!!bobPostInGarden, '10k. Bob creates post in Gardeners');
 
         // Carol (convenor of Builders, NOT Gardeners) tries to delete Bob's post in Gardeners -> MUST fail
@@ -561,8 +561,8 @@ async function runTests() {
             '10p. HARD RULE §9: group_members table has NO foreign key to enterprises');
 
         // Being a convenor grants no trust tier or credit
-        const aliceProfile = db.prepare("SELECT earned_credit, status FROM members WHERE public_key = ?").get(alice.pubKeyHex) as any;
-        assert(aliceProfile.earned_credit === 50, '10q. HARD RULE §9: Creating group or being convenor confers NO credit or trust tier');
+        const aliceProfile = db.prepare("SELECT earned_credit_c, status FROM members WHERE public_key = ?").get(alice.pubKeyHex) as any;
+        assert(aliceProfile.earned_credit_c === 5000, '10q. HARD RULE §9: Creating group or being convenor confers NO credit or trust tier (the 50 she was seeded with, in hundredths)');
 
         // Node roles remain separate
         const nodeRolesRow = db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ?").get(alice.pubKeyHex);
@@ -571,7 +571,7 @@ async function runTests() {
         // 6. Escrow requestPost audience isolation:
         // Carol (non-member of Gardeners) cannot request or accept a group post in Gardeners — and is told exactly what
         // an unknown post id gets, never a membership refusal that would confirm it is a group post.
-        const gardenOffer = createPost('offer', 'tools', 'Special Rake', 'For gardeners only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        const gardenOffer = createPost('offer', 'tools', 'Special Rake', 'For gardeners only', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         let nonMemberReqFailed = false;
         try {
             requestPost(gardenOffer!.id, carol.pubKeyHex);
@@ -610,7 +610,7 @@ async function runTests() {
 
         // Direct post to Dave cannot be requested or accepted by Carol — and, as for a group post above, she is told what an
         // unknown post id gets (engine/post-sight.ts): "This direct post is not addressed to you" confirmed it was one.
-        const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
         let nonTargetReqFailed = false;
         try {
             requestPost(directOffer!.id, carol.pubKeyHex);
@@ -628,7 +628,7 @@ async function runTests() {
         assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post (told "Post not found or not active")');
 
         // 7. Public posts clear foreign target fields:
-        const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'public',
             targetGroupId: gardenGroup.id,
             targetPubkey: dave.pubKeyHex,
@@ -639,7 +639,7 @@ async function runTests() {
             '10u. Public post clears foreign target_group_id, target_pubkey, and assigned_to in database');
 
         // 8. Non-public posts cannot update reach to non-local:
-        const groupPostToUpdate = createPost('offer', 'tools', 'Wheelbarrow', 'Good wheelbarrow', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const groupPostToUpdate = createPost('offer', 'tools', 'Wheelbarrow', 'Good wheelbarrow', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'group',
             targetGroupId: gardenGroup.id
         });
@@ -650,14 +650,14 @@ async function runTests() {
 
         // 9. Convenor moderation scope boundary (§9):
         // Convenor Alice CANNOT delete Bob's public post via removePost
-        const bobPublic = createPost('offer', 'tools', 'Bob Public Shovel', 'Public tool', 5, 'fixed', bob.pubKeyHex)!;
+        const bobPublic = createPost('offer', 'tools', 'Bob Public Shovel', 'Public tool', 500, 'fixed', bob.pubKeyHex)!;
         const aliceDeletePublic = removePost(bobPublic.id, alice.pubKeyHex);
         assert(!aliceDeletePublic, '10w. Convenor Alice CANNOT delete Bob public post via removePost');
         const bobPublicCheck = getPosts({ id: bobPublic.id, viewerPubkey: bob.pubKeyHex })[0];
         assert(bobPublicCheck?.active === true && bobPublicCheck?.status === 'active', '10w-post. Bob public post remains active');
 
         // Residual target_group_id on public post cannot be deleted by convenor
-        const publicResidual = createPost('offer', 'tools', 'Residual Public Post', 'Public with group id', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const publicResidual = createPost('offer', 'tools', 'Residual Public Post', 'Public with group id', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'public',
             targetGroupId: gardenGroup.id
         })!;
@@ -667,7 +667,7 @@ async function runTests() {
         assert(residualCheck?.active === true && residualCheck?.status === 'active', '10x-post. Residual post remains active');
 
         // 10. Re-narrowed WHERE prevents TOCTOU disagreement between auth decision and delete statement
-        const racePost = createPost('offer', 'tools', 'Race Post', 'Testing TOCTOU', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const racePost = createPost('offer', 'tools', 'Race Post', 'Testing TOCTOU', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'group',
             targetGroupId: gardenGroup.id
         })!;
@@ -679,7 +679,7 @@ async function runTests() {
         assert(racePostCheck?.active === true && racePostCheck?.status === 'active', '10y-post. Race post remains active');
 
         // 11. Legitimate convenor can delete active group-scoped post via removePost
-        const validGroupPost = createPost('offer', 'tools', 'Valid Group Tool', 'For gardeners', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const validGroupPost = createPost('offer', 'tools', 'Valid Group Tool', 'For gardeners', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'group',
             targetGroupId: gardenGroup.id
         })!;
@@ -696,7 +696,7 @@ async function runTests() {
             joinPolicy: 'open',
             createdBy: alice.pubKeyHex
         })!;
-        const tempPost = createPost('offer', 'tools', 'Temp Tool', 'In temp group', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+        const tempPost = createPost('offer', 'tools', 'Temp Tool', 'In temp group', 500, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'group',
             targetGroupId: tempGroup.id
         })!;

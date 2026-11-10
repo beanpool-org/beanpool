@@ -225,7 +225,7 @@ describe('the radius picker, the install prompt, the header pill, the Commons pr
     it('the guest lobby: the Join card and the tabs, on the global community and on a local one', async () => {
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         await showIn('xx');
-        const info: any = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+        const info: any = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
         render(<GuestLobby info={info} onComplete={() => {}} />);
         const card = await screen.findByTestId('lobby-join-card');
         await waitFor(() => expect(within(card).getByTestId('lobby-join')).toBeEnabled());

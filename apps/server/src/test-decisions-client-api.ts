@@ -39,7 +39,7 @@ import {
 } from './state-engine.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { db } from './db/db.js';
-import { setCommonsBalance } from '@beanpool/core';
+import { setCommonsBalance, formatHundredths } from '@beanpool/core';
 import type { RouteDeps } from './routes/types.js';
 
 let testsRun = 0;
@@ -129,6 +129,10 @@ async function callRouter(
     return { status: ctx.status, body: ctx.body };
 }
 
+/** The story's figures are Beans; balances, the pot, grants and trade values are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** `balance` and `earnedCredit` are in Beans, as the story tells it. */
 function makeMember(callsign: string, opts?: {
     balance?: number;
     earnedCredit?: number;
@@ -145,34 +149,35 @@ function makeMember(callsign: string, opts?: {
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(pubkey, callsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
+    `).run(pubkey, callsign, joinedAt, status, creditFrozen, isTreasury, hc(earnedCredit));
 
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, 0)
-    `).run(pubkey, balance);
+    `).run(pubkey, hc(balance));
 
     reconcileLedgerFromDb();
 
     return pubkey;
 }
 
+/** A completed trade of `amount` Beans (voice credits on a pool Decision are the Beans of value traded). */
 function recordActivity(buyer: string, seller: string, amount: number) {
     const txId = 'tx-' + Math.random().toString(36).slice(2);
     const postId = 'post-' + Math.random().toString(36).slice(2);
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
-    `).run(txId, postId, buyer, seller, amount, now, now);
+    `).run(txId, postId, buyer, seller, hc(amount), now, now);
 }
 
-// Format the removal debt write-off line per §3.8
-function formatDebtWriteOffLine(targetName: string, debtAmount: number, poolAmount: number): string {
-    return `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+// Format the removal debt write-off line per §3.8. `poolText` is the pot in words (formatHundredths of its hundredths).
+function formatDebtWriteOffLine(targetName: string, debtAmount: number, poolText: string): string {
+    return `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolText}.`;
 }
 
 async function runSuite() {
@@ -264,7 +269,7 @@ async function runSuite() {
             touches: 'pool',
             effect: 'grant_enterprise',
             subject: enterprise,
-            params: { amount: 80 },
+            params: { amount_c: hc(80) },
         },
     });
     assert(resShortDesc.status === 400, 'Propose with description < 10 chars fails with 400');
@@ -280,7 +285,7 @@ async function runSuite() {
             touches: 'pool',
             effect: 'grant_enterprise',
             subject: enterprise,
-            params: { amount: 80 },
+            params: { amount_c: hc(80) },
         },
     });
     assert(resNumDesc.status === 400, 'Propose with non-string description fails with 400 Bad Request');
@@ -295,15 +300,15 @@ async function runSuite() {
             touches: 'pool',
             effect: 'grant_enterprise',
             subject: enterprise,
-            params: { amount: 80 },
+            params: { amount_c: hc(80) },
         },
     });
     assert(resWhitespaceTitle.status === 400, 'Propose with whitespace-only title fails with 400 Bad Request');
     assert(resWhitespaceTitle.body.error.includes('title, touches, and effect are required'), 'Error cites required fields for whitespace title');
     // 1d. Successful propose with no bond charged. The Commons can pay the 80 it asks for: a grant is capped when
     // proposed (grant cap, 2026-09-27), and this fresh node's Commons would otherwise hold nothing.
-    setCommonsBalance(100);
-    const aliceBalanceBefore = getBalance(alice).balance;
+    setCommonsBalance(hc(100));
+    const aliceBalanceBefore = getBalance(alice).balance_c;
     const resAlice = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: alice,
         body: {
@@ -313,7 +318,7 @@ async function runSuite() {
             touches: 'pool',
             effect: 'grant_enterprise',
             subject: enterprise,
-            params: { amount: 80 },
+            params: { amount_c: hc(80) },
         },
     });
     assert(resAlice.status === 200 && resAlice.body.success, 'Alice proposes pool grant successfully');
@@ -321,8 +326,8 @@ async function runSuite() {
     assert(decisionPool.franchise === 'quadratic_trade', 'Pool decision automatically assigned quadratic_trade franchise');
 
     // Verify NO bond debited (§3.8: No bond)
-    const aliceBalanceAfter = getBalance(alice).balance;
-    assert(aliceBalanceBefore === aliceBalanceAfter, `No bond debited on proposal (balance remains ${aliceBalanceAfter} B)`);
+    const aliceBalanceAfter = getBalance(alice).balance_c;
+    assert(aliceBalanceBefore === aliceBalanceAfter && aliceBalanceAfter === hc(200), `No bond debited on proposal (balance remains ${formatHundredths(aliceBalanceAfter, 'en')} B)`);
 
     // 1e. One open decision per author limit
     const resAliceSecond = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
@@ -487,10 +492,11 @@ async function runSuite() {
     // Create a rogue member who owes 180 beans
     const rogue = makeMember('RogueMember', { balance: -180, earnedCredit: 50 });
     const commonsPoolBal = getCommonsBalance();
+    const commonsPoolText = formatHundredths(commonsPoolBal, 'en');
 
     // Verify word-for-word string match from §3.8
-    const expectedLine = `${'RogueMember'}'s balance is \u2212180 beans. Removing them charges that 180 to the Commons pool, which currently holds ${Math.round(commonsPoolBal)}.`;
-    const formattedLine = formatDebtWriteOffLine('RogueMember', 180, Math.round(commonsPoolBal));
+    const expectedLine = `${'RogueMember'}'s balance is \u2212180 beans. Removing them charges that 180 to the Commons pool, which currently holds ${commonsPoolText}.`;
+    const formattedLine = formatDebtWriteOffLine('RogueMember', 180, commonsPoolText);
 
     assert(formattedLine === expectedLine, 'Debt write-off line matches §3.8 word-for-word');
     assert(formattedLine.includes('\u2212'), 'Contains unicode minus sign \\u2212');
@@ -498,8 +504,8 @@ async function runSuite() {
 
     // Test zero-debt scenario
     const cleanMember = makeMember('CleanMember', { balance: 0, earnedCredit: 50 });
-    const cleanExpected = `${'CleanMember'}'s balance is \u22120 beans. Removing them charges that 0 to the Commons pool, which currently holds ${Math.round(commonsPoolBal)}.`;
-    const cleanFormatted = formatDebtWriteOffLine('CleanMember', 0, Math.round(commonsPoolBal));
+    const cleanExpected = `${'CleanMember'}'s balance is \u22120 beans. Removing them charges that 0 to the Commons pool, which currently holds ${commonsPoolText}.`;
+    const cleanFormatted = formatDebtWriteOffLine('CleanMember', 0, commonsPoolText);
     assert(cleanFormatted === cleanExpected, 'Zero-debt ballot correctly states \u22120 and charges 0');
 
     // Propose a removal ballot: since removal by vote S3 nobody proposes one (an admin's pause opens it, and the pause's vote
@@ -516,8 +522,8 @@ async function runSuite() {
             subject: rogue,
             params: {
                 memberName: 'RogueMember',
-                debt: 180,
-                commonsPool: Math.round(commonsPoolBal),
+                debt_c: hc(180),
+                commonsPool_c: commonsPoolBal,
             },
         },
     });
@@ -540,8 +546,8 @@ async function runSuite() {
     db.prepare(`UPDATE decisions SET closes_at = datetime('now', '-1 minute') WHERE id = ?`).run(decisionPool.id);
 
     // Fund the Commons pool so grant can execute
-    setCommonsBalance(500);
-    db.prepare(`UPDATE accounts SET balance = 500 WHERE public_key = 'COMMONS_POOL'`).run();
+    setCommonsBalance(hc(500));
+    db.prepare(`UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'`).run(hc(500));
 
     // Fire the tick the way the node does: the periodic tickDecisions() in state-engine.ts. There is no
     // route for it — test-decisions-tick-route-gone.ts holds POST /api/commons/decisions/tick unrouted.
@@ -558,7 +564,7 @@ async function runSuite() {
         WHERE to_pubkey = ? AND auth_signer = ?
     `).get(enterprise, `system:decision:${decisionPool.id}`) as any;
     assert(!!tx, `Ledger transaction has provenance auth_signer = 'system:decision:${decisionPool.id}'`);
-    assert(tx.amount === 80, 'Transaction amount matches decision grant (80 B)');
+    assert(tx.amount_c === hc(80), `Transaction amount matches decision grant (80 B; ${tx.amount_c} hundredths)`);
 
     console.log(`\n🎉 All ${testsPassed}/${testsRun} Decisions Client API & Parity tests PASSED!\n`);
     process.exit(0);

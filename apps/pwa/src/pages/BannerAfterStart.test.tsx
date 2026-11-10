@@ -40,7 +40,7 @@ vi.mock('../lib/visitor-lobby-gate', () => ({
         memberCount: 5,
         postCount: 0,
         transactionCount: 0,
-        commonsBalance: 100,
+        commonsBalance_c: 10000,
         profile: 'local',
         features: { beans: true, enterprises: true, decisions: true },
     })),
@@ -70,8 +70,8 @@ function sampleEnterprise(over: Record<string, any> = {}) {
         status: 'active',
         paused: false,
         lifecycle: 'ongoing',
-        balance: 50,
-        creditLine: 100,
+        balance_c: 5000,
+        creditLine_c: 10000,
         liveOffers: 1,
         keepers: [{ publicKey: KEEPER_ID.publicKey, callsign: 'Alice', role: 'lead' }],
         shop: {
@@ -94,8 +94,8 @@ describe('banner-after-start (PWA)', () => {
         vi.clearAllMocks();
         localStorage.clear();
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, keeperOf: [ENT_KEY] } as any);
-        vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance: 500 });
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, keeperOf: [ENT_KEY] } as any);
+        vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance_c: 50000 });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getYourGroups').mockResolvedValue({ items: [] } as any);
         vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [] } as any);
@@ -222,7 +222,7 @@ describe('banner-after-start (PWA)', () => {
 
     it('4. not as a non-keeper', async () => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue(sampleEnterprise({ shop: { photoUrl: null } }) as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: [] } as any);
 
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={STRANGER_ID} isMember={true} onBack={vi.fn()} />);
 

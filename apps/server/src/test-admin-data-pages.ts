@@ -48,6 +48,11 @@ function assert(cond: boolean, msg: string): void {
 }
 
 let BASE = '';
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns a Beans figure into hundredths
+ * for a row or a check. A money figure the node answers is named `*_c` (DESIGN-atomic-beans-fable.md §1 Wire).
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 async function post(path: string, headers: Record<string, string>, body: unknown = {}): Promise<{ status: number; bytes: number; ms: number; json: any }> {
     const t0 = performance.now();
     const res = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept-Encoding': 'identity', ...headers }, body: JSON.stringify(body) });
@@ -63,10 +68,10 @@ let seeded = 0;
 function seedMembers(n: number, postsEach = 0) {
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, bio)
         VALUES (?, ?, 'active', ?, ?, 'seed', ?)`);
-    const insertAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`);
+    const insertAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`);
     const insertToken = db.prepare(`INSERT OR IGNORE INTO push_tokens (public_key, token_id, token_box, platform) VALUES (?, ?, 'box', ?)`);
-    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at)
-        VALUES (?, 'offer', 'misc', ?, ?, 10, ?, 'active', 1, ?, ?)`);
+    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at)
+        VALUES (?, 'offer', 'misc', ?, ?, 1000, ?, 'active', 1, ?, ?)`); // 10 Beans
     db.transaction(() => {
         for (let i = 0; i < n; i++) {
             const k = seeded++;
@@ -225,8 +230,8 @@ async function main() {
     // Posts enough to fill their last page of 50 exactly.
     const fill = (50 - (postKeys.length % 50)) % 50;
     const author = whole.json.members[0].publicKey;
-    const insertFill = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at)
-        VALUES (?, 'offer', 'misc', ?, 'Fills the last page.', 5, ?, 'active', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')`);
+    const insertFill = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at)
+        VALUES (?, 'offer', 'misc', ?, 'Fills the last page.', 500, ?, 'active', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')`); // 5 Beans
     for (let i = 0; i < fill; i++) insertFill.run(`fillpost-${i}`, `Fill ${i}`, author);
     const fullPages = (postKeys.length + fill) / 50;
     const sizes: number[] = [];
@@ -302,11 +307,11 @@ async function main() {
     // ── 8. The prune-branch confirmation, from the node ──
     console.log('\n── 8. The figures a branch prune is confirmed on: the whole branch, from the node ──');
     const epoch = ledger.getCurrentEpoch();
-    const branchMember = (callsign: string, joined: string, invitedBy: string, balance: number, status = 'active') => {
+    const branchMember = (callsign: string, joined: string, invitedBy: string, beans: number, status = 'active') => {
         const pub = crypto.randomBytes(32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?, 'seed')`)
             .run(pub, callsign, status, joined, invitedBy);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(pub, balance, epoch);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(pub, hc(beans), epoch);
         return pub;
     };
     // The root joined before every seeded member, so it is on page 1; the members it brought in joined after them all, so
@@ -326,9 +331,9 @@ async function main() {
     const ownerSession = ownerSessionHeaders();
     const looksBefore = db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
     const preview = await get(`/api/local/admin/branches/${root}/prune`, ownerSession);
-    assert(preview.status === 200 && preview.json?.members === 5 && preview.json.badDebt === 125.5 && preview.json.surplus === 55 && preview.json.net === -70.5,
+    assert(preview.status === 200 && preview.json?.members === 5 && preview.json.badDebt_c === hc(125.5) && preview.json.surplus_c === hc(55) && preview.json.net_c === hc(-70.5),
         `an owner reads the whole branch: 5 members (the pruned one left out, the one under them in), 125.5 bad debt, 55 surplus, -70.5 net (${preview.status} ${JSON.stringify(preview.json)})`);
-    assert(JSON.stringify(Object.keys(preview.json ?? {}).sort()) === JSON.stringify(['badDebt', 'members', 'net', 'surplus']),
+    assert(JSON.stringify(Object.keys(preview.json ?? {}).sort()) === JSON.stringify(['badDebt_c', 'members', 'net_c', 'surplus_c']),
         `totals only: no names, no keys (${Object.keys(preview.json ?? {}).join(', ')})`);
     const looks = db.prepare(`SELECT subject_pubkey FROM health_access_log WHERE action = 'offboard_preview' ORDER BY rowid DESC LIMIT 5`).pluck().all() as string[];
     const looksAfter = db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
@@ -339,7 +344,7 @@ async function main() {
     setSwitchOverride('decisions', false);
     const leaf = await get(`/api/local/admin/branches/${kidB}/prune`, ownerSession);
     setSwitchOverride('decisions', true);
-    assert(leaf.status === 200 && leaf.json?.members === 1 && leaf.json.surplus === 10 && leaf.json.badDebt === 0 && leaf.json.net === 10,
+    assert(leaf.status === 200 && leaf.json?.members === 1 && leaf.json.surplus_c === hc(10) && leaf.json.badDebt_c === 0 && leaf.json.net_c === hc(10),
         `a branch of one: 1 member, 10 surplus (${JSON.stringify(leaf.json)})`);
     const nobody = await get(`/api/local/admin/branches/${'ab'.repeat(32)}/prune`, ownerSession);
     assert(nobody.status === 404, `a key that is no member's: 404 (${nobody.status})`);
@@ -356,7 +361,7 @@ async function main() {
         const r = await get(`/api/local/admin/branches/${root}/prune`, h);
         resetAdminAuthTarpit();
         const pruneTry = await post(`/api/local/admin/branches/${root}/prune`, h, {});
-        assert((r.status === 401 || r.status === 403) && r.status === pruneTry.status && !('members' in (r.json ?? {})) && !('net' in (r.json ?? {})),
+        assert((r.status === 401 || r.status === 403) && r.status === pruneTry.status && !('members' in (r.json ?? {})) && !('net' in (r.json ?? {})) && !('net_c' in (r.json ?? {})),
             `${who}: refused the figures (${r.status}) as the prune refuses them (${pruneTry.status}), with none of them`);
     }
     const stillThere = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (SELECT value FROM json_each(?)) AND status != 'pruned'`).pluck().get(JSON.stringify(branchKeys));
@@ -364,10 +369,10 @@ async function main() {
     // The prune then settles what the figures said: the Commons moves by `net`, and every one of the five is pruned.
     const commonsBefore = getCommonsBalanceExact();
     const pruned = await post(`/api/local/admin/branches/${root}/prune`, ownerSession, {});
-    const commonsMoved = Math.round((getCommonsBalanceExact() - commonsBefore) * 100) / 100;
+    const commonsMoved = getCommonsBalanceExact() - commonsBefore; // whole hundredths, exact
     const prunedNow = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (SELECT value FROM json_each(?)) AND status = 'pruned'`).pluck().get(JSON.stringify(branchKeys));
-    assert(pruned.status === 200 && commonsMoved === preview.json.net && prunedNow === preview.json.members,
-        `the owner's prune removes the ${prunedNow} members the figures counted and moves the Commons by their net, ${commonsMoved} (${pruned.status} ${JSON.stringify(pruned.json)})`);
+    assert(pruned.status === 200 && commonsMoved === hc(-70.5) && commonsMoved === preview.json?.net_c && prunedNow === preview.json.members,
+        `the owner's prune removes the ${prunedNow} members the figures counted and moves the Commons by their net, ${commonsMoved} hundredths (${pruned.status} ${JSON.stringify(pruned.json)})`);
 
     // Where the community votes, a branch of one is a direct removal only its vote makes (branchRemovalRefusal): the
     // figures are refused as the prune and the offboarding preview refuse it, before any balance is read, so the owner
@@ -390,12 +395,13 @@ async function main() {
     assert(votePrune.status === 400 && votePrune.json?.code === voteFigures.json?.code && votePrune.json?.error === voteFigures.json?.error
         && voteOffboard.status === 400 && voteOffboard.json?.code === voteFigures.json?.code,
         `in the words the prune (${votePrune.status}) and the offboarding preview (${voteOffboard.status}) refuse it in`);
-    assert(['members', 'badDebt', 'surplus', 'net'].every(k => !(k in (voteFigures.json ?? {}))) && !JSON.stringify(voteFigures.json ?? {}).includes('42.17'),
+    assert(['members', 'badDebt', 'surplus', 'net', 'badDebt_c', 'surplus_c', 'net_c'].every(k => !(k in (voteFigures.json ?? {})))
+        && !JSON.stringify(voteFigures.json ?? {}).includes('42.17') && !JSON.stringify(voteFigures.json ?? {}).includes(String(hc(42.17))),
         `none of the figures, and not the member's balance, in the refusal (${Object.keys(voteFigures.json ?? {}).join(', ')})`);
     assert(leafLooks() === leafLooksBefore && allLooks() === allLooksBefore,
         `no look in the owners' access log for a removal the node refuses (${allLooks() - allLooksBefore} new lines)`);
     const voteBranch = await get(`/api/local/admin/branches/${voteRoot}/prune`, ownerSession);
-    assert(voteBranch.status === 200 && voteBranch.json?.members === 2 && voteBranch.json.badDebt === 3 && voteBranch.json.surplus === 8 && voteBranch.json.net === 5
+    assert(voteBranch.status === 200 && voteBranch.json?.members === 2 && voteBranch.json.badDebt_c === hc(3) && voteBranch.json.surplus_c === hc(8) && voteBranch.json.net_c === hc(5)
         && allLooks() - allLooksBefore === 2,
         `a branch of more than one, an owner's to prune where the community votes, still gets its figures and its 2 looks (${voteBranch.status} ${JSON.stringify(voteBranch.json)})`);
     const voteStill = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (?, ?, ?) AND status != 'pruned'`).pluck().get(voteLeaf, voteRoot, voteKid);

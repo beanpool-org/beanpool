@@ -17,15 +17,20 @@ describe('the Ledger credit-line card', () => {
     // them too ("can't go below zero … pay with what you have" was not), and the card says how far down they are.
     it('a member frozen while in debit is told how far down they are and how they come back up; in credit, nothing more', () => {
         expect(KNOWN_FROZEN_BODY).not.toMatch(/can't go below zero|pay with what you have/);
-        expect(frozenDebitLine(-400)).toBe('You are 400 Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.');
-        expect(frozenDebitLine(-12.34)).toMatch(/^You are 12\.4 Beans in debit\./);
-        expect(frozenDebitLine(-0.04)).toMatch(/^You are 0\.1 Beans in debit\./);
-        expect(frozenDebitLine(-1800)).toMatch(/^You are 1800 Beans in debit\./);
-        expect(frozenDebitLine(-400)).not.toMatch(/Ʀ/);
+        // The balance is whole hundredths of a Bean (the node's balance_c): −40000 is 400 Beans below zero. Exact now, never
+        // rounded up (the old float figure was, to the tenth); grouped as every figure is (core formatHundredths).
+        expect(frozenDebitLine(-40000)).toBe('You are 400 Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.');
+        expect(frozenDebitLine(-1234)).toMatch(/^You are 12\.34 Beans in debit\./);
+        expect(frozenDebitLine(-4)).toMatch(/^You are 0\.04 Beans in debit\./);
+        expect(frozenDebitLine(-180000)).toMatch(/^You are 1,800 Beans in debit\./);
+        expect(frozenDebitLine(-982)).toMatch(/^You are 9\.82 Beans in debit\./);
+        expect(frozenDebitLine(-40000)).not.toMatch(/Ʀ/);
         expect(frozenDebitLine(0)).toBeNull();
-        expect(frozenDebitLine(25)).toBeNull();
+        expect(frozenDebitLine(2500)).toBeNull();
         expect(frozenDebitLine(undefined)).toBeNull();
         expect(frozenDebitLine(NaN)).toBeNull();
+        // Not whole hundredths: no line, never a number.
+        expect(frozenDebitLine(-12.34)).toBeNull();
     });
 
     it('a member whose whole line the admins froze (the manager\'s Freeze) sees the same card, line or not', () => {

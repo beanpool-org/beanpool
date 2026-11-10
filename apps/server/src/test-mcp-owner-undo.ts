@@ -106,7 +106,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(owner2, 'Ottilie');
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(owner.pub);
@@ -175,8 +175,9 @@ async function main(): Promise<void> {
 
         // ── 2. update_post ───────────────────────────────────────────────────────────────────────────
         const upd = await a.callTool({ name: 'update_post', arguments: { post_id: madeA[0], title: 'Meyer lemons from the tree', beans: 4 } });
-        const credits = (db.prepare('SELECT credits FROM posts WHERE id = ?').get(madeA[0]) as any)?.credits;
-        assert(!upd.isError && structured(upd)?.postId === madeA[0] && titleOf(madeA[0]) === 'Meyer lemons from the tree' && credits === 4 && structured(upd)?.editsToday === 1,
+        // The tool speaks Beans (beans: 4); the row holds whole hundredths.
+        const priceC = (db.prepare('SELECT price_c FROM posts WHERE id = ?').get(madeA[0]) as any)?.price_c;
+        assert(!upd.isError && structured(upd)?.postId === madeA[0] && titleOf(madeA[0]) === 'Meyer lemons from the tree' && priceC === 400 && structured(upd)?.editsToday === 1,
             `update_post changes A's own post through the app's edit (${errorText(upd) || JSON.stringify(structured(upd))})`);
         const notMine = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
         for (const [label, id, before] of [['B\'s', madeB, 'Helper-made marmalade'], ['the owner\'s own from the app', ownApp, 'Olive\'s own jam, from the app'], ['Mia\'s', miaPost, 'Mia\'s kombucha']] as const) {

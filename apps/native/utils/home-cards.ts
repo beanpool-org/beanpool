@@ -26,7 +26,7 @@ import {
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
-    currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
+    currentLanguage, formatCount, formatHundredths, isHundredths, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
@@ -146,7 +146,8 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
 export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 
 export interface HomeMarketItem {
-    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** `price_c`: the price, whole hundredths of a Bean, only where Beans are on. */
+    id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null; shownPrice?: string | null;
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
@@ -154,9 +155,9 @@ export interface HomeMarketItem {
 }
 /**
  * One row of "Asked near you" (apps/server routes/home-answer.ts NeedItem): a neighbour's open Need, with the Market card's
- * own fields for the row. `credits` only where Beans are on; `priceType` only when the post has one.
+ * own fields for the row. `price_c` (whole hundredths of a Bean) only where Beans are on; `priceType` only when the post has one.
  */
-export interface HomeNeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+export interface HomeNeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null }
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */
@@ -172,9 +173,11 @@ export interface HomePulseItem { id: string; title: string | null; thumbnailUrl:
 
 export interface HomeDealItem { txId: string; postId: string; title: string; with: string | null; waitsOnMe: boolean; at: string | null }
 
-export interface HomeMonthFigures { trades: number; in: number; out: number }
+/** A month's lines and the Beans in and out, whole hundredths of a Bean (`*_c`, routes/home-answer.ts MonthFigures). */
+export interface HomeMonthFigures { trades: number; in_c: number; out_c: number }
 
-export interface HomeEnterpriseLine { amount: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
+/** An enterprise's latest line this month: the Beans in (+) or out (−), whole hundredths of a Bean. */
+export interface HomeEnterpriseLine { amount_c: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
 
 export interface HomeDecideItem { id: string; title: string; closesAt: string; voted: boolean }
 
@@ -220,7 +223,8 @@ export interface HomeCards {
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
     enterprise?: {
         id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded'; keepers?: number;
-        balance?: number; month?: HomeMonthFigures; latest?: HomeEnterpriseLine | null;
+        /** Whole hundredths of a Bean, only where Beans are on. */
+        balance_c?: number; month?: HomeMonthFigures; latest?: HomeEnterpriseLine | null;
     };
     /** "Your shop and tools" (slice S4′): the member's own shop, or none yet (components/shop/ShopHomeBody.tsx). */
     shop?: ShopHomeCard;
@@ -235,12 +239,14 @@ export interface HomeCards {
     groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: HomeGroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
     pulse?: { items: HomePulseItem[] };
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month?: HomeMonthFigures & { fees: number; more: boolean } };
+    /** Every figure whole hundredths of a Bean (`*_c`), as the node sends them. */
+    beans?: { balance_c: number; room_c: number; tier: string; activated: boolean; frozen: boolean; month?: HomeMonthFigures & { fees_c: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
     community?: {
         name: string | null; members: number; listings?: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        joined7d?: number; eventsSoon?: number; commonsPot?: number;
+        /** `commonsPot_c`: the pot, whole hundredths of a Bean that are always whole Beans (the node drops its hundredths). */
+        joined7d?: number; eventsSoon?: number; commonsPot_c?: number;
     };
 }
 
@@ -1032,9 +1038,10 @@ export function askedUnit(priceType: string | null | undefined): string {
  * long ago it was asked. A Need that asks nothing says Free, with no unit; a node that sent no figure, or one without Beans, says
  * no price. Never a price the node did not send.
  */
-export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
-    const price = showsBeans && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (freePriceWords(p.credits, 'need') ?? [beansAmount(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' '))
+export function askedFacts(p: Pick<HomeNeedItem, 'price_c' | 'priceType' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
+    // Whole hundredths only (isHundredths): a figure that isn't one says no price, never a number.
+    const price = showsBeans && isHundredths(p.price_c)
+        ? (freePriceWords(p.price_c, 'need') ?? [beansAmount(p.price_c), askedUnit(p.priceType)].filter(Boolean).join(' '))
         : null;
     return [price, timeAgoInWords(p.createdAt, nowMs)].filter(Boolean).join(' · ');
 }
@@ -1194,33 +1201,31 @@ export function needsLineA11y(e: NeedsYouEntry): string {
 export const groupThousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 /**
- * −35, 12, 12.5: a true minus sign, at most two decimals, none when whole; thousands grouped in English as always, the
- * decimal separator the language's (core's formatCount and formatNumber).
+ * A figure in whole hundredths of a Bean, in words: −3500 → "−35", 1200 → "12", 1250 → "12.50", 123400 → "1,234" (core
+ * formatHundredths: a true minus sign, two decimals unless whole, thousands grouped in English, the language's decimal
+ * mark). Anything that isn't whole hundredths is "—", never a number.
  */
-export function formatBeans(n: number): string {
-    const r = Math.round(n * 100) / 100;
-    const abs = Math.abs(r);
-    const text = Number.isInteger(abs) ? formatCount(abs) : formatNumber(abs);
-    return r < 0 ? `−${text}` : text;
+export function formatBeans(c: number): string {
+    return formatHundredths(c);
 }
 
-/** "12 Beans", "1 Bean", "−35 Beans": an amount of Beans in words (the word is translated: design M2). */
-export function beansAmount(n: number): string {
-    return tn(n, '{n} Bean', '{n} Beans', { n: formatBeans(n) });
+/** "12 Beans", "1 Bean", "−35 Beans" from whole hundredths (1200, 100, −3500): the word translated (design M2), its plural form read from the Beans. */
+export function beansAmount(c: number): string {
+    return tn(isHundredths(c) ? c / 100 : 0, '{n} Bean', '{n} Beans', { n: formatHundredths(c) });
 }
 
 /** Your Beans (§3.1): own balance only. Tiers are merit badges: the word, nothing about what it opens. */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; sub: string | null } {
-    if (!b.activated && b.balance === 0) {
+    if (!b.activated && b.balance_c === 0) {
         return { main: t('0 Beans · nothing to repay'), sub: t('Your credit opens with a first trade.') };
     }
     if (b.frozen) {
-        return { main: beansAmount(b.balance), sub: t('Spending is paused for now. You can still receive and sell.') };
+        return { main: beansAmount(b.balance_c), sub: t('Spending is paused for now. You can still receive and sell.') };
     }
-    if (!b.activated) return { main: beansAmount(b.balance), sub: t('Your credit opens with a first trade.') };
+    if (!b.activated) return { main: beansAmount(b.balance_c), sub: t('Your credit opens with a first trade.') };
     // The node names the tier by its English id: shown as the tier's word (utils/trust-tier.ts), one it doesn't know as it came.
     const tier = b.tier && Object.prototype.hasOwnProperty.call(TIER_WORDS, b.tier) ? t(TIER_WORDS[b.tier as TierName]) : b.tier || null;
-    return { main: t('{amount} · room to spend {room}', { amount: beansAmount(b.balance), room: formatBeans(b.room) }), sub: tier };
+    return { main: t('{amount} · room to spend {room}', { amount: beansAmount(b.balance_c), room: formatBeans(b.room_c) }), sub: tier };
 }
 
 /** The community's card (§3.1): its name and totals, public by rule. */

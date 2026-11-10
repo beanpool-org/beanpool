@@ -83,6 +83,11 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
     return { status: res.status, body: parsed, text };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
+/**
+ * The story's figures are Beans; the node's are whole hundredths, a voucher budget, a vouch and its room too (`vouchAmount`,
+ * `voucherLevel`, `level`, `vouched`, `left` keep their names, their values hundredths). `hc` turns Beans into hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 const generate = (id: Id, extra: Record<string, unknown> = {}) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...extra });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
@@ -119,7 +124,7 @@ class Phone {
 
 
 const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
-const sumBalances = () => count('SELECT COALESCE(SUM(balance), 0) AS n FROM accounts');
+const sumBalances = () => count('SELECT COALESCE(SUM(balance_c), 0) AS n FROM accounts');
 const DAY = 24 * 60 * 60 * 1000;
 
 /** A confirmation on a fresh entry, written as the names list's confirmMember writes it (setup only: the list's crypto is its own suite's). */
@@ -186,14 +191,14 @@ async function main(): Promise<void> {
 
     // ── 2. Waiting to join: an unused, in-date invite that promises a voucher budget, by entry id ────────────────
     const eWren = await addEntry('Wren Calloway');
-    const wren = await bind(owen, eWren, { vouchAmount: 25, voucherLevel: 1000 });
+    const wren = await bind(owen, eWren, { vouchAmount: hc(25), voucherLevel: hc(1000) });
     const cWren = wren.body?.invite?.code as string;
     require_(wren.status === 201 && cWren, `Owen binds an invite to Wren's entry with a 25 vouch and a 1,000 voucher budget (${show(wren)})`);
     const ePlain = await addEntry('Plain Bound');
-    require_((await bind(owen, ePlain, { vouchAmount: 25 })).status === 201, 'Owen binds an invite with a vouch but no voucher budget to another entry');
+    require_((await bind(owen, ePlain, { vouchAmount: hc(25) })).status === 201, 'Owen binds an invite with a vouch but no voucher budget to another entry');
     const b2 = await block();
     const waiting = (b2.body?.waiting ?? []) as { entryId: string; level: number; vouchAmount: number | null; madeBy: string; madeByCallsign: string; madeAt: string; expiresAt: string }[];
-    assert(waiting.length === 1 && waiting[0].entryId === eWren && waiting[0].level === 1000 && waiting[0].vouchAmount === 25 && waiting[0].madeBy === owen.pk && waiting[0].madeByCallsign === 'Owen',
+    assert(waiting.length === 1 && waiting[0].entryId === eWren && waiting[0].level === hc(1000) && waiting[0].vouchAmount === hc(25) && waiting[0].madeBy === owen.pk && waiting[0].madeByCallsign === 'Owen',
         `2. one row waits to join: Wren's entry, budget 1,000, vouch 25, made by Owen; the invite with no budget does not (${JSON.stringify(waiting)})`);
     const lifeMs = Date.parse(waiting[0].expiresAt) - Date.parse(waiting[0].madeAt);
     assert(Math.abs(lifeMs - 30 * DAY) < 1000, `2. it ends 30 days after it was made (${lifeMs / DAY} days)`);
@@ -212,7 +217,7 @@ async function main(): Promise<void> {
     assert(revoked.status === 200 && (await block()).body?.waiting?.length === 0, `2. revoked, it leaves the list (${show(revoked)})`);
     // Used: gone, and Wren is a member.
     const eJoin = await addEntry('Joss Marlowe');
-    const joinInv = await bind(owen, eJoin, { voucherLevel: 500 });
+    const joinInv = await bind(owen, eJoin, { voucherLevel: hc(500) });
     const cJoin = joinInv.body?.invite?.code as string;
     require_(joinInv.status === 201 && (await block()).body?.waiting?.length === 1, 'Owen binds a fresh invite with a 500 budget: it waits');
     const joss = newId('Joss');
@@ -220,17 +225,17 @@ async function main(): Promise<void> {
     assert((await block()).body?.waiting?.length === 0, '2. used, it no longer waits');
 
     // ── 3. The card's last-30-days figure: vouches that landed in the window, never a balance ─────────────────────
-    const v1 = await call(ada, 'POST', '/api/vouch', { memberPubkey: mel.pk, vouchAmount: 25 });
+    const v1 = await call(ada, 'POST', '/api/vouch', { memberPubkey: mel.pk, vouchAmount: hc(25) });
     require_(v1.status === 200 || v1.status === 201, `Ada vouches 25 for Mel (${show(v1)})`);
-    assert(voucherSummary(ada.pk).vouchedLast30Days === 25 && voucherSummary(ada.pk).vouched === 25, `3. 25 in the last 30 days of 25 vouched (${voucherSummary(ada.pk).vouchedLast30Days})`);
+    assert(voucherSummary(ada.pk).vouchedLast30Days === hc(25) && voucherSummary(ada.pk).vouched === hc(25), `3. 25 in the last 30 days of 25 vouched (${voucherSummary(ada.pk).vouchedLast30Days} hundredths)`);
     db.prepare("UPDATE room_gifts SET at = ? WHERE from_pubkey = ? AND kind = 'vouch'").run(new Date(Date.now() - 40 * DAY).toISOString(), ada.pk);
-    assert(voucherSummary(ada.pk).vouchedLast30Days === 0 && voucherSummary(ada.pk).vouched === 25, '3. a vouch from 40 days ago is in "vouched" but not in the last 30 days');
-    const v2 = await call(ada, 'POST', '/api/vouch', { memberPubkey: nia.pk, vouchAmount: 50 });
+    assert(voucherSummary(ada.pk).vouchedLast30Days === 0 && voucherSummary(ada.pk).vouched === hc(25), '3. a vouch from 40 days ago is in "vouched" but not in the last 30 days');
+    const v2 = await call(ada, 'POST', '/api/vouch', { memberPubkey: nia.pk, vouchAmount: hc(50) });
     require_(v2.status === 200 || v2.status === 201, `Ada vouches 50 for Nia (${show(v2)})`);
     const adaRow = ((await block()).body?.vouchers as { memberPubkey: string; vouchedLast30Days: number; vouched: number; peopleVouched: number }[]).find((r) => r.memberPubkey === ada.pk);
-    assert(adaRow?.vouchedLast30Days === 50 && adaRow?.vouched === 75 && adaRow?.peopleVouched === 2, `3. the block's row says 50 of 75 to 2 people (${JSON.stringify(adaRow)})`);
+    assert(adaRow?.vouchedLast30Days === hc(50) && adaRow?.vouched === hc(75) && adaRow?.peopleVouched === 2, `3. the block's row says 50 of 75 to 2 people (${JSON.stringify(adaRow)})`);
     const card = await call(owen, 'GET', `/api/names/vouchers/${ada.pk}`);
-    assert(card.status === 200 && card.body?.vouchedLast30Days === 50 && !/balance/i.test(card.text), `3. the card carries it too, and no balance figure (${show(card)})`);
+    assert(card.status === 200 && card.body?.vouchedLast30Days === hc(50) && !/balance/i.test(card.text), `3. the card carries it too, and no balance figure (${show(card)})`);
 
     // ── 4. The profile's button follows the person's state ────────────────────────────────────────────────────────
     const buttonOf = async (viewer: Id, target: Id) => {
@@ -249,13 +254,13 @@ async function main(): Promise<void> {
     const pamEntry = confirm(pam, owen);
     assert(JSON.stringify(await buttonOf(owen, pam)) === JSON.stringify({ state: 'make' }), '4. confirmed, an owner (on the committee) sees "Make a voucher"');
     assert((await buttonOf(ada, pam)) === undefined, '4. confirmed, a plain admin sees Add before and nothing after: Make is the committee\'s');
-    const made = await call(owen, 'POST', '/api/names/vouchers', { entryId: pamEntry, amount: 500 });
+    const made = await call(owen, 'POST', '/api/names/vouchers', { entryId: pamEntry, amount_c: hc(500) });
     require_(made.status === 201, `Owen makes Pam a voucher with 500 (${show(made)})`);
     const pamButton = await buttonOf(owen, pam);
-    assert(pamButton?.state === 'voucher' && pamButton.left === 500 && pamButton.noLimit === false && Object.keys(pamButton).sort().join() === 'left,noLimit,state',
+    assert(pamButton?.state === 'voucher' && pamButton.left === hc(500) && pamButton.noLimit === false && Object.keys(pamButton).sort().join() === 'left,noLimit,state',
         `4. a voucher: "Voucher · 500 left ›", and the button carries those three fields only (${JSON.stringify(pamButton)})`);
     const adaSeesPam = await buttonOf(ada, pam);
-    assert(adaSeesPam?.state === 'voucher' && adaSeesPam.left === 500, '4. a plain admin sees the voucher button too (admins read a voucher\'s card)');
+    assert(adaSeesPam?.state === 'voucher' && adaSeesPam.left === hc(500), '4. a plain admin sees the voucher button too (admins read a voucher\'s card)');
     const owenButton = await buttonOf(ada, owen);
     assert(owenButton?.state === 'voucher' && owenButton.noLimit === true, `4. an owner is "Voucher · No limit ›" (${JSON.stringify(owenButton)})`);
     assert(!/balance/i.test(JSON.stringify(pamButton) + JSON.stringify(owenButton)), '4. no balance figure in the button');
@@ -281,7 +286,7 @@ async function main(): Promise<void> {
 
     // ── 5. invite_out words say what this viewer can do ───────────────────────────────────────────────────────────
     const eOut = await addEntry('Tamsin Hollow');
-    const first = await bind(ada, eOut, { vouchAmount: 25 });
+    const first = await bind(ada, eOut, { vouchAmount: hc(25) });
     require_(first.status === 201, `Ada binds an invite to Tamsin's entry (${show(first)})`);
     const byMaker = await bind(ada, eOut);
     const byOwner = await bind(owen, eOut);
@@ -299,7 +304,7 @@ async function main(): Promise<void> {
 
     // ── 6. No Bean moved ──────────────────────────────────────────────────────────────────────────────────────────
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.sumBalances) < 0.01 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
+    assert(audit.ok && audit.sumBalances === 0 && audit.drift === 0 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
         `6. the ledger audit sums to zero (${audit.sumBalances}), no balance moved and no transaction was written`);
 
     console.log(`\n${passed}/${run} passed`);

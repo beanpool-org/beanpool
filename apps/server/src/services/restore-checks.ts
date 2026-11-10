@@ -461,7 +461,8 @@ function quoteName(name: string): string {
  */
 export const CORE_TABLES: Record<string, readonly string[]> = {
     members: ['public_key', 'callsign'],
-    accounts: ['public_key', 'balance'],
+    // The key column only: the money column is the boot's (db/hundredths-step.ts makes `balance_c` on an older shape).
+    accounts: ['public_key'],
     node_config: [],
     node_roles: ['member_pubkey', 'role'],
 };

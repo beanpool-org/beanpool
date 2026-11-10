@@ -53,7 +53,7 @@ function makeAuthor(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -76,9 +76,10 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** A listing's price is whole hundredths on the wire (`price_c`): 20 Beans is 2000. */
 const post = (title: string, cashAlsoNeeded: boolean) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
+    price_c: 2000, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
 });
 
 async function main() {

@@ -172,7 +172,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('AudAlice');
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
         const p = se.createPost(type, category, title, `${title}, described`, 0, 'fixed', alice.pk, AT.lat, AT.lng, photos, false, undefined, false, options)!;
         // Priced (the pricing guide learns from priced listings), and set back an hour, so a cursor from before now
         // leaves it out of a delta. Explicit updated_at: posts_touch_updated_at leaves a write that sets it alone.
-        db.prepare('UPDATE posts SET credits = 5, updated_at = ? WHERE id = ?').run(new Date(Date.now() - HOUR).toISOString(), p.id);
+        db.prepare('UPDATE posts SET price_c = 5, updated_at = ? WHERE id = ?').run(new Date(Date.now() - HOUR).toISOString(), p.id);
         return p.id as string;
     };
     const shapeRow = () => (db.prepare("SELECT value FROM node_config WHERE key = 'photoKeysShape'").get() as { value: string } | undefined)?.value;
@@ -352,9 +352,9 @@ async function main(): Promise<void> {
         for (const s of [bobSock, carolSock, strangerSock]) s.ws.close();
 
         // A trade's cover, and an escrow dispute's photos.
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
             .run('aud-tx-grp', grp, bob.pk, alice.pk, new Date(Date.now() - 10 * DAY).toISOString());
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
             .run('aud-tx-pub', pub, bob.pk, alice.pk, new Date(Date.now() - 10 * DAY).toISOString());
         const one = se.getMarketplaceTransaction('aud-tx-grp');
         const oneOpen = one?.coverImage ? (await get(one.coverImage)).status : null;

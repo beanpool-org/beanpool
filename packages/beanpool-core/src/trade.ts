@@ -46,7 +46,7 @@ export class TradeManager {
         }
 
         // 2. The Reward: Execute mutual credit transfer
-        const transferSuccess = this.ledgerManager.transfer(requesterId, providerId, amount);
+        const transferSuccess = this.ledgerManager.transfer(requesterId, providerId, amount).ok;
 
         if (!transferSuccess) {
             console.error(`Trade failed: Insufficient mutual credit for requester ${requesterId}.`);

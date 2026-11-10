@@ -94,7 +94,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 30 * 86_400_000).toISOString(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 const pushToken = (id: Id) => `ExponentPushToken[${id.pk.slice(0, 20)}]`;
@@ -343,7 +343,7 @@ async function main(): Promise<void> {
     const talkRow = (listed.body?.conversations ?? []).find((c: any) => c.id === circle.id);
     assert(talkRow?.type === 'group_thread' && talkRow?.groupKind === 'circle', `its Talk row says it is a circle, so an app can show its name in the reader's language (got ${JSON.stringify(talkRow ?? null)})`);
     const lateOffer = await call('POST', ana, '/api/marketplace/posts', { type: 'offer', category: 'general', title: 'Offer after the close', description: 'An offer posted after the circle closed.',
-        credits: 0, priceType: 'fixed', authorPublicKey: ana.pk, audienceScope: 'group', targetGroupId: circle.id, photos: TEST_PHOTOS });
+        price_c: 0, priceType: 'fixed', authorPublicKey: ana.pk, audienceScope: 'group', targetGroupId: circle.id, photos: TEST_PHOTOS });
     assert(lateOffer.status === 400 && lateOffer.body?.error === PLACE_CIRCLE_CLOSED_TO_POSTS, `a post to it hears the circle finished, not that anyone voted (got ${lateOffer.status} ${JSON.stringify(lateOffer.body)})`);
     assert(!(await call('GET', ana, '/api/global/home?lat=10.5&lng=76.2')).body?.circle, 'the Find card lets it go');
     // Retiring and clearing the flags are one write: a circle marked retired is never looked at again, so flags left on it

@@ -51,7 +51,7 @@
 // name the project; the leader's counts the backers and the Beans and names nobody. The leader's end date moved in that week
 // (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved), each once a day at most.
 
-import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { formatHundredths, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -81,21 +81,21 @@ interface ProjectRow {
     id: string;
     title: string | null;
     status: string | null;
-    goal_amount: number | null;
-    current_amount: number | null;
+    goal_amount_c: number | null;
+    current_amount_c: number | null;
     creator_pubkey: string | null;
     deadline: string | null;
     enterprise: string;
     enterprise_status: string | null;
-    balance: number | null;
+    balance_c: number | null;
 }
 
 /** A project's rows as the return reads them: its end date as pledgeToProject reads it (its own row's, else its enterprise's). */
 const PROJECT_SQL = `
-    SELECT p.id, p.title, p.status, p.goal_amount, p.current_amount, p.creator_pubkey,
+    SELECT p.id, p.title, p.status, p.goal_amount_c, p.current_amount_c, p.creator_pubkey,
            COALESCE(p.deadline_at, m.deadline_at) AS deadline,
            COALESCE(NULLIF(p.enterprise_pubkey, ''), p.id) AS enterprise, m.status AS enterprise_status,
-           a.balance
+           a.balance_c
     FROM projects p
     LEFT JOIN members m ON m.public_key = COALESCE(NULLIF(p.enterprise_pubkey, ''), p.id)
     LEFT JOIN accounts a ON a.public_key = 'escrow_' || p.id`;
@@ -107,10 +107,10 @@ function leaderOf(projectId: string, creator: string | null): string | null {
     return lead?.member_pubkey ?? creator ?? null;
 }
 
-/** Whether its rows say it reached its goal: in cents, as pledgeToProject decides it, or its enterprise's row says so. */
+/** Whether its rows say it reached its goal: whole hundredths compared exactly, as pledgeToProject decides it, or its enterprise's row says so. */
 function readsFunded(p: ProjectRow): boolean {
-    const goal = Math.round(Number(p.goal_amount || 0) * 100);
-    return goal <= 0 || Math.round(Number(p.current_amount || 0) * 100) >= goal || p.enterprise_status === 'funded';
+    const goal = Number(p.goal_amount_c || 0);
+    return goal <= 0 || Number(p.current_amount_c || 0) >= goal || p.enterprise_status === 'funded';
 }
 
 /**
@@ -118,17 +118,17 @@ function readsFunded(p: ProjectRow): boolean {
  * or why nobody can be paid. Reads only.
  */
 export function findUnfundedProjectsDue(now: number = Date.now()): UnfundedProjectDue[] {
-    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance > ? ORDER BY p.id`).all(DUST_THRESHOLD) as ProjectRow[];
+    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance_c > 0 ORDER BY p.id`).all() as ProjectRow[];
     return rows.filter((p) => isPledgeReturnDue(p.deadline, now)).map((p) => {
         const extra = { deadline: p.deadline as string, leader: leaderOf(p.id, p.creator_pubkey) };
         if (readsFunded(p)) {
             return {
-                projectId: p.id, title: p.title ?? '', status: p.status ?? '', escrow: `escrow_${p.id}`, held: Number(p.balance), ok: false as const,
-                reason: `its rows say it reached its goal (raised ${p.current_amount} of ${p.goal_amount}, its enterprise ${p.enterprise_status}), so nothing goes back`,
+                projectId: p.id, title: p.title ?? '', status: p.status ?? '', escrow: `escrow_${p.id}`, held: Number(p.balance_c), ok: false as const,
+                reason: `its rows say it reached its goal (raised ${formatHundredths(p.current_amount_c, 'en')} of ${formatHundredths(p.goal_amount_c, 'en')} Beans, its enterprise ${p.enterprise_status}), so nothing goes back`,
                 ...extra,
             };
         }
-        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance), { closedToCommons: true }), ...extra };
+        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c), { closedToCommons: true }), ...extra };
     });
 }
 
@@ -138,8 +138,8 @@ function named(title: string): string {
     return t.length > 80 ? `${t.slice(0, 79)}…` : t;
 }
 
-/** Beans as a notice writes them: to the cent, no trailing zeros. */
-const beans = (n: number) => String(Math.round(n * 100) / 100);
+/** A figure (whole hundredths) as a notice writes it, in English (formatHundredths). */
+const beans = (c: number) => formatHundredths(c, 'en');
 
 /** The memo of a closed account's share moved to the Commons: it names nobody (the row names the project). */
 export const CLOSED_ACCOUNT_PLEDGE_MEMO = 'Pledge from a closed account, returned to the Commons';
@@ -196,7 +196,7 @@ export function returnUnfundedPledges(hooks: UnfundedPledgeHooks, now: number = 
     for (const s of due) {
         if (!s.ok) {
             left++;
-            leaveForOperator(s.projectId, `${s.escrow} (project ${s.projectId}, ended ${s.deadline}) holds ${s.held} Beans of pledges due back, not returned: ${s.reason}.`);
+            leaveForOperator(s.projectId, `${s.escrow} (project ${s.projectId}, ended ${s.deadline}) holds ${formatHundredths(s.held, 'en')} Beans of pledges due back, not returned: ${s.reason}.`);
             continue;
         }
         if (returnOne(hooks, s)) returned++;
@@ -207,9 +207,9 @@ export function returnUnfundedPledges(hooks: UnfundedPledgeHooks, now: number = 
 
 function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: true; returns: StrandedPledgeReturn[]; toCommons?: StrandedPledgeReturn[] }): boolean {
     const project = named(s.title);
-    const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
+    const total = s.returns.reduce((sum, o) => sum + o.amount_c, 0);
     const toCommons = s.toCommons ?? [];
-    const toCommonsTotal = toCommons.reduce((sum, o) => sum + o.amount, 0);
+    const toCommonsTotal = toCommons.reduce((sum, o) => sum + o.amount_c, 0);
     const memo = `Pledge returned: "${project}" didn't reach its goal by its end date`;
     const data = { kind: 'pledges_returned', enterprise: s.projectId };
     // The leader hears it once, in their own words, whether or not they backed it too.
@@ -226,18 +226,18 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
     try {
         hooks.conservingTransaction(() => {
             for (const o of s.returns) {
-                const txn = hooks.transfer(s.escrow, o.backer, o.amount, memo, 'escrow', true);
-                if (!txn) throw new Error(`the ledger refused to return ${o.amount} to a backer`);
+                const txn = hooks.transfer(s.escrow, o.backer, o.amount_c, memo, 'escrow', true);
+                if (!txn) throw new Error(`the ledger refused to return ${o.amount_c} to a backer`);
                 // The row names the project, as the delete path's refunds and the stranded return's do: its history shows it went back.
                 db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
             }
             // A closed account's share, to the Commons (A CLOSED ACCOUNT above): one row each, naming the project, not them.
-            for (const o of toCommons) closedPledgeToCommons(hooks, s.escrow, s.projectId, o.amount);
+            for (const o of toCommons) closedPledgeToCommons(hooks, s.escrow, s.projectId, o.amount_c);
             // An ACTIVE project's raised figure is what its escrow holds (pledgeToProject adds each pledge to both), and the escrow
             // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
             // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was
             // 2.2e-16, which the leader's update read as pledges received and the page as Beans held. Review of #2525.
-            db.prepare('UPDATE projects SET current_amount = 0 WHERE id = ?').run(s.projectId);
+            db.prepare('UPDATE projects SET current_amount_c = 0 WHERE id = ?').run(s.projectId);
             // Kept with the money: a crash after the commit still leaves every one of them to read.
             told = [
                 ...backers.map((to) => ({ to, title: backerTitle, body: backerBody, id: keepNotice(to, backerTitle, backerBody, data) })),
@@ -320,8 +320,8 @@ export function noticeEndDateMoved(
         if (getNodeRole() === 'backup') return 0;
         const p = db.prepare(`${PROJECT_SQL} WHERE p.id = ?`).get(projectId) as ProjectRow | undefined;
         if (!p || p.status !== 'ACTIVE' || (p.deadline ?? null) === (before ?? null)) return 0;
-        if (!isPastDeadline(before, now) || !(Number(p.balance) > DUST_THRESHOLD)) return 0;
-        const owed = owedFromProjectEscrow(p.id, p.title ?? '', p.status, Number(p.balance));
+        if (!isPastDeadline(before, now) || !(Number(p.balance_c) > 0)) return 0;
+        const owed = owedFromProjectEscrow(p.id, p.title ?? '', p.status, Number(p.balance_c));
         if (!owed.ok) {
             console.warn(`[Pledges] The end date of project ${projectId} moved, but who holds its pledges can't be worked out, so nobody was told: ${owed.reason}.`);
             return 0;

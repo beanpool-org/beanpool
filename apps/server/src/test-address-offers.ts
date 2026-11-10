@@ -107,7 +107,7 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
                     .run(m.pk, m.callsign);
                 setMemberPhoto(db, m.pk, AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
                 if (m.role) db.prepare('INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, ?, ?)').run(m.pk, m.role, a.owner.pk);
             }
             return true;

@@ -134,7 +134,7 @@ globalThis.__theme = { theme: scheme, colors };
 const POST_ID = '3f0c8a8e-1b2c-4d5e-8f90-123456789abc';
 globalThis.__params = { node: 'https://castlemaine.beanpool.org', post: POST_ID, peek: 'AbCdEfGhIjKlMnOpQrSt_-' };
 globalThis.__peekPost = q.get('stopped') === '1' ? 'stopped' : {
-    id: POST_ID, type: 'offer', title: 'Long ladder to lend for the weekend', credits: 15, priceType: 'fixed',
+    id: POST_ID, type: 'offer', title: 'Long ladder to lend for the weekend', price_c: 1500, priceType: 'fixed', // the node's price_c, whole hundredths
     description: 'A 6 m extension ladder, light enough for one person. Good for gutters and fruit trees.',
     photos: [], status: 'active',
 };

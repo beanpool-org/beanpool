@@ -2,6 +2,7 @@ import React from 'react';
 import type { ShapeLock, JoinState, ShapeLogLine } from '../../lib/community-shape';
 import { recoveryCopiesName, removalDeciderName } from '../../lib/community-shape';
 import { t } from '../../lib/fresh-proof';
+import { beansFigure } from '../../lib/beans';
 
 /**
  * The rows of "Core settings" and of the everyday-rule cards (People & Safety → Invites & QR and Triage & Moderation,
@@ -105,6 +106,14 @@ export function coreLogWords(entry: ShapeLogLine): string | null {
     return null;
 }
 
+/**
+ * A money setting's value as the log keeps it: whole hundredths in text ('150000' is 1,500 Beans; server
+ * config/community-shape-write.ts and config/known-floor.ts log String(hundredths)), in words; text that isn't one, as it is.
+ */
+function logBeans(val: string): string {
+    return /^-?\d{1,15}$/.test(val) ? beansFigure(Number(val)) : val;
+}
+
 export function logValueDisplay(setting: string, val: string | null): string {
     if (val === null || val === undefined) return '';
     if (setting === 'join') {
@@ -112,9 +121,11 @@ export function logValueDisplay(setting: string, val: string | null): string {
     }
     if (setting === 'recoveryCopies') return recoveryCopiesName(val);
     if (setting === 'removalDecider') return removalDeciderName(val);
-    if (setting === 'voucherBudget') return t('{n} Beans').replace('{n}', Number(val).toLocaleString('en'));
+    if (setting === 'voucherBudget') return t('{n} Beans').replace('{n}', logBeans(val));
+    // The known floor and its cap, as their row reads them.
+    if (setting === 'knownFloor.floor' || setting === 'knownFloor.cap') return t('{n} Beans').replace('{n}', logBeans(val));
     // The members' credit-line gift (G1): as its row reads it, "On · up to 100 Beans" or "Off".
-    if (setting === 'memberGift') return val === '0' ? t('Off') : t('On · up to {n} Beans').replace('{n}', Number(val).toLocaleString('en'));
+    if (setting === 'memberGift') return val === '0' ? t('Off') : t('On · up to {n} Beans').replace('{n}', logBeans(val));
     if (val === 'on' || val === 'true') return t('On');
     if (val === 'off' || val === 'false') return t('Off');
     return val;

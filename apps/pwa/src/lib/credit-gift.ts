@@ -10,11 +10,11 @@ import { request } from './api';
 export interface CreditGiftOffer {
     /** The tab is shown: Beans on, the community's setting on, and they hold credit line someone gave them. */
     offered: boolean;
-    /** The community's most for one gift (0: off). */
+    /** The community's most for one gift, whole hundredths (0: off). */
     max: number;
-    /** The credit line someone gave them, which is all a gift can come from. */
+    /** The credit line someone gave them, whole hundredths: all a gift can come from. */
     room: number;
-    /** The most they may give now. */
+    /** The most they may give now, whole hundredths. */
     canGive: number;
     /** The node's sentence for why nothing can be given now, when `canGive` is 0. */
     why: string | null;
@@ -31,7 +31,7 @@ export async function getCreditGiftOffer(): Promise<CreditGiftOffer | null> {
     }
 }
 
-/** Gives `amount` Beans of this member's credit line to `to`. Throws with the node's sentence when it refuses. */
-export function giveCreditLine(to: string, amount: number): Promise<{ amount: number; room: number; canGive: number }> {
-    return request('POST', '/api/credit/gift', { memberPubkey: to, amount });
+/** Gives `amount_c` (whole hundredths) of this member's credit line to `to`. Throws with the node's sentence when it refuses. */
+export function giveCreditLine(to: string, amount_c: number): Promise<{ amount_c: number; room: number; canGive: number }> {
+    return request('POST', '/api/credit/gift', { memberPubkey: to, amount_c });
 }

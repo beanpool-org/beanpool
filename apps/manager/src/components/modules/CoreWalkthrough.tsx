@@ -6,6 +6,7 @@ import { getTfaSessionToken } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import {
     type Shape,
+    type KnownFloorDraft,
     type KnownFloorShape,
     type RecoveryCopies,
     DOOR_PRESETS,
@@ -14,8 +15,13 @@ import {
     saveCommunityPlace,
     getConsequenceSentence,
     hoursWording,
+    knownFloorChange,
+    knownFloorDraftOf,
+    knownFloorUnchanged,
     recoveryCopiesName,
 } from '../../lib/community-shape';
+import { CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX } from '@beanpool/core';
+import { beansFigure, beansRefusalText, parseBeans, typedHundredths } from '../../lib/beans';
 
 /**
  * The first-run walkthrough of Core settings (DESIGN-core-settings-fable.md §3). Offered, never forced: the community runs
@@ -30,7 +36,8 @@ export interface CoreDraft {
     join: 'members' | 'admins';
     wordsDoor: boolean | undefined;
     beans: boolean;
-    knownFloor: { on: boolean; floor: number; cap: number };
+    /** The floor and cap as typed, in Beans (text); the node takes them as whole hundredths (knownFloorChange). */
+    knownFloor: KnownFloorDraft;
     decisions: boolean;
     shareOutside: boolean | undefined;
     recoveryCopies: RecoveryCopies | undefined;
@@ -51,7 +58,7 @@ export function draftFrom(shape: Shape): CoreDraft {
         join: currentDoor(shape),
         wordsDoor: s.wordsDoor?.value,
         beans: s.beans.value,
-        knownFloor: { on: kf.on, floor: kf.floor, cap: kf.cap },
+        knownFloor: knownFloorDraftOf(kf),
         decisions: s.decisions.value,
         shareOutside: s.shareOutside?.value,
         recoveryCopies: s.recoveryCopies?.value,
@@ -76,9 +83,11 @@ export function changesFrom(shape: Shape, d: CoreDraft): Record<string, unknown>
     if (!s.join.lock && d.join !== now.join) out.join = d.join;
     if (s.wordsDoor && !s.wordsDoor.lock && d.wordsDoor !== now.wordsDoor) out.wordsDoor = d.wordsDoor;
     if (!s.beans.lock && d.beans !== now.beans) out.beans = d.beans;
-    // The known floor is only a question while Beans are on.
-    if (d.beans && !knownFloorLock(shape, d) && (d.knownFloor.on !== now.knownFloor.on || d.knownFloor.floor !== now.knownFloor.floor || d.knownFloor.cap !== now.knownFloor.cap)) {
-        out.knownFloor = d.knownFloor;
+    // The known floor is only a question while Beans are on. Sent as the node takes it, `{ on, floor_c, cap_c }` in whole
+    // hundredths, and only when it differs from what the shape has (the shape's figures are hundredths too).
+    if (d.beans && !knownFloorLock(shape, d)) {
+        const change = knownFloorChange(d.knownFloor);
+        if (change && !knownFloorUnchanged(change, s.knownFloor.value)) out.knownFloor = change;
     }
     if (!s.decisions.lock && d.decisions !== now.decisions) out.decisions = d.decisions;
     if (s.shareOutside && !s.shareOutside.lock && d.shareOutside !== now.shareOutside) out.shareOutside = d.shareOutside;
@@ -86,12 +95,19 @@ export function changesFrom(shape: Shape, d: CoreDraft): Record<string, unknown>
     return out;
 }
 
-/** The known floor's own limits (lib: cap 2,000 to 5,000), as the row checks them. */
-export function knownFloorProblem(kf: { on: boolean; floor: number; cap: number }): string | null {
+/**
+ * The known floor's own limits, as the row checks them: each typed figure Beans to the cent (parseHundredths; a minus is the
+ * floor below 0), the floor no more than the cap, and the cap from 2,000 to 5,000 Beans (core CREDIT_CAP_DEFAULT and
+ * CREDIT_CAP_MAX, whole hundredths, as the node checks it: config/known-floor.ts checkKnownFloorSettings).
+ */
+export function knownFloorProblem(kf: KnownFloorDraft): string | null {
     if (!kf.on) return null;
-    if (kf.floor > kf.cap) return t("The known floor can't be more than the cap.");
-    if (kf.floor < 0) return t("The known floor can't be negative.");
-    if (kf.cap < 2000 || kf.cap > 5000) return t('The cap must be between 2,000 and 5,000 Beans.');
+    const floor = parseBeans(kf.floor);
+    const cap = parseBeans(kf.cap);
+    if (!floor.ok) return floor.refusal === 'negative' ? t("The known floor can't be negative.") : beansRefusalText(floor.refusal);
+    if (!cap.ok) return beansRefusalText(cap.refusal);
+    if (floor.value > cap.value) return t("The known floor can't be more than the cap.");
+    if (cap.value < CREDIT_CAP_DEFAULT || cap.value > CREDIT_CAP_MAX) return t('The cap must be between 2,000 and 5,000 Beans.');
     return null;
 }
 
@@ -287,15 +303,15 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                         <div className="space-y-3 pl-6">
                             <div>
                                 <label htmlFor="walk-floor" className="block text-xs font-bold text-nature-300 mb-1">{t('Known floor (Beans)')}</label>
-                                <input id="walk-floor" type="number" value={draft.knownFloor.floor}
-                                    onChange={(e) => setDraft({ ...draft, knownFloor: { ...draft.knownFloor, floor: Number(e.target.value) } })}
+                                <input id="walk-floor" type="number" step="0.01" value={draft.knownFloor.floor}
+                                    onChange={(e) => setDraft({ ...draft, knownFloor: { ...draft.knownFloor, floor: e.target.value } })}
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500" />
-                                <p data-testid="walk-floor-hours" className="text-[11px] text-nature-400 mt-1 m-0">{hoursWording(draft.knownFloor.floor || 0)}</p>
+                                <p data-testid="walk-floor-hours" className="text-[11px] text-nature-400 mt-1 m-0">{hoursWording(typedHundredths(draft.knownFloor.floor) ?? 0)}</p>
                             </div>
                             <div>
                                 <label htmlFor="walk-cap" className="block text-xs font-bold text-nature-300 mb-1">{t('Cap: the most anyone may owe')}</label>
-                                <input id="walk-cap" type="number" value={draft.knownFloor.cap}
-                                    onChange={(e) => setDraft({ ...draft, knownFloor: { ...draft.knownFloor, cap: Number(e.target.value) } })}
+                                <input id="walk-cap" type="number" step="0.01" value={draft.knownFloor.cap}
+                                    onChange={(e) => setDraft({ ...draft, knownFloor: { ...draft.knownFloor, cap: e.target.value } })}
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500" />
                             </div>
                         </div>
@@ -351,12 +367,12 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                         {s.wordsDoor && reviewRow('wordsDoor', '🔑', t('12 words at the open door'), draft.wordsDoor ? t('On') : t('Off'), Boolean(serverHeld('wordsDoor')))}
                         {reviewRow('beans', '🫘', t('Beans'), draft.beans ? t('On') : t('Off'), Boolean(serverHeld('beans')))}
                         {draft.beans && reviewRow('knownFloor', '🤝', t('Known floor for confirmed members'),
-                            draft.knownFloor.on ? t('On · {floor} Beans').replace('{floor}', draft.knownFloor.floor.toLocaleString('en')) : t('Off'), Boolean(serverHeld('knownFloor')))}
+                            draft.knownFloor.on ? t('On · {floor} Beans').replace('{floor}', beansFigure(typedHundredths(draft.knownFloor.floor))) : t('Off'), Boolean(serverHeld('knownFloor')))}
                         {/* A Core setting with no step of its own (slices G1, V5): shown as it stands, so Confirm and lock never locks what isn't seen. */}
                         {draft.beans && s.voucherBudget && reviewRow('voucherBudget', '🎟️', t('Budget per voucher'),
-                            t('{n} Beans').replace('{n}', s.voucherBudget.configured.toLocaleString('en')), false)}
+                            t('{n} Beans').replace('{n}', beansFigure(s.voucherBudget.configured)), false)}
                         {draft.beans && s.memberGift && reviewRow('memberGift', '🎁', t('Members giving part of their credit line'),
-                            s.memberGift.configured > 0 ? t('On · up to {n} Beans').replace('{n}', s.memberGift.configured.toLocaleString('en')) : t('Off'), false)}
+                            s.memberGift.configured > 0 ? t('On · up to {n} Beans').replace('{n}', beansFigure(s.memberGift.configured)) : t('Off'), false)}
                         {reviewRow('decisions', '🗳️', t('Community votes (Decisions)'), draft.decisions ? t('On') : t('Off'), Boolean(serverHeld('decisions')))}
                         {s.shareOutside && reviewRow('shareOutside', '🔗', t('Members may share listings outside the community'), draft.shareOutside ? t('On') : t('Off'), Boolean(serverHeld('shareOutside')))}
                         {s.recoveryCopies && reviewRow('recoveryCopies', '🗝️', t("Where members' copies go"), recoveryCopiesName(draft.recoveryCopies ?? 'vault'), Boolean(serverHeld('recoveryCopies')))}

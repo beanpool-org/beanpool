@@ -67,7 +67,7 @@ function seedMember(pk: string, callsign: string, status = 'active', isVisitor =
         status,
         isVisitor,
     );
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 function main(): void {

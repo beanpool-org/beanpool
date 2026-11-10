@@ -78,6 +78,7 @@ async function main(): Promise<void> {
     old.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Genesis', ?)`).run(GENESIS, at);
     for (const [pk, name] of [[LOCAL, 'Local'], [COPY, 'Copy'], [BOTH, 'Both'], [TARGET, 'Target'], [ASSIGNED, 'Assigned'], [NOBODY, 'Nobody'], [FILLER, 'Filler']]) {
         old.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`).run(pk, name, at, GENESIS);
+        // The v1.2.18 file's own column (REAL `balance`): the boot's hundredths step drops old money (db/hundredths-step.ts).
         old.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
     }
     // The old table has only the columns of its day (no target_pubkey, no assigned_to: the boot adds them), so a post for a

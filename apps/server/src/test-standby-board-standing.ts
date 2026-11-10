@@ -69,7 +69,7 @@ async function child(): Promise<void> {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(key, name, genesis, `INV-${name}`);
                 setMemberPhoto(db, key, AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             se.grantNodeRole(a.pia, 'moderator', genesis);
             const { publicKey: mill } = se.createTreasury('Mill', AVATAR, 100);

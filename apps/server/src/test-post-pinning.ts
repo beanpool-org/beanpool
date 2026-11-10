@@ -72,7 +72,7 @@ function makeIdentity(callsign: string, member = true): Id {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, callsign);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     }
     return { pubKeyHex, privateKey };
 }
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', credits: 5, authorPublicKey: who.pubKeyHex,
+            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', price_c: 500 /* 5 Beans */, authorPublicKey: who.pubKeyHex,
             photos: TEST_PHOTOS, lat: -33.8688, lng: 151.2093, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
@@ -529,7 +529,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(keeper.pubKeyHex);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(enterprise.pubKeyHex, keeper.pubKeyHex);
     const shopPost = 'pin-enterprise-post';
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, updated_at) VALUES (?, 'offer', 'Food', 'Bread', 'Fresh', 5, ?, ?, 1, 'active', ?)`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, updated_at) VALUES (?, 'offer', 'Food', 'Bread', 'Fresh', 500, ?, ?, 1, 'active', ?)`) // 5 Beans
         .run(shopPost, enterprise.pubKeyHex, new Date().toISOString(), new Date().toISOString());
     const shopPin = await pin(shopPost, owner);
     assert(shopPin.status === 200, `an enterprise's listing is pinned like any (got ${shopPin.status} ${shopPin.error ?? ''})`);
@@ -539,7 +539,7 @@ async function main(): Promise<void> {
 
     // ── 9. The write ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 9. The write ──');
-    const beans = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const beans = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const ledgerRows = () => (db.prepare('SELECT COUNT(*) AS n FROM transactions').get() as { n: number }).n;
     const beansBefore = beans();
     const ledgerBefore = ledgerRows();

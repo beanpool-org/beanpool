@@ -47,7 +47,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', credits: 5, authorPublicKey: who.pubKeyHex,
+            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', price_c: 500, authorPublicKey: who.pubKeyHex,
             photos: TEST_PHOTOS, lat: -33.8688, lng: 151.2093, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;

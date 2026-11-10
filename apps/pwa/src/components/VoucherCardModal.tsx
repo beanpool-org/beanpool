@@ -4,7 +4,7 @@
  * and 100-step stepper, raise or lower), Budget history, and See who they brought in.
  */
 import { useEffect, useState, useRef } from 'react';
-import { formatNumber, formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS, formatHundredths, beans, wholeBeansOf, VOUCHER_BUDGET_MIN, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_STEP } from '@beanpool/core';
 import { getVoucherCard, setVoucherBudget, stopVoucher, type VoucherCardData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -14,7 +14,8 @@ export interface VoucherCardModalProps {
     onUpdated?: () => void;
 }
 
-const QUICK_LEVELS = [500, 1000, 1500, 2000];
+/** The quick levels, whole hundredths of a Bean as the node takes a level (core isBudgetLevel): 500 · 1,000 · 1,500 · 2,000 Beans. */
+const QUICK_LEVELS = [500, 1000, 1500, 2000].map(beans);
 
 export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCardModalProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
@@ -22,7 +23,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
 
     const [card, setCard] = useState<VoucherCardData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [targetLevel, setTargetLevel] = useState<number>(1000);
+    const [targetLevel, setTargetLevel] = useState<number>(beans(1000));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'budget' | 'history' | 'people'>('budget');
@@ -76,8 +77,9 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
         }
     };
 
-    const minLevel = Math.max(100, Math.ceil((card?.held ?? 0) / 100) * 100);
-    const maxLevel = 2000;
+    // Whole hundredths, in the node's steps of 100 Beans (core VOUCHER_BUDGET_*): never below what is held.
+    const minLevel = Math.max(VOUCHER_BUDGET_MIN, Math.ceil((card?.held ?? 0) / VOUCHER_BUDGET_STEP) * VOUCHER_BUDGET_STEP);
+    const maxLevel = VOUCHER_BUDGET_MAX;
 
     return (
         <div
@@ -192,17 +194,17 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                         {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
                                         {card.noLimit
                                             ? t(VOUCH_PRESET_WORDS.noLimit)
-                                            : t('{left} of {total} left', { left: formatNumber(card.left), total: formatNumber(card.level) })}
+                                            : t('{left} of {total} left', { left: formatHundredths(card.left), total: formatHundredths(card.level) })}
                                     </div>
                                     {!card.noLimit && (
-                                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
+                                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatHundredths(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
                                     )}
                                     <div>{t('Invites sent with a vouch: {count}', { count: card.invitesWithVouch })}</div>
                                     {card.trading && (
                                         <div>{t('Trading: {others} with others · {inside} inside only', { others: card.trading.withOthers, inside: card.trading.insideOnly })}</div>
                                     )}
                                     {card.passedOn && (
-                                        <div>{t('Passed on: {amount} of their {vouched} to {people}', { amount: formatNumber(card.passedOn.amount), vouched: formatNumber(card.vouched), people: tn(card.passedOn.people, '{n} person', '{n} people') })}</div>
+                                        <div>{t('Passed on: {amount} of their {vouched} to {people}', { amount: formatHundredths(card.passedOn.amount_c), vouched: formatHundredths(card.vouched), people: tn(card.passedOn.people, '{n} person', '{n} people') })}</div>
                                     )}
                                 </div>
 
@@ -214,7 +216,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                 {t('Set budget to')}
                                             </span>
                                             <span className="text-xs text-nature-500 dark:text-nature-400">
-                                                {t('{left} left · {held} held', { left: formatNumber(card.left), held: formatNumber(card.held) })}
+                                                {t('{left} left · {held} held', { left: formatHundredths(card.left), held: formatHundredths(card.held) })}
                                             </span>
                                         </div>
 
@@ -226,14 +228,14 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                     type="button"
                                                     onClick={() => setTargetLevel(lvl)}
                                                     disabled={lvl < minLevel}
-                                                    data-testid={`voucher-level-${lvl}`}
+                                                    data-testid={`voucher-level-${wholeBeansOf(lvl)}`}
                                                     className={`min-h-[44px] px-2 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-colors ${
                                                         targetLevel === lvl
                                                             ? 'bg-bp-commit-fill text-bp-commit-on border-transparent'
                                                             : 'bg-oat-50 dark:bg-nature-950 text-nature-800 dark:text-nature-200 border-nature-200 dark:border-nature-800 hover:border-nature-400'
                                                     } disabled:opacity-40 disabled:cursor-not-allowed`}
                                                 >
-                                                    {formatNumber(lvl)}
+                                                    {formatHundredths(lvl)}
                                                 </button>
                                             ))}
                                         </div>
@@ -242,7 +244,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                         <div className="flex items-center gap-3 mb-4">
                                             <button
                                                 type="button"
-                                                onClick={() => setTargetLevel((prev) => Math.max(minLevel, prev - 100))}
+                                                onClick={() => setTargetLevel((prev) => Math.max(minLevel, prev - VOUCHER_BUDGET_STEP))}
                                                 disabled={targetLevel <= minLevel || saving}
                                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                                 aria-label={t(VOUCH_PRESET_WORDS.decreaseBudget)}
@@ -250,11 +252,11 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                 −
                                             </button>
                                             <div className="flex-1 text-center font-extrabold text-base text-nature-950 dark:text-white">
-                                                {t('Set budget to: {level}', { level: formatNumber(targetLevel) })}
+                                                {t('Set budget to: {level}', { level: formatHundredths(targetLevel) })}
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => setTargetLevel((prev) => Math.min(maxLevel, prev + 100))}
+                                                onClick={() => setTargetLevel((prev) => Math.min(maxLevel, prev + VOUCHER_BUDGET_STEP))}
                                                 disabled={targetLevel >= maxLevel || saving}
                                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                                 aria-label={t(VOUCH_PRESET_WORDS.increaseBudget)}
@@ -269,7 +271,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                             disabled={saving || targetLevel === card.level}
                                             className="w-full min-h-[44px] py-2 px-4 rounded-xl text-sm font-bold bg-bp-commit-fill text-bp-commit-on border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {saving ? t('Saving...') : t('Set budget to: {level}', { level: formatNumber(targetLevel) })}
+                                            {saving ? t('Saving...') : t('Set budget to: {level}', { level: formatHundredths(targetLevel) })}
                                         </button>
                                     </div>
                                 )}
@@ -332,7 +334,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                 </div>
                                                 <div className="text-nature-500 dark:text-nature-400 mt-0.5">
                                                     {t('{amount} Beans{raised} · {source}', {
-                                                        amount: formatNumber(p.amount),
+                                                        amount: formatHundredths(p.amount_c),
                                                         raised: p.raised ? t(' (raised)') : '',
                                                         source: p.byInvite ? t('by invite') : t('from profile'),
                                                     })}

@@ -142,7 +142,7 @@ function member(name: string, opts: { words?: boolean } = {}): Id {
                 VALUES (?, ?, ?, ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, iso(Date.now() - 30 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     // A member who came in by the 12-words door (engine/probation.ts WORDS_PROBATION), joined just now.
     if (opts.words) {
         db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(iso(Date.now()), id.pk);
@@ -716,7 +716,7 @@ async function globalRun(): Promise<void> {
     yulSock.ws.close();
     // A trade between Ann and Sid opening accepts it for both, as a trade accepts any request: it is a chat of hers.
     const sidPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(sidPost, ann.pk, iso(Date.now()));
     const sidSock = await socket(sid);
     await sleep(50);
@@ -848,7 +848,7 @@ async function globalRun(): Promise<void> {
     const adaReply = await send(adaConv, ann);
     const adaBefore = entryOf(await listOf(ada), adaConv)?.request?.state;
     const adaPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'general', 'Jam', 'Two jars', 5, ?, ?, 1, 'active')`).run(adaPost, ann.pk, iso(Date.now()));
     const adaSock = await socket(ada);
     await sleep(50);
@@ -1221,12 +1221,12 @@ async function localRun(): Promise<void> {
     console.log('── 17. trades go straight through ──');
     const post = (author: Id) => {
         const id = crypto.randomUUID();
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                     VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(id, author.pk, iso(Date.now()));
         return id;
     };
     const trade = (buyer: Id, seller: Id, status: string) => db.prepare(
-        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 5, ?)`)
+        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 5, ?)`)
         .run(crypto.randomUUID(), post(seller), buyer.pk, seller.pk, status);
     const dee = member('Dee');
     const tradeConv = attempt(() => ensureTransactionConversation(post(ann), dee.pk, ann.pk));

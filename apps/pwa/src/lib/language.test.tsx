@@ -41,7 +41,7 @@ vi.mock('./api', async () => {
 const FR = frWords as Record<string, unknown>;
 const RU = ruWords as Record<string, unknown>;
 const OCT_15 = new Date(Date.UTC(2026, 9, 15, 9, 5));
-const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
+const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

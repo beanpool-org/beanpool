@@ -87,7 +87,7 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'recovery-tombstones-test', 'TEST')`).run(a.pk, a.callsign);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             return true;
         },
         // A request to this node's own HTTPS server, signed by the member as the apps sign one.

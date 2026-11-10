@@ -8,13 +8,14 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
+import { beans, isHundredths, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { getMemberTrustProfile, washTradingAnalysisStepsOnSnapshot, drainSteps, runStepsInSlices } from './trust.js';
 
 type Db = Database.Database;
 
 export interface AuditSyncPayload {
     members?: any[];
-    accounts?: { publicKey?: string; balance: number | string | null }[];
+    accounts?: { publicKey?: string; balance_c: unknown }[];
     transactions?: any[];
     posts?: any[];
     marketplaceTransactions?: any[];
@@ -34,7 +35,8 @@ export interface AuditSyncPayload {
     treasuryOperators?: unknown[];
     enterprisePledges?: unknown[];
     plainTables?: Record<string, unknown[]>;
-    commonsBalance?: number;
+    /** The Commons pot, whole hundredths. */
+    commonsBalance_c?: number;
     generatedAt?: string;
 }
 
@@ -76,67 +78,43 @@ export function isWellFormedKey(key: string): boolean {
     return !/\p{Surrogate}/u.test(key);
 }
 
-/**
- * The sum of some balances, with each addition's rounding carried (Kahan-Babuska-Neumaier, as SQLite's SUM since 3.43). A
- * running sum of doubles loses any value smaller than half a step of the running total: +1e20, 1000, -1e20 sums to 0.
- * A sum that overflows is ±Infinity, as SQLite's is: the carried rounding is then Infinity - Infinity, NaN, and SQLite
- * leaves out a carry that isn't finite (sumFinalize).
- */
-export function compensatedSum(values: Iterable<number>): number {
-    let sum = 0;
-    let carried = 0;
-    for (const v of values) {
-        const t = sum + v;
-        carried += Math.abs(sum) >= Math.abs(v) ? (sum - t) + v : (v - t) + sum;
-        sum = t;
-    }
-    return Number.isFinite(carried) ? sum + carried : sum;
-}
-
 /** A ledger as a few figures and a fingerprint, to tell whether two servers hold the same one (summariseLedger). */
 export interface LedgerSummary {
-    /** Accounts holding Beans, to the cent. */
+    /** Accounts holding any hundredths. */
     accounts: number;
-    /** What they hold between them, to the cent: the size of the ledger whatever its sum. */
+    /** What they hold between them, whole hundredths: the size of the ledger whatever its sum. */
     holdings: number;
-    /** Their sum. */
+    /** Their sum, whole hundredths, exact. */
     sum: number;
-    /** A hash of each of those accounts' key and balance to the cent. */
+    /** A hash of each of those accounts' key and balance (`key:hundredths`). */
     digest: string;
 }
 
 /**
- * A ledger's figures and fingerprint. Two ledgers with the same digest hold the same Beans in the same accounts, to the
- * cent. An account holding under half a cent counts as holding none, so an empty escrow account a server deletes, or dust
- * its sweep moves to the Commons, changes nothing here. A balance that isn't a number counts as none.
+ * A ledger's figures and fingerprint. Two ledgers with the same digest hold the same hundredths in the same accounts,
+ * exactly (`${key}:${balance_c}`): an empty escrow account a server deletes changes nothing here. A balance that is not
+ * whole hundredths counts as none.
  */
-export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unknown }>): LedgerSummary {
+export function summariseLedger(rows: Iterable<{ publicKey: string; balance_c: unknown }>): LedgerSummary {
     const held: string[] = [];
-    const balances: number[] = [];
     let holdings = 0;
+    let sum = 0;
     for (const r of rows) {
-        const b = typeof r.balance === 'number' && Number.isFinite(r.balance) ? r.balance : 0;
-        balances.push(b);
-        const cents = Math.round(b * 100);
-        if (cents === 0) continue;
-        holdings += Math.abs(cents);
-        held.push(`${r.publicKey}:${cents}`);
+        const c = isHundredths(r.balance_c) ? r.balance_c : 0;
+        if (c === 0) continue;
+        sum += c;
+        holdings += Math.abs(c);
+        held.push(`${r.publicKey}:${c}`);
     }
     held.sort();
     return {
         accounts: held.length,
-        holdings: holdings / 100,
-        sum: Math.round(compensatedSum(balances) * 10000) / 10000,
+        holdings,
+        sum,
         digest: crypto.createHash('sha256').update(held.join('\n')).digest('hex'),
     };
 }
 
-/**
- * The accounts rows whose balance is not a finite number: NULL (better-sqlite3 binds NaN as NULL), text, or ±Infinity
- * (SQLite stores 9e999 as Inf). SUM skips NULLs and a text row, so none of them moves the total the check below
- * compares — a balance of 0 wiped to NULL reads as no drift at all. Shared by the conservation check and the boot
- * migration that makes the column NOT NULL (apps/server db.ts).
- */
 /**
  * The escrows an open deal or an open project still holds, as a WHERE clause on the escrow's account key (`keyColumn`):
  * a pending or requested marketplace deal's (escrow_<deal id>), and an open crowdfund's or open bounded enterprise's
@@ -152,29 +130,39 @@ export function escrowNotHeldOpenSql(db: Db, keyColumn = 'public_key'): string {
         + (hasProjects ? ` AND SUBSTR(${keyColumn}, 8) NOT IN (SELECT id FROM projects WHERE id IS NOT NULL AND status = 'ACTIVE')` : '');
 }
 
-export const BROKEN_BALANCE_SQL = `balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`;
+/**
+ * The accounts rows whose balance is not whole hundredths: NULL (better-sqlite3 binds NaN as NULL), text, or a REAL (an
+ * INTEGER column keeps a fraction, or ±Infinity, as REAL). SUM skips NULLs and a text row, so none of them moves the total
+ * the check below compares: a balance of 0 wiped to NULL reads as no drift at all, which is why each is a failure alone.
+ */
+export const BROKEN_BALANCE_SQL = `balance_c IS NULL OR typeof(balance_c) != 'integer'`;
 
 /**
  * Runs the database-level ledger conservation check.
- * Checks system-wide sum of balances against the established baseline, and
- * flags stranded escrows (escrow accounts with balance > 0.01 for settled transactions).
+ * Checks the system-wide sum of balances against the established baseline, EXACTLY (whole hundredths: drift === 0), and
+ * flags stranded escrows (an escrow holding anything, for a settled deal). The baseline is integer text in node_config; a
+ * baseline written as anything else (a float from before whole hundredths) is refused, never read: the check fails until
+ * an owner sets a new one (routes/admin.ts rebaseline).
  *
  * A balance that is not a finite number (BROKEN_BALANCE_SQL) is a failure on its own (review F1, 2026-10-01): a NaN
  * written as NULL was invisible here, because SUM skips it and NaN compares false against any tolerance. `badBalances`
  * counts them; the baseline is never established from a ledger holding one.
  */
 export function runConservationCheck(db: Db): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
-    const sumBalances = (db.prepare(`SELECT COALESCE(SUM(balance), 0) as s FROM accounts`).get() as any).s as number;
+    const sumBalances = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) as s FROM accounts`).get() as any).s as number;
     const badBalances = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE ${BROKEN_BALANCE_SQL}`).get() as any).c as number;
 
-    const baselineRow = db.prepare(`SELECT value FROM node_config WHERE key='ledger_audit_baseline'`).get() as any;
-    let baseline = baselineRow ? Number(baselineRow.value) : NaN;
-    if (!Number.isFinite(baseline)) {
+    const baselineRow = db.prepare(`SELECT value FROM node_config WHERE key='ledger_audit_baseline'`).get() as { value: unknown } | undefined;
+    let baseline: number;
+    if (!baselineRow) {
         baseline = sumBalances;
-        if (badBalances === 0 && Number.isFinite(sumBalances)) {
+        if (badBalances === 0 && isHundredths(sumBalances)) {
             db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
-            console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
+            console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${String(sumBalances)} hundredths`);
         }
+    } else {
+        // Integer text only: a float baseline (from before whole hundredths) is not read as a figure.
+        baseline = typeof baselineRow.value === 'string' && /^-?\d{1,16}$/.test(baselineRow.value) ? Number(baselineRow.value) : NaN;
     }
     const drift = sumBalances - baseline;
 
@@ -182,16 +170,16 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
     // or a funded or closed project's, escrow that still holds Beans is.
     const strandedEscrows = (db.prepare(`
         SELECT COUNT(*) as c FROM accounts
-        WHERE public_key LIKE 'escrow_%' AND ABS(balance) > 0.01
+        WHERE public_key LIKE 'escrow_%' AND balance_c != 0
           AND ${escrowNotHeldOpenSql(db)}
     `).get() as any).c as number;
 
-    // `Math.abs(drift) < 0.01` is false for a NaN drift, so a non-finite sum fails too.
-    const ok = badBalances === 0 && Number.isFinite(sumBalances) && Math.abs(drift) < 0.01 && strandedEscrows === 0;
+    // Exact: `drift === 0` is false for a NaN drift (a refused baseline), so that fails too.
+    const ok = badBalances === 0 && isHundredths(sumBalances) && drift === 0 && strandedEscrows === 0;
     if (!ok) {
-        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}, balances that are not a finite number=${badBalances}`);
+        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${String(sumBalances)}, drift=${String(drift)} hundredths from baseline${Number.isNaN(baseline) ? ' (the stored baseline is not whole hundredths: set a new one)' : ''}, stranded escrows=${strandedEscrows}, balances that are not whole hundredths=${badBalances}`);
     } else {
-        console.log(`✅ [LedgerAudit] OK — sum(balances)=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)}`);
+        console.log(`✅ [LedgerAudit] OK — sum(balances)=${String(sumBalances)} hundredths, drift=0`);
     }
     return { sumBalances, baseline, drift, strandedEscrows, badBalances, ok };
 }
@@ -239,7 +227,7 @@ export async function computeWashSybilMetricsInSlices(
  */
 function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     // 1. Total negative balance
-    const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
+    const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance_c)) as s FROM accounts WHERE balance_c < 0`).get() as any;
     const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
     yield;
 
@@ -278,15 +266,15 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
             yield;
             const floor = floorOf(member.public_key);
             if (floor < 0) {
-                const balRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(member.public_key) as any;
-                const bal = balRow ? balRow.balance : 0;
+                const balRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(member.public_key) as any;
+                const bal = balRow ? balRow.balance_c : 0;
                 if (bal < 0) {
-                    // Near floor: balance within 10 beans of floor
-                    if (bal - floor <= 10) {
+                    // Near floor: balance within 10 Beans of floor (both whole hundredths, so 10 Beans is beans(10))
+                    if (bal - floor <= beans(10)) {
                         accountsNearFloor++;
                     }
-                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days
-                    if (bal <= floor * 0.8) {
+                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days (as 5 × bal <= 4 × floor: integers, exact)
+                    if (bal * 5 <= floor * 4) {
                         const txRow = db.prepare(`
                             SELECT 1 FROM transactions 
                             WHERE (from_pubkey = ? OR to_pubkey = ?) 
@@ -322,7 +310,8 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
             for (const key of keys) {
                 yield;
                 const floor = floorOf(key);
-                if (floor <= -600) {
+                // A floor at or past the Resident line (-600 Beans, in hundredths like every floor).
+                if (floor <= PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD) {
                     const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
                     if (memberRow?.joined_at) {
                         const joined = new Date(memberRow.joined_at);
@@ -384,7 +373,6 @@ export function getReplicaConsistency(
         try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}${where}`).get() as any).c) || 0; }
         catch { return 0; }
     };
-    const round2 = (n: number) => Math.round(n * 100) / 100;
 
     const tableDefs: [string, number][] = [
         ['members', payload.members?.length ?? 0],
@@ -443,20 +431,19 @@ export function getReplicaConsistency(
         return { name, primary, backup, match: primary === backup };
     });
 
-    const primarySum = round2(compensatedSum((payload.accounts ?? []).map((a) => (Number.isFinite(Number(a?.balance)) ? Number(a?.balance) : 0))));
-    const backupSum = round2(Number((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s) || 0);
-    const sumBalances = { primary: primarySum, backup: backupSum, match: Math.abs(primarySum - backupSum) < 0.01 };
+    // Whole hundredths, exact: a balance that is not one counts as none (the ledger comparison below counts it unreadable).
+    const primarySum = (payload.accounts ?? []).reduce((s, a) => s + (isHundredths(a?.balance_c) ? a.balance_c : 0), 0);
+    const backupSum = Number((db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s) || 0;
+    const sumBalances = { primary: primarySum, backup: backupSum, match: primarySum === backupSum };
 
     let commons: ReplicaConsistency['commons'] = null;
-    if (typeof payload.commonsBalance === 'number') {
-        const primaryC = round2(payload.commonsBalance);
-        const backupC = round2(localCommonsBalance);
-        commons = { primary: primaryC, backup: backupC, match: Math.abs(primaryC - backupC) < 0.01 };
+    if (isHundredths(payload.commonsBalance_c)) {
+        commons = { primary: payload.commonsBalance_c, backup: localCommonsBalance, match: payload.commonsBalance_c === localCommonsBalance };
     }
 
     // Every account (G0). The importer writes the copy's rows as they are and deletes the ones it doesn't carry, so after
     // a whole copy the two are equal, balance for balance; any difference is this standby's ledger not being its main
-    // server's. Exact: both are the same doubles, the import writes the one it was sent.
+    // server's. Exact: both are whole hundredths, the import writes the one it was sent.
     // A copy that names no account carries no ledger, as the importer reads it (apps/server engine/sync.ts): one with an
     // empty set, or with no entry whose key this server can store.
     let ledger: ReplicaConsistency['ledger'] = null;
@@ -466,13 +453,13 @@ export function getReplicaConsistency(
         // A key SQLite would store as another string is one the importer never writes: unreadable, like an entry
         // with no key, so it asks for no force-resync (a force-resync would read it the same way).
         if (typeof a?.publicKey !== 'string' || !a.publicKey || !isWellFormedKey(a.publicKey)) { unreadable++; continue; }
-        const b = typeof a.balance === 'number' && Number.isFinite(a.balance) ? a.balance : null;
+        const b = isHundredths(a.balance_c) ? a.balance_c : null;
         if (b === null) unreadable++;
         theirs.set(a.publicKey, b);
     }
     if (theirs.size > 0) {
-        const ours = new Map((db.prepare('SELECT public_key, balance FROM accounts').all() as { public_key: string; balance: number | null }[])
-            .map((r) => [r.public_key, r.balance]));
+        const ours = new Map((db.prepare('SELECT public_key, balance_c FROM accounts').all() as { public_key: string; balance_c: number | null }[])
+            .map((r) => [r.public_key, r.balance_c]));
         const differ: string[] = [];
         for (const [pk, b] of theirs) {
             if (b === null) continue; // counted as unreadable: there is no balance of theirs to hold

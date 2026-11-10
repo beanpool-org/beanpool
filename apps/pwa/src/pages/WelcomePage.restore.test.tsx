@@ -23,7 +23,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
 
 function stubNode(handlers: Record<string, Handler> = {}) {
     const calls: Array<{ path: string; body: any; headers: Record<string, string> }> = [];
@@ -207,7 +207,7 @@ describe('where it starts on the open door', () => {
 
     it('a local community with an invite door: "Restore Existing Identity" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
         restoreNode({
-            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } }),
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } }),
             '/api/community/card': () => json(200, { name: 'Mullumbimby', host: 'mullum.beanpool.org', members: 77, area: null, joining: 'invite', doors: [] }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
@@ -224,7 +224,7 @@ describe('where it starts on the open door', () => {
 
     it('a local community that keeps no copies of accounts does not offer it: a sign-in there could bring nothing back', async () => {
         restoreNode({
-            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false }, recoveryCopies: 'none' }),
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false }, recoveryCopies: 'none' }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));

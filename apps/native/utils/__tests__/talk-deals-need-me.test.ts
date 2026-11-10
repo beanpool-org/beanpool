@@ -66,7 +66,7 @@ const post = (id: string, type: 'offer' | 'need', author: string, lendable = 0) 
     .prepare("INSERT INTO posts (id, type, category, title, description, author_pubkey, lendable) VALUES (?, ?, 'general', ?, 'd', ?, ?)")
     .run(id, type, `Title of ${id}`, author, lendable);
 const deal = (id: string, postId: string, buyer: string, seller: string, status: string, createdAt: string) => sql
-    .prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, post_title) VALUES (?, ?, ?, ?, 5, ?, ?, ?)')
+    .prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, post_title) VALUES (?, ?, ?, ?, 500, ?, ?, ?)')
     .run(id, postId, buyer, seller, status, createdAt, `Title of ${postId}`);
 const dm = (id: string, peer: string) => {
     sql.prepare("INSERT INTO conversations (id, type) VALUES (?, 'dm')").run(id);
@@ -136,8 +136,8 @@ describe("Talk's Action Required is core's rule: the deals whose step is the mem
 // A standing deal between me (the payer) and Ana (DESIGN-standing-deals-upfront-fable §3): nothing of it is ever held, so
 // no row of it is a step to release, whatever status a copy carries; only its first period asks for a review.
 const standingRow = (id: string, status: string, periodNo: number, phase: string | null, createdAt: string) => {
-    sql.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, 50, ?, ?, ?, ?, ?, ?)')
-        .run(id, 'p-storage', ME, ANA, status, createdAt, 'Vehicle Storage', 'sd-1', periodNo, phase ? JSON.stringify({ phase, beans: 50, unit: 'month', max: null, nextDueAt: '2026-12-09T08:00:00.000Z', startsAt: '2026-10-09T08:00:00.000Z', shortSince: null, stopped: false }) : null);
+    sql.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, 5000, ?, ?, ?, ?, ?, ?)')
+        .run(id, 'p-storage', ME, ANA, status, createdAt, 'Vehicle Storage', 'sd-1', periodNo, phase ? JSON.stringify({ phase, beans_c: 5000, unit: 'month', max: null, nextDueAt: '2026-12-09T08:00:00.000Z', startsAt: '2026-10-09T08:00:00.000Z', shortSince: null, stopped: false }) : null);
 };
 
 describe('a standing deal asks no Release anywhere the phone lists deals (U2, fail-first)', () => {

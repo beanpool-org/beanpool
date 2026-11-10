@@ -18,7 +18,7 @@ import {
 } from '../utils/db';
 import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
-import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, isJuryVote, juryTurnoutLine, juryTurnoutOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_STRIP, formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, isJuryVote, juryTurnoutLine, juryTurnoutOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, minYesLine,
     notExecutedLine, ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
@@ -77,7 +77,8 @@ interface Props {
     /** The signer's voice credits for money votes; null for a guest or before it loads. */
     myPoolVoting?: MyPoolVoting | null;
     identity: any;
-    balanceState: { earnedCredit: number; commons: number };
+    /** db.ts getBalance's answer, its figures whole hundredths of a Bean (`*_c`). */
+    balanceState: { earnedCredit_c: number; commons_c: number };
     onRefresh: () => Promise<void>;
     onOpenPropose: () => void;
     canPropose: boolean;
@@ -963,15 +964,21 @@ export function DecideSection({
                             const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
                             // The node sends the member's balance and debt only to those who can vote in it (and to the member):
                             // balances are private (2026-09-28). Anyone else is told so, never shown a made-up 0.
-                            const knowsDebt = typeof item.params?.debt === 'number' || typeof item.params?.balance === 'number';
-                            const debtAmount = typeof item.params?.debt === 'number' ? Math.abs(item.params.debt) : (typeof item.params?.balance === 'number' ? Math.abs(Math.min(0, item.params.balance)) : 0);
-                            const poolAmount = Math.round(item.params?.commonsPool ?? balanceState.commons ?? 0);
+                            // The node's removal params are whole hundredths: debt_c, balance_c, commonsPool_c (decisions-engine.ts
+                            // removalBalanceParams); a figure that isn't one is not known, never a made-up 0.
+                            const debt_c = isHundredths(item.params?.debt_c) ? item.params.debt_c : null;
+                            const balance_c = isHundredths(item.params?.balance_c) ? item.params.balance_c : null;
+                            const knowsDebt = debt_c !== null || balance_c !== null;
+                            const debtAmount = debt_c !== null ? Math.abs(debt_c) : (balance_c !== null ? Math.abs(Math.min(0, balance_c)) : 0);
+                            const poolAmount = isHundredths(item.params?.commonsPool_c) ? item.params.commonsPool_c
+                                : (isHundredths(balanceState.commons_c) ? balanceState.commons_c : 0);
                             // Whole sentences; English writes "beans" for one and many, as it always has.
                             const debtWriteOffLine = !knowsDebt
-                                ? tn(poolAmount, "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", { name: targetName })
+                                // Each figure from whole hundredths (formatHundredths); the count, in Beans, only picks the form.
+                                ? tn(poolAmount / 100, "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", { name: targetName, n: formatHundredths(poolAmount) })
                                 : debtAmount > 0
-                                    ? tn(debtAmount, "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", { name: targetName, pool: poolAmount })
-                                    : t('{name} has no debt. Removing them charges nothing to the Commons pool, which currently holds {pool}.', { name: targetName, pool: poolAmount });
+                                    ? tn(debtAmount / 100, "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", "{name}'s balance is \u2212{n} beans. Removing them charges that {n} to the Commons pool, which currently holds {pool}.", { name: targetName, n: formatHundredths(debtAmount), pool: formatHundredths(poolAmount) })
+                                    : t('{name} has no debt. Removing them charges nothing to the Commons pool, which currently holds {pool}.', { name: targetName, pool: formatHundredths(poolAmount) });
 
                             return (
                                 <View key={item.id} style={styles.card} testID={preview ? 'sample-decision' : undefined}>

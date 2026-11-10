@@ -323,12 +323,13 @@ export async function startMain(pair: Pair): Promise<{ main: NodeProc; m: string
     };
     built('Gwen sets a profile photo', await As(gwen, '/api/profile/update', { avatar: TINY_PNG }));
     for (const who of [ann, bo, cy, dee]) await join(who);
-    const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
-        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
+    // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+    const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
+        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
     })).post;
     built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
-    await offer(gwen, 'Sourdough', 4);
-    const honey = await offer(ann, 'Honey', 20);
+    await offer(gwen, 'Sourdough', 400);
+    const honey = await offer(ann, 'Honey', 2000);
     const tx = built('Gwen asks for the honey', await As(gwen, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: gwen.pk })).transaction;
     built('Ann approves: the Beans are held', await As(ann, '/api/marketplace/transactions/approve', { transactionId: tx.id, authorPublicKey: ann.pk }));
     built('Gwen confirms: the Beans are released', await As(gwen, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: gwen.pk }));

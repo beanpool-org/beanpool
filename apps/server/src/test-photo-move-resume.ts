@@ -155,8 +155,8 @@ async function main(): Promise<void> {
     const { isServableAvatarValue } = await import('@beanpool/core');
     await initTls();
     se.initStateEngine();
-    for (const m of [ann, bea, cal, dee, eve]) db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)').run(m.pk);
-    const totalSum = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+    for (const m of [ann, bea, cal, dee, eve]) db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 100, 0)').run(m.pk);
+    const totalSum = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
     db.prepare(`UPDATE node_config SET value = ? WHERE key = 'ledger_audit_baseline'`).run(String(totalSum));
     se.reconcileLedgerFromDb();
     const port = await startHttpsServer(0);

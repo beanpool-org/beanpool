@@ -37,7 +37,7 @@
  * conservingTransaction. One plain db.transaction; its one read of a balance is the giver's own, for their debt.
  */
 import crypto from 'node:crypto';
-import { word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
+import { formatHundredths, isHundredths, HUNDREDTHS_PER_BEAN, word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey, getBalance, getMemberTrustProfile } from '../state-engine.js';
 import { creditCap } from '@beanpool/engine';
@@ -70,14 +70,16 @@ export const CREDIT_GIFT_WORDS = {
     noticeTitle: word('Part of a credit line, for you'),
 } as const;
 
-const overSetting = (max: number) => tr('You can give up to {max} Beans of your credit line at once here.', { max });
-const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.', { room, amount });
-const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free });
+/** A figure (whole hundredths) in these English words. */
+const B = (c: number) => formatHundredths(c, 'en');
+const overSetting = (max: number) => tr('You can give up to {max} Beans of your credit line at once here.', { max: B(max) });
+const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.', { room: B(room), amount: B(amount) });
+const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free: B(free) });
 const notReceiving = (name: string) => tr('@{name} can’t be given part of a credit line right now.', { name });
-const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap });
+const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap: B(cap) });
 const backToRoot = (name: string) => tr('The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.', { name });
-const partBackToRoot = (name: string, most: number) => tr('Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.', { name, most });
-const noticeBody = (name: string, amount: number) => tr('@{name} gave you {amount} Beans of their credit line. It’s yours for good.', { name, amount });
+const partBackToRoot = (name: string, most: number) => tr('Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.', { name, most: B(most) });
+const noticeBody = (name: string, amount: number) => tr('@{name} gave you {amount} Beans of their credit line. It’s yours for good.', { name, amount: B(amount) });
 
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomBytes(16).toString('hex');
@@ -94,8 +96,13 @@ interface Piece { id: string; root: string; open: number }
 /** The member's received pieces with an open part, oldest first: what a gift splits, in that order. */
 function openPieces(pk: string): Piece[] {
     return (db.prepare(`SELECT g.id AS id, g.root_pubkey AS root,
-            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+            g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
         FROM room_gifts g WHERE g.to_pubkey = ? ORDER BY g.at ASC, g.rowid ASC`).all(pk) as Piece[]).filter((p) => p.open > 0);
+}
+
+/** Hundredths floored to a whole Bean, toward minus infinity (a multiple of HUNDREDTHS_PER_BEAN): 883 is 800, -50 is -100. */
+function wholeBeansDown(c: number): number {
+    return c - (((c % HUNDREDTHS_PER_BEAN) + HUNDREDTHS_PER_BEAN) % HUNDREDTHS_PER_BEAN);
 }
 
 /** The giver's side: what they may give now, and why not, before any recipient is named. */
@@ -123,18 +130,19 @@ function giverState(giver: string): GiverState {
  * The line is the one the spending gate reads (state-engine usableFloor, core usableAllowance), never the whole floor: one
  * live offer unlocks the known grant and the room whole, the offer bands meter earned and granted credit (one offer: 200).
  * With no live offer the line unlocks nothing, so only a giver who owes nothing gives (it changes no spend of theirs).
- * Whole Beans. Round 2 of #2912: the floor counted earned and granted credit past the band, and a gift the tab offered
- * left the giver owing more than their offers unlock, "Spending paused".
+ * Whole Beans (a gift is one, planGift): the figures are hundredths, so the most is floored to a multiple of 100. Round 2
+ * of #2912: the floor counted earned and granted credit past the band, and a gift the tab offered left the giver owing more
+ * than their offers unlock, "Spending paused".
  */
 function freeRoom(giver: string, p: ReturnType<typeof getMemberTrustProfile>, room: number): number {
     const b = getBalance(giver);
-    const debt = Math.max(0, -b.balance);
+    const debt = Math.max(0, -b.balance_c);
     const cap = creditCap(db);
     const usableAfter = (g: number) => usableAllowance({ knownGrant: p.knownGrant, roomHeld: p.roomHeld - g, otherAllowance: p.otherAllowance, cap, liveOffers: b.liveOffers });
     const most = b.liveOffers >= 1
-        ? Math.floor(p.knownGrant + p.roomHeld + Math.min(p.otherAllowance, offerCapForCount(b.liveOffers)) - debt)
+        ? wholeBeansDown(p.knownGrant + p.roomHeld + Math.min(p.otherAllowance, offerCapForCount(b.liveOffers)) - debt)
         : (debt > 0 ? 0 : room);
-    const free = Math.max(0, Math.min(room, most));
+    const free = wholeBeansDown(Math.max(0, Math.min(room, most)));
     // Past the cap no part of the room covers anything more: the same line, read whole, must still cover the debt.
     return free > 0 && usableAfter(free) >= debt ? free : 0;
 }
@@ -163,10 +171,11 @@ function memberKey(raw: unknown): string {
 }
 
 /** Every rule, in order, with nothing written: the pieces the gift takes, oldest first, and the recipient's name. */
-function planGift(giver: string, to: string, amount: unknown): { amount: number; takes: { piece: Piece; take: number }[]; callsign: string } {
+function planGift(giver: string, to: string, amount: unknown): { amount_c: number; takes: { piece: Piece; take: number }[]; callsign: string } {
     const setting = memberGiftSetting();
     if (setting <= 0) throw new CreditGiftError(403, 'gift_off', CREDIT_GIFT_WORDS.off);
-    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1) throw new CreditGiftError(400, 'bad_amount', CREDIT_GIFT_WORDS.badAmount);
+    // A whole number of Beans, 1 or more, as before whole hundredths: 100, 200, … in hundredths; 12.50 Beans is refused.
+    if (!isHundredths(amount) || amount < HUNDREDTHS_PER_BEAN || amount % HUNDREDTHS_PER_BEAN !== 0) throw new CreditGiftError(400, 'bad_amount', CREDIT_GIFT_WORDS.badAmount);
     if (amount > setting) throw new CreditGiftError(400, 'over_setting', overSetting(setting));
     // The giver first, so a key that may give nothing learns nothing about the member it names.
     const g = giverState(giver);
@@ -208,7 +217,7 @@ function planGift(giver: string, to: string, amount: unknown): { amount: number;
     }
     // The open parts sum to their room, checked above: never a gift that can't be covered piece by piece.
     if (left !== 0) throw new CreditGiftError(409, 'not_enough_room', notEnoughRoom(g.room, amount));
-    return { amount, takes, callsign: r.callsign };
+    return { amount_c: amount, takes, callsign: r.callsign };
 }
 
 /**
@@ -217,28 +226,28 @@ function planGift(giver: string, to: string, amount: unknown): { amount: number;
  * per piece taken, each with that piece's root, and the recipient's notice kept. `tell` sends the notice live and as a
  * push once the transaction has committed.
  */
-export function giveCreditLine(giver: string, body: { memberPubkey?: unknown; amount?: unknown }, tell?: (n: VoucherNotice) => void) {
+export function giveCreditLine(giver: string, body: { memberPubkey?: unknown; amount_c?: unknown }, tell?: (n: VoucherNotice) => void) {
     assertPlainTablesWritable();
     assertBeansOn();
     const to = memberKey(body.memberPubkey);
     const { notice, rows } = db.transaction(() => {
-        const plan = planGift(giver, to, body.amount);
+        const plan = planGift(giver, to, body.amount_c);
         const at = now();
-        const insert = db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount, source_gift_id, at)
+        const insert = db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c, source_gift_id, at)
             VALUES (?, ?, ?, ?, 'gift', ?, ?, ?)`);
-        const written: { id: string; root: string; amount: number; sourceGiftId: string }[] = [];
+        const written: { id: string; root: string; amount_c: number; sourceGiftId: string }[] = [];
         for (const { piece, take } of plan.takes) {
             const id = newId();
             insert.run(id, giver, to, piece.root, take, piece.id, at);
-            written.push({ id, root: piece.root, amount: take, sourceGiftId: piece.id });
+            written.push({ id, root: piece.root, amount_c: take, sourceGiftId: piece.id });
         }
         const giverName = getMember(giver)?.callsign ?? '';
         const title = CREDIT_GIFT_WORDS.noticeTitle;
-        const text = noticeBody(giverName, plan.amount);
-        const data = { kind: 'credit_gift', amount: plan.amount, from: giver };
+        const text = noticeBody(giverName, plan.amount_c);
+        const data = { kind: 'credit_gift', amount: plan.amount_c, from: giver };
         return { notice: { to, title, body: text, data, id: keepNotice(to, title, text, data) } as VoucherNotice, rows: written };
     })();
     tell?.(notice);
     const after = creditGiftOffer(giver);
-    return { memberPubkey: to, amount: rows.reduce((s, r) => s + r.amount, 0), pieces: rows.length, room: after.room, canGive: after.canGive };
+    return { memberPubkey: to, amount: rows.reduce((s, r) => s + r.amount_c, 0), pieces: rows.length, room: after.room, canGive: after.canGive };
 }

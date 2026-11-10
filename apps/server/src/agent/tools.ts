@@ -427,7 +427,8 @@ export const AGENT_TOOLS: AgentTool[] = [
     {
         name: 'community_totals',
         title: 'Community totals',
-        reads: 'Beans in circulation, the sums of credit and debt, how many members are in debit, the Commons pot, trades this month, '
+        reads: 'Beans in circulation, the sums of credit and debt, how many members are in debit, the Commons pot (each money figure a '
+            + 'whole number of hundredths of a Bean, named *_c: 4925 is 49.25 Beans), trades this month, '
             + 'new members in the last 7 and 30 days, the number of posts, and how far members who joined got (newMembers, for the last '
             + `90 days and all time): how many joined and made a first listing, how many completed a first trade (at least this many, in steps of ${FIRST_TRADE_MIN_GROUP}), `
             + 'and the median days from joining to a first listing and from a first listing to a first trade. '
@@ -439,7 +440,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         never: "any member's balance, per-member figures, any member's dates, names or keys, or the list of members in debit",
         inputSchema: NO_ARGS,
         outputSchema: OBJ({
-            beansInCirculation: NUM, sumOfCredit: NUM, sumOfDebt: NUM, membersInDebit: NUM, accounts: NUM, commonsPot: NUM,
+            beansInCirculation_c: NUM, sumOfCredit_c: NUM, sumOfDebt_c: NUM, membersInDebit: NUM, accounts: NUM, commonsPot_c: NUM,
             tradesThisMonth: NUM, newMembers7Days: NUM, newMembers30Days: NUM, posts: NUM,
             newMembers: OBJ({ beans: BOOL, anyTrades: BOOL, minGroup: NUM, last90Days: FIRST_TRADE_WINDOW, allTime: FIRST_TRADE_WINDOW }),
             needs: NEEDS_THIS_MONTH,
@@ -449,8 +450,8 @@ export const AGENT_TOOLS: AgentTool[] = [
             return {
                 ok: true, rows: 1,
                 result: {
-                    beansInCirculation: t.beansInCirculation, sumOfCredit: t.sumOfCredit, sumOfDebt: t.sumOfDebt,
-                    membersInDebit: t.membersInDebit, accounts: t.accounts, commonsPot: t.commonsPot, tradesThisMonth: t.tradesThisMonth,
+                    beansInCirculation_c: t.beansInCirculation_c, sumOfCredit_c: t.sumOfCredit_c, sumOfDebt_c: t.sumOfDebt_c,
+                    membersInDebit: t.membersInDebit, accounts: t.accounts, commonsPot_c: t.commonsPot_c, tradesThisMonth: t.tradesThisMonth,
                     newMembers7Days: newMembersSince(7), newMembers30Days: newMembersSince(30),
                     posts: communityCountsCached().postCount,
                     newMembers: t.newMembers,

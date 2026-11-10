@@ -76,7 +76,8 @@ const KEEPERS = [
 function card(over: Partial<ScopedDecisionCard> = {}): ScopedDecisionCard {
     return {
         id: 'd1', authorPubkey: ANN, title: 'Pay Bob for the oven', description: 'Bob fixed the oven door last week.',
-        effect: 'pay_out', subject: BOB, params: { amount: 40 }, status: 'open',
+        // The node carries a pay-out's figure as params.amount_c, whole hundredths of a Bean: 40 Beans.
+        effect: 'pay_out', subject: BOB, params: { amount_c: 4000 }, status: 'open',
         opensAt: new Date(Date.now() - 3600_000).toISOString(), closesAt: new Date(Date.now() + 6 * 86400_000).toISOString(),
         tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 }, myVote: null, ...over,
     };
@@ -95,7 +96,8 @@ async function render(props: Partial<Parameters<typeof EnterpriseDecisions>[0]> 
     root = createRoot(host);
     await act(async () => {
         root.render(createElement(EnterpriseDecisions, {
-            treasuryKey: ENT, myPubkey: BOB, keepers: KEEPERS, balance: 100, lifecycle: 'ongoing', ...props,
+            // What it holds, whole hundredths (the detail's balance_c): 100 Beans.
+            treasuryKey: ENT, myPubkey: BOB, keepers: KEEPERS, balance: 10000, lifecycle: 'ongoing', ...props,
         }) as unknown as Parameters<Root['render']>[0]);
     });
     await settle();
@@ -155,16 +157,22 @@ describe('a vote card', () => {
 });
 
 describe('the pay-out form', () => {
-    it('what it holds, rounded down to cents (review opus-1767 N8)', async () => {
-        await render({ balance: 112.3125 });
+    it('what it holds, to the hundredth (review opus-1767 N8: never a float tail)', async () => {
+        // Whole hundredths: 112.31 Beans is 11231, so there is nothing below a hundredth to round away.
+        await render({ balance: 11231 });
         await press(button(/^Propose a vote$/));
         expect(textEl(/^It holds 112\.31 Beans now\.$/), textEl(/It holds/)?.textContent).toBeTruthy();
+    });
+    it('what it holds when it is in deficit: nothing, never a figure below zero', async () => {
+        await render({ balance: -982 });
+        await press(button(/^Propose a vote$/));
+        expect(textEl(/^It holds 0 Beans now\.$/), textEl(/It holds/)?.textContent).toBeTruthy();
     });
 });
 
 describe("a keeper's pay-out is a wage (review opus-1767 N5)", () => {
     it('capped at the earned surplus, in the node\'s words; the button waits until the amount fits', async () => {
-        await render({ balance: 100, earnedSurplus: 10 });
+        await render({ balance: 10000, earnedSurplus: 1000 });
         await press(button(/^Propose a vote$/));
         expect(textEl(/^Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 10 Beans now\.$/)).toBeTruthy();
         await press(radio(/^Catherine-Rose$/));
@@ -176,6 +184,11 @@ describe("a keeper's pay-out is a wage (review opus-1767 N5)", () => {
         await type('Amount in Beans', '10');
         expect(textEl(/^Catherine-Rose receives 9\.85 Beans\./)).toBeTruthy();
         expect(button(/^Open the vote$/)?.getAttribute('aria-disabled')).toBeNull();
+        // The vote is opened with the figure the node takes: params.amount_c, whole hundredths (10 Beans is 1000).
+        await press(button(/^Open the vote$/));
+        expect(node.proposed).toEqual([{
+            title: 'Pay Catherine-Rose', description: 'She fixed the oven door last week.', effect: 'pay_out', params: { to: CAT, amount_c: 1000 },
+        }]);
     });
 });
 

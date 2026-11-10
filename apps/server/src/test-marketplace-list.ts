@@ -53,7 +53,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, WEEK_AGO(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
@@ -81,7 +81,7 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
 
 function insertPhotolessPost(id: string, authorPubkey: string, title: string, category = 'food', credits = 5) {
     db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, status, active, created_at, updated_at)
+        INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, status, active, created_at, updated_at)
         VALUES (?, 'offer', ?, ?, 'A test offer', ?, 'fixed', ?, 'active', 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(id, category, title, credits, authorPubkey);
 }

@@ -37,7 +37,7 @@ function makeAuthor(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -61,7 +61,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 
 const post = (title: string, extra: Record<string, unknown> = {}) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
+    price_c: 2000 /* 20 Beans */, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
 });
 
 async function main() {

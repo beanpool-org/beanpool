@@ -173,7 +173,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(id.pubKeyHex, callsign);
         setMemberPhoto(db, id.pubKeyHex, '/uploads/avatar.jpg');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const ada = member('DosAda');
@@ -559,7 +559,7 @@ async function main() {
         const BOUND: number = engine.ONE_PASS_MAX_MEASURED ?? 10_000;
         const N = BOUND + 2_000;
         const author = member('DosSeller');
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng, audience_scope)
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng, audience_scope)
                                 VALUES (?, 'offer', ?, ?, '', 0, ?, ?, ?, ?, ?, 'public')`);
         let seed = 7;
         const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };

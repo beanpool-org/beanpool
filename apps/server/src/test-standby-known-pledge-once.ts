@@ -38,6 +38,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed ce
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Pledge-Main-Pw-8841!';
 const PW_STANDBY = 'Pledge-Standby-Pw-266!';
+/** The story's Beans as the node's whole hundredths (every floor, pledge and figure below is hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -72,10 +74,10 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                         VALUES (?, 'Kai Co', strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'), ?, 'INV-KaiCo', 'active', 1)`).run(a.enterprise, a.owner);
             for (const pk of [a.kai, a.enterprise]) {
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
                 setMemberPhoto(db, pk, avatar);
             }
-            for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Kai Co goods ${i}`, 'Goods', 10, 'fixed', a.enterprise);
+            for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Kai Co goods ${i}`, 'Goods', hc(10), 'fixed', a.enterprise);
             // The confirmation dial stays on its default, on, with no row (config/known-floor.ts).
             db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)`)
                 .run(crypto.randomBytes(16).toString('hex'), a.kai, crypto.randomBytes(16).toString('hex'), a.owner);
@@ -111,11 +113,11 @@ async function child(): Promise<void> {
                 dialRow: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null,
                 spend: getEnterpriseUnderlyingFloor(a.enterprise).floor,
                 engine: getEnterpriseFloor(db, a.enterprise).floor,
-                usable: getBalance(a.enterprise).usableFloor,
-                kaiOwn: getBalance(a.kai).floor,
-                figure: (db.prepare('SELECT backing FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(a.enterprise, a.kai) as { backing: number } | undefined)?.backing ?? null,
-                pledges: (db.prepare('SELECT id, amount FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL').all(a.enterprise) as { id: string; amount: number }[])
-                    .map((r) => `${r.id.startsWith('known:') ? 'known' : 'earned'} ${r.amount}`).sort(),
+                usable: getBalance(a.enterprise).usableFloor_c,
+                kaiOwn: getBalance(a.kai).floor_c,
+                figure: (db.prepare('SELECT backing_c FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(a.enterprise, a.kai) as { backing_c: number } | undefined)?.backing_c ?? null,
+                pledges: (db.prepare('SELECT id, amount_c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL').all(a.enterprise) as { id: string; amount_c: number }[])
+                    .map((r) => `${r.id.startsWith('known:') ? 'known' : 'earned'} ${r.amount_c}`).sort(),
             };
         },
     });
@@ -178,12 +180,12 @@ async function main(): Promise<void> {
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, owner: owen.pk, kai: kai.pk, enterprise });
         const mBase = `https://localhost:${await main.send('serve')}`;
-        const asked = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/keepers/request`, kai, { pledgedBacking: 500 });
+        const asked = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/keepers/request`, kai, { pledgedBacking_c: hc(500) });
         require_(asked.status === 200 && typeof asked.body?.request?.id === 'string', `M: Kai asks to join, pledging 500 (${asked.status} ${j(asked.body)})`);
         const approved = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/keepers/requests/${asked.body.request.id}/approve`, owen, {});
         require_(approved.status === 200 && approved.body?.applied === true, `M: the owner approves him at once (${approved.status} ${j(approved.body)})`);
         const m1 = await main.send('floors', who);
-        assert(m1.dial === true && m1.dialRow === null && m1.spend === -500 && m1.engine === -500 && m1.usable === -500 && j(m1.pledges) === j(['known 500']) && m1.figure === 500,
+        assert(m1.dial === true && m1.dialRow === null && m1.spend === -hc(500) && m1.engine === -hc(500) && m1.usable === -hc(500) && j(m1.pledges) === j([`known ${hc(500)}`]) && m1.figure === hc(500),
             `M: on the default dial (no row), Kai Co's floor is -500, one known row of 500, the figure 500 (${j(m1)})`);
 
         // ── 2. S's first copy ──
@@ -196,7 +198,7 @@ async function main(): Promise<void> {
         const first = await standby.send('pull');
         require_(first.ok === true, `S: its first copy lands (${j(first)})`);
         const s2 = await standby.send('floors', who);
-        assert(j(s2.pledges) === j(['known 500']) && s2.figure === 500, `S holds the binding, figure 500, and the known row of 500 (${j(s2)})`);
+        assert(j(s2.pledges) === j([`known ${hc(500)}`]) && s2.figure === hc(500), `S holds the binding, figure 500, and the known row of 500 (${j(s2)})`);
         assert(s2.dialRow === 'off', `S keeps its own dial through the copy: its own 'off' row (${j(s2.dialRow)})`);
         assert(s2.dial === false && s2.kaiOwn === 0 && s2.spend === 0 && s2.engine === 0,
             `S applies none of the community's settings yet: no known part counts there, Kai's own line 0 and Kai Co's 0 alike, never the figure's -500 (${j(s2)})`);
@@ -210,20 +212,20 @@ async function main(): Promise<void> {
         const installed = await standby.send('install-settings');
         require_(installed.installed === true, `S installs the community's settings it kept (${j(installed)})`);
         const s3 = await standby.send('floors', who);
-        assert(s3.dial === true && s3.dialRow === null && s3.spend === -500 && s3.engine === -500 && s3.usable === -500 && s3.kaiOwn === -500,
+        assert(s3.dial === true && s3.dialRow === null && s3.spend === -hc(500) && s3.engine === -hc(500) && s3.usable === -hc(500) && s3.kaiOwn === -hc(500),
             `S: M's default dial (no row) replaces S's own 'off'; Kai Co reads -500, as on M, never -1,000; Kai's own line 500 (${j(s3)})`);
 
         // ── 4. a release on M, and S's next copy ──
         console.log('\n— 4. Kai releases 200 on M; the standby\'s next copy —');
-        const released = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/release`, kai, { amount: 200 });
-        require_(released.status === 200 && released.body?.remainingPledge === 300, `M: Kai releases 200 (${released.status} ${j(released.body)})`);
+        const released = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/release`, kai, { amount_c: hc(200) });
+        require_(released.status === 200 && released.body?.remainingPledge_c === hc(300), `M: Kai releases 200 (${released.status} ${j(released.body)})`);
         const m4 = await main.send('floors', who);
-        assert(m4.spend === -300 && m4.engine === -300 && j(m4.pledges) === j(['known 300']) && m4.figure === 500,
+        assert(m4.spend === -hc(300) && m4.engine === -hc(300) && j(m4.pledges) === j([`known ${hc(300)}`]) && m4.figure === hc(500),
             `M: Kai Co reads -300, the figure still 500 (${j(m4)})`);
         const delta = await standby.send('pull');
         require_(delta.ok === true, `S: the next copy lands (${j(delta)})`);
         const s4 = await standby.send('floors', who);
-        assert(s4.spend === -300 && s4.engine === -300 && s4.usable === -300 && j(s4.pledges) === j(['known 300']) && s4.figure === 500,
+        assert(s4.spend === -hc(300) && s4.engine === -hc(300) && s4.usable === -hc(300) && j(s4.pledges) === j([`known ${hc(300)}`]) && s4.figure === hc(500),
             `S: Kai Co reads -300, as on M, never -800 (${j(s4)})`);
     } finally {
         for (const n of nodes) await n.kill();

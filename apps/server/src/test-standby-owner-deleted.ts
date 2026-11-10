@@ -47,7 +47,7 @@ async function child(): Promise<void> {
             for (const [key, name] of [[a.rhea, 'Rhea'], [a.friend, 'Finn']]) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, bio, contact_value)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(key, name, genesis, `INV-${name}`, `${name} keeps bees`, `${name.toLowerCase()}@example.com`);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(a.rhea, a.friend);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(a.friend, a.rhea);

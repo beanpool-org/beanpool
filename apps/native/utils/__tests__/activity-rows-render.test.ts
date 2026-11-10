@@ -49,7 +49,7 @@ const items = {
     posted: { id: 11, eventType: 'post_created', actorPubkey: 'pk-damo', actorCallsign: 'Damo', metadata: { postId: 'post-1', title: 'Record Fair' }, createdAt: now },
     tradedNoListing: {
         id: 13, eventType: 'trade_completed', actorPubkey: 'pk-sam', actorCallsign: 'Sam', targetPubkey: 'pk-bea', targetCallsign: 'Bea',
-        metadata: { credits: 12 }, createdAt: now,
+        metadata: { amount_c: 1200 }, createdAt: now,
     },
     rated: {
         id: 14, eventType: 'rating_given', actorPubkey: 'pk-rae', actorCallsign: 'Rae', targetPubkey: 'pk-tia', targetCallsign: 'Tia',

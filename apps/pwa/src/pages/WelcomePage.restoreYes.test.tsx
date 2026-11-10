@@ -20,7 +20,7 @@ import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
 const NODE = 'https://byron.example.org';
-const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
+const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
 const CARD = { name: 'Byron Shire BeanPool', host: 'byron.example.org', members: 3, joining: 'requests' };
 
 type Call = { path: string; method: string; body: Record<string, unknown>; headers: Record<string, string> };

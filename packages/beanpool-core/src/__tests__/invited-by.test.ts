@@ -55,16 +55,18 @@ describe('Brought in, the switch, the Ledger line', () => {
         });
     });
     it('the Ledger names the voucher and the amount', () => {
-        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }])).toBe('Your credit line: 200, vouched by @marty');
+        expect(ledgerCreditLine([{ callsign: 'marty', amount_c: 20000 }])).toBe('Your credit line: 200, vouched by @marty');
     });
     it('two or three vouchers: one credit line, the total once, each voucher with their part, in the order given', () => {
-        const two = ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }]);
+        const two = ledgerCreditLine([{ callsign: 'marty', amount_c: 20000 }, { callsign: 'olive', amount_c: 10000 }]);
         expect(two).toBe('Your credit line: 300 · vouched by @marty 200, @olive 100');
-        const three = ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }, { callsign: 'kofi', amount: 50 }]);
+        const three = ledgerCreditLine([{ callsign: 'marty', amount_c: 20000 }, { callsign: 'olive', amount_c: 10000 }, { callsign: 'kofi', amount_c: 5000 }]);
         expect(three).toBe('Your credit line: 350 · vouched by @marty 200, @olive 100, @kofi 50');
         // Never one "Your credit line" per voucher (two would read as two different lines, neither the whole).
         for (const line of [two, three]) expect(line!.match(/Your credit line/g)).toHaveLength(1);
-        expect(ledgerCreditLine([{ callsign: 'a', amount: 0.1 }, { callsign: 'b', amount: 0.2 }])).toBe('Your credit line: 0.3 · vouched by @a 0.1, @b 0.2');
+        // Whole hundredths add exactly (0.10 + 0.20 is 0.30), and a figure that isn't one is no voucher's part.
+        expect(ledgerCreditLine([{ callsign: 'a', amount_c: 10 }, { callsign: 'b', amount_c: 20 }])).toBe('Your credit line: 0.30 · vouched by @a 0.10, @b 0.20');
+        expect(ledgerCreditLine([{ callsign: 'a', amount_c: 0.1 }])).toBeNull();
     });
     it('nobody vouched: no line', () => {
         expect(ledgerCreditLine([])).toBeNull();
@@ -73,10 +75,10 @@ describe('Brought in, the switch, the Ledger line', () => {
     });
     it('every piece of the line goes through the words layer', () => {
         setLanguage('xx');
-        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }])).toBe(pseudoLocalise('Your credit line: {amount}, vouched by @{name}').replace('{amount}', '200').replace('{name}', 'marty'));
+        expect(ledgerCreditLine([{ callsign: 'marty', amount_c: 20000 }])).toBe(pseudoLocalise('Your credit line: {amount}, vouched by @{name}').replace('{amount}', '200').replace('{name}', 'marty'));
         const item = (name: string, amount: string) => pseudoLocalise('@{name} {amount}').replace('{name}', name).replace('{amount}', amount);
         const list = pseudoLocalise('{list}, {item}').replace('{list}', item('marty', '200')).replace('{item}', item('olive', '100'));
-        expect(ledgerCreditLine([{ callsign: 'marty', amount: 200 }, { callsign: 'olive', amount: 100 }]))
+        expect(ledgerCreditLine([{ callsign: 'marty', amount_c: 20000 }, { callsign: 'olive', amount_c: 10000 }]))
             .toBe(pseudoLocalise('Your credit line: {total} · vouched by {vouchers}').replace('{total}', '300').replace('{vouchers}', list));
     });
 });

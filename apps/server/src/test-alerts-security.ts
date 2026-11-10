@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[admin, CALLSIGNS[1]], [moderator, CALLSIGNS[2]], [member, CALLSIGNS[3]], [helper, CALLSIGNS[4]]]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
@@ -458,7 +458,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[flipped, 'FlipFloS'], [xav, 'XavNewOwnerS']]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     putPushTokenRow(xav, 'ExponentPushToken[xav-new-owner]', 'android');
     const asAdmin = { 'x-admin-session': session(admin, 'admin') };
@@ -531,7 +531,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[yan, 'YanNewOwnerS'], [una, 'UnaNewAdminS']]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     alerts.resetAlertsForTests();
     advance(2 * HOUR);
@@ -570,7 +570,7 @@ async function main(): Promise<void> {
     for (const [i, pk] of [sue, pru, rpt, del, mia, moe, dee, eve].entries()) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, C5[i], new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     for (const pk of [sue, pru, del, eve]) grantNodeRole(pk, 'admin', owner);
     for (const pk of [rpt, mia, moe, dee]) grantNodeRole(pk, 'moderator', owner);
@@ -739,7 +739,7 @@ async function main(): Promise<void> {
     for (const [i, pk] of [rey, mac, pia, mol].entries()) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, C5E[i], new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     // By the password, so the owner's own hour of pushes is untouched: a re-key counted twice would be told, and seen.
     for (const [pk, role] of [[rey, 'admin'], [mac, 'moderator'], [mol, 'moderator']] as const) grantNodeRole(pk, role, 'owner:password');

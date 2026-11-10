@@ -105,7 +105,7 @@ async function render(decisions: any[], view: 'open' | 'history' = 'open', me = 
     root = createRoot(host);
     await act(async () => {
         root.render(createElement(DecideSection, {
-            decisions, identity: { publicKey: me }, balanceState: { earnedCredit: 0, commons: 0 }, onRefresh: async () => {},
+            decisions, identity: { publicKey: me }, balanceState: { earnedCredit_c: 0, commons_c: 0 }, onRefresh: async () => {},
             onOpenPropose: () => {}, canPropose: true, hasOpenDecision: false, activeView: view, onChangeView: () => {},
             features: { beans: true } as any,
         }) as unknown as Parameters<Root['render']>[0]);

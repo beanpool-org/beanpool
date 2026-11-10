@@ -52,7 +52,7 @@ vi.mock('./lib/sync', () => ({
 // The node's /api/community/info, read once per page load: a local node unless a test says otherwise.
 const info = vi.hoisted(() => ({ features: {} as Record<string, unknown> }));
 vi.mock('./lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: info.features })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: info.features })),
     joinInFlight: vi.fn(async () => false),
 }));
 

@@ -98,6 +98,12 @@ function assert(cond: boolean, msg: string): void {
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; callsign: string };
 
@@ -113,8 +119,8 @@ function makeMember(callsign: string, beans = 100): Id {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(id.pubKeyHex, callsign);
     setMemberPhoto(db, id.pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
-    transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+    transfer('genesis', id.pubKeyHex, hc(beans), `seed ${callsign}`, 'direct', true);
     return id;
 }
 
@@ -174,8 +180,8 @@ const isMemberRow = (pk: string): boolean => !!db.prepare('SELECT 1 FROM members
 const inviteCount = (pk: string): number =>
     (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?').get(pk) as { n: number }).n;
 
-function offer(author: Id, title: string, credits = 10) {
-    const post = createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', author.pubKeyHex, undefined, undefined, [TINY_PNG]);
+function offer(author: Id, title: string, beans = 10) {
+    const post = createPost('offer', 'produce', title, `${title}, fresh`, hc(beans), 'fixed', author.pubKeyHex, undefined, undefined, [TINY_PNG]);
     if (!post) throw new Error(`could not list ${title}`);
     return post;
 }
@@ -304,7 +310,7 @@ async function main(): Promise<void> {
     const carol = makeMember('CarolNM');
     offer(carol, 'Carol plums');
     const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, lockedGroupLine(db, group.id)); // a group chat line is sealed
-    const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', 1, 'fixed', bob.pubKeyHex,
+    const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', hc(1), 'fixed', bob.pubKeyHex,
         undefined, undefined, [TINY_PNG], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
     if (!bobGroupPost) throw new Error('could not post to the group');
     const askGroup = createGroup({ name: 'Seed library NM', createdBy: pruney.pubKeyHex, joinPolicy: 'request_to_join' } as any);
@@ -323,7 +329,7 @@ async function main(): Promise<void> {
     const quietGroup = createGroup({ name: 'Tool library NM', createdBy: operator.pubKeyHex, joinPolicy: 'open' } as any);
     for (const m of [pruney, bob, alice]) joinGroup(quietGroup.id, m.pubKeyHex);
     const project = `proj-${crypto.randomUUID()}`;
-    createCrowdfundProject(project, alice.pubKeyHex, 'Community oven NM', 'A wood-fired oven', [], 500, null);
+    createCrowdfundProject(project, alice.pubKeyHex, 'Community oven NM', 'A wood-fired oven', [], hc(500), null);
 
     // For the event edits (4109566615): Bob, who is going to Alice's events, has a phone to push to. Rekeyee convenes a
     // group with an event of Alice's that Bob is going to; Carol, a live member, convenes another (the control).
@@ -436,8 +442,8 @@ async function main(): Promise<void> {
         const account = JSON.stringify(accountOf(phoneless.pubKeyHex));
         const purge = await signedFetch('POST', '/api/member/purge', phoneless, {});
         assert(replaced(purge), `the old key cannot delete the member's account (got ${purge.status} ${JSON.stringify(purge.body)})`);
-        assert(getBalance(phoneless.pubKeyHex).balance === 50 && JSON.stringify(accountOf(phoneless.pubKeyHex)) === account,
-            `its 50 Beans and its profile are untouched (${getBalance(phoneless.pubKeyHex).balance}, ${JSON.stringify(accountOf(phoneless.pubKeyHex))})`);
+        assert(getBalance(phoneless.pubKeyHex).balance_c === hc(50) && JSON.stringify(accountOf(phoneless.pubKeyHex)) === account,
+            `its 50 Beans and its profile are untouched (${beansOf(getBalance(phoneless.pubKeyHex).balance_c)}, ${JSON.stringify(accountOf(phoneless.pubKeyHex))})`);
         const rename = await signedFetch('POST', '/api/profile/update', phoneless,
             { callsign: 'Taken NM', bio: 'Not me', contact: { value: 'thief@example.org', visibility: 'community' } });
         assert(replaced(rename) && JSON.stringify(accountOf(phoneless.pubKeyHex)) === account,
@@ -445,7 +451,7 @@ async function main(): Promise<void> {
         const postsBy = () => (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(phoneless.pubKeyHex) as { n: number }).n;
         const posts = postsBy();
         const garlic = (audience: Record<string, unknown>) => ({ type: 'offer', category: 'produce', title: 'Garlic, cheap',
-            description: 'Message me', credits: 1, priceType: 'fixed', authorPublicKey: phoneless.pubKeyHex, photos: [TINY_PNG], ...audience });
+            description: 'Message me', price_c: hc(1), priceType: 'fixed', authorPublicKey: phoneless.pubKeyHex, photos: [TINY_PNG], ...audience });
         const direct = await signedFetch('POST', '/api/marketplace/posts', phoneless, garlic({ audienceScope: 'direct', targetPubkey: alice.pubKeyHex }));
         assert(replaced(direct) && postsBy() === posts, `nor post to Alice as them, and nothing is stored (got ${direct.status} ${JSON.stringify(direct.body)})`);
         const inGroup = await signedFetch('POST', '/api/marketplace/posts', phoneless, garlic({ audienceScope: 'group', targetGroupId: liveGroup.id }));
@@ -471,9 +477,9 @@ async function main(): Promise<void> {
         const moved = accountOf(newPhone.pubKeyHex);
         const was = JSON.parse(account);
         assert(done.success === true, 'the operator binds the new phone: the re-key completes');
-        assert(getBalance(newPhone.pubKeyHex).balance === 50 && moved?.status === 'active' && moved?.callsign === 'PhonelessNM'
+        assert(getBalance(newPhone.pubKeyHex).balance_c === hc(50) && moved?.status === 'active' && moved?.callsign === 'PhonelessNM'
             && moved?.bio === 'Grows garlic' && moved?.avatar_url === was.avatar_url && moved?.contact_value === was.contact_value,
-            `and the new key holds the member's account, with its 50 Beans and its profile (${getBalance(newPhone.pubKeyHex).balance}, ${JSON.stringify(moved)})`);
+            `and the new key holds the member's account, with its 50 Beans and its profile (${beansOf(getBalance(newPhone.pubKeyHex).balance_c)}, ${JSON.stringify(moved)})`);
     }
 
     // ── 4. Invites ─────────────────────────────────────────────────────────────────────────────────
@@ -620,11 +626,11 @@ async function main(): Promise<void> {
         assert((db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number }).n === before.n, 'and nothing is sent');
         refused("nor react to Bob's message",
             await signedFetch('POST', '/api/messages/react', rekeyee, { messageId: bobDmLine.id, authorPubkey: rekeyee.pubKeyHex, emoji: '👍' }));
-        const held = getBalance(rekeyee.pubKeyHex).balance;
+        const held = getBalance(rekeyee.pubKeyHex).balance_c;
         refused("nor pledge the member's Beans to a project",
-            await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, rekeyee, { amount: 5 }));
-        assert(getBalance(rekeyee.pubKeyHex).balance === held, `and the balance is untouched (${held})`);
-        const livePledge = await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, bob, { amount: 5 });
+            await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, rekeyee, { amount_c: hc(5) }));
+        assert(getBalance(rekeyee.pubKeyHex).balance_c === held, `and the balance is untouched (${beansOf(held)})`);
+        const livePledge = await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, bob, { amount_c: hc(5) });
         assert(livePledge.status === 200, `a live member still pledges (got ${livePledge.status} ${JSON.stringify(livePledge.body)})`);
     }
 
@@ -656,7 +662,7 @@ async function main(): Promise<void> {
             to: alice.pubKeyHex, candidatePubkey: bob.pubKeyHex, candidate: bob.pubKeyHex,
             id: rekeyGroupEvent.id, postId: aliceOffer4.id, groupId: rekeyGroup.id, targetGroupId: rekeyGroup.id, conversationId: rekeyeeDm.id,
             messageId: bobDmLine.id, transactionId: tRekeyee2.id, projectId: project, code: phonelessRekey.code,
-            type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', credits: 1, priceType: 'fixed', amount: 1,
+            type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', price_c: hc(1), priceType: 'fixed', amount_c: hc(1),
             ...lockedDm(), // ciphertext + nonce in the encrypted form, the only one a DM send or edit takes
             emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
             token: 'ExponentPushToken[swept]', platform: 'android', status: 'going', choice: 'yes', optionId: 'a',
@@ -766,7 +772,7 @@ async function main(): Promise<void> {
             const own = offer(member, `Control ${status} marmalade`);
             db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, member.pubKeyHex);
             const post = await signedFetch('POST', '/api/marketplace/posts', member, { type: 'offer', category: 'produce', title: `Honey from ${status}`,
-                description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex, photos: [TINY_PNG] });
+                description: 'Jars', price_c: hc(3), priceType: 'fixed', authorPublicKey: member.pubKeyHex, photos: [TINY_PNG] });
             const message = await signedFetch('POST', '/api/messages/send', member,
                 { conversationId: dm.id, authorPubkey: member.pubKeyHex, ...lockedDm() }); // a DM goes in encrypted
             const pause = await signedFetch('POST', '/api/marketplace/posts/pause', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
@@ -862,9 +868,9 @@ async function main(): Promise<void> {
         }
 
         // A listing the prune cancelled under a deal in escrow stays down when an admin refunds the buyer.
-        const carolHeld = getBalance(carol.pubKeyHex).balance;
+        const carolHeld = getBalance(carol.pubKeyHex).balance_c;
         const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { ...ownerPassword(), action: 'refund_to_buyer' });
-        assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance > carolHeld,
+        assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance_c > carolHeld,
             `an admin refunds Carol the deal in escrow with the removed member (got ${refund.status} ${JSON.stringify(refund.body)}, ${tradeStatus(escrowTx.id)})`);
         assert(postStatus(escrowed.id) === 'cancelled', `and the listing the prune cancelled stays down (got ${postStatus(escrowed.id)})`);
 

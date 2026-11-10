@@ -15,7 +15,8 @@ export interface MarketplaceTransaction {
     buyerCallsign: string;
     sellerPublicKey: string;
     sellerCallsign: string;
-    credits: number;
+    /** The deal's price, whole hundredths of a Bean (0 for a free listing). */
+    amount_c: number;
     hours?: number;
     status: 'requested' | 'pending' | 'completed' | 'cancelled' | 'rejected' | string;
     createdAt: string;
@@ -39,7 +40,8 @@ export interface MarketplaceTransaction {
     standingId?: string;
     periodNo?: number;
     standingPhase?: 'paid' | 'short' | 'ended';
-    standingBeans?: number;
+    /** The Beans per period, whole hundredths of a Bean. */
+    standingBeans_c?: number;
     standingUnit?: 'week' | 'month';
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string;
@@ -61,7 +63,7 @@ function standingFields(r: any): Partial<MarketplaceTransaction> {
     const out: Partial<MarketplaceTransaction> = { standingId: r.standing_id, periodNo: r.period_no ?? undefined };
     if (r.sdPhase) {
         out.standingPhase = r.sdPhase;
-        out.standingBeans = r.sdBeans;
+        out.standingBeans_c = r.sdBeans;
         out.standingUnit = r.sdUnit;
         out.standingMaxPeriods = r.sdMax ?? null;
         out.standingNextDueAt = r.sdNextDueAt;
@@ -97,7 +99,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
-               sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
                sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
@@ -127,7 +129,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         buyerCallsign: r.buyerCallsign,
         sellerPublicKey: r.seller_pubkey,
         sellerCallsign: r.sellerCallsign,
-        credits: r.credits,
+        amount_c: r.amount_c,
         hours: r.hours ?? undefined,
         status: r.status,
         createdAt: r.created_at,
@@ -158,7 +160,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
-               sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
                sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
@@ -200,7 +202,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             buyerCallsign: r.buyerCallsign,
             sellerPublicKey: r.seller_pubkey,
             sellerCallsign: r.sellerCallsign,
-            credits: r.credits,
+            amount_c: r.amount_c,
             hours: r.hours ?? undefined,
             status: r.status,
             createdAt: r.created_at,

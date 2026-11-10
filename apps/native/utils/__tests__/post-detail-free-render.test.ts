@@ -135,7 +135,7 @@ const KOFI = { pubkey: 'kofi-key', callsign: 'Kofi' };
 /** Another member's Offer, with every badge: a photo pair, cash too, recurring, a group's own. */
 const OFFER = {
     id: 'p-offer', type: 'offer', status: 'active', title: 'Bike repairs at home', description: 'Flat tyres, brakes, gears',
-    category: 'transport', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, credits: 12, price_type: 'fixed',
+    category: 'transport', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: 1200, price_type: 'fixed',
     photos: JSON.stringify(['https://mullum.example/p/1.jpg', 'https://mullum.example/p/2.jpg']), repeatable: 1, cash_also_needed: 1,
     audience_scope: 'group', target_group_id: 'g1', target_group_name: 'Garden club', created_at: iso(now - 3 * 60 * 60_000),
 };
@@ -143,21 +143,21 @@ const HOURLY = { ...OFFER, id: 'p-hourly', price_type: 'hourly', target_group_id
 /** The member's own Need, with two requests waiting. */
 const NEED = {
     id: 'p-need', type: 'need', status: 'active', title: 'Help moving a sofa', description: 'Second floor, no lift', category: 'labour',
-    author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'hourly', photos: '[]', created_at: iso(now - 26 * 60 * 60_000),
+    author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'hourly', photos: '[]', created_at: iso(now - 26 * 60 * 60_000),
 };
 const REQUESTS = [
-    { id: 'tx-r1', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 40, hours: 2 },
-    { id: 'tx-r2', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: 'mia-key', seller_callsign: 'Mia', credits: 20, hours: null },
+    { id: 'tx-r1', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 4000, hours: 2 },
+    { id: 'tx-r2', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: 'mia-key', seller_callsign: 'Mia', amount_c: 2000, hours: null },
 ];
 /** A deal held in trust on Kofi's Offer: the member pays. */
 const HELD = { ...HOURLY, id: 'p-held', status: 'pending', pending_transaction_id: 'tx-held' };
-const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 24, hours: 2, created_at: '2026-10-24T10:00:00.000Z' };
+const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 2400, hours: 2, created_at: '2026-10-24T10:00:00.000Z' };
 /** The member's own Offer held in trust: the member is paid. */
 const MINE_HELD = { ...HOURLY, id: 'p-mine-held', status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign, accepted_by: KOFI.pubkey, accepted_by_callsign: KOFI.callsign, pending_transaction_id: 'tx-mine' };
-const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, credits: 24, hours: 2 };
+const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, amount_c: 2400, hours: 2 };
 const DONE = { ...OFFER, id: 'p-done', status: 'completed', target_group_id: null, audience_scope: 'public', pending_transaction_id: 'tx-done', accepted_by: ME.publicKey };
 const PAUSED = { ...HOURLY, id: 'p-paused', status: 'paused', author_pubkey: ME.publicKey, author_callsign: ME.callsign };
-const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', credits: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
+const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', price_c: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
 
 /** What members and the node wrote: shown as written. */
 const OTHERS = [
@@ -234,7 +234,7 @@ const freeLine = () => host.querySelector('[data-testid="price-free"]');
 
 describe("a listing priced at 0 reads Free on its page (phone; core listing-price.ts, the web's page says the same)", () => {
     it('the Need from the report: "Free help wanted" under the label Price, never "Willing to pay 0"', async () => {
-        const FREE_NEED = { ...OFFER, id: 'p-free-need', type: 'need', credits: 0, price_type: 'fixed', title: 'Invites to harvest any sort of spray free food', repeatable: 0, cash_also_needed: 0, audience_scope: 'public', target_group_id: null };
+        const FREE_NEED = { ...OFFER, id: 'p-free-need', type: 'need', price_c: 0, price_type: 'fixed', title: 'Invites to harvest any sort of spray free food', repeatable: 0, cash_also_needed: 0, audience_scope: 'public', target_group_id: null };
         await open(FREE_NEED, 'en');
         expect(priceBox()?.textContent).toBe('PRICEFree help wanted');
         expect(freeLine()?.textContent).toBe('Free help wanted');
@@ -245,7 +245,7 @@ describe("a listing priced at 0 reads Free on its page (phone; core listing-pric
     });
 
     it('an Offer at 0 says Free, with the label it always had', async () => {
-        await open({ ...OFFER, id: 'p-free-offer', credits: 0, price_type: 'fixed' }, 'en');
+        await open({ ...OFFER, id: 'p-free-offer', price_c: 0, price_type: 'fixed' }, 'en');
         expect(priceBox()?.textContent).toBe('ASKING PRICEFree');
         expect(priceBox()?.querySelector('img')).toBeNull();
     });
@@ -254,13 +254,13 @@ describe("a listing priced at 0 reads Free on its page (phone; core listing-pric
         for (const unit of ['hourly', 'daily', 'weekly', 'monthly']) {
             root.unmount();
             root = createRoot(host);
-            await open({ ...OFFER, id: `p-free-${unit}`, credits: 0, price_type: unit }, 'en');
+            await open({ ...OFFER, id: `p-free-${unit}`, price_c: 0, price_type: unit }, 'en');
             expect(priceBox()?.textContent, unit).toBe('ASKING PRICEFree');
         }
     });
 
     it('a Need with a price keeps its label and its figure and unit: nothing changes for a priced listing', async () => {
-        await open({ ...OFFER, id: 'p-paid-need', type: 'need', credits: 20, price_type: 'hourly' }, 'en');
+        await open({ ...OFFER, id: 'p-paid-need', type: 'need', price_c: 2000, price_type: 'hourly' }, 'en');
         expect(priceBox()?.textContent).toContain('WILLING TO PAY');
         expect(priceBox()?.textContent).toContain('20');
         expect(priceBox()?.textContent).toContain('/ Hr');
@@ -269,7 +269,7 @@ describe("a listing priced at 0 reads Free on its page (phone; core listing-pric
     });
 
     it('the pseudo-locale: the words Free help wanted and Price come through t()', async () => {
-        await open({ ...OFFER, id: 'p-free-need-xx', type: 'need', credits: 0, price_type: 'fixed' }, 'xx');
+        await open({ ...OFFER, id: 'p-free-need-xx', type: 'need', price_c: 0, price_type: 'fixed' }, 'xx');
         expect(freeLine()?.textContent).toBe(pseudoLocalise('Free help wanted'));
         expect(bypassing(), 'the page').toEqual([]);
     });

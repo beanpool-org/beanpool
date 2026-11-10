@@ -147,7 +147,7 @@ async function child(): Promise<void> {
             const later = new Date(Date.now() + 1000).toISOString();
             payload.posts = payload.posts.map((x: any) => ({ ...x, title: `${x.title} (forged)`, updatedAt: later }));
             payload.marketplaceTransactions = [...(payload.marketplaceTransactions ?? []), {
-                id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: 'x', sellerPubkey: 'y', credits: 1, status: 'pending', createdAt: later,
+                id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: 'x', sellerPubkey: 'y', amount_c: 100, status: 'pending', createdAt: later,
             }];
             payload.generatedAt = new Date().toISOString();
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
@@ -321,8 +321,9 @@ async function main(): Promise<void> {
             built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
-        const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG], ...extra,
+        // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+        const offer = async (who: Id, title: string, price_c: number, extra: Record<string, unknown> = {}) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG], ...extra,
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;
@@ -331,19 +332,20 @@ async function main(): Promise<void> {
             return tx.id as string;
         };
         built('the admin makes Gwen an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
-        const sourdough = await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
-        const honey = await offer(ann, 'Honey', 3, { photos: [TINY_PNG, TINY_PNG, TINY_PNG] });
-        await offer(ann, 'Jam', 2);
-        const seedlings = await offer(bo, 'Seedlings', 3);
-        const compost = await offer(bo, 'Compost', 2, { reach: 'everywhere' });
-        const kindling = await offer(dee, 'Kindling', 3);
-        await deal(gwen, cy, (await offer(cy, 'Bike repair', 6)).id, true); // Cy has Beans to buy with
-        await deal(gwen, dee, (await offer(dee, 'Firewood', 5)).id, true); // and Dee
-        const disputed = await deal(cy, kip, (await offer(kip, 'Tune-up', 2)).id, false); // no owner a party: the password resolves it
-        const lingering = await deal(dee, kip, (await offer(kip, 'Mending', 1)).id, false);
-        const seed = built('Ann starts a project with a goal', await S_(ann, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100 }));
+        const sourdough = await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
+        const honey = await offer(ann, 'Honey', 300, { photos: [TINY_PNG, TINY_PNG, TINY_PNG] });
+        await offer(ann, 'Jam', 200);
+        const seedlings = await offer(bo, 'Seedlings', 300);
+        const compost = await offer(bo, 'Compost', 200, { reach: 'everywhere' });
+        const kindling = await offer(dee, 'Kindling', 300);
+        await deal(gwen, cy, (await offer(cy, 'Bike repair', 600)).id, true); // Cy has Beans to buy with
+        await deal(gwen, dee, (await offer(dee, 'Firewood', 500)).id, true); // and Dee
+        const disputed = await deal(cy, kip, (await offer(kip, 'Tune-up', 200)).id, false); // no owner a party: the password resolves it
+        const lingering = await deal(dee, kip, (await offer(kip, 'Mending', 100)).id, false);
+        // A goal of 100 Beans: 10000 hundredths, the wire's `goalAmount_c`.
+        const seed = built('Ann starts a project with a goal', await S_(ann, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: 10000 }));
         const cached = await main.send('cache-peer-listing', {
-            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', credits: 2,
+            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', price_c: 200,
                 priceType: 'fixed', authorPublicKey: newId('Nia').pk, authorCallsign: 'Nia', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         });
         require_(cached.cached === 1, `M: a linked community's listing is in its cache (${JSON.stringify(cached)})`);
@@ -369,7 +371,7 @@ async function main(): Promise<void> {
         const ownOrigins = [...new Set(s.posts.filter((p) => p.id !== cachedRow.id).map((p) => p.origin_node))];
         assert(ownOrigins.length === 1 && ownOrigins[0] === null, `a listing of M's own names no origin on S (${JSON.stringify(ownOrigins)})`);
         assert(s.posts.find((p) => p.id === cachedRow.id)?.origin_node === NEIGHBOUR_URL, 'the cached one names its community');
-        assert(s.format === '14', `the copy records the importer's format, 14 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 the standing copy's (G2); 5 in-flight money and governance's (G3); 6 members' devices' (G4); 7 a whole copy built from nothing in a staging database (P2); 8 listing photos by reference (P4); 9 members' phones locked; 10 events' clock, zone and join link; 11 events' let-ins; 12 repeating events; 13 a poll's typed Other; 14 chat photos (G4)
+        assert(s.format === '15', `the copy records the importer's format, 15 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 the standing copy's (G2); 5 in-flight money and governance's (G3); 6 members' devices' (G4); 7 a whole copy built from nothing in a staging database (P2); 8 listing photos by reference (P4); 9 members' phones locked; 10 events' clock, zone and join link; 11 events' let-ins; 12 repeating events; 13 a poll's typed Other; 14 chat photos (G4); 15 money in whole hundredths
 
         // ── 3. Changes after the first copy, then a delta ──
         console.log('\n— 3. after the first copy: the changes a delta must carry —');
@@ -380,7 +382,7 @@ async function main(): Promise<void> {
         require_(typeof nudged === 'string', `M: the hygiene run nudges Dee about the deal held for a week (${nudged})`);
         built('Ann takes two of Honey\'s three photos off', await S_(ann, '/api/marketplace/posts/update', { id: honey.id, authorPublicKey: ann.pk, photos: [TINY_PNG] }));
         const pending = built('Cy asks for Ann\'s honey (not approved yet)', await S_(cy, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: cy.pk })).transaction;
-        built('Kip, paid for the tune-up, pledges 1 Bean to the project', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 1 }));
+        built('Kip, paid for the tune-up, pledges 1 Bean to the project', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount_c: 100 }));
         const delta = await standby.send('pull', {});
         const m3: Rows = await main.send('rows');
         s = await standby.send('rows');
@@ -444,7 +446,7 @@ async function main(): Promise<void> {
         const o5: Rows = await old.send('rows');
         assert(reseed.ok === true && reseed.mode === 'resync', `its next pull is one re-seed, and it lands (${JSON.stringify({ ok: reseed.ok, mode: reseed.mode, error: reseed.error })})`);
         assert(rowsDiff(m5, o5).length === 0, `it ends equal to M, every row and stamp (differences ${first(rowsDiff(m5, o5))})`);
-        assert(o5.format === '14', `and records format 14, the importer's (${o5.format})`);
+        assert(o5.format === '15', `and records format 15, the importer's (${o5.format})`);
         const after = await old.send('pull', {});
         assert(after.ok === true && after.mode === 'delta', `the pull after it is a delta, not a second re-seed (${JSON.stringify({ ok: after.ok, mode: after.mode, error: after.error })})`);
         // A main server whose older database holds a photo and a project unstamped: the copy stamps each from M's own rows,

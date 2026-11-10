@@ -1162,7 +1162,8 @@ export function mergeNeeds(
         .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
-        const named = e.kind === 'deal' ? (node ?? []).find(i => i.kind === 'deal' && sameDeal(i.target, e.target)) : undefined;
+        // A standing deal's live line keeps the phone's own words (translated, the day count from this clock).
+        const named = e.kind === 'deal' && !e.standingId ? (node ?? []).find(i => i.kind === 'deal' && sameDeal(i.target, e.target)) : undefined;
         return named ? { ...e, label: named.label } : e;
     });
     const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);

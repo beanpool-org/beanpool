@@ -257,7 +257,7 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
-    // And an existing vouch amount for a member (`already_vouched`), for the raise confirmation prompt.
+    // And an existing vouch total for a member (`already_vouched`, `raise_not_above`), so a screen that took a raise for a first vouch shows the raise card.
     if (typeof err.prior === 'number' && Number.isInteger(err.prior) && err.prior > 0) (error as Error & { prior?: number }).prior = err.prior;
     // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
     if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
@@ -956,16 +956,17 @@ export async function getMyVouching(): Promise<MyVouching | null> {
     return request<MyVouching>('GET', '/api/vouchers/me');
 }
 
+/**
+ * A vouch from a profile: `{ vouchAmount }` for a first vouch (a preset), or `{ raiseTo }` for a raise, the total the vouches
+ * for this person end at (a preset of the voucher's), never an amount to add. The node lands the difference.
+ */
+export type VouchPick = { vouchAmount: number } | { raiseTo: number };
+
 export async function vouchForMember(
     memberPubkey: string,
-    vouchAmount: number,
-    raise?: boolean,
+    pick: VouchPick,
 ): Promise<{ id: string; memberPubkey: string; amount: number; total: number; budget: any }> {
-    return request('POST', '/api/vouch', {
-        memberPubkey,
-        vouchAmount,
-        ...(raise ? { raise: true } : {}),
-    });
+    return request('POST', '/api/vouch', { memberPubkey, ...pick });
 }
 
 export async function getVouchersBlock(): Promise<VouchersBlockData> {

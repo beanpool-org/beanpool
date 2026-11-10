@@ -11,7 +11,8 @@
  *  4. The vouch on an invite: a non-voucher's, a 60, and a 100 with 75 left each refused with the sentence; a preset held.
  *  5. Set to a level: 150 and 2,100 refused, below what is held refused, a raise and a lower written as the difference, a
  *     lower leaves room already given untouched, left + held at 2,000 at most.
- *  6. The profile vouch: a second separate vouch refused, a raise to 100 passes, past 100 refused; a fourth voucher refused;
+ *  6. The profile vouch: a second separate vouch refused, a raise to 100 passes (the difference lands), a target at or below the
+ *     total or past 100 refused; a fourth voucher refused;
  *     a member below zero refused; an invite's vouch is that pair's one vouch; the credit line it gives (one offer).
  *  7. A demoted admin's held code redeems with no vouch and the sentence; the committee flag clears with the role.
  *  8. A revoked confirmation stops a list budget; a held code comes back at expiry, a redeemed one never. A budget the role
@@ -30,6 +31,8 @@
  *     paused one's budget isn't raised either; both may be lowered.
  * 18. Each change the committee makes to a budget (made, raised, lowered, stopped) is a notice kept for the voucher, told
  *     live and pushed once it has committed.
+ * 23. A raise is a target (invites-vouching I6): the difference is drawn from the budget, a target the budget can't cover, a
+ *     never-vouched person, a vouch amount sent with it, and the retired raise flag each refused with nothing written.
  * Round 2 of the deciding review (PR #2911):
  * 19. No voucher answer carries an invite code, nor a piece of one, nor anything that redeems: the card to an admin off the
  *     committee, to a committee admin and to an owner, the block, a set-to's and a stop's answers, the voucher's own read.
@@ -134,7 +137,9 @@ const restoreDoor = (d: ReturnType<typeof getDoor>) => setDoor(d === 'open' ? DE
 
 const generate = (id: Id, vouchAmount?: unknown) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...(vouchAmount === undefined ? {} : { vouchAmount }) });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
-const vouch = (by: Id, who: Id, vouchAmount: unknown, raise?: boolean) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount, ...(raise ? { raise: true } : {}) });
+const vouch = (by: Id, who: Id, vouchAmount: unknown) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount });
+/** A raise names the total it ends at (slice I6), never an amount to add. */
+const raiseTo = (by: Id, who: Id, target: unknown) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, raiseTo: target });
 const setLevel = (by: Id, who: Id, level: unknown) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level });
 
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
@@ -387,21 +392,34 @@ async function main(): Promise<void> {
     const second = await vouch(jane, sam, 25);
     assert(second.status === 409 && second.body?.code === 'already_vouched' && second.body?.error === 'You’ve already vouched for @Sam.',
         `6. a second separate vouch by the same voucher is refused: "${second.body?.error}"`);
-    // The apps word "You vouched 25 for @Sam before. Raise it to 50?" from this figure, and guess nothing without it.
+    // The apps read the person's total from this figure (the raise card then offers the totals above it), and guess nothing without it.
     assert(second.body?.prior === 25, `6. the already_vouched refusal carries the voucher's earlier vouch as prior (${show(second)})`);
-    const raise100 = await vouch(jane, sam, 75, true);
-    assert(raise100.status === 200 && raise100.body?.total === 100 && count("SELECT COUNT(*) AS n FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ?", jane.pk, sam.pk) === 2,
-        `6. a raise to 100 passes: a further hold and room_gifts row on the same pair (${show(raise100)})`);
-    const past = await vouch(jane, sam, 25, true);
-    assert(past.status === 409 && past.body?.code === 'over_max', `6. a raise past 100 is refused (${show(past)})`);
-    assert(past.body?.prior === 100, `6. the over_max refusal carries the pair's total so far as prior (${show(past)})`);
+    const budgetBeforeRaise = budgetOf(jane.pk).left;
+    const raise100 = await raiseTo(jane, sam, 100);
+    assert(raise100.status === 200 && raise100.body?.total === 100 && raise100.body?.amount === 75 && count("SELECT COUNT(*) AS n FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ?", jane.pk, sam.pk) === 2,
+        `6. a raise to 100 passes: a further hold and room_gifts row on the same pair, for the difference (${show(raise100)})`);
+    const raiseLine = lines(jane.pk).at(-1);
+    assert(raiseLine?.kind === 'hold' && raiseLine.amount === -75 && budgetOf(jane.pk).left === budgetBeforeRaise - 75,
+        `6. the target is the total: 100 on 25 holds 75 from the budget, not 100 (${JSON.stringify(raiseLine)}, left ${budgetBeforeRaise} to ${budgetOf(jane.pk).left})`);
+    const linesAfterRaise = allLines();
+    const past = await raiseTo(jane, sam, 100);
+    assert(past.status === 409 && past.body?.code === 'raise_not_above' && past.body?.error === 'You’ve vouched 100 Beans for @Sam already. Pick a higher total to raise it to.',
+        `6. a target at the total is refused with the sentence, so a repeated tap lands once (${show(past)})`);
+    assert(past.body?.prior === 100, `6. the refusal carries the pair's total so far as prior (${show(past)})`);
+    const belowTotal = await raiseTo(jane, sam, 50);
+    assert(belowTotal.status === 409 && belowTotal.body?.code === 'raise_not_above', `6. a target below the total is refused (${show(belowTotal)})`);
+    const pastHundred = await raiseTo(jane, sam, 200);
+    assert(pastHundred.status === 403 && pastHundred.body?.code === 'owner_amount', `6. past 100 is an owner's total, refused for a voucher (${show(pastHundred)})`);
+    const notPreset = await raiseTo(jane, sam, 90);
+    assert(notPreset.status === 400 && notPreset.body?.code === 'bad_amount', `6. a target that is no preset is refused (${show(notPreset)})`);
+    assert(allLines() === linesAfterRaise && roomOf(sam.pk) === 100, '6. none of the refused raises wrote a line or a room');
     require_((await vouch(owen, sam, 25)).status === 200 && (await vouch(ada, sam, 25)).status === 200, 'Owen and Ada vouch for Sam too: three vouchers');
     require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(bea, owen), amount: 500 })).status === 201, 'Bea is made a voucher');
     const fourth = await vouch(bea, sam, 25);
     assert(fourth.status === 409 && fourth.body?.code === 'three_vouches' && fourth.body?.error === '@Sam has three vouches.',
         `6. a fourth voucher's vouch is refused: "${fourth.body?.error}"`);
-    const raiseOfThree = await vouch(owen, sam, 25, true);
-    assert(raiseOfThree.status === 200, `6. one of the three may still raise theirs (${show(raiseOfThree)})`);
+    const raiseOfThree = await raiseTo(owen, sam, 50);
+    assert(raiseOfThree.status === 200 && raiseOfThree.body?.amount === 25 && raiseOfThree.body?.total === 50, `6. one of the three may still raise theirs (${show(raiseOfThree)})`);
     // The credit line it gives: one live offer unlocks it whole; the badge ignores it.
     const samBal = getBalance(sam.pk);
     assert(samBal.roomHeld === 175 && samBal.floor === -175 && samBal.usableFloor === 0 && samBal.tierCredit === 0,
@@ -424,8 +442,8 @@ async function main(): Promise<void> {
     const umaJoins = await redeem(uma, janeForUma.body?.invite?.code);
     require_(umaJoins.status === 200 && umaJoins.body?.vouch?.landed === 50 && roomOf(uma.pk) === 50, `Uma joins on Jane's invite with a 50 vouch (${show(umaJoins)})`);
     const umaSecond = await vouch(jane, uma, 25);
-    const umaRaise = await vouch(jane, uma, 50, true);
-    assert(umaSecond.body?.code === 'already_vouched' && umaSecond.body?.prior === 50 && umaRaise.status === 200 && umaRaise.body?.total === 100,
+    const umaRaise = await raiseTo(jane, uma, 100);
+    assert(umaSecond.body?.code === 'already_vouched' && umaSecond.body?.prior === 50 && umaRaise.status === 200 && umaRaise.body?.total === 100 && umaRaise.body?.amount === 50,
         `6. an invite vouch counts as that pair's one vouch: a separate one refused, a raise to 100 passes (${umaSecond.body?.code} ${show(umaRaise)})`);
     const selfVouch = await vouch(jane, jane, 25);
     assert(selfVouch.status === 403 && selfVouch.body?.code === 'own_vouch', '6. never for yourself');
@@ -662,7 +680,11 @@ async function main(): Promise<void> {
                     db.prepare("UPDATE invite_codes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-31 days') WHERE code = ?").run(open[rand(open.length)].code);
                     returnLapsedHolds();
                 }
-            } else if (op === 4) vouchFromProfile(pv.pk, { memberPubkey: targets[rand(targets.length)], vouchAmount: [25, 50, 75, 100][rand(4)], raise: rand(2) === 1 });
+            } else if (op === 4) {
+                const person = targets[rand(targets.length)];
+                const preset = [25, 50, 75, 100][rand(4)];
+                vouchFromProfile(pv.pk, rand(2) === 1 ? { memberPubkey: person, raiseTo: preset } : { memberPubkey: person, vouchAmount: preset });
+            }
             else if (rand(8) === 0) { stopVoucher(owen.pk, pv.pk); makeVoucher(owen.pk, { entryId: pvEntry, amount: levels[rand(levels.length - 1)] }); }
             ops++;
         } catch { /* a refusal is a step too: the invariants must hold after it */ }
@@ -698,7 +720,8 @@ async function main(): Promise<void> {
         for (const v of vouchers) {
             for (let r = 0; r < 4; r++) {
                 if (budgetOf(v.pk).left < 25) setBudgetLevel(v.pk === owen.pk ? ada.pk : owen.pk, v.pk, { level: 2000 });
-                vouchFromProfile(v.pk, { memberPubkey: p, vouchAmount: 25, raise: r > 0 });
+                // A first vouch of 25, then raises to 50, 75 and 100: each lands 25.
+                vouchFromProfile(v.pk, r === 0 ? { memberPubkey: p, vouchAmount: 25 } : { memberPubkey: p, raiseTo: 25 * (r + 1) });
                 vouches++;
             }
         }
@@ -1040,6 +1063,34 @@ async function main(): Promise<void> {
         && markOf(tx) === 'others' && markOf(ty) === 'inside' && markOf(tz) === 'none' && JSON.stringify(tiaRow?.trading) === JSON.stringify({ withOthers: 1, insideOnly: 1 })
         && !tiaCard.text.includes(mel.pk),
         `22. Tia's card: "Trading: 1 with others · 1 inside only": Tex traded with Mel, Ty only with Tex, Zed's deal isn't done; no name of whom they traded with (${JSON.stringify({ trading: tiaCard.body?.trading, marks: [markOf(tx), markOf(ty), markOf(tz)] })})`);
+
+    // ── 23. A raise is a target (invites-vouching I6; DESIGN-invites-vouching-review-fable.md §4) ─────────────────────────
+    // A voucher with a budget of 100 vouches 25 for one person and 50 for another (25 left): raising the first to 100 would
+    // draw 75, more than is left, so it is refused with the budget sentence for that difference and nothing is written.
+    const [pam, pat, pia] = [newId('Pam'), newId('Pat'), newId('Pia')];
+    for (const p of [pam, pat, pia]) enter(p);
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(pam, owen), amount: 100 })).status === 201, 'Pam is made a voucher with a budget of 100');
+    require_((await vouch(pam, pat, 25)).status === 200 && (await vouch(pam, pia, 50)).status === 200 && budgetOf(pam.pk).left === 25, 'Pam vouches 25 for Pat and 50 for Pia: 25 left');
+    const linesBefore23 = allLines();
+    const roomBefore23 = roomOf(pat.pk);
+    const tooMuch = await raiseTo(pam, pat, 100);
+    assert(tooMuch.status === 409 && tooMuch.body?.code === 'not_enough'
+        && tooMuch.body?.error === 'You have 25 Beans of budget left, so you can’t vouch 75. Pick a smaller vouch, or ask an owner for more.'
+        && allLines() === linesBefore23 && roomOf(pat.pk) === roomBefore23,
+        `23. a raise to 100 on 25 draws 75, more than the 25 left: refused with the budget sentence, nothing written (${show(tooMuch)})`);
+    const fits = await raiseTo(pam, pat, 50);
+    assert(fits.status === 200 && fits.body?.amount === 25 && fits.body?.total === 50 && budgetOf(pam.pk).left === 0 && roomOf(pat.pk) === roomBefore23 + 25,
+        `23. a raise to 50 draws the 25 that is left (${show(fits)})`);
+    // Never vouched for: nothing to raise. Both fields at once: refused. Raising a vouch that is not yours: nothing to raise.
+    const noVouch = await raiseTo(pam, tz, 50);
+    assert(noVouch.status === 409 && noVouch.body?.code === 'no_vouch_yet', `23. a raise for someone you never vouched for is refused (${show(noVouch)})`);
+    const linesBeforeBoth = allLines();
+    const amountAndTarget = await call(pam, 'POST', '/api/vouch', { memberPubkey: pat.pk, vouchAmount: 25, raiseTo: 75 });
+    assert(amountAndTarget.status === 400 && amountAndTarget.body?.code === 'bad_body' && amountAndTarget.body?.error === VOUCHER_WORDS.vouchOrRaise && allLines() === linesBeforeBoth,
+        `23. a vouch amount and a raise target together are refused, nothing written (${show(amountAndTarget)})`);
+    // The retired boolean is not read: with only an amount, a second vouch for the same person is the plain already_vouched.
+    const oldShape = await call(tia, 'POST', '/api/vouch', { memberPubkey: tx.pk, vouchAmount: 25, raise: true });
+    assert(oldShape.status === 409 && oldShape.body?.code === 'already_vouched', `23. the old raise flag adds nothing: an amount is a first vouch only (${show(oldShape)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

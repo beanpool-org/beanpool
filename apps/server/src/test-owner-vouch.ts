@@ -15,6 +15,9 @@
  *  8. An owner's held invite that lapses goes back without touching the budget; a demoted owner keeps the budget the role
  *     gave them whole, picks from the four presets again, and their invite made as an owner still lands its 500.
  *  9. No Bean moved, and every vouch is a room_gifts row with its hold.
+ * 10. A raise is a target (invites-vouching I6): an owner at 100 raises to 200, then 500; the difference lands and is held
+ *     (an owner's hold, no budget drawn); 300 is no preset; a target at or below the total, an unvouched person, and a vouch
+ *     amount sent with a target are refused with nothing written; an admin's 200 is an owner's alone.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -86,7 +89,9 @@ const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-'
 
 const generate = (id: Id, vouchAmount?: unknown) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...(vouchAmount === undefined ? {} : { vouchAmount }) });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
-const vouch = (by: Id, who: Id, vouchAmount: unknown, raise?: boolean) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount, ...(raise ? { raise: true } : {}) });
+const vouch = (by: Id, who: Id, vouchAmount: unknown) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, vouchAmount });
+/** A raise names the total it ends at (slice I6), never an amount to add. */
+const raiseTo = (by: Id, who: Id, target: unknown) => call(by, 'POST', '/api/vouch', { memberPubkey: who.pk, raiseTo: target });
 const setLevel = (by: Id, who: Id, level: unknown) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level });
 
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
@@ -209,13 +214,14 @@ async function main(): Promise<void> {
         `5. an owner's 500 on Sam's 300 would pass 500: refused (${show(owenTops500)})`);
     const owenTops200 = await vouch(owen, sam, 200);
     assert(owenTops200.status === 200 && roomOf(sam.pk) === 500, `5. an owner tops Sam's 300 up to 500 with a 200, past the three vouchers (${show(owenTops200)})`);
-    const owenRaise = await vouch(owen, sam, 25, true);
-    const danRaise = await vouch(dan, sam, 25, true);
-    assert(owenRaise.body?.code === 'over_person_max' && danRaise.body?.code === 'over_max' && roomOf(sam.pk) === 500,
-        `5. and no further: the owner's raise is refused at 500 for the person, Dan's at 100 for his own (${show(owenRaise)} | ${show(danRaise)})`);
-    const owenRaiseTom = await vouch(owen, tom, 25, true);
-    assert(owenRaiseTom.status === 409 && owenRaiseTom.body?.code === 'over_max' && owenRaiseTom.body?.error === 'Your vouch for @Tom can come to 500 Beans at most, and it is 500 now.',
-        `5. an owner's own vouch for one person comes to 500 at most: Tom's 500 can't be raised (${show(owenRaiseTom)})`);
+    const owenRaise = await raiseTo(owen, sam, 500);
+    const danRaise = await raiseTo(dan, sam, 100);
+    const danRaiseHigh = await raiseTo(dan, sam, 200);
+    assert(owenRaise.body?.code === 'over_person_max' && danRaise.body?.code === 'raise_not_above' && danRaiseHigh.body?.code === 'owner_amount' && roomOf(sam.pk) === 500,
+        `5. and no further: the owner's raise to 500 is refused at 500 for the person, Dan's to 100 is no raise and a 200 is not his to give (${show(owenRaise)} | ${show(danRaise)} | ${show(danRaiseHigh)})`);
+    const owenRaiseTom = await raiseTo(owen, tom, 500);
+    assert(owenRaiseTom.status === 409 && owenRaiseTom.body?.code === 'raise_not_above' && owenRaiseTom.body?.error === 'You’ve vouched 500 Beans for @Tom already. Pick a higher total to raise it to.',
+        `5. an owner's own vouch for one person comes to 500 at most: Tom's 500 has no higher total to raise to (${show(owenRaiseTom)})`);
 
     // ── 6. Nobody sets an owner's budget ────────────────────────────────────────────────────────────────────────
     const linesBefore6 = allLines();
@@ -273,6 +279,42 @@ async function main(): Promise<void> {
         WHERE h.member_pubkey = g.from_pubkey AND h.kind = 'hold' AND h.ref IN (g.id, g.invite_code))`);
     const ownerHolds = count(`SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'hold' AND actor = ?`, OWNER_VOUCH_ACTOR);
     assert(unheld === 0 && ownerHolds === 8, `9. every vouch is a room_gifts row with its hold in the allocation ledger (${unheld} without), ${ownerHolds} of them an owner's`);
+
+    // ── 10. A raise is a target (invites-vouching I6) ───────────────────────────────────────────────────────────
+    const [rae, ned, ivy] = [newId('Rae'), newId('Ned'), newId('Ivy')];
+    for (const who of [rae, ned, ivy]) enter(who);
+    require_((await vouch(owen, rae, 100)).status === 200 && roomOf(rae.pk) === 100, 'Owen vouches 100 for Rae');
+    const owenBudget10 = JSON.stringify(budgetSlim(owen.pk));
+    const to200 = await raiseTo(owen, rae, 200);
+    const owenLast = lines(owen.pk).at(-1);
+    assert(to200.status === 200 && to200.body?.amount === 100 && to200.body?.total === 200 && roomOf(rae.pk) === 200
+        && owenLast?.kind === 'hold' && owenLast.amount === -100 && owenLast.actor === OWNER_VOUCH_ACTOR && JSON.stringify(budgetSlim(owen.pk)) === owenBudget10,
+        `10. an owner at 100 raises to 200: the difference (100) lands and is held as an owner's, drawing no budget (${show(to200)} | ${JSON.stringify(owenLast)})`);
+    const linesBefore10 = allLines();
+    const refused10 = [
+        ['300 is no preset', await raiseTo(owen, rae, 300), 400, 'bad_amount'],
+        ['the same total again', await raiseTo(owen, rae, 200), 409, 'raise_not_above'],
+        ['a total below', await raiseTo(owen, rae, 100), 409, 'raise_not_above'],
+        ['someone never vouched for', await raiseTo(owen, ned, 200), 409, 'no_vouch_yet'],
+        ['a vouch amount sent with a target', await call(owen, 'POST', '/api/vouch', { memberPubkey: rae.pk, vouchAmount: 25, raiseTo: 500 }), 400, 'bad_body'],
+        ['a target that is a string', await raiseTo(owen, rae, '500'), 400, 'bad_amount'],
+    ] as const;
+    for (const [what, res, status, code] of refused10) {
+        assert(res.status === status && res.body?.code === code, `10. ${what}: ${status} ${code} (${show(res)})`);
+    }
+    assert(allLines() === linesBefore10 && roomOf(rae.pk) === 200, '10. none of the refused raises wrote a line or a room');
+    const to500 = await raiseTo(owen, rae, 500);
+    assert(to500.status === 200 && to500.body?.amount === 300 && to500.body?.total === 500 && roomOf(rae.pk) === 500
+        && count("SELECT COUNT(*) AS n FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ? AND kind = 'vouch'", owen.pk, rae.pk) === 3,
+        `10. then 200 to 500: 300 lands as a third room row (${show(to500)})`);
+    // An admin's raise: a first vouch of 25, then 100 draws the 75 from the budget; 200 is not hers to give.
+    require_((await vouch(dan, ivy, 25)).status === 200, 'Dan vouches 25 for Ivy');
+    const danBefore = budgetOf(dan.pk).left;
+    const danTo100 = await raiseTo(dan, ivy, 100);
+    const danTo200 = await raiseTo(dan, ivy, 200);
+    assert(danTo100.status === 200 && danTo100.body?.amount === 75 && budgetOf(dan.pk).left === danBefore - 75 && danTo200.status === 403 && danTo200.body?.code === 'owner_amount' && roomOf(ivy.pk) === 100,
+        `10. an admin raises 25 to 100 (75 drawn from the budget) and is refused an owner's 200 (${show(danTo100)} | ${show(danTo200)})`);
+    assert(sumBalances() === balancesBefore, `10. no Bean moved by any raise (${balancesBefore} before, ${sumBalances()} after)`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

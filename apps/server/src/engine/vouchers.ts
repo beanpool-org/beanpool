@@ -104,6 +104,7 @@ export const VOUCHER_WORDS = {
     badOwnerAmount: word('An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.'),
     ownerAmountOnly: word('Only an owner can vouch 200 or 500 Beans.'),
     ownVouch: word('You can’t vouch for yourself.'),
+    vouchOrRaise: word('Send either an amount to vouch or a total to raise to, not both.'),
     notMember: word('Only an active member of this community can be vouched for.'),
     committeeOnly: word('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'),
     ownBudget: word('Another owner or credit committee admin makes you a voucher or sets your budget.'),
@@ -127,7 +128,7 @@ const alreadyVouched = (name: string) => tr('You’ve already vouched for @{name
 const threeVouches = (name: string) => tr('@{name} has three vouches.', { name });
 const belowZero = (name: string) => tr('@{name} is below zero: a credit-line gift or a Decision can help.', { name });
 const noVouchYet = (name: string) => tr('You haven’t vouched for @{name} yet, so there is no vouch to raise.', { name });
-const overMax = (name: string, total: number, max: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max, total });
+const raiseNotAbove = (name: string, total: number) => tr('You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.', { name, total });
 const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total, max });
 const alreadyVoucher = (name: string) => tr('@{name} is a voucher already.', { name });
 const notVoucher = (name: string) => tr('@{name} isn’t a voucher.', { name });
@@ -692,9 +693,10 @@ function addVouchRow(voucher: string, person: string, amount: number, inviteCode
  * not frozen, at most what is left (a hold whose code lapsed counted back, as budgetOf counts it). Beans on, a main
  * server. An owner whose role acts now (Marty, 9 Nov) picks from the owner presets (200 and 500 too, refused from anyone
  * else) and is never refused for budget: their hold is recorded with OWNER_VOUCH_ACTOR and no budget counts it. Throws
- * VoucherError, or Beans off's own refusal. `owner`: whether this vouch is an owner's.
+ * VoucherError, or Beans off's own refusal. `owner`: whether this vouch is an owner's. `target`: the number is the total a raise
+ * ends at (a preset, as an amount is); the budget is then checked by the caller against the difference it lands.
  */
-function assertMayVouch(voucher: string, amount: unknown): { amount: number; owner: boolean } {
+function assertMayVouch(voucher: string, amount: unknown, target = false): { amount: number; owner: boolean } {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!liveVoucher(voucher)) throw new VoucherError(403, 'not_a_voucher', VOUCHER_WORDS.notAVoucher);
@@ -707,7 +709,7 @@ function assertMayVouch(voucher: string, amount: unknown): { amount: number; own
     }
     const n = amount as number;
     if (isFrozen(voucher)) throw new VoucherError(409, 'frozen', VOUCHER_WORDS.frozen);
-    if (!owner) {
+    if (!owner && !target) {
         const { left } = budgetOf(voucher);
         if (n > left) throw new VoucherError(409, 'not_enough', notEnough(left, n));
     }
@@ -718,31 +720,40 @@ function assertMayVouch(voucher: string, amount: unknown): { amount: number; own
 const holdActor = (voucher: string, owner: boolean) => (owner ? OWNER_VOUCH_ACTOR : voucher);
 
 /**
- * A vouch from a member's profile (POST /api/vouch `{ memberPubkey, vouchAmount, raise? }`, §4 Q1 and §9), landing at once:
- * a `hold` with the room_gifts id and the room_gifts row, in one transaction that checks every rule again. Without `raise`,
- * the voucher's one vouch for this person; with it, a further vouch on top of theirs, the two together at most 100 (an
- * owner's: 500). Every vouch for one person comes to 300 at most, or 500 once an owner vouched for them or is vouching now
- * (Marty, 9 Nov). The three-vouchers rule never refuses an owner's vouch: theirs may top a person up to 500.
+ * A vouch from a member's profile (POST /api/vouch `{ memberPubkey, vouchAmount }` or `{ memberPubkey, raiseTo }`, §4 Q1 and
+ * §9; raise as a target: DESIGN-invites-vouching-review-fable.md §4, slice I6), landing at once: a `hold` with the room_gifts
+ * id and the room_gifts row, in one transaction that checks every rule again. `vouchAmount` is the voucher's one vouch for
+ * this person (a preset). `raiseTo` is a raise: the total their vouches for this person end at (a preset of theirs, so an
+ * owner's 200 or 500 and nobody else's), never an amount to add. The server lands the difference, from the budget; a target at
+ * or below what they have vouched already is refused (`raise_not_above`), so a repeated tap lands once. The two together at
+ * most 100 (an owner's: 500). Every vouch for one person comes to 300 at most, or 500 once an owner vouched for them or is
+ * vouching now (Marty, 9 Nov). The three-vouchers rule never refuses an owner's vouch: theirs may top a person up to 500.
  */
-export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown; vouchAmount?: unknown; raise?: unknown }) {
+export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown; vouchAmount?: unknown; raiseTo?: unknown }) {
     const person = memberKey(body.memberPubkey);
-    assertMayVouch(voucher, body.vouchAmount);
-    const amount = body.vouchAmount as number;
-    if (body.raise !== undefined && typeof body.raise !== 'boolean') throw new VoucherError(400, 'bad_raise', "'raise' is true or false.");
-    const raise = body.raise === true;
+    const raise = body.raiseTo !== undefined;
+    if (raise && body.vouchAmount !== undefined) throw new VoucherError(400, 'bad_body', VOUCHER_WORDS.vouchOrRaise);
+    const asked = raise ? body.raiseTo : body.vouchAmount;
+    assertMayVouch(voucher, asked, raise);
     if (person === voucher) throw new VoucherError(403, 'own_vouch', VOUCHER_WORDS.ownVouch);
     const m = getMember(db, person);
     if (!m || m.status !== 'active' || isVisitorKey(db, person) || m.isTreasury) throw new VoucherError(404, 'not_member', VOUCHER_WORDS.notMember);
     let id = '';
+    let amount = asked as number;
     db.transaction(() => {
         returnLapsedHolds(voucher);
-        const { owner } = assertMayVouch(voucher, amount);
+        const { owner } = assertMayVouch(voucher, asked, raise);
         if (belowZeroNow(person)) throw new VoucherError(409, 'below_zero', belowZero(m.callsign));
         const pair = pairOf(voucher, person);
-        const pairMax = vouchMaxFor(owner);
         if (raise) {
+            const target = asked as number;
             if (pair.total === 0) throw new VoucherError(409, 'no_vouch_yet', noVouchYet(m.callsign));
-            if (pair.total + amount > pairMax) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total, pairMax), { prior: pair.total });
+            if (target <= pair.total) throw new VoucherError(409, 'raise_not_above', raiseNotAbove(m.callsign, pair.total), { prior: pair.total });
+            amount = target - pair.total;
+            if (!owner) {
+                const { left } = budgetOf(voucher);
+                if (amount > left) throw new VoucherError(409, 'not_enough', notEnough(left, amount));
+            }
         } else {
             if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign), { prior: pair.total });
             if (!owner && pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));

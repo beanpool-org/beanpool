@@ -81,10 +81,18 @@ export async function rereadMyVouching(
     if (second) apply(second);
 }
 
+/**
+ * What a vouch from a profile posts: `vouchAmount` for a first vouch (a preset), or `raiseTo` for a raise, the total the
+ * vouches for this person end at (a preset of the voucher's), never an amount to add. The node lands the difference.
+ */
+export type VouchProfileBody =
+    | { memberPubkey: string; vouchAmount: number }
+    | { memberPubkey: string; raiseTo: number };
+
 export async function vouchFromProfile(
     anchor: string,
     identity: BeanPoolIdentity,
-    body: { memberPubkey: string; vouchAmount: number; raise?: boolean },
+    body: VouchProfileBody,
 ): Promise<VouchProfileResult> {
     try {
         const { signedPost } = await import('./node-post');

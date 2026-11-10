@@ -171,6 +171,23 @@ describe('the whole row opens the invite', () => {
     });
 });
 
+// The words sweep (invites-vouching I6): three sentences the design retired, asserted absent from what the page draws.
+const RETIRED_INVITE_WORDS = ['Invited directly by the system admin', 'Vetted by the admin at sign-up', 'Share this cryptographic code'];
+
+describe('the retired sentences are drawn nowhere (invites-vouching I6)', () => {
+    it('after Generate, and again with the form back and Pending and Joined open: none of the three', async () => {
+        const { container } = render(<InvitePage identity={IDENTITY} />);
+        fireEvent.click(await screen.findByRole('button', { name: /Generate New Invite/ }));
+        await screen.findByTestId('invite-made-card');
+        for (const gone of RETIRED_INVITE_WORDS) expect(container.textContent).not.toContain(gone);
+        fireEvent.click(screen.getByTestId('invite-make-another'));
+        fireEvent.click(await screen.findByTestId('invites-pending-fold'));
+        fireEvent.click(await screen.findByTestId('invites-joined-fold'));
+        expect(rows().length).toBeGreaterThan(0);
+        for (const gone of RETIRED_INVITE_WORDS) expect(container.textContent).not.toContain(gone);
+    });
+});
+
 describe('the made card and the folded form', () => {
     it('after Generate the card says who it is for, what it carries and 30 days; the form is gone until Make another invite', async () => {
         INVITES.rows = [];

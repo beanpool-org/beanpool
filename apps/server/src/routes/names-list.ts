@@ -58,6 +58,7 @@ import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey, generateInvite, broadcast, dispatchPushNotification } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { revokeEntryInvite } from '../engine/invites.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
@@ -193,12 +194,14 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
     // Body `{ vouchAmount?, voucherLevel? }` (amend3 §2, Marty's Q1): a vouch preset from the maker's budget, held now, as on
     // any invite; and a voucher budget (an owner or committee admin, 100 to 2,000) the joiner is given once confirmed.
+    // One live invite per entry (invites-vouching I2): with one out, 409 `invite_out` (its maker's callsign and days left),
+    // unless `replace: true` from its maker or an owner, which revokes it in the new invite's transaction.
     router.post('/api/names/entries/:id/invite', async (ctx) => {
         const actor = admin(ctx);
         if (!actor) return;
         try {
             const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
-            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), body.vouchAmount, body.voucherLevel);
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), body.vouchAmount, body.voucherLevel, body.replace);
             if (!invite) return answer(ctx, 403, word('Only registered members can generate invites'), 'not_member');
             ctx.status = 201;
             ctx.body = { success: true, invite };
@@ -207,6 +210,9 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
             respond(ctx, e);
         }
     });
+    // The live invite on an entry revoked from the entry's line (invites-vouching I2): its maker or an owner. Bound invites
+    // reach no admin as a code, so the entry names it (engine/invites.ts revokeEntryInvite).
+    router.delete('/api/names/entries/:id/invite', (ctx) => asAdmin(ctx, (actor) => revokeEntryInvite(actor, ctx.params.id)));
     router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
 
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));

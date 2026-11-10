@@ -108,6 +108,16 @@ async function press(b: Element | null) {
     await act(async () => { (b as HTMLButtonElement).click(); });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
+/**
+ * Lets the screen run, a tick at a time inside act, until `done` holds (at most 5 s). For a press whose work loads a
+ * module for the first time on the way (the bound path's forgetTheLook imports nodes.ts), which one tick can't cover.
+ */
+async function until(done: () => boolean) {
+    await vi.waitFor(async () => {
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        if (!done()) throw new Error('the screen has not settled yet');
+    }, { timeout: 5_000, interval: 10 });
+}
 
 beforeEach(async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -184,6 +194,9 @@ describe('the re-key screen, when an earlier ask showed a number (#1783 reviews 
     it('its node bound it (the admin typed the number after Not now): finished, its key the phone\'s, never offered to forget', async () => {
         hosts[MULLUM] = { state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: false };
         await press(buttonNamed(/^Continue$/));
+        // Finishing it loads nodes.ts for the first time (look-around.ts forgetTheLook), after the press's one tick:
+        // wait for the finish itself, then check all of it.
+        await until(() => text().includes('You’re in') && fake.imported.length > 0 && fake.slot === null);
         expect(buttonNamed(/^Forget/)).toBeNull();
         expect(text()).not.toContain('still open');
         expect(text()).toContain('You’re in');

@@ -1187,6 +1187,13 @@ describe('Add a community by address: a server with no owner yet is claimed, not
         vi.mocked(clearGuestNode).mockClear();
         const before = snapshot();
         await click(host.querySelector('[data-testid="settings-add-connect"]'), 'Add & Connect');
+        // The press is over when its spinner goes (settings.tsx handleUpdateAnchor's finally), not after a fixed number
+        // of ticks: its first step loads utils/node-claim.ts for the first time, which on a loaded runner took longer
+        // than the ticks did (CI, 4df1a0b5: the claim not yet asked when checked).
+        await vi.waitFor(async () => {
+            await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+            if (host.querySelector('[data-testid="settings-add-connect"] [data-spinner]')) throw new Error('Add & Connect still running');
+        }, { timeout: 5_000, interval: 10 });
         await settle();
         return before;
     }

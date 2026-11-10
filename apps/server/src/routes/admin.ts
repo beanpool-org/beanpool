@@ -71,7 +71,7 @@ import { APP_PLATFORMS, appStoreCheckDisabled, getMinAppVersion, getMinAppVersio
 import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
@@ -954,8 +954,10 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
             };
             return;
         }
-        const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
-        const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
+        // Whole hundredths (every balance was a number, asked just above): the baseline is the integer as text, read back
+        // exactly by LedgerAudit; the note says it in Beans.
+        const normalizedBaseline = String(result.sumBalances);
+        const note = `[${new Date().toISOString()}] rebaselined at ${hundredthsAsDecimalText(result.sumBalances)} Beans (drift was ${hundredthsAsDecimalText(result.drift)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.
         db.transaction(() => {
             db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(normalizedBaseline);

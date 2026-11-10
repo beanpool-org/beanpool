@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -2314,8 +2314,8 @@ export interface EscrowRefundShortfall {
 /** A shortfall in words, for the moderator who made the removal. */
 export function describeRefundShortfall(s: EscrowRefundShortfall): string {
     return s.owed === null
-        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${s.refunded}`
-        : `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`;
+        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${formatHundredths(s.refunded, 'en')} Beans`
+        : `trade ${s.transactionId} owed ${formatHundredths(s.owed, 'en')} Beans, refunded ${formatHundredths(s.refunded, 'en')}`;
 }
 
 /** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */

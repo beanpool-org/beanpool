@@ -99,6 +99,11 @@ export type WriteOffResult =
  * A reason with control characters flattened to spaces (they could forge log lines or smuggle terminal escapes
  * into an operator's console — the same treatment as the rebaseline note), or null when none was given.
  */
+/** A figure in a refusal: whole hundredths in Beans ("−0.01"), anything else exactly as it is held. */
+function shownFigure(v: unknown): string {
+    return isHundredths(v) ? formatHundredths(v, 'en') : String(v);
+}
+
 export function normaliseWriteOffReason(reason: unknown): string | null {
     if (typeof reason !== 'string') return null;
     // eslint-disable-next-line no-control-regex
@@ -237,7 +242,7 @@ export function writeOffStrandedEscrow(
     // Before the shape check, so a disagreement is never reported as something else.
     if (Number(row.balance_c) !== balance) {
         return refuse(409, 'ledger_mismatch',
-            `This escrow reads ${balance} in memory but ${row.balance_c} on disk. Restart the node so it reloads the ledger, then try again`);
+            `This escrow reads ${shownFigure(balance)} in memory but ${shownFigure(row.balance_c)} on disk. Restart the node so it reloads the ledger, then try again`);
     }
 
     const shape = balanceRefusal(balance, trade?.status ?? null);

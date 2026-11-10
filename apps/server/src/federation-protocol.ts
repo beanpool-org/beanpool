@@ -200,7 +200,7 @@ async function routeSettlementAction(request: any, remotePeerId: string): Promis
                 buyerHomeNode: request.buyerHomeNode ?? null,
                 sellerPublicKey: request.sellerPublicKey,
                 postId: request.postId ?? null,
-                amount: request.amount,
+                amount_c: request.amount_c,
             });
 
         // Step 4: their receipt arrived. Persist it, then pay our seller — or refuse CAPACITY_LAPSED.
@@ -509,7 +509,7 @@ export async function federatedPurchase(
         buyerHomeNode?: string | null;
         sellerPublicKey: string;
         postId?: string | null;
-        amount: number;
+        amount_c: number;
     },
 ): Promise<any> {
     return settlementRoundTrip(node, targetPeerId, { action: SETTLE_PURCHASE, ...payload }, PURCHASE_ASK_TIMEOUT_MS);
@@ -573,7 +573,7 @@ export async function settleCrossNodePurchase(
         buyerHomeNode?: string | null;
         sellerPublicKey: string;
         postId?: string | null;
-        amount: number;
+        amount_c: number;
     },
 ): Promise<OutboundOutcome> {
     return runOutboundSettlement(

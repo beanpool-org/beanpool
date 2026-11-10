@@ -182,7 +182,7 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
         // the apps send when there is none, is no pledge; anything else the handler would take as one counts (and is
         // given back when it refuses it).
         method: 'POST', path: at('keepers/request'),
-        plan: (actor, _m, b) => (Number(b.pledgedBacking ?? b.amount ?? b.backing ?? 0) === 0 ? null : pledge(actor)),
+        plan: (actor, _m, b) => (Number(b.pledgedBacking ?? b.amount_c ?? b.backing_c ?? 0) === 0 ? null : pledge(actor)),
     },
     { method: 'POST', path: at('(?:release|pledge/release|backing/release)'), plan: (actor) => pledge(actor) },
     { method: 'DELETE', path: at('(?:pledge|backing)'), plan: (actor) => pledge(actor) },

@@ -163,7 +163,7 @@ function memberKey(raw: unknown): string {
 }
 
 /** Every rule, in order, with nothing written: the pieces the gift takes, oldest first, and the recipient's name. */
-function planGift(giver: string, to: string, amount: unknown): { amount: number; takes: { piece: Piece; take: number }[]; callsign: string } {
+function planGift(giver: string, to: string, amount: unknown): { amount_c: number; takes: { piece: Piece; take: number }[]; callsign: string } {
     const setting = memberGiftSetting();
     if (setting <= 0) throw new CreditGiftError(403, 'gift_off', CREDIT_GIFT_WORDS.off);
     if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1) throw new CreditGiftError(400, 'bad_amount', CREDIT_GIFT_WORDS.badAmount);
@@ -208,7 +208,7 @@ function planGift(giver: string, to: string, amount: unknown): { amount: number;
     }
     // The open parts sum to their room, checked above: never a gift that can't be covered piece by piece.
     if (left !== 0) throw new CreditGiftError(409, 'not_enough_room', notEnoughRoom(g.room, amount));
-    return { amount, takes, callsign: r.callsign };
+    return { amount_c: amount, takes, callsign: r.callsign };
 }
 
 /**
@@ -217,28 +217,28 @@ function planGift(giver: string, to: string, amount: unknown): { amount: number;
  * per piece taken, each with that piece's root, and the recipient's notice kept. `tell` sends the notice live and as a
  * push once the transaction has committed.
  */
-export function giveCreditLine(giver: string, body: { memberPubkey?: unknown; amount?: unknown }, tell?: (n: VoucherNotice) => void) {
+export function giveCreditLine(giver: string, body: { memberPubkey?: unknown; amount_c?: unknown }, tell?: (n: VoucherNotice) => void) {
     assertPlainTablesWritable();
     assertBeansOn();
     const to = memberKey(body.memberPubkey);
     const { notice, rows } = db.transaction(() => {
-        const plan = planGift(giver, to, body.amount);
+        const plan = planGift(giver, to, body.amount_c);
         const at = now();
         const insert = db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c, source_gift_id, at)
             VALUES (?, ?, ?, ?, 'gift', ?, ?, ?)`);
-        const written: { id: string; root: string; amount: number; sourceGiftId: string }[] = [];
+        const written: { id: string; root: string; amount_c: number; sourceGiftId: string }[] = [];
         for (const { piece, take } of plan.takes) {
             const id = newId();
             insert.run(id, giver, to, piece.root, take, piece.id, at);
-            written.push({ id, root: piece.root, amount: take, sourceGiftId: piece.id });
+            written.push({ id, root: piece.root, amount_c: take, sourceGiftId: piece.id });
         }
         const giverName = getMember(giver)?.callsign ?? '';
         const title = CREDIT_GIFT_WORDS.noticeTitle;
-        const text = noticeBody(giverName, plan.amount);
-        const data = { kind: 'credit_gift', amount: plan.amount, from: giver };
+        const text = noticeBody(giverName, plan.amount_c);
+        const data = { kind: 'credit_gift', amount: plan.amount_c, from: giver };
         return { notice: { to, title, body: text, data, id: keepNotice(to, title, text, data) } as VoucherNotice, rows: written };
     })();
     tell?.(notice);
     const after = creditGiftOffer(giver);
-    return { memberPubkey: to, amount: rows.reduce((s, r) => s + r.amount, 0), pieces: rows.length, room: after.room, canGive: after.canGive };
+    return { memberPubkey: to, amount: rows.reduce((s, r) => s + r.amount_c, 0), pieces: rows.length, room: after.room, canGive: after.canGive };
 }

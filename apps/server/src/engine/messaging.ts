@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -1201,8 +1201,8 @@ export function injectSystemMessage(
     }
 
     const contentMap: Record<string, string> = {
-        [SystemMessageType.ESCROW_FUNDED]: `${meta.amount} Beans placed in escrow.`,
-        [SystemMessageType.ESCROW_RELEASED]: `Payment of ${meta.amount} Beans released to the provider.`,
+        [SystemMessageType.ESCROW_FUNDED]: `${formatHundredths(meta.amount_c, 'en')} Beans placed in escrow.`,
+        [SystemMessageType.ESCROW_RELEASED]: `Payment of ${formatHundredths(meta.amount_c, 'en')} Beans released to the provider.`,
         [SystemMessageType.ESCROW_CANCELLED]: `Escrow cancelled and funds refunded.`,
         [SystemMessageType.COMMONS_GRANT]: `Commons grant awarded.`,
         [SystemMessageType.VOUCH_GRANTED]: `Vouch granted.`,

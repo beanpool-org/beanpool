@@ -62,7 +62,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
     router.post('/api/federation/purchase', async (ctx) => {
         const body = (ctx as any).requestBody || {};
         const { nodeUrl, peerAddress, sellerPublicKey, postId } = body;
-        const amount = Number(body.amount);
+        const amount = Number(body.amount_c);
 
         // 1. THE KILL SWITCH, before anything else. Off by default on every node, and turning it off must
         //    refuse new trades without a hint that some other input might get past it.
@@ -230,7 +230,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
         //    round-3 review). settlementKeyFor takes only a key this node minted, on this buyer's own purchase of the
         //    same thing from the same community; anything else is refused here, before anything moves.
         const postIdOrNull = typeof postId === 'string' ? postId : null;
-        const keyed = settlementKeyFor(body.key, 'xn-', { payer: buyerPublicKey, peerId, sellerPublicKey, postId: postIdOrNull, amount });
+        const keyed = settlementKeyFor(body.key, 'xn-', { payer: buyerPublicKey, peerId, sellerPublicKey, postId: postIdOrNull, amount_c: amount });
         if (!keyed.ok) {
             ctx.status = keyed.status;
             ctx.body = { error: keyed.error, reason: keyed.reason };
@@ -262,7 +262,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey,
                 postId: postIdOrNull,
-                amount,
+                amount_c: amount,
             });
             ctx.status = statusFor(outcome.status);
             ctx.body = { ...outcome, amount, peer: connector.callsign ?? connector.address };

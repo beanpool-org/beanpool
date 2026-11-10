@@ -131,7 +131,7 @@ const NOT_YOUR_KEY = 'That key is not one of yours. Send the purchase without a 
 export function settlementKeyFor(
     sent: unknown,
     prefix: SettlementKeyPrefix,
-    trade: { payer: string; peerId: string; sellerPublicKey: string; postId: string | null; amount: number },
+    trade: { payer: string; peerId: string; sellerPublicKey: string; postId: string | null; amount_c: number },
 ): { ok: true; key: string } | { ok: false; status: 400 | 409; reason: string; error: string } {
     if (sent === undefined || sent === null) return { ok: true, key: mintSettlementKey(prefix) };
     if (!isMintedSettlementKey(sent, prefix)) {
@@ -146,7 +146,7 @@ export function settlementKeyFor(
         return { ok: false, status: 409, reason: 'key_conflict', error: NOT_YOUR_KEY };
     }
     if ((row.sellerPubkey ?? null) !== trade.sellerPublicKey || (row.postId ?? null) !== (trade.postId ?? null)
-        || row.amount !== trade.amount) {
+        || row.amount_c !== trade.amount_c) {
         return {
             ok: false, status: 409, reason: 'key_conflict',
             error: 'That key is for a different purchase. Try it again with the same seller, listing and amount. Nothing has been deducted.',
@@ -208,11 +208,11 @@ export function beginOutboundSettlement(input: {
     buyerHomeNode?: string | null;
     sellerPublicKey: string;
     postId?: string | null;
-    amount: number;
+    amount_c: number;
 }): SettlementRow {
-    requireAmount(input.amount);
+    requireAmount(input.amount_c);
 
-    const amount = input.amount;
+    const amount = input.amount_c;
     const fee = crossNodeFee(amount);
     const escrowAccount = escrowAccountFor(input.key);
 
@@ -248,8 +248,8 @@ export function beginOutboundSettlement(input: {
             sellerPubkey: input.sellerPublicKey,
             buyerHomeNode: input.buyerHomeNode ?? null,
             postId: input.postId ?? null,
-            amount,
-            fee,
+            amount_c: amount,
+            fee_c: fee,
             state: 'escrowed',
         });
 
@@ -323,7 +323,7 @@ export async function commitOutboundSettlement(
         buyerHomeNode: buyerHomeNode ?? row.buyerHomeNode ?? null,
         sellerPublicKey: row.sellerPubkey ?? '',
         postId: row.postId,
-        amount: row.amount,
+        amount_c: row.amount_c,
         committedAt: new Date().toISOString(),
     };
 
@@ -360,11 +360,11 @@ export async function commitOutboundSettlement(
 
         // Price to the bridge; fee to our OWN Commons. The bridge entry carries the price alone, so the
         // two nodes' bridge rows can be equal and opposite.
-        mustTransfer(escrowAccount, bridge, fresh.amount, `Cross-community purchase (${key})`);
+        mustTransfer(escrowAccount, bridge, fresh.amount_c, `Cross-community purchase (${key})`);
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — see its docstring. A transfer into the
         // COMMONS_POOL *account* is overwritten by the next persistCommonsBalance() flush, so the fee
         // would vanish from the books and the node would stop summing to zero.
-        if (fresh.fee > 0 && !moveToCommons(escrowAccount, fresh.fee, `Cross-community purchase fee (${key})`)) {
+        if (fresh.fee_c > 0 && !moveToCommons(escrowAccount, fresh.fee_c, `Cross-community purchase fee (${key})`)) {
             throw new SettlementError(`Could not move the fee for ${key} to the Commons`, 'fee_failed');
         }
         // Persist the payload as well as the signature, so a retry can hand back byte-identical bytes.
@@ -461,7 +461,7 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
     return settlementTransaction(() => {
         // The PRINCIPAL always goes back. Naming the reason in the memo so a member sees why their purchase
         // reversed rather than only that it did.
-        mustTransfer(bridge, row.buyerPubkey, row.amount, `${reversalMemo(reason)} (${key})`);
+        mustTransfer(bridge, row.buyerPubkey, row.amount_c, `${reversalMemo(reason)} (${key})`);
 
         // Drawn from the Commons pot, not from the shadow account — otherwise the refund is funded from
         // nowhere and the node's books stop balancing.
@@ -472,8 +472,8 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
         // negative also matches the documented Solvency Rule for write-offs
         // (docs/commons-pool-transparency.md): a negative Commons is the honest record of a community that
         // has paid out more than it has collected, and the network still sums to zero.
-        if (row.fee > 0) {
-            payFromCommons(row.buyerPubkey, row.fee, `Refunded cross-community fee (${key})`, { allowDeficit: true });
+        if (row.fee_c > 0) {
+            payFromCommons(row.buyerPubkey, row.fee_c, `Refunded cross-community fee (${key})`, { allowDeficit: true });
         }
         return advanceSettlement(key, 'reversed', { failureReason: reason });
     });
@@ -493,7 +493,7 @@ export function abandonOutboundSettlement(key: string, reason: string): Settleme
 
     return settlementTransaction(() => {
         mustTransfer(
-            escrowAccountFor(key), row.buyerPubkey, (row.amount + row.fee),
+            escrowAccountFor(key), row.buyerPubkey, (row.amount_c + row.fee_c),
             `Released cross-community hold (${key})`,
         );
         return advanceSettlement(key, 'abandoned', { failureReason: reason });
@@ -539,7 +539,7 @@ export interface SettlementWire {
         buyerHomeNode?: string | null;
         sellerPublicKey: string;
         postId?: string | null;
-        amount: number;
+        amount_c: number;
     }): Promise<any>;
     deliver(payload: { key: string; receipt: SettlementReceipt; signature: string }): Promise<any>;
 }
@@ -606,7 +606,7 @@ export async function runOutboundSettlement(
         buyerHomeNode?: string | null;
         sellerPublicKey: string;
         postId?: string | null;
-        amount: number;
+        amount_c: number;
     },
     wire: SettlementWire,
     ourPeerId: string,
@@ -651,7 +651,7 @@ export async function runOutboundSettlement(
                 buyerHomeNode: input.buyerHomeNode ?? null,
                 sellerPublicKey: input.sellerPublicKey,
                 postId: input.postId ?? null,
-                amount: input.amount,
+                amount_c: input.amount_c,
             });
         } catch (e: any) {
             // A LOST ASK IS SAFE TO RELEASE, and this is the one transport failure that is. Step 2 moves no
@@ -769,7 +769,7 @@ export function handlePurchaseRequest(input: {
     buyerHomeNode?: string | null;
     sellerPublicKey: string;
     postId?: string | null;
-    amount: number;
+    amount_c: number;
 }): PurchaseDecision {
     if (!input.key || typeof input.key !== 'string') {
         return { accepted: false, reason: 'invalid_key', message: 'A settlement key is required.' };
@@ -779,7 +779,7 @@ export function handlePurchaseRequest(input: {
     if (!input.peerId || typeof input.peerId !== 'string') {
         return { accepted: false, reason: 'invalid_peer', message: 'Settlement requires an identified peer.' };
     }
-    if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) {
+    if (typeof input.amount_c !== 'number' || !Number.isFinite(input.amount_c) || input.amount_c <= 0) {
         return { accepted: false, reason: 'invalid_amount', message: 'A settlement amount must be a positive number.' };
     }
     if (!input.sellerPublicKey || !input.buyerPublicKey) {
@@ -804,7 +804,7 @@ export function handlePurchaseRequest(input: {
         // returned `accepted: true`, the buyer then committed against those new terms, and receipt delivery
         // compared them to the old row and refused — a compensating reversal that need never have happened.
         // Idempotency has to mean "the same trade", and a trade is the whole tuple.
-        const sameTrade = existing.amount === input.amount
+        const sameTrade = existing.amount_c === input.amount_c
             && existing.buyerPubkey === input.buyerPublicKey
             && (existing.sellerPubkey ?? null) === input.sellerPublicKey
             && (existing.postId ?? null) === (input.postId ?? null);
@@ -851,7 +851,7 @@ export function handlePurchaseRequest(input: {
         };
     }
 
-    const capacity = settlementCapacityForPeer(input.peerId, input.amount);
+    const capacity = settlementCapacityForPeer(input.peerId, input.amount_c);
     if (!capacity.ok) return { accepted: false, reason: capacity.reason, message: capacity.message };
 
     const reservedUntil = new Date(Date.now() + RESERVATION_TTL_MS).toISOString();
@@ -896,7 +896,7 @@ export function handlePurchaseRequest(input: {
         buyerHomeNode: resolvedHomeNode,
         sellerPubkey: input.sellerPublicKey,
         postId: input.postId ?? null,
-        amount: input.amount,
+        amount_c: input.amount_c,
         reservedUntil,
         state: 'reserved',
     });
@@ -1012,7 +1012,7 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
 
     // excludeKey: this row's own reservation already counts toward `reservedAgainstPeer`, so without
     // excluding it the check would measure the payment against itself and always lapse.
-    const capacity = settlementCapacityForPeer(row.peerId, row.amount, row.key);
+    const capacity = settlementCapacityForPeer(row.peerId, row.amount_c, row.key);
     if (!capacity.ok) {
         // Do NOT pay. Whether to LATCH that refusal depends on who is asking, and the distinction matters
         // (review finding):
@@ -1054,7 +1054,7 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
         // The seller receives exactly the agreed amount — fee-exempt, because the buyer already paid the
         // fee on their own node and it never crossed the border.
         mustTransfer(
-            bridgeAccountId(fresh.peerId), fresh.sellerPubkey!, fresh.amount,
+            bridgeAccountId(fresh.peerId), fresh.sellerPubkey!, fresh.amount_c,
             `Cross-community sale (${key})`,
         );
         advanceSettlement(key, 'settled');
@@ -1072,7 +1072,7 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
 function receiptMatchesRow(r: SettlementReceipt, row: SettlementRow): boolean {
     return !!r
         && r.key === row.key
-        && r.amount === row.amount
+        && r.amount_c === row.amount_c
         && r.buyerPublicKey === row.buyerPubkey
         && r.sellerPublicKey === (row.sellerPubkey ?? '')
         && (r.postId ?? null) === (row.postId ?? null);
@@ -1256,7 +1256,7 @@ export async function recoverSettlements(
             : `A local seller is owed and we cannot pay within our own credit limit`;
         console.warn(
             `[Federation] ⚠️  Settlement ${row.key} has been unresolved since ${row.updatedAt} `
-            + `(${row.amount} beans, peer ${row.peerId.slice(-8)}). ${whatIsStuck}. `
+            + `(${row.amount_c} beans, peer ${row.peerId.slice(-8)}). ${whatIsStuck}. `
             + `An operator needs to reconcile this with the other community — it will not clear by retrying.`,
         );
     }

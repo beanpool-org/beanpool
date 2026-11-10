@@ -373,7 +373,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     
     for (const p of projects) {
         if (p.status === 'funded') {
-            balancesCsv += `project_${p.id},Project: ${p.title.replace(/,/g, '')},Project_Funded,${p.requestedAmount}\n`;
+            balancesCsv += `project_${p.id},Project: ${p.title.replace(/,/g, '')},Project_Funded,${isHundredths(p.requestedAmount_c) ? hundredthsAsDecimalText(p.requestedAmount_c) : ''}\n`;
         }
     }
     

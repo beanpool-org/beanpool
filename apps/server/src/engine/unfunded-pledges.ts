@@ -207,9 +207,9 @@ export function returnUnfundedPledges(hooks: UnfundedPledgeHooks, now: number = 
 
 function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: true; returns: StrandedPledgeReturn[]; toCommons?: StrandedPledgeReturn[] }): boolean {
     const project = named(s.title);
-    const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
+    const total = s.returns.reduce((sum, o) => sum + o.amount_c, 0);
     const toCommons = s.toCommons ?? [];
-    const toCommonsTotal = toCommons.reduce((sum, o) => sum + o.amount, 0);
+    const toCommonsTotal = toCommons.reduce((sum, o) => sum + o.amount_c, 0);
     const memo = `Pledge returned: "${project}" didn't reach its goal by its end date`;
     const data = { kind: 'pledges_returned', enterprise: s.projectId };
     // The leader hears it once, in their own words, whether or not they backed it too.
@@ -226,13 +226,13 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
     try {
         hooks.conservingTransaction(() => {
             for (const o of s.returns) {
-                const txn = hooks.transfer(s.escrow, o.backer, o.amount, memo, 'escrow', true);
-                if (!txn) throw new Error(`the ledger refused to return ${o.amount} to a backer`);
+                const txn = hooks.transfer(s.escrow, o.backer, o.amount_c, memo, 'escrow', true);
+                if (!txn) throw new Error(`the ledger refused to return ${o.amount_c} to a backer`);
                 // The row names the project, as the delete path's refunds and the stranded return's do: its history shows it went back.
                 db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
             }
             // A closed account's share, to the Commons (A CLOSED ACCOUNT above): one row each, naming the project, not them.
-            for (const o of toCommons) closedPledgeToCommons(hooks, s.escrow, s.projectId, o.amount);
+            for (const o of toCommons) closedPledgeToCommons(hooks, s.escrow, s.projectId, o.amount_c);
             // An ACTIVE project's raised figure is what its escrow holds (pledgeToProject adds each pledge to both), and the escrow
             // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
             // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was

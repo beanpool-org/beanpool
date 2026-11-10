@@ -315,8 +315,8 @@ export function returnLapsedHolds(pk: string | null = null, at = Date.now()): nu
     if (getNodeRole() !== 'primary') return 0;
     const lapsed = db.prepare(`SELECT h.member_pubkey AS pk, h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h
         WHERE ${LAPSED_HOLD} AND (? IS NULL OR h.member_pubkey = ?)`)
-        .all(lifeCutoff(at), pk, pk) as { pk: string; ref: string; amount: number }[];
-    db.transaction(() => { for (const l of lapsed) addLine(l.pk, 'return', l.amount, 'node', l.ref); })();
+        .all(lifeCutoff(at), pk, pk) as { pk: string; ref: string; amount_c: number }[];
+    db.transaction(() => { for (const l of lapsed) addLine(l.pk, 'return', l.amount_c, 'node', l.ref); })();
     return lapsed.length;
 }
 
@@ -326,8 +326,8 @@ export function returnLapsedHolds(pk: string | null = null, at = Date.now()): nu
  */
 function stopBudget(pk: string, actor: string, reason: 'role_lost' | 'stopped' | 'revoked' | 'departed'): void {
     const open = db.prepare(`SELECT h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${OPEN_HOLD}
-          AND NOT EXISTS (SELECT 1 FROM invite_codes ic WHERE ic.code = h.ref AND ic.used_by IS NOT NULL)`).all(pk) as { ref: string; amount: number }[];
-    for (const o of open) addLine(pk, 'return', o.amount, actor, o.ref);
+          AND NOT EXISTS (SELECT 1 FROM invite_codes ic WHERE ic.code = h.ref AND ic.used_by IS NOT NULL)`).all(pk) as { ref: string; amount_c: number }[];
+    for (const o of open) addLine(pk, 'return', o.amount_c, actor, o.ref);
     const { left } = budgetOf(pk);
     if (left > 0) addLine(pk, 'stop', -left, actor);
     db.prepare('UPDATE vouchers SET stopped_at = ?, stopped_by = ?, stop_reason = ? WHERE member_pubkey = ? AND stopped_at IS NULL').run(now(), actor, reason, pk);
@@ -470,20 +470,20 @@ function memberKey(raw: unknown): string {
  * nothing new: their budget's source moves to the entry, so losing the role later leaves it. Never yourself. A new budget
  * is a notice to its voucher, kept in the transaction and told by `tell` after it.
  */
-export function makeVoucher(actor: string, body: { entryId?: unknown; amount?: unknown }, tell?: TellVoucher) {
+export function makeVoucher(actor: string, body: { entryId?: unknown; amount_c?: unknown }, tell?: TellVoucher) {
     assertCommittee(actor);
     if (typeof body.entryId !== 'string' || !/^[0-9a-f]{32}$/.test(body.entryId)) throw new VoucherError(400, 'bad_entry', 'An entry id is 32 hexadecimal characters.');
     const conf = db.prepare('SELECT member_pubkey, needs_second, seconded_at FROM confirmations WHERE entry_id = ? AND revoked_at IS NULL')
         .get(body.entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
     if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
     if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
-    const debt = db.prepare("SELECT amount_c FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount: number } | undefined;
-    if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount));
+    const debt = db.prepare("SELECT amount_c FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount_c: number } | undefined;
+    if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount_c));
     const pk = conf.member_pubkey;
     const m = getMember(db, pk);
     if (!m || m.status !== 'active' || isVisitorKey(db, pk) || m.isTreasury) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
-    const amount = body.amount === undefined ? voucherBudgetSetting() : body.amount;
+    const amount = body.amount_c === undefined ? voucherBudgetSetting() : body.amount_c;
     if (!isBudgetLevel(amount)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
     const live = liveVoucher(pk);
     if (live?.source === 'entry') throw new VoucherError(409, 'already_voucher', alreadyVoucher(m.callsign));
@@ -649,7 +649,7 @@ function addVouchRow(voucher: string, person: string, amount: number, inviteCode
  * else) and is never refused for budget: their hold is recorded with OWNER_VOUCH_ACTOR and no budget counts it. Throws
  * VoucherError, or Beans off's own refusal. `owner`: whether this vouch is an owner's.
  */
-function assertMayVouch(voucher: string, amount: unknown): { amount: number; owner: boolean } {
+function assertMayVouch(voucher: string, amount: unknown): { amount_c: number; owner: boolean } {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!liveVoucher(voucher)) throw new VoucherError(403, 'not_a_voucher', VOUCHER_WORDS.notAVoucher);
@@ -666,7 +666,7 @@ function assertMayVouch(voucher: string, amount: unknown): { amount: number; own
         const { left } = budgetOf(voucher);
         if (n > left) throw new VoucherError(409, 'not_enough', notEnough(left, n));
     }
-    return { amount: n, owner };
+    return { amount_c: n, owner };
 }
 
 /** The hold's actor: the voucher's own key, or OWNER_VOUCH_ACTOR for an owner's vouch (recorded, drawn from no budget). */
@@ -717,7 +717,7 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
  * Throws as a profile vouch does. The hold itself is written with the code, in one transaction ({@link holdForInvite}).
  */
 export function checkInviteVouch(maker: string, amount: unknown): number {
-    return assertMayVouch(maker, amount).amount;
+    return assertMayVouch(maker, amount).amount_c;
 }
 
 /** Inside generateInvite's transaction, with the code's row: the hold, after every check again (an owner's: OWNER_VOUCH_ACTOR). */
@@ -739,9 +739,9 @@ export function holdForInvite(maker: string, code: string, amount: number): void
  */
 export function landInviteVouch(maker: string, code: string, joiner: string, amount: number): { landed: number } | { ended: string } {
     const hold = db.prepare(`SELECT -h.amount_c AS amount_c, h.actor AS actor FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
-        .get(maker, code) as { amount: number; actor: string } | undefined;
+        .get(maker, code) as { amount_c: number; actor: string } | undefined;
     const preset = hold?.actor === OWNER_VOUCH_ACTOR ? isOwnerVouchPreset(amount) : isVouchPreset(amount);
-    if (!hold || hold.amount !== amount || !preset) return { ended: VOUCHER_WORDS.voucherEnded };
+    if (!hold || hold.amount_c !== amount || !preset) return { ended: VOUCHER_WORDS.voucherEnded };
     const pair = pairOf(maker, joiner);
     if (!getProfileSwitches().beans || isFrozen(maker) || pair.total > 0 || pair.vouchers >= VOUCHES_PER_PERSON) {
         addLine(maker, 'return', amount, 'node', code);
@@ -935,7 +935,7 @@ function tradingOf(pk: string): Map<string, TradingMark> {
  * a piece whose holder left was stamped written off and counts in the written-off line, not here. No balance figure:
  * "below zero" marks the room, never by how much.
  */
-function passedOnOf(pk: string): { amount: number; people: number; belowZero: number } {
+function passedOnOf(pk: string): { amount_c: number; people: number; belowZero: number } {
     const pieces = (db.prepare(`SELECT g.to_pubkey AS holder,
             g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
         FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off_c IS NULL`).all(pk) as { holder: string; open: number }[])
@@ -943,7 +943,7 @@ function passedOnOf(pk: string): { amount: number; people: number; belowZero: nu
     const holders = new Set(pieces.map((p) => p.holder));
     const below = new Set([...holders].filter((h) => belowZeroNow(h)));
     return {
-        amount: pieces.reduce((s, p) => s + p.open, 0),
+        amount_c: pieces.reduce((s, p) => s + p.open, 0),
         people: holders.size,
         belowZero: pieces.filter((p) => below.has(p.holder)).reduce((s, p) => s + p.open, 0),
     };
@@ -982,7 +982,7 @@ export function vouchersBlock() {
 
 /** One line of a Budget history: what moved, by whose hand, and for what, never which invite code. */
 export interface HistoryLine {
-    kind: string; amount: number; actor: string; actorCallsign: string | null; at: string;
+    kind: string; amount_c: number; actor: string; actorCallsign: string | null; at: string;
     /** A hold or a return: an invite's vouch, or one from a member's profile. Absent on a grant, a level or a stop. */
     for?: 'invite' | 'profile';
     /** An invite's: when it was made (its hold's moment, written with the code). */
@@ -1004,7 +1004,7 @@ export interface HistoryLine {
 function historyOf(pk: string, limit = 200): HistoryLine[] {
     const cutoff = lifeCutoff(Date.now());
     const rows = db.prepare('SELECT kind, amount_c, actor, ref, at FROM voucher_allocations WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, limit) as
-        { kind: string; amount: number; actor: string; ref: string | null; at: string }[];
+        { kind: string; amount_c: number; actor: string; ref: string | null; at: string }[];
     const giftTo = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE id = ? AND from_pubkey = ? AND kind = 'vouch'");
     const landedOn = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE invite_code = ? AND from_pubkey = ? AND kind = 'vouch' LIMIT 1");
     const holdAt = db.prepare("SELECT at FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ? ORDER BY rowid LIMIT 1");
@@ -1012,7 +1012,7 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
     const codeRow = db.prepare('SELECT used_by, created_at FROM invite_codes WHERE code = ?');
     const personOf = (who: string) => ({ memberPubkey: who, callsign: callsignOf(who) });
     return rows.map((r): HistoryLine => {
-        const line: HistoryLine = { kind: r.kind, amount: r.amount, actor: r.actor, actorCallsign: callsignOf(r.actor) || null, at: r.at };
+        const line: HistoryLine = { kind: r.kind, amount_c: r.amount_c, actor: r.actor, actorCallsign: callsignOf(r.actor) || null, at: r.at };
         if (!r.ref || (r.kind !== 'hold' && r.kind !== 'return')) return line;
         const gift = r.kind === 'hold' ? giftTo.get(r.ref, pk) as { pk: string } | undefined : undefined;
         if (gift) return { ...line, for: 'profile', person: personOf(gift.pk) };
@@ -1037,11 +1037,11 @@ function peopleOf(pk: string) {
     const trading = tradingOf(pk);
     return (db.prepare(`SELECT to_pubkey AS pk, SUM(amount_c) AS amount_c, COUNT(*) AS pieces, MIN(at) AS first_at, MAX(invite_code IS NOT NULL) AS by_invite,
             SUM(COALESCE(written_off_c, 0)) AS written_off_c FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? GROUP BY to_pubkey ORDER BY first_at DESC`).all(pk) as
-        { pk: string; amount: number; pieces: number; first_at: string; by_invite: number; written_off_c: number }[])
+        { pk: string; amount_c: number; pieces: number; first_at: string; by_invite: number; written_off_c: number }[])
         .map((r) => {
             const m = getMember(db, r.pk);
             return {
-                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount: r.amount, raised: r.pieces > 1,
+                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount: r.amount_c, raised: r.pieces > 1,
                 byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off_c,
                 vouchesForMe: pairOf(r.pk, pk).total > 0, trading: trading.get(r.pk) ?? 'none',
             };
@@ -1082,7 +1082,7 @@ export function myVouching(pk: string) {
         noLimit: owner, presets: [...vouchPresetsFor(owner)], vouchMax: vouchMaxFor(owner), budgetMax: VOUCHER_BUDGET_MAX,
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
         vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount_c) AS amount_c, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
-            GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount: number; at: string }[])
-            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount: r.amount, at: r.at })),
+            GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount_c: number; at: string }[])
+            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount: r.amount_c, at: r.at })),
     };
 }

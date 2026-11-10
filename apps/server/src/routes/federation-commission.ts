@@ -183,7 +183,7 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         // 5. THE AMOUNT. Defaults to the listing's own price, which is the normal case — a keeper pressing
         //    "commission" on a card. An explicit amount is accepted for an hourly or negotiated listing, the
         //    same latitude an ordinary purchase has, and is bounded by the allowance either way.
-        const amount = body.amount === undefined ? Number(listing.credits) : Number(body.amount);
+        const amount = body.amount_c === undefined ? Number(listing.credits) : Number(body.amount_c);
         if (!Number.isFinite(amount) || amount <= 0) {
             ctx.status = 400;
             ctx.body = { error: 'amount must be a positive number' };
@@ -244,7 +244,7 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         //    must be this link's own commission of this listing, for this amount (settlementKeyFor), or it is refused
         //    here, before the Commons tops the link up. The payer is the link, so any of its keepers may retry it.
         const keyed = settlementKeyFor(body.key, 'xc-', {
-            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount,
+            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount_c: amount,
         });
         if (!keyed.ok) {
             ctx.status = keyed.status;
@@ -296,13 +296,13 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
                 buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey: seller,
                 postId,
-                amount: funding.amount,
+                amount_c: funding.amount_c,
             });
             ctx.status = statusFor(outcome.status);
             ctx.body = {
                 ...outcome,
-                amount: funding.amount,
-                fee: funding.fee,
+                amount: funding.amount_c,
+                fee: funding.fee_c,
                 drawnFromCommons: funding.drawnFromCommons,
                 commissionedBy: link.name,
                 peer: connector.callsign ?? connector.address,

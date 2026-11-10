@@ -6,8 +6,8 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
-import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isHundredths, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
+import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -28,8 +28,6 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 const DB_PATH = path.join(DATA_DIR, 'state.db');
-const STATE_JSON_PATH = path.join(DATA_DIR, 'state.json');
-const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`);
 
 // A standby's whole copy made ready in data/staging is swapped in first (db/swap-at-boot.ts), by rename, before this
 // process opens the database, whichever module imported this one first: a rename under an open connection would leave
@@ -609,68 +607,6 @@ function bringMembersToSchemaRules(schemaSql: string): void {
     } catch (e) {
         // Nothing is changed and the marker isn't written, so the next boot tries again. A standby leaves such a value out.
         console.error('[DB] ❌ Could not bring members rows into the schema\'s rules:', e);
-    }
-}
-
-/**
- * Makes `accounts.balance_c` NOT NULL on a node whose table predates it (schema.sql), by rebuilding the table once.
- *
- * WHY (review FABLE-sec-input F1, 2026-10-01, measured). better-sqlite3 binds NaN as NULL, and the column was nullable, so
- * a NaN balance — a listing priced "abc" poisoned every buyer approved for it — was written as NULL without a word. With
- * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
- * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
- * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
- * persistCommonsBalance), so that write refuses a pot that is not a finite number itself, before it binds anything.
- *
- * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
- * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its
- * key, and the rebuild does not happen; the next boot looks again, and the conservation check fails until it is fixed
- * (engine audit.ts BROKEN_BALANCE_SQL). Idempotent: once the column is NOT NULL this reads one pragma row and returns.
- * The table is the schema's own (createTableText), so the rebuilt table is exactly a fresh install's.
- *
- * Returns what it did, for the upgrade test: 'already' (nothing to do), 'rebuilt', 'refused' (broken rows logged), or
- * 'failed' (logged; the node keeps its old table).
- */
-export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebuilt' | 'refused' | 'failed' {
-    try {
-        const col = db.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as { nn: number } | undefined;
-        if (!col || col.nn === 1) return 'already';
-        const broken = db.prepare(`SELECT public_key, balance_c, typeof(balance_c) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
-            .all() as { public_key: string; balance_c: unknown; t: string }[];
-        if (broken.length > 0) {
-            console.error('');
-            console.error('╔════════════════════════════════════════════════════════════════════════╗');
-            console.error('║ 🛑 LEDGER: ACCOUNTS WHOSE BALANCE IS NOT A NUMBER — MIGRATION STOPPED   ║');
-            console.error('╚════════════════════════════════════════════════════════════════════════╝');
-            console.error(`[DB] ${broken.length} account row(s) hold a balance that is not a finite number, so accounts.balance_c`);
-            console.error('[DB] was NOT made NOT NULL. Nothing was changed: no value is guessed for them. Work out what each');
-            console.error('[DB] should hold from its transactions, set it, and restart; this runs again at every boot.');
-            for (const r of broken.slice(0, 50)) console.error(`[DB]   ${r.public_key}  balance=${String(r.balance_c)} (${r.t})`);
-            if (broken.length > 50) console.error(`[DB]   … and ${broken.length - 50} more`);
-            return 'refused';
-        }
-        const fresh = createTableText(schemaSql, 'accounts');
-        if (!fresh || !/\bbalance\s+REAL\s+NOT\s+NULL\b/i.test(fresh)) throw new Error('schema.sql declares no accounts table with a NOT NULL balance');
-        const staged = 'accounts_balance_not_null';
-        const createStaged = fresh.replace(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?accounts["`\]]?/i, `CREATE TABLE ${staged}`);
-        const oldCols = new Set((db.prepare(`SELECT name FROM pragma_table_info('accounts')`).all() as { name: string }[]).map((c) => c.name));
-        let copied = 0;
-        db.transaction(() => {
-            db.exec(`DROP TABLE IF EXISTS ${staged}`);
-            db.exec(createStaged);
-            const cols = (db.prepare(`SELECT name FROM pragma_table_info(?)`).all(staged) as { name: string }[])
-                .map((c) => c.name).filter((c) => oldCols.has(c)).map((c) => `"${c}"`).join(', ');
-            copied = db.prepare(`INSERT INTO ${staged} (${cols}) SELECT ${cols} FROM accounts`).run().changes;
-            db.exec(`DROP TABLE accounts`);
-            db.exec(`ALTER TABLE ${staged} RENAME TO accounts`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_last_updated_at ON accounts(last_updated_at)`);
-        })();
-        console.log(`[DB] ✅ accounts.balance_c is now NOT NULL (${copied} account row(s) kept as they were)`);
-        return 'rebuilt';
-    } catch (e) {
-        // The old table stays, rows and all; the next boot tries again. Loud, because a NaN would still land as NULL.
-        console.error('[DB] ❌ Could not make accounts.balance_c NOT NULL; a balance that is not a number can still be stored as NULL:', e);
-        return 'failed';
     }
 }
 
@@ -2389,7 +2325,6 @@ export function initSchema() {
     backfillBoardStanding();
     fillPausedBoardStanding();
     bringMembersToSchemaRules(schemaSql);
-    makeAccountBalanceNotNull(schemaSql);
     indexOldConversationIds();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
@@ -2866,250 +2801,6 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
     }
 }
 
-// Function to migrate from legacy JSON state
-export function migrateLegacyState() {
-    if (!fs.existsSync(STATE_JSON_PATH)) {
-        return; // Nothing to migrate
-    }
-
-    // Check if we already migrated (e.g., db has members)
-    const countQuery = db.prepare("SELECT COUNT(*) as count FROM members").get() as { count: number };
-    if (countQuery.count > 0) {
-        console.log('📒 SQLite DB already populated. Skipping state.json migration.');
-        // Rename anyway to prevent future confusion
-        fs.renameSync(STATE_JSON_PATH, STATE_BACKUP_PATH);
-        return;
-    }
-
-    console.log('🔄 Starting migration from state.json to SQLite...');
-    const raw = fs.readFileSync(STATE_JSON_PATH, 'utf-8');
-    let state;
-    try {
-        state = JSON.parse(raw);
-    } catch (err: any) {
-        console.error('❌ Failed to parse state.json:', err.message);
-        return;
-    }
-
-    // Prepare statements
-    const insertMember = db.prepare(`
-        INSERT OR IGNORE INTO members (
-            public_key, callsign, joined_at, invited_by, invite_code, home_node_url,
-            bio, contact_value, contact_visibility, status, last_active_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertInviteCode = db.prepare(`
-        INSERT OR IGNORE INTO invite_codes (code, created_by, created_at, used_by, used_at, intended_for)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertAccount = db.prepare(`
-        INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch)
-        VALUES (?, ?, ?)
-    `);
-
-    const insertTransaction = db.prepare(`
-        INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertPost = db.prepare(`
-        INSERT OR IGNORE INTO posts (
-            id, type, category, title, description, price_c, author_pubkey, created_at,
-            active, status, repeatable, accepted_by, accepted_at, pending_transaction_id,
-            completed_at, lat, lng, origin_node
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertPostPhoto = db.prepare(`
-        INSERT OR IGNORE INTO post_photos (post_id, photo_data, order_num)
-        VALUES (?, ?, ?)
-    `);
-
-    const insertMarketplaceTx = db.prepare(`
-        INSERT OR IGNORE INTO marketplace_transactions (
-            id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertConversation = db.prepare(`
-        INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertParticipant = db.prepare(`
-        INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, last_read_at)
-        VALUES (?, ?, ?)
-    `);
-
-    const insertMessage = db.prepare(`
-        INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertFriend = db.prepare(`
-        INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at)
-        VALUES (?, ?, ?)
-    `);
-
-    const insertRating = db.prepare(`
-        INSERT OR IGNORE INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertReport = db.prepare(`
-        INSERT OR IGNORE INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertConfig = db.prepare(`
-        INSERT OR IGNORE INTO node_config (key, value)
-        VALUES (?, ?)
-    `);
-
-    // Perform the entire migration inside a transaction
-    const migrate = db.transaction(() => {
-        // 1. Members and Profiles
-        if (state.members) {
-            for (const m of state.members) {
-                const profile = state.profiles?.[m.publicKey] || {};
-                const contactValue = profile.contact?.value || null;
-                const contactVis = profile.contact?.visibility || null;
-
-                const inserted = insertMember.run(
-                    m.publicKey, m.callsign, m.joinedAt,
-                    m.invitedBy || 'genesis', m.inviteCode || 'legacy', m.homeNodeUrl || null,
-                    profile.bio || null, contactValue, contactVis,
-                    profile.status || 'active', profile.lastActiveAt || null
-                ).changes > 0;
-                if (inserted) setMemberPhoto(db, m.publicKey, profile.avatar || null);
-            }
-        }
-
-        // 2. Invite Codes
-        if (state.inviteCodes) {
-            for (const inv of state.inviteCodes) {
-                insertInviteCode.run(
-                    inv.code, inv.createdBy, inv.createdAt,
-                    inv.usedBy || null, inv.usedAt || null, inv.intendedFor || null
-                );
-            }
-        }
-
-        // 3. Accounts
-        if (state.ledgerAccounts) {
-            for (const acc of state.ledgerAccounts) {
-                insertAccount.run(acc.id, acc.balance_c, acc.lastDemurrageEpoch || 0);
-            }
-        }
-
-        // 4. Transactions
-        if (state.transactions) {
-            for (const tx of state.transactions) {
-                insertTransaction.run(tx.id, tx.from, tx.to, tx.amount, tx.memo || '', tx.timestamp);
-            }
-        }
-
-        // 5. Posts and Photos
-        if (state.posts) {
-            for (const p of state.posts) {
-                insertPost.run(
-                    p.id, p.type, p.category, p.title, p.description, p.credits || 0,
-                    p.authorPublicKey, p.createdAt,
-                    p.active ? 1 : 0, p.status || (p.active ? 'active' : 'cancelled'),
-                    p.repeatable ? 1 : 0, p.acceptedBy || null, p.acceptedAt || null,
-                    p.pendingTransactionId || null, p.completedAt || null,
-                    p.lat ?? null, p.lng ?? null, p.originNode || null
-                );
-
-                if (p.photos && Array.isArray(p.photos)) {
-                    p.photos.forEach((photoData: string, idx: number) => {
-                        insertPostPhoto.run(p.id, photoData, idx);
-                    });
-                }
-            }
-        }
-
-        // 6. Marketplace Transactions
-        if (state.marketplaceTransactions) {
-            for (const mtx of state.marketplaceTransactions) {
-                insertMarketplaceTx.run(
-                    mtx.id, mtx.postId, mtx.buyerPublicKey, mtx.sellerPublicKey,
-                    mtx.credits, mtx.status || 'pending', mtx.createdAt, mtx.completedAt || null
-                );
-            }
-        }
-
-        // 7. Conversations and Messages
-        if (state.conversations) {
-            for (const conv of state.conversations) {
-                insertConversation.run(conv.id, conv.type, conv.postId || null, conv.name || null, conv.createdBy || null, conv.createdAt);
-
-                if (conv.participants) {
-                    const uniqueParticipants = Array.from(new Set(conv.participants));
-                    for (const pubkey of uniqueParticipants) {
-                        const pk = pubkey as string;
-                        const lastRead = state.readCursors?.[pk]?.[conv.id] || null;
-                        insertParticipant.run(conv.id, pk, lastRead);
-                    }
-                }
-            }
-        }
-
-        if (state.messages) {
-            for (const msg of state.messages) {
-                insertMessage.run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce || '', msg.timestamp);
-            }
-        }
-
-        // 8. Friends
-        if (state.friends) {
-            for (const ownerPubkey of Object.keys(state.friends)) {
-                const uniqueFriends = new Map();
-                for (const friend of state.friends[ownerPubkey]) {
-                    if (!uniqueFriends.has(friend.publicKey)) {
-                        uniqueFriends.set(friend.publicKey, friend);
-                    }
-                }
-                for (const friend of uniqueFriends.values()) {
-                    insertFriend.run(ownerPubkey, friend.publicKey, friend.addedAt);
-                }
-            }
-        }
-
-        // 9. Ratings
-        if (state.ratings) {
-            for (const r of state.ratings) {
-                insertRating.run(r.id, r.targetPubkey, r.raterPubkey, r.role || 'provider', r.stars, r.comment || '', r.transactionId, r.createdAt);
-            }
-        }
-
-        // 10. Abuse Reports
-        if (state.reports) {
-            for (const r of state.reports) {
-                insertReport.run(r.id, r.reporterPubkey, r.targetPubkey, r.targetPostId || null, r.reason, r.createdAt);
-            }
-        }
-
-        // 11. Node Config
-        if (state.nodeConfig) {
-            insertConfig.run('node_config', JSON.stringify(state.nodeConfig));
-        }
-    });
-
-    try {
-        db.pragma('foreign_keys = OFF');
-        migrate();
-        console.log('✅ Successfully migrated state.json to SQLite database.');
-        fs.renameSync(STATE_JSON_PATH, STATE_BACKUP_PATH);
-        console.log(`📦 Legacy JSON renamed to ${STATE_BACKUP_PATH}`);
-    } catch (err: any) {
-        console.error('❌ Database migration failed:', err.message);
-        throw err;
-    }
-}
-
 // ==========================================
 // CROWDFUNDING PROJECTS
 // ==========================================
@@ -3157,7 +2848,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         const accBal = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance_c || 0;
         // The sum in cents, as every pledge is: SQLite's sum of REALs is not 0 where every pledge went back (0.1, 0.2 and 0.7
         // from one backer, 0.3 and 0.6 from another, leave 2.8e-17), and the update read that as pledges received. Review of #2525.
-        currentAmount = Math.max(currentAmount, Math.round(Number(txSum) * 100) / 100, accBal);
+        currentAmount = Math.max(currentAmount, (Number(txSum)), accBal);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -3180,7 +2871,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
 /**
  * A project's row as the list reads it: every column rowToProjectRow takes but `photos`, which the list never reads.
  */
-const PROJECT_LIST_COLUMNS = 'id, creator_pubkey, description, goal_amount, current_amount, deadline_at, status, created_at, enterprise_pubkey';
+const PROJECT_LIST_COLUMNS = 'id, creator_pubkey, description, goal_amount_c, current_amount_c, deadline_at, status, created_at, enterprise_pubkey';
 
 /**
  * Every project, newest first (200 at most), its `photos` the enterprise's photo as its URL (avatarUrlOf, from the row's
@@ -3309,13 +3000,13 @@ export function isOperatorSwitchedOff(memberPubkey: string): boolean {
 export const INACTIVE_MEMBER_CREATE_ERROR = word('Only active community members can create an enterprise or a project');
 
 /**
- * A goal a fresh members table holds (its CHECK: `goal_amount IS NULL OR goal_amount >= 0`): none, or a finite number of
- * Beans, 0 or more. Asked by every writer of a goal, because a node whose table got the column from an ALTER has no such
+ * A goal a fresh members table holds (its CHECK: `goal_amount_c IS NULL OR goal_amount_c >= 0`): none, or whole hundredths of
+ * a Bean, 0 or more. Asked by every writer of a goal, because a node whose table got the column from an ALTER has no such
  * CHECK, and a goal below 0 there is one its standby's table refuses (bringMembersToSchemaRules).
  */
 export const GOAL_AMOUNT_ERROR = word('The goal must be a number of Beans, 0 or more');
 export function isAcceptableGoal(goal: number | null): boolean {
-    return goal === null || (Number.isFinite(goal) && goal >= 0);
+    return goal === null || (isHundredths(goal) && goal >= 0);
 }
 
 /** Is this member's account active? Missing rows and every other status (disabled, suspended, pruned) are not. */
@@ -3509,7 +3200,7 @@ export function updateCrowdfundProject(
     assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     // In cents, as pledgeToProject reads a goal: a float residue where every pledge went back is no pledge received.
-    if (Math.round(Number(project.current_amount_c) * 100) > 0 && Number(goal_amount) !== project.goal_amount_c) {
+    if (Number(project.current_amount_c) > 0 && Number(goal_amount) !== project.goal_amount_c) {
         throw new Error("Cannot change funding goal after receiving pledges");
     }
 
@@ -3569,10 +3260,8 @@ export function updateCrowdfundProject(
     }
 }
 
-/** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
+/** What a member's money door says to an amount that is not whole hundredths above 0 (a pledge, a send, a payment to the Commons). */
 export const WHOLE_CENTS_ERROR = word('The amount is a number of Beans above 0, to the cent.');
-/** At least a cent, in whole cents (@beanpool/core ledger.ts): the apps check the same before they send. */
-export { isWholeCents };
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
@@ -3580,8 +3269,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
-    // To the cent, as a payment to the Commons is (state-engine.ts payToCommons). Before anything moves: a refusal in words.
-    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
+    // Whole hundredths, as a payment to the Commons is (state-engine.ts payToCommons). Before anything moves: a refusal in words.
+    if (!isHundredths(amount)) throw new Error(WHOLE_CENTS_ERROR);
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
@@ -3675,7 +3364,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
 
         const updatedProject = db.prepare(`SELECT current_amount_c, goal_amount_c FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
         // In cents: SQLite sums REALs, and 0.70 + 0.10 + 0.10 + 0.10 is 0.9999999999999999, short of a goal of 1.
-        if (updatedProject && Math.round(updatedProject.current_amount_c * 100) >= Math.round(updatedProject.goal_amount_c * 100) && project.status === 'ACTIVE') {
+        if (updatedProject && updatedProject.current_amount_c >= updatedProject.goal_amount_c && project.status === 'ACTIVE') {
             db.prepare(`UPDATE projects SET status = 'FUNDED' WHERE id = ?`).run(projectId);
             db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 
@@ -3736,7 +3425,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
 
     // Guard against non-zero account balance to maintain ledger conservation
     const account = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
-    if (account && Math.abs(account.balance_c) > 0.0001) {
+    if (account && account.balance_c !== 0) {
         throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance_c}). Drain or sweep funds first.`);
     }
 
@@ -3749,14 +3438,14 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // unmoved). Decided here, before anything moves.
     const escrowPubkey = `escrow_${projectId}`;
     const pledges = project.status === 'ACTIVE'
-        ? db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[]
+        ? db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount_c: number, id: string }[]
         : [];
     const ledger = projectCancelLedger;
     if (pledges.length > 0 && !ledger) throw new Error('Cannot refund the backers: the ledger is not running');
     const refunds: typeof pledges = [];
     const toCommons = new Map<string, number>();
     for (const pledge of pledges) {
-        if (ledger?.isClosedAccount(pledge.from_pubkey)) toCommons.set(pledge.from_pubkey, (toCommons.get(pledge.from_pubkey) ?? 0) + pledge.amount);
+        if (ledger?.isClosedAccount(pledge.from_pubkey)) toCommons.set(pledge.from_pubkey, (toCommons.get(pledge.from_pubkey) ?? 0) + pledge.amount_c);
         else refunds.push(pledge);
     }
     // That move needs Beans switched on (config/node-profile.ts), as the return's does: refused before anything moves.
@@ -3780,15 +3469,15 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             let totalRefunded = 0;
             for (const pledge of refunds) {
                 // Return Beans to Backer
-                db.prepare(`UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
+                db.prepare(`UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount_c, pledge.from_pubkey);
 
                 // Record the localized Refund Transaction
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`refund_${pledge.id}`, escrowPubkey, pledge.from_pubkey, pledge.amount, 'Escrow Refund: Project Deleted', projectId);
+                `).run(`refund_${pledge.id}`, escrowPubkey, pledge.from_pubkey, pledge.amount_c, 'Escrow Refund: Project Deleted', projectId);
 
-                totalRefunded += pledge.amount;
+                totalRefunded += pledge.amount_c;
             }
 
             // Drain the escrow account to reconcile the economy symmetrically
@@ -3800,14 +3489,14 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
 
         const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
-        if (acc && Math.abs(acc.balance_c) > 1e-9) {
+        if (acc && acc.balance_c !== 0) {
             throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance_c} Beans). Sweep or refund funds first.`);
         }
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance_c) < 0.0001`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND balance_c = 0`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         try {
             const cpRow = db.prepare("SELECT value FROM node_config WHERE key = 'commons_projects'").get() as any;

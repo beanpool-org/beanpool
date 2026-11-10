@@ -57,9 +57,9 @@ export interface SettlementRow {
     /** Inbound: the local member we pay when the receipt lands. Outbound: the peer's seller, informational. */
     sellerPubkey: string | null;
     postId: string | null;
-    amount: number;
+    amount_c: number;
     /** Outbound only: the fee charged to the buyer on top of `amount` (§2.1). Refunded on reversal. */
-    fee: number;
+    fee_c: number;
     /** Inbound only: ISO timestamp at which the cap reservation lapses. */
     reservedUntil: string | null;
     state: SettlementState;
@@ -79,8 +79,8 @@ const rowToSettlement = (r: any): SettlementRow => ({
     buyerHomeNode: r.buyer_home_node ?? null,
     sellerPubkey: r.seller_pubkey ?? null,
     postId: r.post_id ?? null,
-    amount: r.amount,
-    fee: r.fee ?? 0,
+    amount_c: r.amount_c,
+    fee_c: r.fee_c ?? 0,
     reservedUntil: r.reserved_until ?? null,
     state: r.state,
     receipt: r.receipt ?? null,
@@ -135,8 +135,8 @@ export function claimSettlement(input: {
     buyerHomeNode?: string | null;
     sellerPubkey?: string | null;
     postId?: string | null;
-    amount: number;
-    fee?: number;
+    amount_c: number;
+    fee_c?: number;
     reservedUntil?: string | null;
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
 }): { row: SettlementRow; created: boolean } {
@@ -152,7 +152,7 @@ export function claimSettlement(input: {
     `).run(
         input.key, input.direction, input.peerId, input.buyerPubkey,
         input.buyerHomeNode ?? null, input.sellerPubkey ?? null, input.postId ?? null,
-        input.amount, input.fee ?? 0, input.reservedUntil ?? null, input.state,
+        input.amount_c, input.fee_c ?? 0, input.reservedUntil ?? null, input.state,
     );
 
     const row = getSettlement(input.key)!;
@@ -172,7 +172,7 @@ export function claimSettlement(input: {
         // old row — an avoidable mismatch and reversal. `fee` and `buyerHomeNode` are deliberately excluded:
         // fee is derived from amount, and buyerHomeNode is informational rather than trade-defining.
         && (row.postId ?? null) === (input.postId ?? null)
-        && row.amount === input.amount;
+        && row.amount_c === input.amount_c;
     if (!same) {
         throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
     }

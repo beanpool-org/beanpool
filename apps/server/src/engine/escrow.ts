@@ -43,7 +43,8 @@ export interface EscrowCallbacks {
     ensureTransactionConversation: EnsureConvFn;
     injectSystemMessage: SystemMsgFn;
     dispatchPushNotification: PushFn;
-    getBalance: (publicKey: string) => any;
+    /** The balance answer (state-engine.ts BalanceAnswer): every money field whole hundredths, `*_c`. */
+    getBalance: (publicKey: string) => { balance_c: number; floor_c: number; usableFloor_c: number };
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
     canOperateTreasury: (operator: string, treasury: string) => boolean;
@@ -456,7 +457,7 @@ export function requestPost(
     // #143 step 4 fallout: a PULLED listing is on this board but belongs to a peer. Raw row here, so the
     // column name rather than the mapped field. The payee is the other side of the same swap as the payer.
     assertTradableHere({ originNode: post.origin_node }, isOffer ? post.author_pubkey : requesterPublicKey);
-    const { balance, floor, usableFloor: uFloor } = cb.getBalance(payerPubkey);
+    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(payerPubkey);
     if (balance - finalCredits < floor) throw new Error(word('Insufficient balance to request this post.'));
     if (balance - finalCredits < uFloor) throw cb.floorLockedError(payerPubkey, balance - finalCredits);
 
@@ -534,7 +535,7 @@ function assertHoldFunded(cb: EscrowCallbacks, p: HoldParties, amount: number, o
     insufficient: string;
     claim: { postId: string; transactionId?: string } | null;
 }): void {
-    const { balance, floor, usableFloor: uFloor } = cb.getBalance(p.payer);
+    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(p.payer);
     if (p.isPayeeKeeper) {
         const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(p.payer) as any;
         const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
@@ -577,7 +578,7 @@ export interface HoldOpening {
     txId: string;
     postId: string;
     parties: HoldParties;
-    amount: number;
+    amount_c: number;
     hours?: number | null;
     memo: string;
     /** The ledger row's auth columns (an enterprise's keeper). */
@@ -614,7 +615,7 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
 
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${h.txId}`);
 
-    const escrowResult = cb.transfer(h.parties.payer, `escrow_${h.txId}`, h.amount, h.memo, 'escrow', true, h.auth);
+    const escrowResult = cb.transfer(h.parties.payer, `escrow_${h.txId}`, h.amount_c, h.memo, 'escrow', true, h.auth);
     if (!escrowResult) {
         throw short(new Error(h.row === 'approve'
             ? word('Failed to lock funds in escrow')
@@ -623,12 +624,12 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
 
     if (h.parties.isPayeeKeeper) {
         db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
-            .run(h.amount, h.parties.payer);
+            .run(h.amount_c, h.parties.payer);
     }
 
     if (h.row === 'insert') {
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
-            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount, h.hours ?? null, h.createdAt);
+            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount_c, h.hours ?? null, h.createdAt);
     }
 }
 
@@ -639,7 +640,7 @@ export interface StandingPayment {
     parties: HoldParties;
     standingId: string;
     periodNo: number;
-    amount: number;
+    amount_c: number;
     memo: string;
     /** The ledger row's auth columns: the authorisation's signer and `standing:<id>:<n>`. */
     auth: { signer: string; payload: string };
@@ -663,12 +664,12 @@ export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { re
     if (p.row === 'approve') {
         // The helper's request becomes period 1, paid now; when they asked (created_at) stays as it was.
         const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, amount_c=?, hours=NULL, standing_id=?, period_no=?
-                                WHERE id=? AND status='requested'`).run(p.paidAt, p.amount, p.standingId, p.periodNo, p.txId);
+                                WHERE id=? AND status='requested'`).run(p.paidAt, p.amount_c, p.standingId, p.periodNo, p.txId);
         if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
     } else {
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, standing_id, period_no)
                     VALUES (?, ?, ?, ?, ?, NULL, 'completed', ?, ?, ?, ?)`)
-            .run(p.txId, p.postId, p.parties.payer, p.parties.payee, p.amount, p.paidAt, p.paidAt, p.standingId, p.periodNo);
+            .run(p.txId, p.postId, p.parties.payer, p.parties.payee, p.amount_c, p.paidAt, p.paidAt, p.standingId, p.periodNo);
     }
     if (p.takeListing) {
         // A one-off listing stays off the board under the standing deal's latest period (design §3): taken at the first,
@@ -680,9 +681,9 @@ export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { re
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
             .run(p.postId, p.txId);
     }
-    const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount, p.memo, 'escrow', false, p.auth);
+    const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount_c, p.memo, 'escrow', false, p.auth);
     if (!releaseResult) throw short(new Error(word('Insufficient balance to accept this offer')));
-    return { releaseResult, releaseCredits: p.amount };
+    return { releaseResult, releaseCredits: p.amount_c };
 }
 
 /** A request's deal as approvePostRequest's checks read it: a requested row, or a standing deal's next period on a Need. */
@@ -857,7 +858,7 @@ export function approvePostRequest(
             txId: row.id,
             postId: post.id,
             parties,
-            amount: deal.amount_c,
+            amount_c: deal.amount_c,
             memo: `Escrow hold for approved deal ${row.post_id}`,
             // Only attribute authSigner when the debited account is the enterprise itself (Need listings).
             auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
@@ -873,7 +874,7 @@ export function approvePostRequest(
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
-            amount: deal.amount_c,
+            amount_c: deal.amount_c,
             postId: post.id,
             transactionId: row.id,
             actorPubkey: authorPublicKey,
@@ -984,7 +985,7 @@ export function offerHoldChecks(
     buyerPublicKey: string,
     price: () => number,
     opts: { authSigner?: string; scheduled?: { standingId: string }; standing?: boolean },
-): HoldParties & { amount: number; buyerCallsign?: string } {
+): HoldParties & { amount_c: number; buyerCallsign?: string } {
     assertNoDealOnCopy(post.shownFromHost);
     // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
     // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and
@@ -1093,7 +1094,7 @@ export function offerHoldChecks(
         insufficient: word('Insufficient balance to accept this offer'),
         claim: opts.scheduled ? null : { postId: post.id },
     });
-    return { ...parties, amount: finalCredits, buyerCallsign: buyerMember?.callsign };
+    return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };
 }
 
 /** The standing deal still running (any phase but ended) that `payer` has on a listing: its current period's row, or its id. */
@@ -1141,7 +1142,7 @@ export function acceptPost(
         keptHours = post.priceType !== 'fixed' ? hours : undefined;
         return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     }, { authSigner: opts?.authSigner, standing: !!standing });
-    const finalCredits = parties.amount;
+    const finalCredits = parties.amount_c;
     if (standing) {
         cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
         return startStanding(cb, standing, { txId: crypto.randomUUID(), row: 'insert', post, parties: { ...parties, oneAtATime: !post.repeatable }, actor: buyerPublicKey });
@@ -1168,7 +1169,7 @@ export function acceptPost(
             txId: tx.id,
             postId: post.id,
             parties,
-            amount: finalCredits,
+            amount_c: finalCredits,
             hours: keptHours,
             memo: `Escrow hold for offer ${post.id}`,
             auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
@@ -1184,7 +1185,7 @@ export function acceptPost(
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
-            amount: finalCredits,
+            amount_c: finalCredits,
             postId: post.id,
             transactionId: tx.id,
             actorPubkey: buyerPublicKey,
@@ -1318,12 +1319,12 @@ export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released:
         console.warn('[ActivityFeed] Could not record trade_completed:', e);
     }
 
-    const netPayout = releaseCredits - (releaseResult?.taxFee ?? 0);
+    const netPayout = releaseCredits - (releaseResult?.fee_c ?? 0);
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_RELEASED, {
-            amount: netPayout,
-            grossAmount: releaseCredits,
-            fee: releaseResult?.taxFee ?? 0,
+            amount_c: netPayout,
+            grossAmount_c: releaseCredits,
+            fee_c: releaseResult?.fee_c ?? 0,
             postId: row.post_id,
             transactionId: row.id,
             actorPubkey: actor,
@@ -1482,7 +1483,7 @@ export function completePostTransaction(
                         db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
                             .get(row.buyer_pubkey, row.seller_pubkey)
                     );
-                    const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
+                    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(row.buyer_pubkey);
                     if (isPayeeKeeper) {
                         const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
                         const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
@@ -1588,7 +1589,7 @@ export function cancelPostTransaction(
 
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
-            amount: row.amount_c,
+            amount_c: row.amount_c,
             postId: row.post_id,
             transactionId: row.id,
             actorPubkey: cancellerPublicKey,
@@ -1880,7 +1881,7 @@ export function resolveEscrowDispute(
             postId: row.post_id,
             transactionId: row.id,
             resolution: action,
-            amount: row.amount_c,
+            amount_c: row.amount_c,
             resolvedByName: resolverName,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,

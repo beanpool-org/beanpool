@@ -133,11 +133,11 @@ export type CommissionRefusal =
     | { ok: false; reason: 'commons_not_a_number'; shortfall: number; message: string };
 
 export type CommissionFunding =
-    | { ok: true; total: number; amount: number; fee: number; drawnFromCommons: number; capacity: CommissionCapacity }
+    | { ok: true; total: number; amount_c: number; fee_c: number; drawnFromCommons: number; capacity: CommissionCapacity }
     | CommissionRefusal;
 
 export type CommissionAllowance =
-    | { ok: true; total: number; amount: number; fee: number; capacity: CommissionCapacity }
+    | { ok: true; total: number; amount_c: number; fee_c: number; capacity: CommissionCapacity }
     | CommissionRefusal;
 
 /**
@@ -174,7 +174,7 @@ export function checkCommissionAllowance(peerId: string, amount: number): Commis
                 : `That is more than ${link.name} can commission right now (${total} needed, ${capacity.allowance} available — ${capacity.redeemable} of credit owed to us plus a ceiling of ${capacity.ceiling}).`,
         };
     }
-    return { ok: true, total, amount: amount, fee, capacity };
+    return { ok: true, total, amount_c: amount, fee_c: fee, capacity };
 }
 
 const noLink = (): CommissionRefusal => ({
@@ -210,7 +210,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
     // this is where the allowance has to hold. Between the two calls a settlement could have moved the tab.
     const allowed = checkCommissionAllowance(peerId, amount);
     if (!allowed.ok) return allowed;
-    const { total, fee, capacity } = allowed;
+    const { total, fee_c: fee, capacity } = allowed;
 
     // What the enterprise still needs on top of what it already holds.
     const shortfall = (Math.max(0, total - link.treasuryBalance));
@@ -261,7 +261,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
     logger.info('P2P', `[Commission] ${link.name}: funding ${total} (${drawnFromCommons} from the Commons, `
         + `${(total - drawnFromCommons)} already held) — tab ${capacity.energyBalance}, ceiling ${capacity.ceiling}`);
 
-    return { ok: true, total, amount: amount, fee, drawnFromCommons, capacity };
+    return { ok: true, total, amount_c: amount, fee_c: fee, drawnFromCommons, capacity };
 }
 
 /**

@@ -169,10 +169,10 @@ export function insertStandingDeal(v: CheckedStandingStart, txId: string): void 
 }
 
 /** The first period's payment as the take-up makes it: what escrow.ts payStandingPeriod needs from a checked start. */
-export function firstPeriodOf(v: CheckedStandingStart, title: string): { periodNo: number; amount: number; memo: string; auth: { signer: string; payload: string } } {
+export function firstPeriodOf(v: CheckedStandingStart, title: string): { periodNo: number; amount_c: number; memo: string; auth: { signer: string; payload: string } } {
     return {
         periodNo: 1,
-        amount: v.auth.beansPerPeriod_c,
+        amount_c: v.auth.beansPerPeriod_c,
         memo: standingLines.memo(v.auth.unit, title, 1),
         auth: { signer: v.signer, payload: standingPaymentPayload(v.auth.standingId, 1) },
     };
@@ -519,7 +519,7 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
                                       WHERE id = ? AND phase = ? AND periods_done = ?`).run(txId, nextDue, sd.id, sd.phase, sd.periods_done);
             if (moved.changes !== 1) throw new Error('the standing deal moved on since it was read');
             paid = payStandingPeriod(hooks, {
-                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount: sd.beans_per_period_c,
+                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount_c: sd.beans_per_period_c,
                 memo: standingLines.memo(sd.period_unit, title, n),
                 auth: { signer: sd.auth_signer, payload: standingPaymentPayload(sd.id, n) },
                 row: 'insert', paidAt, takeListing: parties.oneAtATime,

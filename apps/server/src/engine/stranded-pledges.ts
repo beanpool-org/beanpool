@@ -47,7 +47,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 /** What one backer gets back: the sum of their stranded pledges, net of anything already sent back to them. */
 export interface StrandedPledgeReturn {
     backer: string;
-    amount: number;
+    amount_c: number;
     /** The pledge rows (transactions.id) this amount is made of. */
     pledgeIds: string[];
 }
@@ -185,23 +185,23 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
             if (r.project_id !== projectId || isSyntheticAccount(r.from_pubkey)) {
                 return stop(`transaction ${r.id} put Beans into it that are not a member's pledge to this project`);
             }
-            const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount: 0, pledgeIds: [] };
-            o.amount += Number(r.amount_c) - Number(r.fee_c || 0);
+            const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount_c: 0, pledgeIds: [] as string[] };
+            o.amount_c += Number(r.amount_c) - Number(r.fee_c || 0);
             o.pledgeIds.push(r.id);
             owed.set(r.from_pubkey, o);
         } else {
             const o = owed.get(r.to_pubkey);
             if (!o) return stop(`transaction ${r.id} paid Beans out of it to someone who had not pledged since it last stood at 0`);
-            o.amount -= Number(r.amount_c);
+            o.amount_c -= Number(r.amount_c);
         }
     }
 
     const returns: StrandedPledgeReturn[] = [];
     for (const o of owed.values()) {
-        if (o.amount < 0) return stop(`more went back to ${o.backer} than they pledged`);
-        if (o.amount > 0) returns.push(o);
+        if (o.amount_c < 0) return stop(`more went back to ${o.backer} than they pledged`);
+        if (o.amount_c > 0) returns.push(o);
     }
-    const total = returns.reduce((s, o) => s + o.amount, 0);
+    const total = returns.reduce((s, o) => s + o.amount_c, 0);
     if (returns.length === 0 || !near(total, held)) {
         return stop(`the pledges since it last stood at 0 come to ${total}, but it holds ${held}`);
     }
@@ -239,16 +239,16 @@ export function returnStrandedPledges(ledger: StrandedPledgeLedger): { returned:
         try {
             ledger.conservingTransaction(() => {
                 for (const o of s.returns) {
-                    const txn = ledger.transfer(s.escrow, o.backer, o.amount, memo, 'escrow', true);
-                    if (!txn) throw new Error(`the ledger refused to return ${o.amount} to ${o.backer}`);
+                    const txn = ledger.transfer(s.escrow, o.backer, o.amount_c, memo, 'escrow', true);
+                    if (!txn) throw new Error(`the ledger refused to return ${o.amount_c} to ${o.backer}`);
                     // The row names the project, as the delete path's refunds do: the project's history shows it went back.
                     db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
                 }
-                const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
+                const total = s.returns.reduce((sum, o) => sum + o.amount_c, 0);
                 db.prepare('UPDATE projects SET current_amount_c = MAX(0, current_amount_c - ?) WHERE id = ?').run(total, s.projectId);
             });
             returned++;
-            const lines = s.returns.map((o) => `${o.amount} to ${o.backer} (${o.pledgeIds.join(', ')})`).join('; ');
+            const lines = s.returns.map((o) => `${o.amount_c} to ${o.backer} (${o.pledgeIds.join(', ')})`).join('; ');
             console.log(`[Pledges] Returned the pledges stranded in ${s.escrow} (project "${s.title}", ${s.status}): ${lines}.`);
         } catch (e: any) {
             left++;

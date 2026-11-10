@@ -1623,9 +1623,9 @@ function replaceTreasuryOperators(rows: unknown[]): { changes: number; skipped: 
         if (!r || !text(r.treasuryPubkey) || !text(r.memberPubkey) || !text(r.role)) { skipped++; continue; }
         const key = `${r.treasuryPubkey}|${r.memberPubkey}`;
         named.add(key);
-        const row = [r.role, orNull(r.grantedAt, text), orNull(r.grantedBy, text), orNull(r.backing, isNumber), orNull(r.autoPromotedAt, text)] as const;
+        const row = [r.role, orNull(r.grantedAt, text), orNull(r.grantedBy, text), orNull(r.backing_c, isNumber), orNull(r.autoPromotedAt, text)] as const;
         const mine = here.get(key);
-        if (mine && mine.role === row[0] && mine.granted_at === row[1] && mine.granted_by === row[2] && mine.backing === row[3] && mine.auto_promoted_at === row[4]) continue;
+        if (mine && mine.role === row[0] && mine.granted_at === row[1] && mine.granted_by === row[2] && mine.backing_c === row[3] && mine.auto_promoted_at === row[4]) continue;
         upsert.run(r.treasuryPubkey, r.memberPubkey, ...row);
         changes++;
     }
@@ -1660,13 +1660,13 @@ function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: num
     const named = new Set<string>();
     for (const raw of rows) {
         const r = raw as Record<string, unknown> | null;
-        if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || typeof r.amount !== 'number' || !(r.amount > 0) || !Number.isFinite(r.amount)
+        if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || typeof r.amount_c !== 'number' || !(r.amount_c > 0) || !Number.isFinite(r.amount_c)
             || (r.pledgedAt !== null && !text(r.pledgedAt)) || (r.releasedAt !== null && !text(r.releasedAt))) {
             skipped++;
             continue;
         }
         named.add(r.id);
-        changes += upsert.run(r.id, r.keeper, r.enterprise, r.amount, r.pledgedAt, r.releasedAt).changes;
+        changes += upsert.run(r.id, r.keeper, r.enterprise, r.amount_c, r.pledgedAt, r.releasedAt).changes;
     }
     if (whole) {
         const drop = db.prepare('DELETE FROM enterprise_pledges WHERE id = ?');

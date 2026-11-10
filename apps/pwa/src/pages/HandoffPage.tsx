@@ -119,7 +119,11 @@ export function HandoffPage({ handoff, onOpen, onJoin, onMember }: {
         if (!status.ok || status.value.status !== 'approved') {
             answer('refused');
             const unreachable = !status.ok && status.kind === 'unreachable';
-            setView({ kind: 'refused', sentence: unreachable ? t(KNOCK_MESSAGES.unreachable) : t('This account has no yes here.') });
+            // The version gate's own line (knock.ts): a server older than this app talks to, or one whose version couldn't be read.
+            const gateLine = status.ok ? null
+                : status.kind === 'refused' ? (status.code === 'node_too_old' ? status.message : null)
+                : status.kind === 'unreachable' && status.message !== t(KNOCK_MESSAGES.unreachable) ? status.message : null;
+            setView({ kind: 'refused', sentence: gateLine ?? (unreachable ? t(KNOCK_MESSAGES.unreachable) : t('This account has no yes here.')) });
             return;
         }
         let held: BeanPoolIdentity | null;

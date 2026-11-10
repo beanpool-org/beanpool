@@ -135,7 +135,8 @@ Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and 
 
 - Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button, whoever may invite. A moderator cannot.
 - If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: "This community doesn’t use invites".
-- In the community's invite tree, an invite made in Settings comes from the community's founding account, not from you: on an older server the member called Admin, on a new one the built-in BeanPool account. The server also records which owner or admin made it (or "the admin password"), in its security log.
+- Made from the app's Manage button (your own key), the invite comes from you: in the invite tree whoever joins with it is under you, and their profile says **Invited by** and your name, with **owner** or **admin** beside it. Made with the admin password, no one person is known: it comes from the community's founding account (on an older server the member called Admin, on a new one the built-in BeanPool account), and the profile of whoever joins with it says **Invited with an owner’s invite card**. Invites made before this version stay where they were made: one an admin made with their key on an older server sits under the founding account and names it. The server also records which owner or admin made each one (or "the admin password"), in its security log.
+- A member can turn off **Show who invited me to other members** in their Settings. Other members then don't see who invited them, on their profile or in the invite tree; owners, admins and the person who invited them still do. On anyone's profile, owners and admins also see **Brought in** and a number, the people that member invited.
 
 ![The Invites and QR screen in Settings](images/people-invites.webp)
 

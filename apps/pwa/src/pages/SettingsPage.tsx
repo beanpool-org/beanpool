@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -16,7 +16,7 @@ import {
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, WEB_VAULT_COPY_LINE, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
-    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, getProfilePrivacy, setProfilePrivacy, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
@@ -305,6 +305,34 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             .catch(() => { });
         return () => { cancelled = true; };
     }, [identity.publicKey]);
+
+    // "Show who invited me to other members" (I3; server members.inviter_shown): on unless turned off, served to you alone.
+    // null until the node says; where invites are off nobody was invited, so it isn't asked and the row isn't shown.
+    const [inviterShown, setInviterShown] = useState<boolean | null>(null);
+    const [inviterShownError, setInviterShownError] = useState<string | null>(null);
+    const invitesHere = communityInfo?.features?.invites !== false;
+    useEffect(() => {
+        let cancelled = false;
+        setInviterShown(null);
+        if (!invitesHere) return;
+        getProfilePrivacy()
+            .then(body => { if (!cancelled && typeof body?.inviterShown === 'boolean') setInviterShown(body.inviterShown); })
+            .catch(() => { });
+        return () => { cancelled = true; };
+    }, [identity.publicKey, invitesHere]);
+
+    const handleToggleInviterShown = async () => {
+        if (inviterShown === null) return;
+        const next = !inviterShown;
+        setInviterShown(next);
+        setInviterShownError(null);
+        try {
+            await setProfilePrivacy(next);
+        } catch (e: any) {
+            setInviterShown(!next);
+            setInviterShownError(e?.message || t('Your community could not save that. Try again.'));
+        }
+    };
 
     const handleToggleShowAsConnection = async () => {
         if (showAsConnection === null) return;
@@ -1232,6 +1260,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             checked={showAsConnection}
                                             onChange={handleToggleShowAsConnection}
                                             label={t('Show me as a connection in common')}
+                                            activeBgClass="bg-accent border-accent"
+                                            inactiveBgClass="bg-bg-hover border-border-primary"
+                                        />
+                                    </div>
+                                )}
+                                {inviterShown !== null && (
+                                    <div className="p-4 flex items-center justify-between gap-3" data-testid="show-inviter">
+                                        <span className="min-w-0">
+                                            <span className="block text-text-primary font-bold text-[15px]">🌱 <>{showInviterSwitchWords().label}</></span>
+                                            <span className="block text-text-muted text-[12px] mt-0.5">{showInviterSwitchWords().hint}</span>
+                                            {inviterShownError && <span role="alert" className="block text-text-primary text-[12px] mt-1 font-semibold">{inviterShownError}</span>}
+                                        </span>
+                                        <ToggleSwitch
+                                            checked={inviterShown}
+                                            onChange={handleToggleInviterShown}
+                                            label={showInviterSwitchWords().label}
                                             activeBgClass="bg-accent border-accent"
                                             inactiveBgClass="bg-bg-hover border-border-primary"
                                         />

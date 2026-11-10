@@ -5276,11 +5276,6 @@
     "other": "👥 {n}টি পারস্পরিক পরিচিতি"
   },
   "Ask about them ›": "তাদের সম্পর্কে জিজ্ঞাসা করুন ›",
-  "{tier} tier · tap to reach out": "{tier} স্তর · যোগাযোগ করতে ট্যাপ করুন",
-  "Founding member": "প্রতিষ্ঠাতা সদস্য",
-  "Invited directly by the system admin": "সিস্টেম অ্যাডমিন কর্তৃক সরাসরি আমন্ত্রিত",
-  "Here since the community began": "কমিউনিটির শুরু থেকেই আছেন",
-  "Vetted by the admin at sign-up": "সাইন-আপের সময় অ্যাডমিন দ্বারা যাচাইকৃত",
   "{n} trust points|{n} trust points": {
     "one": "{n} আস্থা পয়েন্ট",
     "other": "{n} আস্থা পয়েন্ট"
@@ -6975,7 +6970,6 @@
   "Could not vouch": "নিশ্চয়তা দেওয়া যায়নি",
   "Offline": "অফলাইন",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "আমন্ত্রণ লিঙ্কগুলো একক ব্যবহারের জন্য এবং 30 দিনের জন্য বৈধ। আপনি অফলাইনে থাকলে এর পরিবর্তে একটি অফলাইন টিকিট তৈরি করা হবে।",
-  "🌱 Invited by {name}": "🌱 {name} কর্তৃক আমন্ত্রিত",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "আপনি ইতিমধ্যে @{name}-এর জন্য {prior} শিম নিশ্চয়তা দিয়েছেন। আপনি এটি {max} শিম পর্যন্ত বাড়াতে পারেন।",
   "Raised vouch for @{name} to {total} Beans.": "@{name}-এর জন্য নিশ্চয়তা বাড়িয়ে {total} শিম করা হয়েছে।",
   "Could not vouch.": "নিশ্চয়তা দেওয়া যায়নি।",

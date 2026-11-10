@@ -5277,11 +5277,6 @@
     "other": "👥 {n} κοινές συνδέσεις"
   },
   "Ask about them ›": "Ρώτησε για αυτούς ›",
-  "{tier} tier · tap to reach out": "Επίπεδο {tier} · πάτα για επικοινωνία",
-  "Founding member": "Ιδρυτικό μέλος",
-  "Invited directly by the system admin": "Προσκλήθηκε απευθείας από τον διαχειριστή συστήματος",
-  "Here since the community began": "Εδώ από την ίδρυση της κοινότητας",
-  "Vetted by the admin at sign-up": "Ελέγχθηκε από τον διαχειριστή κατά την εγγραφή",
   "{n} trust points|{n} trust points": {
     "one": "{n} πόντος εμπιστοσύνης",
     "other": "{n} πόντοι εμπιστοσύνης"
@@ -6975,7 +6970,6 @@
   "Your budget to vouch from": "Ο προϋπολογισμός σας για παροχή εγγυήσεων",
   "{left} of {total} left": "απομένουν {left} από {total}",
   "✓ Given!": "✓ Δόθηκε!",
-  "🌱 Invited by {name}": "🌱 Προσκλήθηκε από {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} πίσω, ο προϋπολογισμός διακόπηκε, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} πίσω, η πρόσκληση έληξε, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} πίσω, η εγγύηση δεν ολοκληρώθηκε, {date}",

@@ -1519,6 +1519,7 @@ export function App() {
                             identity={identity}
                             pubkey={openProfilePubkey}
                             onBack={() => setOpenProfilePubkey(null)}
+                            onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                             onOpenTreasury={(pubkey) => {
                                 setOpenProfilePubkey(null);
                                 setOpenTreasuryPubkey(pubkey);

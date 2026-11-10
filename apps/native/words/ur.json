@@ -5277,11 +5277,6 @@
     "other": "👥 {n} مشترکہ رابطے"
   },
   "Ask about them ›": "ان کے بارے میں پوچھیں ›",
-  "{tier} tier · tap to reach out": "{tier} درجہ · رابطہ کرنے کے لیے ٹیپ کریں",
-  "Founding member": "بانی رکن",
-  "Invited directly by the system admin": "سسٹم ایڈمن کی طرف سے براہ راست مدعو",
-  "Here since the community began": "کمیونٹی کے آغاز سے یہیں موجود ہیں",
-  "Vetted by the admin at sign-up": "سائن اپ پر ایڈمن کی طرف سے جانچ پڑتال شدہ",
   "{n} trust points|{n} trust points": {
     "one": "{n} ٹرسٹ پوائنٹ",
     "other": "{n} ٹرسٹ پوائنٹس"
@@ -6975,7 +6970,6 @@
   "Could not vouch": "تصدیق نہیں ہو سکی",
   "Offline": "آف لائن",
   "Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.": "دعوت کے لنکس ایک بار استعمال کے لیے ہیں اور 30 دنوں کے لیے درست ہیں۔ اگر آپ آف لائن ہیں تو اس کے بجائے ایک آف لائن ٹکٹ بنایا جائے گا۔",
-  "🌱 Invited by {name}": "🌱 {name} کی طرف سے مدعو",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "آپ پہلے ہی @{name} کے لیے {prior} پھلیاں کی تصدیق کر چکے ہیں۔ آپ اسے زیادہ سے زیادہ {max} پھلیاں تک بڑھا سکتے ہیں۔",
   "Raised vouch for @{name} to {total} Beans.": "@{name} کے لیے تصدیق بڑھا کر {total} پھلیاں کر دی گئی۔",
   "Could not vouch.": "تصدیق نہیں ہو سکی۔",

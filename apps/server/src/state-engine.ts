@@ -2733,12 +2733,20 @@ export interface ViewerTrustProfile {
     mutualCount: number; // mutualConnections.length: the same four-way rule, never a one-way count
     priorTradesWithViewer: number;
     vouchedInBy: {
-        kind: 'member' | 'admin' | 'founder';
+        kind: 'member' | 'founder' | 'card';
         publicKey: string | null; // set only for kind 'member'
         callsign: string | null;  // set only for kind 'member'
         avatarUrl: string | null;
         tier: string | null;
+        role: 'owner' | 'admin' | null; // the inviter's node role now, for kind 'member'; null otherwise
     } | null;
+    /**
+     * How many people this member brought in (members whose invited_by is this member: the first level of GET
+     * /api/invite/tree?root=), for an owner or admin of this node and for the member themself; absent for anyone else.
+     */
+    broughtIn?: number;
+    /** The member's own "Show who invited me to other members" switch, to the member themself only. */
+    inviterShown?: boolean;
     risk: TradeRiskAssessment;
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
@@ -2749,17 +2757,19 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * "Invited by" — who brought this member in.
+ * "Invited by" — who brought this member in (DESIGN-invites-vouching-review-fable.md §3 ask 2, slice I3).
  *
- * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
- * puts your name on their profile and makes you a reachable reference if a trade goes wrong. When
- * the inviter is the system admin or a founder there is no peer to reach out to, so the kind says
- * so and `publicKey` is null — the UI shows a clear, non-actionable label rather than a dead link.
+ * Every member inviter is returned by name, whatever node role they hold, with that role (`owner`, `admin` or null), so
+ * invitations carry accountability: bringing someone in puts your name on their profile and makes you a reachable
+ * reference if a trade goes wrong. An owner or an admin is no exception: owner tags are on profiles already, and "invited
+ * by the system admin" named nobody while every member an owner invited read it. Two kinds name no person:
+ *  - `founder`: the member the community began with (invited_by 'genesis');
+ *  - `card`: a seed invite made under the node password (invite_codes.issued_by 'owner:password', routes/community.ts):
+ *    an owner made it, and no key says which one. A seed invite made under an owner's or admin's key hangs off that
+ *    person (adminGenerateInvite's `created_by`), so it names them as kind `member`.
+ * Anyone else (no inviter, an open door's `open:<provider>`, a key with no member row here) is null.
  *
- * Shared with the keyholder system (K3), where those null cases are not cosmetic: a member with no
- * human inviter has NOBODY to hold their inviter fragment, and lands at signup with two pieces
- * rather than three. Both callers must agree on who counts as an inviter, so there is one
- * implementation rather than two that drift.
+ * Who may read it is getTrustProfileForViewer's (viewerSeesInviterOf): this names the inviter whatever the switch says.
  */
 export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vouchedInBy'] {
     const member = getMember(targetPubkey);
@@ -2767,20 +2777,73 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     if (!inviterKey || inviterKey === targetPubkey) return null;
 
     if (inviterKey === 'genesis') {
-        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
     }
-    if (inviterKey === 'SYSTEM' || isAdminPubkey(inviterKey)) {
-        return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+    // invite_code is the code as the joiner typed it (redeemInvite matches it without case); the codes are made in capitals.
+    const code = member?.inviteCode;
+    if (code) {
+        const issued = (db.prepare('SELECT issued_by FROM invite_codes WHERE code IN (?, UPPER(?))').get(code, code) as { issued_by: string | null } | undefined)?.issued_by;
+        if (issued === 'owner:password') {
+            return { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
+        }
     }
     const inviter = getMember(inviterKey);
-    if (!inviter) return null;
+    if (!inviter || isVisitorKey(inviterKey)) return null;
+    const role = nodeRoleOf(inviterKey);
     return {
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
         avatarUrl: avatarUrlOf(inviter.publicKey, inviter.avatarRef),
         tier: getMemberTrustProfile(inviterKey).tier.name,
+        role: role === 'owner' || role === 'admin' ? role : null,
     };
+}
+
+/** Whether `viewer` is an owner or admin of this node whose role acts (isNodeAdmin, owners included). */
+function seesWhoInvitedWhom(viewer: string | null | undefined): boolean {
+    return !!viewer && isNodeAdmin(viewer);
+}
+
+/** A member's own "Show who invited me to other members" (members.inviter_shown): on unless they switched it off. */
+export function inviterShownOf(publicKey: string): boolean {
+    const row = db.prepare('SELECT inviter_shown FROM members WHERE public_key = ?').get(publicKey) as { inviter_shown: number | null } | undefined;
+    return !row || row.inviter_shown === null || Number(row.inviter_shown) !== 0;
+}
+
+/**
+ * Whether `viewer` reads who invited `target`: always the target themself, an owner or admin of this node, and the
+ * inviter; any other member only while the target's switch is on (inviterShownOf). A caller with no signed viewer is
+ * any other member (the routes that call this refuse such a caller first).
+ */
+export function viewerSeesInviterOf(viewer: string | null | undefined, target: string, inviterKey: string | null | undefined): boolean {
+    if (viewer && viewer === target) return true;
+    if (viewer && inviterKey && viewer === inviterKey) return true;
+    if (seesWhoInvitedWhom(viewer)) return true;
+    return inviterShownOf(target);
+}
+
+/**
+ * viewerSeesInviterOf for many targets at once (the invite tree): the viewer's role and the switched-off members read
+ * once, not once per member.
+ */
+export function inviterVisibilityFor(viewer: string | null | undefined): (target: string, inviterKey: string | null | undefined) => boolean {
+    if (seesWhoInvitedWhom(viewer)) return () => true;
+    const hidden = new Set((db.prepare('SELECT public_key AS pk FROM members WHERE inviter_shown = 0').all() as { pk: string }[]).map(r => r.pk));
+    return (target, inviterKey) => !hidden.has(target) || (!!viewer && (viewer === target || (!!inviterKey && viewer === inviterKey)));
+}
+
+/** How many people `publicKey` brought in: the first level of their branch of the invite tree (getInviteTree). */
+function broughtInCount(publicKey: string): number {
+    return (db.prepare('SELECT COUNT(*) AS n FROM members WHERE invited_by = ? AND public_key != ?').get(publicKey, publicKey) as { n: number }).n;
+}
+
+export const INVITER_SHOWN_MEMBERS_ONLY_MESSAGE = word('Only a member of this community chooses who sees who invited them.');
+
+/** A member's "Show who invited me to other members", their own (PUT /api/profile/privacy). A member's alone. */
+export function setInviterShown(publicKey: string, shown: boolean): void {
+    if (!isNodeMember(publicKey)) throw new Error(INVITER_SHOWN_MEMBERS_ONLY_MESSAGE);
+    db.prepare('UPDATE members SET inviter_shown = ? WHERE public_key = ?').run(shown ? 1 : 0, publicKey);
 }
 
 /**
@@ -2864,13 +2927,16 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer = priorRow?.count || 0;
     }
 
-    // "Invited by" — who brought this member in. A peer inviter is shown by
-    // name with a tappable link, so invitations carry accountability: bringing
-    // someone in puts your name on their profile and makes you a reachable
-    // reference if a trade goes wrong. When the inviter is the system admin or a
-    // founder there's no peer to reach out to — show a clear, non-actionable
-    // label instead (and never a dead-end tappable link).
-    const vouchedInBy = resolveVouchedInBy(targetPubkey);
+    // "Invited by" — who brought this member in, by name whatever their role (resolveVouchedInBy). A member who switched
+    // "Show who invited me to other members" off (inviter_shown 0) has it left out for a plain member; the member
+    // themself, an owner or admin, and the inviter still read it (viewerSeesInviterOf, I3).
+    // Where invites are off (the global node, config/node-profile.ts) nobody brought anybody in, and neither line shows:
+    // a member there came through the open door, and a row from before the switch names nobody to anyone (I3 STOP rule).
+    const invitesOn = getProfileSwitches().invites;
+    const vouchedInBy = invitesOn && viewerSeesInviterOf(viewerPubkey, targetPubkey, member.invitedBy) ? resolveVouchedInBy(targetPubkey) : null;
+    // "Brought in n people ›": for an owner or admin of this node, and for the member on their own profile (I3).
+    const isSelf = !!viewerPubkey && viewerPubkey === targetPubkey;
+    const broughtIn = invitesOn && (isSelf || seesWhoInvitedWhom(viewerPubkey)) ? broughtInCount(targetPubkey) : undefined;
 
     const risk = assessTradeRisk({
         tier,
@@ -2899,6 +2965,8 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer,
         vouchedInBy,
         risk,
+        ...(broughtIn !== undefined ? { broughtIn } : {}),
+        ...(isSelf ? { inviterShown: inviterShownOf(targetPubkey) } : {}),
         ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };
 }

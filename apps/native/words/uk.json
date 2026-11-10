@@ -5680,11 +5680,6 @@
     "other": "👥 {n} спільного зв'язку"
   },
   "Ask about them ›": "Запитати про них ›",
-  "{tier} tier · tap to reach out": "Рівень {tier} · торкніться, щоб зв'язатися",
-  "Founding member": "Засновник спільноти",
-  "Invited directly by the system admin": "Запрошено безпосередньо системним адміністратором",
-  "Here since the community began": "Тут від початку заснування спільноти",
-  "Vetted by the admin at sign-up": "Перевірено адміністратором під час реєстрації",
   "{n} trust points|{n} trust points": {
     "one": "{n} бал довіри",
     "few": "{n} бали довіри",
@@ -7481,7 +7476,6 @@
   "Your budget to vouch from": "Ваш бюджет для поручительства",
   "{left} of {total} left": "залишилося {left} із {total}",
   "✓ Given!": "✓ Передано!",
-  "🌱 Invited by {name}": "🌱 Запрошено {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} повернено, бюджет зупинено, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} повернено, строк запрошення минув, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} повернено, порука не відбулася, {date}",

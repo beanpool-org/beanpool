@@ -103,6 +103,13 @@ export const VOUCH_PRESET_WORDS = {
     belowZero: word('@{name} is below zero: a credit-line gift or a Decision can help.'),
     invitedBy: word('Invited by @{name}'),
     ledgerVouchedBy: word('vouched by @{name}'),
+    // The Ledger's one line for the vouches a member holds (I3; DESIGN-invites-vouching-review-fable.md §2): how much of the
+    // credit line, and who stood behind it, named whatever their role. One voucher: one sentence. Two or more: the total once,
+    // then each voucher with their part, in the order they vouched (ledgerCreditLine below).
+    ledgerCreditLine: word('Your credit line: {amount}, vouched by @{name}'),
+    ledgerCreditLineMany: word('Your credit line: {total} · vouched by {vouchers}'),
+    ledgerCreditLineVoucher: word('@{name} {amount}'),
+    ledgerCreditLineList: word('{list}, {item}'),
     ledgerBudget: word('Your budget: {left} of {total} left'),
     ledgerBudgetNoLimit: word('Your budget: No limit'),
     budgetHistory: word('Budget history'),
@@ -182,6 +189,22 @@ export const vouchFor = (name: string) => t(VOUCH_PRESET_WORDS.vouchFor, { name 
 export const raiseVouchFor = (name: string) => t(VOUCH_PRESET_WORDS.raiseVouchFor, { name });
 export const invitedBy = (name: string) => t(VOUCH_PRESET_WORDS.invitedBy, { name });
 export const ledgerVouchedBy = (name: string) => t(VOUCH_PRESET_WORDS.ledgerVouchedBy, { name });
+/**
+ * The Ledger's one line for a member's vouches (GET /api/ledger/balance `vouchedBy`, one row per voucher, oldest first):
+ * "Your credit line: 200, vouched by @marty"; with more than one voucher, the total once and each voucher's part,
+ * "Your credit line: 300 · vouched by @marty 200, @olive 100". Null when nobody vouched. Never one "Your credit line" per
+ * voucher: two of those read as two different lines, neither of them the whole.
+ */
+export function ledgerCreditLine(vouchedBy: readonly { callsign: string; amount: number }[] | null | undefined): string | null {
+    const rows = (vouchedBy ?? []).filter((v) => v && typeof v.amount === 'number' && Number.isFinite(v.amount));
+    if (rows.length === 0) return null;
+    if (rows.length === 1) return t(VOUCH_PRESET_WORDS.ledgerCreditLine, { name: rows[0].callsign, amount: formatNumber(rows[0].amount) });
+    const items = rows.map((v) => t(VOUCH_PRESET_WORDS.ledgerCreditLineVoucher, { name: v.callsign, amount: formatNumber(v.amount) }));
+    const vouchers = items.slice(1).reduce((list, item) => t(VOUCH_PRESET_WORDS.ledgerCreditLineList, { list, item }), items[0]);
+    // Summed in hundredths, so 0.1 + 0.2 reads 0.3.
+    const total = rows.reduce((sum, v) => sum + Math.round(v.amount * 100), 0) / 100;
+    return t(VOUCH_PRESET_WORDS.ledgerCreditLineMany, { total: formatNumber(total), vouchers });
+}
 export const ledgerBudget = (left: number, total: number) =>
     t(VOUCH_PRESET_WORDS.ledgerBudget, { left: formatNumber(left), total: formatNumber(total) });
 

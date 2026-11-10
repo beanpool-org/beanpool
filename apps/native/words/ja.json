@@ -5457,11 +5457,6 @@
     "other": "👥 共通のつながり {n}人"
   },
   "Ask about them ›": "相手について聞いてみる ›",
-  "{tier} tier · tap to reach out": "{tier}ランク · タップして連絡",
-  "Founding member": "創設メンバー",
-  "Invited directly by the system admin": "システム管理者から直接招待されました",
-  "Here since the community began": "コミュニティ創設当初からのメンバー",
-  "Vetted by the admin at sign-up": "登録時に管理者による審査を受けました",
   "{n} trust points|{n} trust points": {
     "other": "{n}信頼ポイント"
   },
@@ -6722,7 +6717,6 @@
   "Your budget to vouch from": "あなたの保証用予算",
   "{left} of {total} left": "残り {left} / 全体 {total}",
   "✓ Given!": "✓ 譲渡完了！",
-  "🌱 Invited by {name}": "🌱 {name}による招待",
   "+{amount} back, budget stopped, {date}": "+{amount} 返還、予算停止、{date}",
   "+{amount} back, invite expired, {date}": "+{amount} 返還、招待の期限切れ、{date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} 返還、保証が成立せず、{date}",

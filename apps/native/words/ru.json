@@ -5681,11 +5681,6 @@
     "other": "👥 {n} общих контакта"
   },
   "Ask about them ›": "Спросить о них ›",
-  "{tier} tier · tap to reach out": "Уровень «{tier}» · нажмите, чтобы связаться",
-  "Founding member": "Участник-основатель",
-  "Invited directly by the system admin": "Приглашён напрямую системным администратором",
-  "Here since the community began": "В сообществе с момента основания",
-  "Vetted by the admin at sign-up": "Проверен администратором при регистрации",
   "{n} trust points|{n} trust points": {
     "one": "{n} балл доверия",
     "few": "{n} балла доверия",
@@ -7481,7 +7476,6 @@
   "Your budget to vouch from": "Ваш бюджет для поручительства",
   "{left} of {total} left": "осталось {left} из {total}",
   "✓ Given!": "✓ Передано!",
-  "🌱 Invited by {name}": "🌱 Приглашение от {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} возвращено: бюджет остановлен, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} возвращено, приглашение истекло, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} возвращено, поручительство не состоялось, {date}",

@@ -5277,11 +5277,6 @@
     "other": "👥 {n} karaniwang koneksyon"
   },
   "Ask about them ›": "Magtanong tungkol sa kanila ›",
-  "{tier} tier · tap to reach out": "{tier} antas · i-tap para makipag-ugnayan",
-  "Founding member": "Nagtatag na miyembro",
-  "Invited directly by the system admin": "Direktang inimbita ng admin ng sistema",
-  "Here since the community began": "Narito mula noong magsimula ang komunidad",
-  "Vetted by the admin at sign-up": "Sinuri ng admin noong nag-sign up",
   "{n} trust points|{n} trust points": {
     "one": "{n} trust point",
     "other": "{n} trust points"
@@ -6975,7 +6970,6 @@
   "Your budget to vouch from": "Iyong badyet para sa pagpapatunay",
   "{left} of {total} left": "{left} ng {total} ang natitira",
   "✓ Given!": "✓ Naibigay na!",
-  "🌱 Invited by {name}": "🌱 Inimbitahan ni {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} ibinalik, itinigil ang badyet, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} ibinalik, nag-expire ang imbitasyon, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} ibinalik, hindi natuloy ang patunay, {date}",

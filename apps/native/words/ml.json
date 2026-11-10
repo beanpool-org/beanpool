@@ -5276,11 +5276,6 @@
     "other": "👥 പൊതുവായ {n} ബന്ധങ്ങൾ"
   },
   "Ask about them ›": "ഇവരെക്കുറിച്ച് ചോദിക്കുക ›",
-  "{tier} tier · tap to reach out": "{tier} തലം · ബന്ധപ്പെടാൻ ടാപ്പ് ചെയ്യുക",
-  "Founding member": "സ്ഥാപകാംഗം",
-  "Invited directly by the system admin": "സിസ്റ്റം അഡ്മിൻ നേരിട്ട് ക്ഷണിച്ചത്",
-  "Here since the community began": "കമ്മ്യൂണിറ്റി തുടങ്ങിയതുമുതൽ ഇവിടെയുണ്ട്",
-  "Vetted by the admin at sign-up": "സൈൻ-അപ്പിൽ അഡ്മിൻ പരിശോധിച്ചത്",
   "{n} trust points|{n} trust points": {
     "one": "{n} വിശ്വാസ്യത പോയിന്റ്",
     "other": "{n} വിശ്വാസ്യത പോയിന്റുകൾ"
@@ -6975,7 +6970,6 @@
   "Your budget to vouch from": "ഉറപ്പുനൽകാനുള്ള നിങ്ങളുടെ ബജറ്റ്",
   "{left} of {total} left": "{total}-ൽ {left} ബാക്കി",
   "✓ Given!": "✓ നൽകി!",
-  "🌱 Invited by {name}": "🌱 {name} ക്ഷണിച്ചു",
   "+{amount} back, budget stopped, {date}": "+{amount} തിരികെ, ബജറ്റ് നിർത്തി, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} തിരികെ, ക്ഷണം കാലഹരണപ്പെട്ടു, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} തിരികെ, ഉറപ്പ് നടപ്പായില്ല, {date}",

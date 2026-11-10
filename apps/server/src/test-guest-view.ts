@@ -1190,6 +1190,8 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A member's own switch: past the body check to the member check.
+            'PUT /api/profile/privacy': { inviterShown: false },
             // A find with a provider it verifies: past the provider check to the sign-in, which names the accounts it protects.
             'POST /api/recovery/find': { provider: 'google', idToken: 'sentinel', nonce: 'sentinel' },
             // An assistant's call for the reports, which name members, and the owner switch turned off.
@@ -1479,7 +1481,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
-            'GET /api/profile/:publicKey', 'POST /api/profile/update',
+            'GET /api/profile/:publicKey', 'POST /api/profile/update', 'GET /api/profile/privacy', 'PUT /api/profile/privacy',
             'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',

@@ -37,7 +37,7 @@ import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
     t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
-    ledgerVouchedBy, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
+    ledgerCreditLine, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
 import { Modal } from 'react-native';
@@ -1256,7 +1256,7 @@ export default function LedgerScreen() {
                             </Text>
                             {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
                                 <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                                    {balanceState.vouchedBy.map((v: any) => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                    {ledgerCreditLine(balanceState.vouchedBy)}
                                 </Text>
                             )}
                         </View>
@@ -1276,7 +1276,7 @@ export default function LedgerScreen() {
                     )}
                     {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
                         <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                            {balanceState.vouchedBy.map((v: any) => ledgerVouchedBy(v.callsign)).join(' · ')}
+                            {ledgerCreditLine(balanceState.vouchedBy)}
                         </Text>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}

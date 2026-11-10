@@ -5275,11 +5275,6 @@
     "other": "👥 {n} conexiones en común"
   },
   "Ask about them ›": "Preguntar sobre ellos ›",
-  "{tier} tier · tap to reach out": "Nivel {tier} · toca para contactar",
-  "Founding member": "Miembro fundador",
-  "Invited directly by the system admin": "Invitado directamente por el administrador del sistema",
-  "Here since the community began": "Aquí desde que comenzó la comunidad",
-  "Vetted by the admin at sign-up": "Verificado por el administrador al registrarse",
   "{n} trust points|{n} trust points": {
     "one": "{n} punto de confianza",
     "other": "{n} puntos de confianza"
@@ -6975,7 +6970,6 @@
   "Your budget to vouch from": "Tu presupuesto para avalar",
   "{left} of {total} left": "Quedan {left} de {total}",
   "✓ Given!": "✓ ¡Entregado!",
-  "🌱 Invited by {name}": "🌱 Invitación de {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} devuelto, presupuesto detenido, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} devuelto, invitación caducada, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} devuelto, el aval no se concretó, {date}",

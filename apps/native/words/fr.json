@@ -5277,11 +5277,6 @@
     "other": "👥 {n} contacts en commun"
   },
   "Ask about them ›": "Se renseigner ›",
-  "{tier} tier · tap to reach out": "Rang {tier} · toucher pour contacter",
-  "Founding member": "Membre fondateur",
-  "Invited directly by the system admin": "Invité directement par l'admin système",
-  "Here since the community began": "Présent depuis les débuts de la communauté",
-  "Vetted by the admin at sign-up": "Validé par l'admin à l'inscription",
   "{n} trust points|{n} trust points": {
     "one": "{n} point de confiance",
     "other": "{n} points de confiance"
@@ -6975,7 +6970,6 @@
   "Your budget to vouch from": "Votre budget de parrainage",
   "{left} of {total} left": "{left} sur {total} restants",
   "✓ Given!": "✓ Transmis !",
-  "🌱 Invited by {name}": "🌱 Invitation de {name}",
   "+{amount} back, budget stopped, {date}": "+{amount} restitué, budget arrêté, {date}",
   "+{amount} back, invite expired, {date}": "+{amount} restitué, invitation expirée, {date}",
   "+{amount} back, vouch didn’t land, {date}": "+{amount} restitué, le parrainage n’a pas abouti, {date}",

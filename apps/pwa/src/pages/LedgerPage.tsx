@@ -25,7 +25,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerCreditLine, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -603,7 +603,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                                 <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                                    {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                    {ledgerCreditLine(balanceInfo.vouchedBy)}
                                 </div>
                             )}
                         </div>
@@ -618,7 +618,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     )}
                     {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                         <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                            {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                            {ledgerCreditLine(balanceInfo.vouchedBy)}
                         </div>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}

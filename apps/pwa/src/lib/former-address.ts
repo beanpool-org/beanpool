@@ -48,8 +48,8 @@ const isBareHost = (v: unknown): v is string => typeof v === 'string' && v.lengt
 
 /**
  * What to tell someone who opened the web app at `host`: where the community lives now when `host` is one of its
- * former names and the node names a current one; null otherwise (its current name or any other, a node with no
- * current name, or one too old to say).
+ * former names and the node names a current one; null otherwise (its current name or any other, or a node with no
+ * current name).
  */
 export function formerAddressNotice(
     info: Pick<CommunityInfo, 'primaryAddress' | 'formerAddresses'> | null | undefined,

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '@beanpool/core';
 import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
 const PUB = 'a'.repeat(64);
 const IDENTITY: BeanPoolIdentity = { publicKey: PUB, privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
@@ -15,7 +16,12 @@ const REQ = { callsign: 'Ana', message: '  I grow tomatoes by the river.  ' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 describe('sendKnock: a signed POST to the community it asks', () => {
-    beforeEach(() => { localStorage.clear(); localStorage.setItem('bp_node_url', 'https://global.example.org'); });
+    beforeEach(() => {
+        localStorage.clear(); localStorage.setItem('bp_node_url', 'https://global.example.org');
+        // These tests read every fetch: the communities are heard new enough, so the version gate's own read is not among them.
+        resetNodeVersionGateForTests();
+        for (const community of ['https://riverside.example.org', 'https://byron.beanpool.org']) hearNodeVersionForTests(community);
+    });
     afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
     it('goes to that community\'s own knock path, signed for its host, with the phone\'s body', async () => {

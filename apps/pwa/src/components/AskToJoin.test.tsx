@@ -10,6 +10,7 @@ import { t } from '@beanpool/core';
 import { AskToJoin } from './AskToJoin';
 import { KNOCK_MESSAGES, rememberedKnocks } from '../lib/knock';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const RIVERSIDE = { key: 'r', name: 'Riverside', url: 'https://riverside.example.org' };
@@ -34,7 +35,12 @@ function openForm() {
     };
 }
 
-beforeEach(() => { localStorage.clear(); localStorage.setItem('bp_node_url', 'https://global.example.org'); });
+beforeEach(() => {
+    localStorage.clear(); localStorage.setItem('bp_node_url', 'https://global.example.org');
+    // Every fetch is read: the communities are heard new enough, so the version gate's own read is not among them.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(RIVERSIDE.url);
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 describe('Ask to join on the web', () => {

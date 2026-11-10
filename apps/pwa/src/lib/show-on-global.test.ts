@@ -10,6 +10,7 @@ import { clearCopyPairs, copyPairs } from './copy-pairs';
 import { memoryIndexedDB } from './memory-indexeddb';
 import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, requestsWaitingOnGlobal, showPostOnGlobal, takeQuestions, tendCopiesSoon } from './show-on-global';
 import { communityInfoOnce } from './visitor-lobby-gate';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
 
 vi.mock('./visitor-lobby-gate', async () => ({ ...(await vi.importActual('./visitor-lobby-gate')), communityInfoOnce: vi.fn() }));
@@ -28,6 +29,9 @@ beforeEach(async () => {
     fetchMock.mockReset();
     localStorage.clear();
     setNodeApiUrl?.('');
+    // Every fetch is read in these tests: the communities are heard new enough, so the version gate's own read is not among them.
+    resetNodeVersionGateForTests();
+    for (const community of ['https://global.test', 'https://home.test']) hearNodeVersionForTests(community);
     vi.mocked(communityInfoOnce).mockResolvedValue({ profile: 'local', globalCommunityUrl: 'https://global.test', addresses: [] } as never);
     await clearCopyPairs().catch(() => {});
 });

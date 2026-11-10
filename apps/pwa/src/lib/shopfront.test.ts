@@ -99,11 +99,11 @@ describe('the sections', () => {
         expect(listingStateLine(listing({ status: 'pending', lendable: true }))).toBe('Out on loan');
         expect(listingStateLine(listing())).toBeNull();
     });
-    it("a category's emoji and its name; a word that is not one of today's is General's (cutover N2, E28)", () => {
+    it("a category's emoji and its name; an older id is today's", () => {
         expect(categoryEmoji('tools')).toBe('🛠️');
         expect(categoryLabel('tools')).toBe('Tools');
-        expect(categoryEmoji('tools_hardware')).toBe('🌱');
-        expect(categoryLabel('tools_hardware')).toBe(categoryLabel('general'));
+        expect(categoryEmoji('tools_hardware')).toBe('🛠️');
+        expect(categoryLabel('tools_hardware')).toBe('Tools');
         expect(categoryEmoji(null)).toBe('🌱');
     });
 });

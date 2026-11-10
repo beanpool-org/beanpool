@@ -20,15 +20,20 @@ describe('Pricing Catalog & Utilities (#206)', () => {
         expect(ids).toContain('general');
     });
 
-    it("normalizes a category to one of today's, or General", () => {
-        // The words from before the categories were renamed (26 Aug) are no category any more: no listing on any node
-        // holds one (cutover N2, audit E28; measured 10 Nov), so each reads as General, as any unknown word does.
-        for (const old of ['food_produce', 'prepared_meals', 'tools_hardware', 'skilled_trade', 'tech_digital', 'housing_space',
-            'education_arts', 'kids_baby', 'animals_pet', 'plants_garden', 'raw_materials', 'events_community']) {
-            expect(normalizeCategory(old), old).toBe('general');
-        }
+    it('normalizes legacy and compound category strings correctly', () => {
+        expect(normalizeCategory('food_produce')).toBe('food');
+        expect(normalizeCategory('prepared_meals')).toBe('food');
+        expect(normalizeCategory('tools_hardware')).toBe('tools');
+        expect(normalizeCategory('skilled_trade')).toBe('services');
+        expect(normalizeCategory('tech_digital')).toBe('tech');
+        expect(normalizeCategory('housing_space')).toBe('housing');
+        expect(normalizeCategory('education_arts')).toBe('education');
+        expect(normalizeCategory('kids_baby')).toBe('care');
+        expect(normalizeCategory('animals_pet')).toBe('animals');
+        expect(normalizeCategory('plants_garden')).toBe('garden');
+        expect(normalizeCategory('raw_materials')).toBe('goods');
+        expect(normalizeCategory('events_community')).toBe('general');
         expect(normalizeCategory('food')).toBe('food');
-        expect(normalizeCategory(' Tools ')).toBe('tools');
         expect(normalizeCategory('unknown_xyz')).toBe('general');
         expect(normalizeCategory(null)).toBe('general');
     });

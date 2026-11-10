@@ -82,7 +82,7 @@
 import { assistantBeansOf, hundredthsFromAssistantBeans } from '../money-body.js';
 import crypto from 'node:crypto';
 import {
-    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
+    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LEGACY_CATEGORY_ALIASES, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
     POST_TAGS_MAX, postTagsOf, PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
     POLL_OTHER_WORDS_MAX,
 } from '@beanpool/core';
@@ -147,11 +147,10 @@ export function enterpriseRef(enterpriseKey: string): string {
 export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((c) => c.id);
 
 /**
- * A stored category that is the node's own word: the Market's, what an event or a listing with none is given, or the
- * Daily Pulse's `skills`, the one word its entries use that the Market doesn't list (daily-pulse-entries.ts). The words
- * from before the categories were renamed (26 Aug) are not among them: no listing holds one (cutover N2, audit E28).
+ * A stored category that is the node's own word: the Market's, one it had before, what an event or a listing with none is
+ * given, or the Daily Pulse's `skills`, the one word its entries use that the Market doesn't list (daily-pulse-entries.ts).
  */
-const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, 'community', 'other', 'skills']);
+const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other', 'skills']);
 
 /**
  * A post's category as an assistant reads it. Stored, it is any text of up to 50 characters (engine/post-fields.ts), and it

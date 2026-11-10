@@ -55,13 +55,30 @@ export const PRICING_CATEGORIES: PricingCategoryMeta[] = [
     { id: 'general', label: word('General & Community'), emoji: '🌱', description: 'Event gear, venue space, marquee, sound hire, and community items' },
 ];
 
-/**
- * A category as one of today's, or General. The words from before the categories were renamed (26 Aug, `food_produce`
- * and the like) are not mapped any more: no listing on any node holds one (cutover N2, audit E28; measured 10 Nov).
- */
+export const LEGACY_CATEGORY_ALIASES: Record<string, PricingCategory> = {
+    food_produce: 'food',
+    prepared_meals: 'food',
+    tools_hardware: 'tools',
+    labour_services: 'labour',
+    skilled_trade: 'services',
+    tech_digital: 'tech',
+    transport_vehicles: 'transport',
+    housing_space: 'housing',
+    education_arts: 'education',
+    household_goods: 'goods',
+    kids_baby: 'care',
+    animals_pet: 'animals',
+    plants_garden: 'garden',
+    events_community: 'general',
+    raw_materials: 'goods',
+};
+
 export function normalizeCategory(category: string | undefined | null): PricingCategory {
     if (!category) return 'general';
     const trimmed = category.trim().toLowerCase();
+    if (trimmed in LEGACY_CATEGORY_ALIASES) {
+        return LEGACY_CATEGORY_ALIASES[trimmed];
+    }
     const valid = PRICING_CATEGORIES.some(c => c.id === trimmed);
     if (valid) return trimmed as PricingCategory;
     return 'general';

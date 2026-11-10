@@ -175,3 +175,35 @@ describe('a standing deal asks no Release anywhere the phone lists deals (U2, fa
         expect(localDealMoves(rows.find(r => r.txId === 'sd-m3')!, ME)!.stop).toBe(true);
     });
 });
+
+// A one-off deal held in trust, read by the chat's own read (getDealsBetween) from the phone's real schema: its payer is
+// offered Release and Cancel in the chat's strip and inline bar, its payee waits (U2 round 2: dealMoves routes every chat
+// button, and a one-off held deal must still show Release + Cancel to its payer, memory deals-design-badge-means-your-step).
+describe("a one-off deal held in trust: the chat's read offers its payer Release and Cancel (U2 round 2)", () => {
+    beforeEach(async () => {
+        store.clear();
+        store.set('beanpool_anchor_url', NODE);
+        globalThis.fetch = vi.fn(async () => new Response('no', { status: 500 })) as typeof fetch;
+        await getDb();
+        for (const t of ['marketplace_transactions', 'posts', 'conversation_participants', 'conversations', 'ratings']) sql.exec(`DELETE FROM ${t}`);
+        post('p-eggs', 'offer', ANA);
+        dm('c-ana', ANA);
+        deal('held-eggs', 'p-eggs', ME, ANA, 'pending', '2026-11-10T09:00:00.000Z');
+    });
+
+    it('the payer: Release and Cancel, in the strip; the payee: awaiting release, never Release', async () => {
+        const rows = await getDealsBetween(ME, ANA);
+        expect(rows).toHaveLength(1);
+        const row = rows[0];
+        // The keys the chat's dealMoves reads come with the row (the chat's fixture lacked them: #3032 round 2).
+        expect(row).toMatchObject({ txId: 'held-eggs', status: 'pending', buyerPubkey: ME, sellerPubkey: ANA, standing_id: null });
+        const payer = localDealMoves(row, ME)!;
+        expect([payer.release, payer.cancelHold, payer.step.state]).toEqual([true, true, 'to-release']);
+        expect(isChatStripDeal(row, ME)).toBe(true);
+        const payee = localDealMoves(row, ANA)!;
+        expect([payee.release, payee.cancelHold, payee.step.state]).toEqual([false, true, 'to-deliver']);
+        expect(isChatStripDeal(row, ANA)).toBe(true);
+        // Talk counts it as the payer's step too.
+        expect((await getActionableDeals(ME)).map(d => [d.txId, d.action])).toEqual([['held-eggs', 'release']]);
+    });
+});

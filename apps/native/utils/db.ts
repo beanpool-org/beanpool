@@ -1684,12 +1684,19 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
     }));
 }
 
-export async function refreshBalanceFromServer(pubkey: string) {
+/** The node's own balance read (GET /api/ledger/balance), as it answered: what a standing take-up's room is read from. */
+export type NodeBalanceRead = { balance?: number | null; floor?: number | null; usableFloor?: number | null; [field: string]: unknown };
+
+/**
+ * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
+ * couldn't be read (no node, refused, offline), so a caller never takes the phone's cached copy for a fresh read.
+ */
+export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBalanceRead | null> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return;
+    if (!anchorUrl) return null;
     try {
         const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}`);
-        if (!res.ok) return;
+        if (!res.ok) return null;
         const balData = await res.json();
         const database = await getDb();
         const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
@@ -1753,8 +1760,10 @@ export async function refreshBalanceFromServer(pubkey: string) {
             const { DeviceEventEmitter } = require('react-native');
             DeviceEventEmitter.emit('sync_data_updated');
         }
+        return balData && typeof balData === 'object' ? balData as NodeBalanceRead : null;
     } catch (e) {
         console.warn(`[refreshBalanceFromServer] Failed for ${pubkey}:`, e);
+        return null;
     }
 }
 

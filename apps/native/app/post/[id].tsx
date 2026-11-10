@@ -13,7 +13,7 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal,
 } from '../../utils/db';
@@ -964,19 +964,33 @@ export default function PostDetailModal() {
         // Gate 1 is a Beans rule and keeperOf an enterprises one: where both are in preview (the global node) the
         // reader's balance is never asked (utils/reads-own.ts).
         Promise.all([readsOwn('beans', key), readsOwn('enterprises', key)])
-            .then(async ([beans, enterprises]) => ({ beans, b: beans || enterprises ? await getBalance(key) : null }))
-            .then(({ beans, b }) => {
+            .then(([beans, enterprises]) => (beans || enterprises ? getBalance(key) : null))
+            .then(b => {
                 if (!cancelled && b) {
                     setBlockedFromTrading(!!(b as any).isBlockedFromTrading);
                     const mine: string[] = Array.isArray((b as any).keeperOf) ? (b as any).keeperOf : [];
                     setOperatedTreasuries(mine);
-                    // What a standing take-up can pay now (core standingRoomOf): Agree is disabled with a plain line below it.
-                    setSpendRoom(beans ? standingRoomOf(b as any) : null);
                 }
             })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
+
+    // What a standing take-up can pay now (core standingRoomOf), read only from the node's own balance read: the phone's
+    // cached getBalance reads floor 0 when its copy is missing or stale, and would disable Agree on a guess. Unknown until
+    // that read lands, and when it fails: Agree stays and the node checks (DESIGN-standing-deals-upfront-fable §3).
+    const takesStanding = !!post && !!standingUnitForListing(post.price_type, post.credits);
+    useEffect(() => {
+        setSpendRoom(null);
+        if (!identity?.publicKey || !takesStanding) return;
+        let cancelled = false;
+        const key = identity.publicKey;
+        readsOwn('beans', key)
+            .then(beans => (beans ? refreshBalanceFromServer(key) : null))
+            .then(fresh => { if (!cancelled) setSpendRoom(standingRoomOf(fresh)); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [identity?.publicKey, takesStanding]);
 
     if (!post) {
         if (!postMissing) {

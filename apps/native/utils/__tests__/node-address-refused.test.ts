@@ -284,7 +284,8 @@ describe('the fetch wrapper (utils/node-request-signing.ts)', () => {
         expect(memberKeySign).not.toHaveBeenCalled();
 
         await fetch('https://mullum.beanpool.org/api/community/me');
-        expect(underlying).toHaveBeenCalledTimes(1);
-        expect((underlying.mock.calls[0][1]?.headers as Record<string, string>)['X-Signed-For']).toBe('mullum.beanpool.org');
+        // The community's health first (utils/node-version-gate.ts: not heard from this run), then the request, signed.
+        expect(underlying.mock.calls.map(([input]) => input)).toEqual(['https://mullum.beanpool.org/api/community/health', 'https://mullum.beanpool.org/api/community/me']);
+        expect((underlying.mock.calls[1][1]?.headers as Record<string, string>)['X-Signed-For']).toBe('mullum.beanpool.org');
     });
 });

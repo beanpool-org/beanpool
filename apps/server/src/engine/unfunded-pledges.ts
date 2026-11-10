@@ -51,7 +51,7 @@
 // name the project; the leader's counts the backers and the Beans and names nobody. The leader's end date moved in that week
 // (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved), each once a day at most.
 
-import { isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { formatHundredths, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -138,8 +138,8 @@ function named(title: string): string {
     return t.length > 80 ? `${t.slice(0, 79)}…` : t;
 }
 
-/** Beans as a notice writes them: to the cent, no trailing zeros. */
-const beans = (n: number) => String(Math.round(n * 100) / 100);
+/** A figure (whole hundredths) as a notice writes it, in English (formatHundredths). */
+const beans = (c: number) => formatHundredths(c, 'en');
 
 /** The memo of a closed account's share moved to the Commons: it names nobody (the row names the project). */
 export const CLOSED_ACCOUNT_PLEDGE_MEMO = 'Pledge from a closed account, returned to the Commons';

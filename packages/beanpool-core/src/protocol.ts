@@ -277,7 +277,7 @@ export function enterpriseKnownShare(keepers: Array<{ knownGrant: number; enterp
 export function formatTimeEquivalent(amount: Hundredths): string {
     const hours = Math.abs(amount) / PROTOCOL_CONSTANTS.REFERENCE_RATE;
     if (hours < 0.5) return `≈ ${Math.round(hours * 60)}min`;
-    if (hours < 10) return `≈ ${hours.toFixed(1)}hr`;
+    if (hours < 10) { const tenths = Math.round(hours * 10); return `≈ ${Math.trunc(tenths / 10)}.${tenths % 10}hr`; }
     return `≈ ${Math.round(hours)}hr`;
 }
 

@@ -184,15 +184,19 @@ interface CopyClear { alsoDrop: string }
  */
 function openCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
     currentDbName = file;
+    const seq = ++openSeq;
     // Cleared once it settles, unless another open has taken its place since, and before the asks waiting on it go on.
-    const opening = openAndMakeCopy(file, url, clear).finally(() => {
+    const opening = openAndMakeCopy(file, url, clear, seq).finally(() => {
         if (getDbPromise === opening) getDbPromise = null;
     });
     getDbPromise = opening;
     return opening;
 }
 
-async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
+/** Each open's number (openCopy): only the latest is handed out. */
+let openSeq = 0;
+
+async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null, seq: number): Promise<SQLite.SQLiteDatabase> {
     // Force strict database isolation and hot-swap reconnect if matrix url changes
     if (db) {
         await acquireSyncLock({ urgent: true });
@@ -228,6 +232,12 @@ async function openAndMakeCopy(file: string, url: string | null, clear: CopyClea
         await handle.closeAsync().catch(() => {});
         throw e;
     }
+    if (seq !== openSeq) {
+        // Another copy was asked for while this one was made (the address changed): never a second connection left open
+        // beside the one in use. Its asks get the copy asked for now.
+        await handle.closeAsync().catch(() => {});
+        return getDb();
+    }
     db = handle;
     return handle;
 }
@@ -235,9 +245,24 @@ async function openAndMakeCopy(file: string, url: string | null, clear: CopyClea
 export async function closeDB() {
     await acquireSyncLock({ urgent: true });
     try {
+        // An open on its way finishes first, and its copy is closed with the rest: none is left open after this.
+        await untilNoOpenOnItsWay();
         await closeOpenCopy();
     } finally {
         releaseSyncLock();
+    }
+}
+
+/**
+ * Called holding the sync lock, and back holding it: an open on its way (getDbPromise) finishes first, outside the lock,
+ * since a hot swap in getDb takes the lock itself (closeDB, whileCopyMoves, clearDB).
+ */
+async function untilNoOpenOnItsWay(): Promise<void> {
+    while (getDbPromise) {
+        const opening = getDbPromise;
+        releaseSyncLock();
+        await opening.catch(() => {});
+        await acquireSyncLock({ urgent: true });
     }
 }
 
@@ -276,12 +301,7 @@ export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Pro
     // Never while the copies still move to their own names (cache-file-migration.ts): that opens and renames them too.
     await communityCachesRenamed();
     await acquireSyncLock({ urgent: true });
-    while (getDbPromise) {
-        const opening = getDbPromise;
-        releaseSyncLock();
-        await opening.catch(() => {});
-        await acquireSyncLock({ urgent: true });
-    }
+    await untilNoOpenOnItsWay();
     let moved!: () => void;
     copyMoving = new Promise<void>((resolve) => { moved = resolve; });
     try {
@@ -743,18 +763,12 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     }
     // The copy open now (getDb sets each handle's file).
     const file = dbFileOf.get(await getDb())!;
-    let cleared: Promise<SQLite.SQLiteDatabase> | null = null;
+    let cleared: Promise<SQLite.SQLiteDatabase> | undefined;
     // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
     await acquireSyncLock({ urgent: true });
     try {
-        // An open on its way finishes first (as whileCopyMoves).
-        while (getDbPromise) {
-            const opening = getDbPromise;
-            releaseSyncLock();
-            await opening.catch(() => {});
-            await acquireSyncLock({ urgent: true });
-        }
+        await untilNoOpenOnItsWay();
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();

@@ -24,6 +24,8 @@ const h = vi.hoisted(() => ({
     holds: [] as { match: RegExp; until: Promise<void>; opened: () => void; release?: () => void }[],
     /** A statement run through execAsync that throws instead (the disk full, the app closing): once. */
     failExec: null as RegExp | null,
+    /** Every connection the app opened, by file, and whether it has been closed. */
+    connections: [] as { name: string; closed: boolean }[],
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -33,6 +35,8 @@ vi.mock('expo-sqlite', async () => {
     return {
         openDatabaseAsync: vi.fn(async (name: string) => {
             const sql = new Sqlite(join(h.dir, name));
+            const connection = { name, closed: false };
+            h.connections.push(connection);
             /** One read: stepped, then (the caller's awaits) finalized; the statement is open in between. */
             const read = async (q: string, p: unknown, all: boolean) => {
                 const it = sql.prepare(q).iterate(...params(p));
@@ -80,7 +84,10 @@ vi.mock('expo-sqlite', async () => {
                         throw e;
                     }
                 },
-                closeAsync: async () => { sql.close(); },
+                closeAsync: async () => {
+                    connection.closed = true;
+                    sql.close();
+                },
             };
         }),
     };
@@ -125,6 +132,7 @@ beforeEach(() => {
     h.store.clear();
     h.holds = [];
     h.failExec = null;
+    h.connections = [];
 });
 afterEach(async () => {
     for (const hold of h.holds) hold.release?.();
@@ -317,5 +325,35 @@ describe("a copy below the schema number is cleared and made again before anythi
         expect(disk.posts).toBe(0);
         expect(disk.postColumns).toContain('price_c');
         expect(await (await getDb()).getFirstAsync('SELECT COUNT(*) AS n FROM posts')).toEqual({ n: 0 });
+    });
+
+    it('the address changes while a 1.3 copy is still being made: the copy asked for last is the one handed out, and no other connection stays open', async () => {
+        const LEFT = 'https://left.example.org';
+        const NOW = 'https://now.example.org';
+        oldCopy(LEFT);
+        h.anchor = LEFT;
+        // LEFT's open caught as it reads its copy's number.
+        let reached!: () => void;
+        const atNumber = new Promise<void>((resolve) => { reached = resolve; });
+        let letGo!: () => void;
+        const held = new Promise<void>((resolve) => { letGo = resolve; });
+        h.holds.push({ match: /^PRAGMA user_version$/, until: held, opened: () => reached(), release: () => letGo() });
+        const first = settled(getDb().then((d) => d.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'nearby_held'")));
+        await atNumber;
+        // The address changes with no closeDB first (a door's key, the sync's winning address: getDb's own swap).
+        h.holds = [];
+        h.anchor = NOW;
+        const nowCopy = await getDb();
+        letGo();
+        const firstAnswer = await first;
+        const open = h.connections.filter((c) => !c.closed).map((c) => c.name);
+        console.log(`address changed mid-make: the first ask ${firstAnswer}; connections still open ${JSON.stringify(open)}; left on disk ${JSON.stringify(onDisk(LEFT))}`);
+        // The first ask gets the copy the phone is on now, made; LEFT's own connection is closed, never left beside it.
+        expect(firstAnswer).toBe('made');
+        expect(open).toEqual([fileOf(NOW)]);
+        expect(await getDb()).toBe(nowCopy);
+        // LEFT's clear, done before the address changed, stays done: a whole copy at the number.
+        expect(onDisk(LEFT).userVersion).toBe(COPY_SCHEMA);
+        expect(onDisk(LEFT).members).toBe(0);
     });
 });

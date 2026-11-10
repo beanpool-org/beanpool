@@ -158,6 +158,8 @@ function offlineTicket(inviter: Id): string {
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+/** The story's Beans as the node's whole hundredths (every transfer, price and balance here is hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
 const CONTACT = 'olive.contact@example.test';
 const POINT = 'lat=-28.64&lng=153.61';
 
@@ -200,7 +202,7 @@ async function main() {
             .run(id.pubKeyHex, callsign, gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
-        se.transfer('genesis', id.pubKeyHex, 50, `seed ${callsign}`, 'direct', true);
+        se.transfer('genesis', id.pubKeyHex, hc(50), `seed ${callsign}`, 'direct', true);
         return id;
     };
     const olive = seedMember('OliveOwner');   // shares her contact with the Community, hosts the poll's DMs
@@ -262,12 +264,13 @@ async function main() {
     const deeMsg = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ...deeLine }, olive);
     assert(deeMsg.status === 200, `…and sends it a message (${deeMsg.status} ${deeMsg.text.slice(0, 80)})`);
     const tex = keypair('TransferTex');
-    const texTx = se.transfer('genesis', tex.pubKeyHex, 5, 'welcome beans', 'direct', true);
+    const texTx = se.transfer('genesis', tex.pubKeyHex, hc(5), 'welcome beans', 'direct', true);
     assert(!!texTx, 'a transfer to a key with no account here lands, with its 5 Beans');
     const tex2 = keypair('RefusedTex2');
-    const refusedSend = await post('/api/ledger/transfer', { to: tex2.pubKeyHex, amount: 1 }, olive);
+    const refusedSend = await post('/api/ledger/transfer', { to: tex2.pubKeyHex, amount_c: hc(1) }, olive);
     // A refused send makes no row (test-visitors-cant-act section 4): the recipient reads below as the key with no row it is.
-    assert(refusedSend.status === 400 && !row(tex2.pubKeyHex),
+    // Refused for having no trade yet, never for the body's figure (whole hundredths: money-body.ts amount_c_required).
+    assert(refusedSend.status === 400 && refusedSend.body?.code !== 'amount_c_required' && !row(tex2.pubKeyHex),
         `a send from a member with no trade yet is refused (${refusedSend.status}), and the recipient gets no row`);
     const rita = keypair('RemoteRita');
     registerVisitor(rita.pubKeyHex, rita.callsign, 'https://peer.example.test');
@@ -301,8 +304,8 @@ async function main() {
 
     // ── Suspensions and a re-key ───────────────────────────────────────────────────────────────────────────────────
     // Sue's and Dan's own listings, which the board other members read leaves out while they are suspended.
-    const sueOffer = se.createPost('offer', 'food', 'Sue sourdough', 'A loaf a week', 5, 'fixed', sue.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
-    const danOffer = se.createPost('offer', 'tools', 'Dan ladder', 'Borrow it for a day', 5, 'fixed', dis.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
+    const sueOffer = se.createPost('offer', 'food', 'Sue sourdough', 'A loaf a week', hc(5), 'fixed', sue.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
+    const danOffer = se.createPost('offer', 'tools', 'Dan ladder', 'Borrow it for a day', hc(5), 'fixed', dis.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
     const boardIds = async (reader: Id) => {
         const r = await get('/api/marketplace/posts?limit=500&types=offer,need,poll,event', reader);
         return new Set(((Array.isArray(r.body) ? r.body : r.body?.posts) ?? []).map((p: any) => p.id as string));
@@ -405,9 +408,9 @@ async function main() {
         const deeBalance = await get(`/api/ledger/balance/${dee.pubKeyHex}`, dee);
         assert(deeBalance.status === 200, `…and its own balance (${deeBalance.status})`);
         const texBalance = await get(`/api/ledger/balance/${tex.pubKeyHex}`, tex);
-        assert(texBalance.status === 200 && Number(texBalance.body?.balance) === 5, `the transfer-made visitor reads its 5 Beans (${texBalance.status} ${texBalance.text.slice(0, 80)})`);
+        assert(texBalance.status === 200 && texBalance.body?.balance_c === hc(5), `the transfer-made visitor reads its 5 Beans (${texBalance.status} ${texBalance.text.slice(0, 80)})`);
         const texTxs = await get(`/api/ledger/transactions?publicKey=${tex.pubKeyHex}`, tex);
-        assert(texTxs.status === 200 && Array.isArray(texTxs.body) && texTxs.body.some((t: any) => t.to === tex.pubKeyHex && t.amount === 5),
+        assert(texTxs.status === 200 && Array.isArray(texTxs.body) && texTxs.body.some((t: any) => t.to === tex.pubKeyHex && t.amount_c === hc(5)),
             `…and the transfer that brought them (${texTxs.status})`);
 
         const oliveGen = se.createConversation('dm', [olive.pubKeyHex, gen.pubKeyHex], olive.pubKeyHex)!;
@@ -538,7 +541,7 @@ async function main() {
         const texJoin = await joinWithTicket(tex, tex);
         assert(texJoin.status === 200 && !texJoin.body?.alreadyMember, `the transfer-made visitor joins with an offline ticket (${texJoin.text.slice(0, 120)})`);
         assert(visitorFlag(tex.pubKeyHex) === 0 && row(tex.pubKeyHex).invited_by === gen.pubKeyHex, 'its row is a member\'s now');
-        assert(Number(se.getBalance(tex.pubKeyHex)?.balance) === 5, `it keeps its 5 Beans (${se.getBalance(tex.pubKeyHex)?.balance})`);
+        assert(se.getBalance(tex.pubKeyHex)?.balance_c === hc(5), `it keeps its 5 Beans (${se.getBalance(tex.pubKeyHex)?.balance_c} hundredths)`);
         await expectReader('the transfer-made visitor, joined', tex);
 
         const voJoin = joinOpenDoor(vo, 'vo-sub');
@@ -578,8 +581,8 @@ async function main() {
         const { addConnector } = await import('./connector-manager.js');
         const zed = keypair('ZedVisitor');
         const yan = keypair('YanVisitor');
-        se.transfer('genesis', zed.pubKeyHex, 1, 'hello', 'direct', true);
-        se.transfer('genesis', yan.pubKeyHex, 1, 'hello', 'direct', true);
+        se.transfer('genesis', zed.pubKeyHex, hc(1), 'hello', 'direct', true);
+        se.transfer('genesis', yan.pubKeyHex, hc(1), 'hello', 'direct', true);
         const p2p = await startP2P(0, 0);
         const nodeId = p2p.peerId.toString();
         pinMainServerForTests(`/ip4/127.0.0.1/tcp/4297/p2p/${nodeId}`);
@@ -596,7 +599,7 @@ async function main() {
         // hid it, by keeping a zero account the members import made for Zed over the main server's).
         const OLD = '2000-01-01T00:00:00.000Z';
         db.prepare('DELETE FROM members WHERE public_key = ?').run(zed.pubKeyHex);
-        const zedHeld = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(zed.pubKeyHex) as { balance: number }).balance;
+        const zedHeld = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(zed.pubKeyHex) as { balance_c: number }).balance_c;
         db.prepare('DELETE FROM accounts WHERE public_key = ?').run(zed.pubKeyHex);
         db.prepare("UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = 'genesis'").run(zedHeld);
         db.prepare('UPDATE members SET is_visitor = 0, updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
@@ -675,7 +678,7 @@ async function main() {
         // Val: a visitor made by a member's DM, with Beans. Vera: a federation visitor.
         const val = keypair('VisitorVal');
         const valConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, val.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
-        se.transfer('genesis', val.pubKeyHex, 3, 'beans for Val', 'direct', true);
+        se.transfer('genesis', val.pubKeyHex, hc(3), 'beans for Val', 'direct', true);
         const vera = keypair('VisitorVera');
         registerVisitor(vera.pubKeyHex, vera.callsign, 'https://peer.example.test');
         assert(valConv.status === 200 && visitorFlag(val.pubKeyHex) === 1 && visitorFlag(vera.pubKeyHex) === 1,
@@ -709,7 +712,7 @@ async function main() {
         assert(valJoin.status === 200 && valJoin.body?.success === true && !valJoin.body?.alreadyMember && visitorFlag(val.pubKeyHex) === 0
             && valRow.invited_by === gen.pubKeyHex && valRow.invite_code === code && codeUser(code) === val.pubKeyHex && feedLines(val.pubKeyHex) === 1,
             `Val's own signed redeem of the same code makes her row a member's and uses the code (${valJoin.status} ${valJoin.text.slice(0, 100)})`);
-        assert(Number(se.getBalance(val.pubKeyHex)?.balance) === 3, `…she keeps her 3 Beans (${se.getBalance(val.pubKeyHex)?.balance})`);
+        assert(se.getBalance(val.pubKeyHex)?.balance_c === hc(3), `…she keeps her 3 Beans (${se.getBalance(val.pubKeyHex)?.balance_c} hundredths)`);
         const valConvs = await get(`/api/messages/conversations/${val.pubKeyHex}`, val);
         assert(valConvs.status === 200 && (valConvs.body?.conversations ?? []).some((c: any) => c.id === valConv.body?.conversation?.id),
             `…and her DM with Olive (${valConvs.status})`);
@@ -740,7 +743,7 @@ async function main() {
         // A visitor's row brings nobody in: no invite, no offline ticket, no answer to a knock. A key with no row gets the
         // same answers.
         const wes = keypair('VisitorWes');
-        se.transfer('genesis', wes.pubKeyHex, 1, 'hello', 'direct', true);
+        se.transfer('genesis', wes.pubKeyHex, hc(1), 'hello', 'direct', true);
         const nobody = keypair('NobodyNat');
         assert(visitorFlag(wes.pubKeyHex) === 1 && !row(nobody.pubKeyHex), 'Wes is a visitor (a transfer); Nat has no row');
         setVisitorGateForTests(false);

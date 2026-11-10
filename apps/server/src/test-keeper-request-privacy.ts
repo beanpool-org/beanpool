@@ -115,10 +115,17 @@ function requestRows(r: Res): any[] {
     return [...(r.body?.keeperRequests ?? []), ...(r.body?.requests ?? [])];
 }
 
+/**
+ * The figure of what an applicant has left to back with, under any name it has gone by: `availableToBack`, and since whole
+ * hundredths `availableToBack_c` (routes/treasury.ts).
+ */
+const carriesFigure = (row: unknown) => !!row && typeof row === 'object' && Object.keys(row).some((k) => k.startsWith('availableToBack'));
 /** True when no keeper request row in the response carries a figure of what the applicant has left to back with. */
 function rowsCarryNoFigure(r: Res): boolean {
-    return requestRows(r).every(row => !('availableToBack' in row));
+    return requestRows(r).every(row => !carriesFigure(row));
 }
+/** The story's Beans as the node's whole hundredths (every figure, pledge and balance here is hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 // ── signed member sockets ───────────────────────────────────────────────────────────────────────
 type Sock = { ws: WebSocket; events: any[] };
@@ -140,7 +147,7 @@ const settle = () => new Promise(r => setTimeout(r, 400));
 const resolvedOn = (s: Sock, changeId: string) => s.events.filter(e => JSON.stringify(e).includes(changeId));
 /** The member buys something: the beans go into a purchase's escrow (a direct send needs a completed trade first). */
 function spend(from: Id, beans: number): boolean {
-    return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, beans, 'a purchase', 'escrow', true);
+    return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, hc(beans), 'a purchase', 'escrow', true);
 }
 /** Words a refusal someone else reads must never carry: a figure, or what the figure comes from. */
 const leaksStanding = (text: string) => /\d/.test(text) || /frozen|freeze|balance|floor|grant|available/i.test(text);
@@ -168,16 +175,16 @@ async function main(): Promise<void> {
     const otto = makeMember('Otto');
     const ana = makeMember('Ana');
     const sid = makeMember('Sid');
-    createPost('offer', 'produce', 'Ana mends nets', 'Nets', 20, 'fixed', ana.pk);
+    createPost('offer', 'produce', 'Ana mends nets', 'Nets', hc(20), 'fixed', ana.pk);
     confirm(ana, lead);
 
     const ent = createTreasury(`Net Loft ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
     adminAssignTreasuryOperator(ent, otto.pk, 'admin');
 
     const figure = getAvailableBacking(ana.pk);
-    assert(figure > 5, `precondition: a confirmed applicant with a live offer has backing room from the known grant (${figure})`);
+    assert(figure > hc(5), `precondition: a confirmed applicant with a live offer has backing room from the known grant (${figure} hundredths)`);
 
-    const asked = await call('POST', ana, `/api/enterprise/${ent}/keepers/request`, { pledgedBacking: 5 });
+    const asked = await call('POST', ana, `/api/enterprise/${ent}/keepers/request`, { pledgedBacking_c: hc(5) });
     assert(asked.status === 200 && asked.body?.success === true, `Ana asks to keep the enterprise with a pledge of 5 (${show(asked)})`);
 
     const detail = (who: Id | null, extra: Record<string, string> = {}) => call('GET', who, `/api/enterprise/${ent}`, undefined, extra);
@@ -188,9 +195,10 @@ async function main(): Promise<void> {
     const leadDetail = await detail(lead);
     const leadRow = leadDetail.body?.keeperRequests?.[0];
     assert(leadDetail.status === 200 && leadRow?.memberPubkey === ana.pk, `the lead keeper sees Ana's request on the enterprise (${show(leadDetail)})`);
-    assert(leadRow && !('availableToBack' in leadRow), `and it carries no figure of what Ana has left to back with (got ${JSON.stringify(leadRow?.availableToBack)})`);
+    assert(leadRow && !carriesFigure(leadRow), `and it carries no figure of what Ana has left to back with (got ${JSON.stringify(leadRow?.availableToBack_c ?? leadRow?.availableToBack)})`);
     assert(leadRow?.canBackPledge === true, `but says yes, Ana can still back her pledge of 5 (got ${JSON.stringify(leadRow?.canBackPledge)})`);
-    assert(leadRow?.pledgedBacking === 5, 'and shows the pledge itself, 5');
+    // The row keeps its key, `pledgedBacking`, its figure whole hundredths (state-engine getKeeperRequests).
+    assert(leadRow?.pledgedBacking === hc(5), 'and shows the pledge itself, 5');
     assert(leadDetail.body?.myPendingRequest === null, 'the lead keeper has no request of their own');
     const leadList = await list(lead);
     const leadListRow = leadList.body?.requests?.[0];
@@ -216,9 +224,9 @@ async function main(): Promise<void> {
     const anaDetail = await detail(ana);
     const mine = anaDetail.body?.myPendingRequest;
     assert(anaDetail.status === 200 && mine?.memberPubkey === ana.pk, `Ana sees her own request (${show(anaDetail)})`);
-    assert(mine?.availableToBack === figure, `with her own figure on it, ${figure} (got ${JSON.stringify(mine?.availableToBack)})`);
+    assert(mine?.availableToBack_c === figure, `with her own figure on it, ${figure} (got ${JSON.stringify(mine?.availableToBack_c)})`);
     assert(mine?.canBackPledge === true, 'and the same yes the lead keeper sees');
-    assert(anaDetail.body?.availableToBack === figure, 'the enterprise read\'s top-level figure is Ana\'s own too');
+    assert(anaDetail.body?.availableToBack_c === figure, 'the enterprise read\'s top-level figure is Ana\'s own too');
     assert((anaDetail.body?.keeperRequests ?? []).length === 0, 'and she sees no one\'s request rows');
     const anaList = await list(ana);
     assert(anaList.status === 403, `Ana is refused the requests list (${show(anaList)})`);
@@ -249,13 +257,13 @@ async function main(): Promise<void> {
 
     // ── 5. the applicant's room drops below the pledge ─────────────────────────────────────────
     console.log('── 5. the applicant can no longer back the pledge ──');
-    const lowered = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: ana.pk, amount: 6 }, adaAdmin);
+    const lowered = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: ana.pk, amount_c: hc(6) }, adaAdmin);
     assert(lowered.status === 200, `an admin lowers Ana's known floor to 6 (${show(lowered)})`);
     const lowFigure = getAvailableBacking(ana.pk);
-    assert(lowFigure < 5, `precondition: Ana now has less than her pledge of 5 to back with (${lowFigure})`);
+    assert(lowFigure < hc(5), `precondition: Ana now has less than her pledge of 5 to back with (${lowFigure} hundredths)`);
     const leadAfter = await detail(lead);
     const rowAfter = leadAfter.body?.keeperRequests?.[0];
-    assert(rowAfter?.canBackPledge === false && !('availableToBack' in rowAfter), `the lead keeper sees a no, still with no figure (${JSON.stringify(rowAfter)})`);
+    assert(rowAfter?.canBackPledge === false && !carriesFigure(rowAfter), `the lead keeper sees a no, still with no figure (${JSON.stringify(rowAfter)})`);
     const listAfter = await list(lead);
     assert(listAfter.body?.requests?.[0]?.canBackPledge === false && rowsCarryNoFigure(listAfter), 'and the same no on the list');
     const approve = await call('POST', lead, `/api/enterprise/${ent}/keepers/requests/${rowAfter?.id}/approve`, {});
@@ -265,21 +273,21 @@ async function main(): Promise<void> {
     assert(!new RegExp(`\\(${lowFigure} available\\)|\\b${lowFigure} available`).test(approveError) && !/\(\d+ available\)/.test(approveError),
         `and the refusal the lead keeper reads does not carry Ana's figure (${approveError})`);
     const anaAfter = await detail(ana);
-    assert(anaAfter.body?.myPendingRequest?.availableToBack === lowFigure && anaAfter.body?.myPendingRequest?.canBackPledge === false,
+    assert(anaAfter.body?.myPendingRequest?.availableToBack_c === lowFigure && anaAfter.body?.myPendingRequest?.canBackPledge === false,
         `Ana still sees her own figure, ${lowFigure}, and the no (${JSON.stringify(anaAfter.body?.myPendingRequest)})`);
 
     // ── 6. sole keeper, the applicant's own debt is using their known floor ────────────────────────
     console.log('── 6. sole keeper: the own-debt lock refuses with no figure ──');
     const solo = createTreasury(`Rope Walk ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
     const bea = makeMember('Bea');
-    createPost('offer', 'produce', 'Bea splices rope', 'Rope', 20, 'fixed', bea.pk);
+    createPost('offer', 'produce', 'Bea splices rope', 'Rope', hc(20), 'fixed', bea.pk);
     confirm(bea, lead);
-    const beaAsk = await call('POST', bea, `/api/enterprise/${solo}/keepers/request`, { pledgedBacking: 400 });
+    const beaAsk = await call('POST', bea, `/api/enterprise/${solo}/keepers/request`, { pledgedBacking_c: hc(400) });
     assert(beaAsk.status === 200, `Bea asks to keep a one-keeper enterprise with a pledge of 400 (${show(beaAsk)})`);
     const beaSpent = spend(bea, 700);
-    const beaBalance = getBalance(bea.pk).balance;
-    assert(beaSpent && beaBalance === -700 && getAvailableBacking(bea.pk) >= 400,
-        `precondition: Bea spends 700 (balance ${beaBalance}) and still has room for 400 on paper (${getAvailableBacking(bea.pk)})`);
+    const beaBalance = getBalance(bea.pk).balance_c;
+    assert(beaSpent && beaBalance === -hc(700) && getAvailableBacking(bea.pk) >= hc(400),
+        `precondition: Bea spends 700 (balance ${beaBalance} hundredths) and still has room for 400 on paper (${getAvailableBacking(bea.pk)} hundredths)`);
     const soloList = await call('GET', lead, `/api/enterprise/${solo}/keepers/requests?status=pending`);
     const soloRow = soloList.body?.requests?.[0];
     assert(soloRow?.memberPubkey === bea.pk && soloRow?.canBackPledge === false && rowsCarryNoFigure(soloList),
@@ -289,7 +297,7 @@ async function main(): Promise<void> {
     assert(soloApprove.status === 400 && /standing doesn't cover this pledge/.test(soloError), `the sole keeper's Approve is refused (${show(soloApprove)})`);
     assert(!leaksStanding(soloError), `and the refusal carries no figure, balance, floor or freeze (${soloError})`);
     const beaOwn = await call('GET', bea, `/api/enterprise/${solo}`);
-    assert(beaOwn.body?.myPendingRequest?.canBackPledge === false && typeof beaOwn.body?.myPendingRequest?.availableToBack === 'number',
+    assert(beaOwn.body?.myPendingRequest?.canBackPledge === false && typeof beaOwn.body?.myPendingRequest?.availableToBack_c === 'number',
         `Bea still sees her own request, with her own figure (${JSON.stringify(beaOwn.body?.myPendingRequest)})`);
 
     // ── 7. two keepers, the scheduler refuses at the end of the window ─────────────────────────────
@@ -297,22 +305,22 @@ async function main(): Promise<void> {
     const pair = createTreasury(`Sail Loft ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
     adminAssignTreasuryOperator(pair, otto.pk, 'admin');
     const cal = makeMember('Cal');
-    createPost('offer', 'produce', 'Cal sews sails', 'Sails', 20, 'fixed', cal.pk);
+    createPost('offer', 'produce', 'Cal sews sails', 'Sails', hc(20), 'fixed', cal.pk);
     confirm(cal, lead);
     const dee = makeMember('Dee');
-    createPost('offer', 'produce', 'Dee tars hulls', 'Tar', 20, 'fixed', dee.pk);
+    createPost('offer', 'produce', 'Dee tars hulls', 'Tar', hc(20), 'fixed', dee.pk);
     confirm(dee, lead);
     const socks = { lead: await socket(lead), cal: await socket(cal), dee: await socket(dee), sid: await socket(sid) };
 
-    const calAsk = await call('POST', cal, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking: 400 });
+    const calAsk = await call('POST', cal, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking_c: hc(400) });
     const calApprove = await call('POST', lead, `/api/enterprise/${pair}/keepers/requests/${calAsk.body?.request?.id ?? calAsk.body?.id}/approve`, {});
     const calChange = calApprove.body?.change?.id;
     assert(calApprove.status === 200 && calApprove.body?.applied === false && !!calChange,
         `the lead keeper approves Cal's pledge of 400 and the objection window opens (${show(calApprove)})`);
     spend(cal, 700);
-    assert(getBalance(cal.pk).balance === -700, `precondition: Cal spends 700 inside the window (${getBalance(cal.pk).balance})`);
+    assert(getBalance(cal.pk).balance_c === -hc(700), `precondition: Cal spends 700 inside the window (${getBalance(cal.pk).balance_c} hundredths)`);
 
-    const deeAsk = await call('POST', dee, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking: 5 });
+    const deeAsk = await call('POST', dee, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking_c: hc(5) });
     const deeApprove = await call('POST', lead, `/api/enterprise/${pair}/keepers/requests/${deeAsk.body?.request?.id ?? deeAsk.body?.id}/approve`, {});
     const deeChange = deeApprove.body?.change?.id;
     assert(deeApprove.status === 200 && !!deeChange, `the lead keeper approves Dee's pledge of 5 (${show(deeApprove)})`);

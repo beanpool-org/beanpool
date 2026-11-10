@@ -51,6 +51,11 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Vouch-Reset-Pw-8831!';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OLD_COLUMNS = ['can_vouch', 'vouch_credit', 'elder_vouched_by'];
+/**
+ * The story's figures are Beans; the node's balances, grants and lines are whole hundredths (`*_c`). `hc` turns a Beans figure
+ * into hundredths. The old vouch_credit column is the previous release's own figure and is only ever zeroed: it keeps its Beans.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 interface Id { pk: string; priv: crypto.KeyObject; name: string }
 function newId(name: string): Id {
@@ -89,7 +94,8 @@ async function child(): Promise<void> {
             const alert = getAlertsStatus().history.filter((e) => e.key === 'reset.vouching').map((e) => e.detail);
             return {
                 members: cols('members'), inviteCodes: cols('invite_codes'), logs, codes, tombstones, alert,
-                mo: { profileFloor: se.getMemberTrustProfile(w.mo).floor, balanceFloor: se.getBalance(w.mo).floor, balance: se.getBalance(w.mo).balance },
+                // Whole hundredths, every figure (the trust profile's floor as getBalance's floor_c is it).
+                mo: { profileFloor_c: se.getMemberTrustProfile(w.mo).floor, balanceFloor_c: se.getBalance(w.mo).floor_c, balance_c: se.getBalance(w.mo).balance_c },
                 vic: { floor: se.getMemberTrustProfile(w.vic).floor, activated: se.getMemberTrustProfile(w.vic).activated },
                 audit: se.runLedgerAudit(),
                 sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
@@ -173,11 +179,11 @@ function writeOldRows(d: Database.Database, w: World): void {
         member.run(w.val.pk, 'Val', 0, 1, 0, null);
         member.run(w.vee.pk, 'Vee', 0, 1, 0, null);
         member.run(w.vic.pk, 'Vic', 0, 0, 100, w.val.pk);
-        member.run(w.mo.pk, 'Mo', 100, 0, 25, w.vee.pk);
+        member.run(w.mo.pk, 'Mo', hc(100), 0, 25, w.vee.pk);
         member.run(w.pat.pk, 'Pat', 0, 0, 0, null);
-        account.run(w.vic.pk, -30, epoch);
-        account.run(w.mo.pk, -40, epoch);
-        account.run(w.pat.pk, 70, epoch);
+        account.run(w.vic.pk, -hc(30), epoch);
+        account.run(w.mo.pk, -hc(40), epoch);
+        account.run(w.pat.pk, hc(70), epoch);
         const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
         code.run(w.codes.openVouched, w.val.pk, iso(DAY_MS), null, null, 3);
         code.run(w.codes.expiredVouched, w.val.pk, iso(40 * DAY_MS), null, null, 2);
@@ -252,7 +258,7 @@ async function main(): Promise<void> {
         require_(OLD_COLUMNS.every((c) => columnsOf(file, 'members').includes(c)) && columnsOf(file, 'invite_codes').includes('vouch_level'),
             'the data dir holds the previous release\'s shape: the four columns');
         const sumOf = () => { const d = new Database(file, { readonly: true }); try { return (d.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s; } finally { d.close(); } };
-        assert(Math.abs(sumOf()) < 1e-9, `the ledger sums to zero before (${sumOf()})`);
+        assert(sumOf() === 0, `the ledger sums to zero before (${sumOf()})`);
 
         const measured = measure(file);
         assert(measured.code === 2 && /F people with a vouch below the line they keep without it: 1/.test(measured.out) && /STOP/.test(measured.out),
@@ -287,10 +293,10 @@ async function main(): Promise<void> {
         {
             const d = new Database(file);
             d.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(w.vic.pk);
-            d.prepare('UPDATE accounts SET balance_c = 40 WHERE public_key = ?').run(w.pat.pk);
+            d.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(40), w.pat.pk);
             d.close();
         }
-        assert(Math.abs(sumOf()) < 1e-9, `the ledger sums to zero before the reset (${sumOf()})`);
+        assert(sumOf() === 0, `the ledger sums to zero before the reset (${sumOf()})`);
         const measured0 = measure(file);
         assert(measured0.code === 0 && /F people with a vouch below the line they keep without it: 0/.test(measured0.out) && /OK: F and G are 0/.test(measured0.out),
             `the measure script now reads F = 0 and says OK, exit 0 (Mo's -40 is within the 100 he keeps) (${measured0.code})`);
@@ -314,10 +320,10 @@ async function main(): Promise<void> {
             `the two unused vouched invites are deleted; the used one and the plain one stay (${j(look.codes)})`);
         assert(look.tombstones.openVouched === true && look.tombstones.expiredVouched === true && look.tombstones.plain === false,
             `each deleted invite has its tombstone, for a standby (${j(look.tombstones)})`);
-        assert(look.mo.profileFloor === -100 && look.mo.balanceFloor === -100 && look.mo.balance === -40,
+        assert(look.mo.profileFloor_c === -hc(100) && look.mo.balanceFloor_c === -hc(100) && look.mo.balance_c === -hc(40),
             `Mo, at -40 with 100 granted and a 25 vouch, keeps a line of 100 (${j(look.mo)})`);
         assert(look.vic.floor === 0 && look.vic.activated === false, `Vic, whose line was the vouch alone, has none now, owing nothing (${j(look.vic)})`);
-        assert(Math.abs(look.sum) < 1e-9 && look.audit.ok === true, `the ledger sums to zero after, and the audit is ok (${j({ sum: look.sum, audit: look.audit })})`);
+        assert(look.sum === 0 && look.audit.ok === true && look.audit.drift === 0, `the ledger sums to zero after, and the audit is ok (${j({ sum: look.sum, audit: look.audit })})`);
 
         // ── 5. the deleted routes 404, through the real middleware ──
         console.log('\n— 5. the deleted routes answer 404, signed or with an owner\'s session —');
@@ -375,7 +381,7 @@ async function main(): Promise<void> {
             givePreviousShape(d);
             writeOldRows(d, w);
             d.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(w.vic.pk);
-            d.prepare('UPDATE accounts SET balance_c = 40 WHERE public_key = ?').run(w.pat.pk);
+            d.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(40), w.pat.pk);
             d.close();
         }
         const sb2 = await spawnNode(SCRIPT, standbyDir, { ...env, NODE_ROLE: 'backup' });

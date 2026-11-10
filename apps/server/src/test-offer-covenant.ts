@@ -29,7 +29,11 @@ function throws(fn: () => void, needle: string, msg: string): void {
     catch (e: any) { assert(String(e?.message || e).includes(needle), `${msg} — threw "${e?.message}"`); }
 }
 
+/** The story's Beans as the node's whole hundredths (every floor, balance and price here is hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 let seq = 0;
+/** `balance`: whole hundredths. */
 function seedMember(pk: string, balance = 0) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
     setMemberPhoto(db, pk, 'a.png');
@@ -37,10 +41,10 @@ function seedMember(pk: string, balance = 0) {
 }
 // Insert an Offer row directly. live=false → a paused/soft-deleted offer that still counts for the
 // "ever listed" contribution gate but is NOT a live offer for the covenant.
-function offer(author: string, live: boolean, credits = 10): string {
+function offer(author: string, live: boolean, beans = 10): string {
     const pid = 'test-post-' + (seq++) + '-' + Math.random().toString(36).slice(2, 9);
     db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', ?, 'fixed', ?, ?, ?)`)
-        .run(pid, credits, author, live ? 1 : 0, live ? 'active' : 'paused');
+        .run(pid, hc(beans), author, live ? 1 : 0, live ? 'active' : 'paused');
     return pid;
 }
 const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
@@ -62,35 +66,35 @@ function main() {
     const sOffer = offer('seller', true, 10); // seller's live offer, costs 10
     offer('payer', false); // payer has LISTED an offer (clears contribution gate) but it is NOT live
     assert(hasLiveOffer('payer') === false, 'payer has no live offer');
-    assert(getBalance('payer').usableFloor === 0, '0 live offers → usable floor 0 (no credit line to draw)');
+    assert(getBalance('payer').usableFloor_c === 0, '0 live offers → usable floor 0 (no credit line to draw)');
     throws(() => requestPost(sOffer, 'payer'), 'FLOOR_LOCKED', 'no live offer → banded covenant blocks the credit spend');
     offer('payer', true); // 1 live offer → unlocks −200
-    assert(getBalance('payer').usableFloor === -200, '1 live offer → usable floor -200');
+    assert(getBalance('payer').usableFloor_c === -hc(200), '1 live offer → usable floor -200');
     const tx = requestPost(sOffer, 'payer');
     assert(!!tx && tx.status === 'requested', 'spend within the unlocked band → allowed');
 
     // Band boundaries: each extra live offer unlocks a deeper band, capped by the earned limit.
     seedMember('deep'); adminSetTier('deep', 'Elder'); // earned limit -1400
-    assert(getBalance('deep').usableFloor === 0, 'deep: 0 offers → 0');
-    offer('deep', true); assert(getBalance('deep').usableFloor === -200,  'deep: 1 offer → -200');
-    offer('deep', true); assert(getBalance('deep').usableFloor === -500,  'deep: 2 offers → -500');
-    offer('deep', true); assert(getBalance('deep').usableFloor === -1000, 'deep: 3 offers → -1000');
-    offer('deep', true); assert(getBalance('deep').usableFloor === -1400, 'deep: 4 offers → full earned -1400 (band -1500 capped by limit)');
+    assert(getBalance('deep').usableFloor_c === 0, 'deep: 0 offers → 0');
+    offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(200),  'deep: 1 offer → -200');
+    offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(500),  'deep: 2 offers → -500');
+    offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(1000), 'deep: 3 offers → -1000');
+    offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(1400), 'deep: 4 offers → full earned -1400 (band -1500 capped by limit)');
 
     // Freeze: dropping below the offers your debt needs freezes spending (inbound stays open).
     seedMember('frozen'); adminSetTier('frozen', 'Elder');
     const fOfferA = offer('frozen', true); offer('frozen', true); // 2 offers → -500 line
-    db.prepare(`UPDATE accounts SET balance_c = -400 WHERE public_key = 'frozen'`).run();
+    db.prepare(`UPDATE accounts SET balance_c = ? WHERE public_key = 'frozen'`).run(-hc(400));
     reconcileLedgerFromDb();
     assert(getBalance('frozen').frozen === false, 'debt -400 within the 2-offer -500 line → not frozen');
     db.prepare(`UPDATE posts SET status='paused', active=0 WHERE id = ?`).run(fOfferA); // pause one → 1 live offer
-    assert(getBalance('frozen').usableFloor === -200, 'after pausing one offer → usable floor -200');
+    assert(getBalance('frozen').usableFloor_c === -hc(200), 'after pausing one offer → usable floor -200');
     assert(getBalance('frozen').frozen === true, 'debt -400 now below the -200 line → frozen');
 
     // ── 4b. Viewer-aware paused visibility: author sees own paused Offer; others & the feed don't ──
     seedMember('pauser');
     const pausedId = 'test-post-paused-' + (seq++) + '-' + Math.random().toString(36).slice(2, 7);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', 10, 'fixed', 'pauser', 1, 'paused')`).run(pausedId);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', ?, 'fixed', 'pauser', 1, 'paused')`).run(pausedId, hc(10));
     assert(getPosts({ authorPubkey: 'pauser', viewerPubkey: 'pauser' }).some(p => p.id === pausedId), 'author viewing their own listings sees their paused Offer');
     assert(!getPosts({ authorPubkey: 'pauser', viewerPubkey: 'someone-else' }).some(p => p.id === pausedId), 'a different viewer does NOT see the author\'s paused Offer');
     assert(!getPosts().some(p => p.id === pausedId), 'the general feed hides paused Offers');
@@ -98,11 +102,11 @@ function main() {
     // ── 6. Admin tier badges grant the tier's entry floor ──
     seedMember('badgeUser');
     adminSetTier('badgeUser', 'Resident');
-    assert(floorOf('badgeUser') === -200, 'Resident badge → floor -200');
+    assert(floorOf('badgeUser') === -hc(200), 'Resident badge → floor -200');
     adminSetTier('badgeUser', 'Steward');
-    assert(floorOf('badgeUser') === -600, 'Steward badge → floor -600');
+    assert(floorOf('badgeUser') === -hc(600), 'Steward badge → floor -600');
     adminSetTier('badgeUser', 'Elder');
-    assert(floorOf('badgeUser') === -1400, 'Elder badge → floor -1400');
+    assert(floorOf('badgeUser') === -hc(1400), 'Elder badge → floor -1400');
     adminSetTier('badgeUser', 'Newcomer');
     assert(floorOf('badgeUser') === 0, 'Newcomer badge clears the grant → floor 0');
 
@@ -116,7 +120,7 @@ function main() {
     setHolidayMode('holA', false);
     assert(isOnHoliday('holA') === false, 'holiday switches back off');
     // open-trades guard: an in-flight deal blocks turning holiday ON
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES ('mt-hol', ?, 'holA', 'seller', 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(sOffer2);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES ('mt-hol', ?, 'holA', 'seller', ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(sOffer2, hc(5));
     throws(() => setHolidayMode('holA', true), 'active trade', 'cannot go on holiday with an open trade in progress');
     // feed-hide: an away member's offer is excluded from the general feed, but visible on their own listing view
     seedMember('holB'); const hbOffer = offer('holB', true, 7);

@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, freePriceWords, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, freePriceWords, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -1483,8 +1483,7 @@ export default function PublicProfileScreen() {
                                                 budgetLeft={myVouching.budget?.left ?? 0}
                                                 budgetTotal={myVouching.budget?.level ?? 0}
                                                 noLimit={myVouching.noLimit === true}
-                                                priorVouch={effectivePriorVouch}
-                                                personName={profile?.callsign || callsignStr || ''}
+                                                raiseFrom={isRaise ? effectivePriorVouch : undefined}
                                             />
                                         </>
                                     )}
@@ -1511,64 +1510,17 @@ export default function PublicProfileScreen() {
                                                 setVouchRefusal(null);
                                                 setVouchSuccess(null);
                                                 try {
-                                                    const res = await vouchFromProfile(anchorUrl, identity, {
-                                                        memberPubkey: pubKeyStr,
-                                                        vouchAmount: profileVouchPreset,
-                                                        raise: isRaise,
-                                                    });
-                                                    // The node's figure for your earlier vouch, when it sent one (`already_vouched`,
-                                                    // `over_max`). Without it nothing is guessed: the node's own sentence is shown.
+                                                    // A raise posts the total it ends at, a first vouch its amount; the node lands the difference.
+                                                    const res = await vouchFromProfile(anchorUrl, identity, isRaise
+                                                        ? { memberPubkey: pubKeyStr, raiseTo: profileVouchPreset }
+                                                        : { memberPubkey: pubKeyStr, vouchAmount: profileVouchPreset });
+                                                    // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `raise_not_above`):
+                                                    // the card follows it, so a screen that took a raise for a first vouch becomes the raise card.
+                                                    // Without it nothing is guessed: the node's own sentence is shown.
                                                     const prior = !res.ok && typeof res.prior === 'number' && res.prior > 0 ? res.prior : null;
                                                     if (prior !== null) setNodePriorVouch(prior);
-                                                    if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null && prior + profileVouchPreset <= pairMax) {
-                                                        const newTotal = prior + profileVouchPreset;
-                                                        Alert.alert(
-                                                            t(VOUCH_PRESET_WORDS.raiseTitle),
-                                                            t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
-                                                                prior,
-                                                                name: profile?.callsign || callsignStr || '',
-                                                                newTotal,
-                                                            }),
-                                                            [
-                                                                { text: t('Cancel'), style: 'cancel' },
-                                                                {
-                                                                    text: t(VOUCH_PRESET_WORDS.raise),
-                                                                    onPress: async () => {
-                                                                        setVouchBusy(true);
-                                                                        setVouchRefusal(null);
-                                                                        setVouchSuccess(null);
-                                                                        try {
-                                                                            const raiseRes = await vouchFromProfile(anchorUrl, identity, {
-                                                                                memberPubkey: pubKeyStr,
-                                                                                vouchAmount: profileVouchPreset,
-                                                                                raise: true,
-                                                                            });
-                                                                            if (raiseRes.ok) {
-                                                                                // The node's new total: the heading and the greyed presets follow it.
-                                                                                if (raiseRes.total > 0) setNodePriorVouch(raiseRes.total);
-                                                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: raiseRes.total }));
-                                                                                setProfileVouchPreset(null);
-                                                                                // A failed re-read keeps the card, its figures and this banner.
-                                                                                void rereadMyVouching(anchorUrl, identity, setMyVouching);
-                                                                            } else {
-                                                                                if (typeof raiseRes.prior === 'number' && raiseRes.prior > 0) setNodePriorVouch(raiseRes.prior);
-                                                                                setProfileVouchPreset(null);
-                                                                                setVouchRefusal(raiseRes.message);
-                                                                            }
-                                                                        } catch (e: any) {
-                                                                            setProfileVouchPreset(null);
-                                                                            setVouchRefusal(e?.message ?? t('Could not vouch.'));
-                                                                        } finally {
-                                                                            setVouchBusy(false);
-                                                                        }
-                                                                    },
-                                                                },
-                                                            ]
-                                                        );
-                                                        return;
-                                                    }
                                                     if (res.ok) {
-                                                        // The node's new total: the heading and the greyed presets follow it.
+                                                        // The node's new total: the heading and the raise choices follow it.
                                                         if (res.total > 0) setNodePriorVouch(res.total);
                                                         setVouchSuccess(isRaise
                                                             ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })

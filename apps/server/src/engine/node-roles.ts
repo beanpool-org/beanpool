@@ -329,7 +329,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
 
 /** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
 export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
-    // An owner or admin given their role back vouches by it again, as one granted it (engine/vouchers.ts; never throws).
+    // An owner given their role back vouches by it again, as one granted it; an admin gets no budget, and one a suspension
+    // took is not brought back (an owner makes an admin a voucher by hand, I5; engine/vouchers.ts; never throws).
     vouchingAfterRoleChange(pubkey, by.actor);
     const actorRole = actorRoleOf(by.actor);
     noteRoleAlert(`Someone was made ${withArticle(role)} again, ${by.how} ${HOW[actorRole]}.`, () => heldNodeRoleOf(pubkey) === role,
@@ -464,8 +465,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?)`
         ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass, madeAt, madeBy);
         if (currentRole !== role) noteRoleChanged(targetPubkey);
-        // An owner or admin vouches by the role, with a budget from the day it is granted (actor: who granted it); one made
-        // a moderator loses a budget the role gave, and the credit committee's place (engine/vouchers.ts; never throws).
+        // An owner vouches by the role, with a budget from the day it is granted (actor: who granted it). An admin gets none:
+        // an owner makes an admin a voucher by hand (I5). One made a moderator loses a budget the role gave, and the credit
+        // committee's place (engine/vouchers.ts; never throws).
         vouchingAfterRoleChange(targetPubkey, actorPubkey);
     })();
     bumpMembersVersion();

@@ -21,7 +21,7 @@ import {
 } from '../names-list';
 import {
     lowestBudgetLevel, nearestBudgetLevel, budgetLevelUp, budgetLevelDown, acceptsBudgetLevel, voucherActorWords, historyLineWords,
-    voucherCardSubtitle, canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers,
+    voucherCardSubtitle, canMakeVoucher, ownerOnlyVoucherTargets, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers,
 } from '../voucher-rules';
 import { voucherRowText } from '../../components/VouchersBlock';
 import { VoucherCard } from '../../components/VoucherCard';
@@ -353,6 +353,31 @@ describe('the rules the screens call', () => {
         expect(canMakeVoucher(entry({}), true, null)).toBe(false);
     });
 
+    it('canMakeVoucher: not on an admin’s entry for a viewer who is not an owner (the node answers 403 owner_only); an owner may (review, 10 Nov; I5)', () => {
+        const admins = [
+            { pubkey: ME, role: 'owner' }, { pubkey: 'pk_alice', role: 'admin' }, { pubkey: 'pk_wren', role: 'admin' }, { pubkey: 'pk_sally', role: 'owner' },
+        ];
+        const committeeAdmin = ownerOnlyVoucherTargets(admins, false);
+        const owner = ownerOnlyVoucherTargets(admins, true);
+        // Alice is an admin (entry() confirms pk_alice): a committee admin is not offered Make, an owner is.
+        expect(canMakeVoucher(entry({}), true, ME, committeeAdmin)).toBe(false);
+        expect(canMakeVoucher(entry({}), true, ME, owner)).toBe(true);
+        // A member who is no admin is offered to both, and the rule never lets a non-committee viewer in.
+        expect(canMakeVoucher(entry({ confirmation: confirmation({ memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(true);
+        expect(canMakeVoucher(entry({}), false, ME, owner)).toBe(false);
+        // The other checks still hold with the set given.
+        expect(canMakeVoucher(entry({ confirmation: confirmation({ status: 'awaiting_second', memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(false);
+        expect(canMakeVoucher(entry({ voucher: summary({ memberPubkey: 'pk_bea' }), confirmation: confirmation({ memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(false);
+    });
+
+    it('ownerOnlyVoucherTargets: the admins, for anyone who is not an owner; nobody for an owner; owners are never in it', () => {
+        const admins = [{ pubkey: 'pk_sally', role: 'owner' }, { pubkey: 'pk_alice', role: 'admin' }, { pubkey: 'pk_wren', role: 'admin' }];
+        expect([...ownerOnlyVoucherTargets(admins, false)].sort()).toEqual(['pk_alice', 'pk_wren']);
+        expect(ownerOnlyVoucherTargets(admins, true).size).toBe(0);
+        expect(ownerOnlyVoucherTargets(null, false).size).toBe(0);
+        expect(ownerOnlyVoucherTargets(undefined, false).size).toBe(0);
+    });
+
     it('voucherCallsignFor: the confirmation’s callsign, the community’s, the entry’s name', () => {
         const callsignOf = (pk: string) => (pk === 'pk_charlie' ? 'charlie' : '');
         expect(voucherCallsignFor(entry({ confirmation: confirmation({ callsign: 'alice' }) }), callsignOf)).toBe('alice');
@@ -385,6 +410,8 @@ describe('the rules the screens call', () => {
         const nameOf = (pk: string) => ({ pk_marty: 'marty', pk_wren: 'wren' } as Record<string, string>)[pk] ?? '';
         expect(voucherCardSubtitle(NODE_CARD, conf, nameOf)).toBe('@jane: confirmed by @marty and @wren, 4 Nov · made a voucher by @marty, 5 Nov');
         expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'migration:vouchers', madeByCallsign: null }, null)).toBe('@jane · made a voucher by role');
+        // An admin an owner made a voucher (I5: source 'role', made by that owner) names the owner, as the web and manager do.
+        expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'pk_marty', madeByCallsign: 'marty' }, null)).toBe('@jane · made a voucher by @marty, 5 Nov');
         // Someone else's confirmation (not this member's) is never shown as theirs.
         expect(voucherCardSubtitle(NODE_CARD, confirmation({ memberPubkey: 'pk_other' }), nameOf)).toBe('@jane · made a voucher by @marty, 5 Nov');
     });

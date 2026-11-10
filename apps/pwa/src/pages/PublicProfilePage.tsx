@@ -10,7 +10,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, VOUCH_PRESET_WORDS, type QuizResult, formatHundredths } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, type QuizResult, formatHundredths } from '@beanpool/core';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
@@ -248,7 +248,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         return () => { cancelled = true; };
     }, [pubkey, beansMode]);
 
-    const [raisePrompt, setRaisePrompt] = useState<{ prior: number; newTotal: number; amount: number } | null>(null);
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
 
     const myPriorVouch = useMemo(() => {
@@ -479,15 +478,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 )}
                                 <VouchPresetChoice
                                     value={profileVouchPreset}
-                                    onChange={(val) => {
-                                        setProfileVouchPreset(val);
-                                        setRaisePrompt(null);
-                                    }}
+                                    onChange={setProfileVouchPreset}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
                                     noLimit={myVouching.noLimit === true}
-                                    priorVouch={effectivePriorVouch}
-                                    personName={profile?.callsign || ''}
+                                    raiseFrom={isRaise ? effectivePriorVouch : undefined}
                                 />
                             </>
                         )}
@@ -501,56 +496,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 {vouchSuccess}
                             </p>
                         )}
-                        {raisePrompt && (
-                            <div className="mt-3 p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50 dark:bg-nature-950 space-y-2" data-testid="profile-vouch-raise-confirm">
-                                <p className="m-0 text-sm font-bold text-nature-950 dark:text-white">
-                                    {t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
-                                        prior: formatHundredths(raisePrompt.prior),
-                                        name: profile?.callsign || '',
-                                        newTotal: formatHundredths(raisePrompt.newTotal),
-                                    })}
-                                </p>
-                                <div className="flex gap-2 justify-end">
-                                    <button
-                                        type="button"
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-800 cursor-pointer"
-                                        onClick={() => setRaisePrompt(null)}
-                                        data-testid="profile-vouch-raise-cancel"
-                                    >
-                                        {t('Cancel')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold border-0 bg-bp-commit-fill text-bp-commit-on cursor-pointer font-bold"
-                                        onClick={async () => {
-                                            const amount = raisePrompt.amount;
-                                            setRaisePrompt(null);
-                                            setVouchBusy(true);
-                                            setVouchRefusal(null);
-                                            setVouchSuccess(null);
-                                            try {
-                                                const res = await api.vouchForMember(pubkey, amount, true);
-                                                // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
-                                                if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
-                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: formatHundredths(res?.total) }));
-                                                setProfileVouchPreset(null);
-                                                void getMyVouching().then(setMyVouching).catch(() => {});
-                                            } catch (e: any) {
-                                                if (typeof e?.prior === 'number' && e.prior > 0) setNodePriorVouch(e.prior);
-                                                setProfileVouchPreset(null);
-                                                const msg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : t('Could not vouch.');
-                                                setVouchRefusal(msg);
-                                            } finally {
-                                                setVouchBusy(false);
-                                            }
-                                        }}
-                                        data-testid="profile-vouch-raise-submit"
-                                    >
-                                        {t(VOUCH_PRESET_WORDS.raise)}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                         {!atMax && (
                             <button
                                 type="button"
@@ -560,9 +505,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     setVouchBusy(true);
                                     setVouchRefusal(null);
                                     setVouchSuccess(null);
-                                    setRaisePrompt(null);
                                     try {
-                                        const res = await api.vouchForMember(pubkey, profileVouchPreset, isRaise);
+                                        // A raise posts the total it ends at, a first vouch its amount; the node lands the difference.
+                                        const res = await api.vouchForMember(pubkey, isRaise ? { raiseTo: profileVouchPreset } : { vouchAmount: profileVouchPreset });
                                         // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
                                         if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
                                         setVouchSuccess(isRaise
@@ -571,16 +516,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setProfileVouchPreset(null);
                                         void getMyVouching().then(setMyVouching).catch(() => {});
                                     } catch (err: any) {
-                                        // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `over_max`).
-                                        // Without it nothing is guessed: the node's own sentence is shown, and no raise is offered.
+                                        // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `raise_not_above`):
+                                        // the card follows it, so a screen that took a raise for a first vouch becomes the raise card.
+                                        // Without it nothing is guessed: the node's own sentence is shown.
                                         const prior = typeof err?.prior === 'number' && err.prior > 0 ? err.prior : null;
                                         if (prior !== null) setNodePriorVouch(prior);
-                                        if (!isRaise && err?.code === 'already_vouched' && prior !== null) {
-                                            if (prior + profileVouchPreset <= pairMax) {
-                                                setRaisePrompt({ prior, newTotal: prior + profileVouchPreset, amount: profileVouchPreset });
-                                                return;
-                                            }
-                                        }
                                         // After any refusal, the selection goes back to what was in effect before the press (null):
                                         setProfileVouchPreset(null);
                                         const msg = typeof err?.message === 'string' && err.message ? err.message : typeof err?.error === 'string' && err.error ? err.error : t('Could not vouch.');

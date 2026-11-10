@@ -36,7 +36,7 @@ You can choose not to be shown as anyone's connection in common. In Settings, un
 
 ## Vouching for someone
 
-A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners and admins by role, and members set as vouchers on the names list by an owner or credit-committee admin.
+A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or credit-committee admin.
 
 On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. An owner can also choose **200** or **500**, and has no budget limit ("From your budget: No limit"). No Beans leave the voucher's own wallet.
 

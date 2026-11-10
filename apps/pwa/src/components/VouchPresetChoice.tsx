@@ -5,15 +5,16 @@
  * Shows:
  *   - "From your budget: 550 of 1,000 left" under it
  *   - A preset above what is left is greyed ("Not enough budget left")
- *   - A preset that would take your vouches for this person past 100 is greyed, and says so
- *     ("Your vouches for @sam can’t go past 100 Beans."): the cap, not the budget, is the reason
+ *   - A raise (`raiseFrom`, slice I6): "Raise to: 200 · 500", the totals above what you vouched for this person already
+ *     (core raiseTargetsFor, up to your most), no None; a choice is greyed only when the difference it draws is more than the
+ *     budget has left
  *   - Nothing left: "No budget left. Ask an owner for more."
  *   - An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none greyed for budget, and "From your budget: No limit"
  *
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
  */
 import { useId } from 'react';
-import { formatHundredths, t, vouchPresetsFor, vouchMaxFor, vouchPresets, wholeBeansOf } from '@beanpool/core';
+import { formatHundredths, t, vouchPresetsFor, raiseTargetsFor, vouchPresets, wholeBeansOf } from '@beanpool/core';
 
 /** Every figure here is whole hundredths of a Bean: core's presets and caps, the node's budget (GET /api/vouchers/me). */
 export interface VouchPresetChoiceProps {
@@ -21,10 +22,11 @@ export interface VouchPresetChoiceProps {
     onChange: (value: number | null) => void;
     budgetLeft: number;
     budgetTotal: number;
-    /** What you have vouched for this person already (the node's figure): a preset past VOUCH_MAX with it is greyed. */
-    priorVouch?: number;
-    /** Their callsign, for the sentence a greyed-by-the-cap preset says. */
-    personName?: string;
+    /**
+     * What you have vouched for this person already (the node's figure), above 0 on a raise: the choices are then the totals
+     * the vouch can be raised TO, with no None, and a choice draws only the difference (so it is greyed on that, not on its total).
+     */
+    raiseFrom?: number;
     /**
      * The node's `noLimit` for the signer (GET /api/vouchers/me): an owner vouches with no budget limit (Marty, 9 Nov), so
      * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your budget: No limit".
@@ -32,9 +34,9 @@ export interface VouchPresetChoiceProps {
     noLimit?: boolean;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch, personName, noLimit = false }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, raiseFrom, noLimit = false }: VouchPresetChoiceProps) {
     const id = useId();
-    const vouchMax = vouchMaxFor(noLimit);
+    const raising = raiseFrom !== undefined && raiseFrom > 0;
     const noneLeft = !noLimit && budgetLeft <= 0;
     const subtitle = noLimit
         ? t(vouchPresets.fromBudgetNoLimit)
@@ -42,20 +44,18 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
             ? t(vouchPresets.noneLeft)
             : t(vouchPresets.fromBudget, { left: formatHundredths(budgetLeft), total: formatHundredths(budgetTotal) });
 
+    const picks = raising ? raiseTargetsFor(noLimit, raiseFrom) : vouchPresetsFor(noLimit);
     const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
-        { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
-        ...vouchPresetsFor(noLimit).map((p) => {
-            const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > vouchMax;
-            const notEnoughBudget = !noLimit && p > budgetLeft;
+        ...(raising ? [] : [{ amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false }]),
+        ...picks.map((p) => {
+            // A raise draws the difference from the budget, a first vouch its whole amount.
+            const notEnoughBudget = !noLimit && (raising ? p - raiseFrom : p) > budgetLeft;
             return {
                 amount: p,
                 label: formatHundredths(p),
                 ariaLabel: t(vouchPresets.beans, { amount: formatHundredths(p) }),
-                disabled: notEnoughBudget || wouldExceedMax,
-                // The cap first: more budget would not make this preset possible.
-                why: wouldExceedMax
-                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatHundredths(vouchMax) })
-                    : notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
+                disabled: notEnoughBudget,
+                why: notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
             };
         }),
     ];
@@ -63,7 +63,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
     return (
         <fieldset className="mb-4 border-0 p-0 m-0 min-w-0" data-testid="invite-vouch">
             <legend className="p-0 mb-1 text-[14px] font-bold text-nature-950 dark:text-white">
-                {t(vouchPresets.label)}
+                {raising ? t(vouchPresets.raiseTo) : t(vouchPresets.label)}
             </legend>
             <p className="m-0 mb-2 text-xs text-nature-500 dark:text-nature-400">
                 {subtitle}

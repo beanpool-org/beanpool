@@ -71,10 +71,43 @@ describe('the phone vouch presets per role', () => {
         expect(h.textContent).toContain(`From your budget: 60 of ${formatNumber(1000)} left`);
     });
 
-    it("disables an owner's raise past 500 for one person, never past 100", () => {
-        const h = draw({ noLimit: true, priorVouch: 200, personName: 'sam' });
-        expect(off(h, '200')).toBe(false);
-        expect(off(h, '500')).toBe(true);
+    it("offers an owner's raise as the totals above what they vouched, with a Raise to heading and no None (slice I6)", () => {
+        const h = draw({ noLimit: true, raiseFrom: 100 });
+        expect(ids(h)).toEqual(['200', '500']);
+        expect(chips(h).some((e) => e.getAttribute('data-disabled') === 'true')).toBe(false);
+        expect(h.textContent).toContain('Raise to');
+        expect(h.textContent).not.toContain('Vouch for them');
+        expect(h.textContent).not.toContain('None');
+        expect(h.textContent).toContain('From your budget: No limit');
+    });
+
+    it("offers an owner at 200 only 500, and an owner at 500 nothing to raise to", () => {
+        expect(ids(draw({ noLimit: true, raiseFrom: 200 }))).toEqual(['500']);
+        act(() => root?.unmount());
+        host?.remove();
+        expect(ids(draw({ noLimit: true, raiseFrom: 500 }))).toEqual([]);
+    });
+
+    it("offers a voucher the totals up to 100, greyed only where the difference is more than the budget has left", () => {
+        const h = draw({ raiseFrom: 25, budgetLeft: 30, budgetTotal: 1000 });
+        expect(ids(h)).toEqual(['50', '75', '100']);
+        // 50 draws 25 (30 left): open. 75 draws 50 and 100 draws 75: greyed, on the difference and not on their totals.
+        expect(off(h, '50')).toBe(false);
+        expect(off(h, '75')).toBe(true);
+        expect(off(h, '100')).toBe(true);
+        expect(h.textContent).toContain('Raise to');
+        expect(h.textContent).toContain(`From your budget: 30 of ${formatNumber(1000)} left`);
+    });
+
+    it("never offers a voucher an owner's 200 or 500 when raising", () => {
+        expect(ids(draw({ raiseFrom: 75, budgetLeft: 1000, budgetTotal: 1000 }))).toEqual(['100']);
+    });
+
+    it('a first vouch still offers None and the presets, headed Vouch for them', () => {
+        const h = draw({ budgetLeft: 1000, budgetTotal: 1000 });
+        expect(ids(h)).toEqual(['none', '25', '50', '75', '100']);
+        expect(h.textContent).toContain('Vouch for them');
+        expect(h.textContent).not.toContain('Raise to');
     });
 
     it('wraps its row and keeps each chip 44 dp tall (320 dp × 1.3)', () => {

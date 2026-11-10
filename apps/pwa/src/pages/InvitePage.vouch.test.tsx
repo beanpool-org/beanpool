@@ -197,21 +197,23 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument();
     });
 
-    it('"+ Make someone a voucher" says one plain sentence, no developer words, and closes on Escape (#2915 round 4)', async () => {
+    it('"+ Make someone a voucher" opens the sheet of whom the node offers (I5), named by its heading, no developer words, and closes on Escape (#2915 round 4)', async () => {
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
         await waitFor(() => expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument());
 
         const row = screen.getByTestId('make-voucher-button');
         row.focus();
         fireEvent.click(row);
-        const dialog = screen.getByRole('dialog', { name: '+ Make someone a voucher' });
-        expect(dialog).toHaveTextContent('Make vouchers on the names list in the phone app.');
+        const dialog = screen.getByRole('dialog', { name: 'Make someone a voucher' });
+        // This node's block offers nobody (no `candidates`): one plain sentence says so. (Before I5 the web only said the
+        // phone made vouchers; Marty's 10 Nov rule gives the web the sheet too.)
+        expect(dialog).toHaveTextContent('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
         // Never a repo folder, a slice code or a promise of screens to come.
         expect(dialog.textContent).not.toMatch(/apps\/|manager|\bS\d\b|coming soon/i);
-        expect(document.activeElement).toBe(screen.getByRole('heading', { name: '+ Make someone a voucher' }));
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Make someone a voucher' }));
 
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: '+ Make someone a voucher' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Make someone a voucher' })).toBeNull();
         expect(document.activeElement).toBe(row);
     });
 

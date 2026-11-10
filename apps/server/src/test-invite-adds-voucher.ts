@@ -183,7 +183,9 @@ async function main(): Promise<void> {
         return id;
     };
     const bind = (id: Id, entryId: string, body: Record<string, unknown> = {}) => call(id, 'POST', `/api/names/entries/${entryId}/invite`, body);
-    require_(budgetOf(owen.pk).left === hc(1000) && budgetOf(ada.pk).left === hc(1000), `Owen and Ada each hold 1,000 by role (${budgetOf(owen.pk).left}, ${budgetOf(ada.pk).left} hundredths)`);
+    // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada one, no entry needed.
+    require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201, 'Owen makes Ada, an admin, a voucher');
+    require_(budgetOf(owen.pk).left === hc(1000) && budgetOf(ada.pk).left === hc(1000), `Owen holds 1,000 by role and Ada the 1,000 he made her (${budgetOf(owen.pk).left}, ${budgetOf(ada.pk).left} hundredths)`);
     const txBefore = count('SELECT COUNT(*) AS n FROM transactions');
     const balancesBefore = sumBalances();
 

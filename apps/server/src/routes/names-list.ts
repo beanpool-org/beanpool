@@ -34,10 +34,12 @@
  * Vouchers (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §2 to §5, Marty's §9 to §11). Every writer is
  * an owner's or a credit-committee admin's (403 `committee_only` for any other admin), with Beans on (403
  * `profile_no_beans`), and never their own budget (403 `own_budget`):
- *   GET    /api/names/vouchers                      → { vouchers: [row], settings } (the vouchers block: owners and committee)
- *   POST   /api/names/vouchers                      { entryId, amount? } → 201 card: a confirmed entry's member made a voucher
- *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange } (any owner or admin; logged)
- *   DELETE /api/names/vouchers/:member              → card: Stop vouching (a list budget; 409 role_voucher for a role's)
+ *   GET    /api/names/vouchers                      → { vouchers: [row], waiting, candidates: { admins, confirmed }, settings }
+ *                                                     (the vouchers block: owners and committee)
+ *   POST   /api/names/vouchers                      { entryId, amount_c? } → 201 card: a confirmed entry's member made a voucher;
+ *                                                   { memberPubkey, amount_c? } → 201 card: an admin made one by an owner (I5)
+ *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange, canStop } (any owner or admin; logged)
+ *   DELETE /api/names/vouchers/:member              → card: Stop vouching (409 role_voucher for an owner's; an admin's by an owner)
  *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)
  *   POST   /api/names/vouchers/settings             { voucherBudget } → settings (an owner); `memberGift` is a Core setting,
  *                                                     refused here whole (400 moved_to_community_shape): Core settings change it
@@ -258,7 +260,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     // Vouchers (engine/vouchers.ts). The block is the committee's: an admin who isn't on it reads a voucher's card only.
     router.get('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor) => {
         if (!isOnCreditCommittee(actor)) throw new VoucherError(403, 'committee_only', VOUCHER_WORDS.committeeOnly);
-        return vouchersBlock();
+        return vouchersBlock(actor);
     }));
     // Making a voucher, setting a budget and stopping one each tell the voucher (§10.2), as `tell` does above.
     router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body, tell), 201));

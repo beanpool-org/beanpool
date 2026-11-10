@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, store-badges: the two store-badge sentences, copied from the web app's catalog drafts of the same sentences); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, store-badges: the two store-badge sentences, copied from the web app's catalog drafts of the same sentences); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I6: Raise to and the raise-as-a-total sentences, 10 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I5: the make-voucher sheet and the owner-only voucher words, 10 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-10",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -958,7 +958,6 @@
   "@{name} is a voucher already.": "@{name} 已经是担保人了。",
   "@{name} is below zero: a credit-line gift or a Decision can help.": "@{name} 当前余额为负：赠予信用额度或发起决策会有所帮助。",
   "@{name} isn’t a voucher.": "@{name} 不是担保人。",
-  "@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.": "@{name} 担任所有者或管理员期间依职权进行担保，因此其预算无法停止。你可以调低该预算。",
   "@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.": "@{name} 的账户处于暂停状态，在暂停期间不能提高其预算。你仍然可以调低它。",
   "@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.": "@{name} 的信用额度已被冻结，在管理员解冻前不能提高其预算。你仍然可以调低它。",
   "A budget is 100 to 2,000 Beans, in steps of 100.": "预算必须在 100 至 2,000 豆子之间，按 100 递增。",
@@ -988,6 +987,8 @@
   "You can’t vouch for yourself.": "你不能为自己担保。",
   "You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.": "你的剩余预算仅剩 {left} 豆子，因此无法担保 {amount}。请选择较小的担保额，或向所有者申请更多。",
   "You haven’t vouched for @{name} yet, so there is no vouch to raise.": "你尚未为 @{name} 担保过，因此没有担保可以提高。",
+  "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "你已经为 @{name} 担保了 {total} 豆子。请选择更高的总额来提高。",
+  "Send either an amount to vouch or a total to raise to, not both.": "请只发送要担保的数额或要提高到的总额，不要两个都发。",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "你持有人家赠予的信用额度仅为 {room} 豆子，因此不能赠予 {amount}。",
   "Your budget to vouch from": "你的担保预算",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "你的担保预算已降至 {level} 豆子。你还剩 {left} 可用于担保。",
@@ -997,7 +998,6 @@
   "Your community's owners changed how it works: members no longer give part of their credit line to each other.": "你所在社区的所有者更改了运行规则：成员之间不再可以相互赠予部分信用额度。",
   "Your credit line is frozen, so you can’t give part of it until an admin unfreezes it.": "你的信用额度已被冻结，在管理员解冻前不能赠予其中的一部分。",
   "Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.": "你的信用额度已被冻结，在管理员解冻前不能使用预算进行担保。",
-  "Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.": "你对 @{name} 的担保最多为 {max} 豆子，当前为 {total}。",
   "You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.": "你现在是担保人了：你拥有 {level} 豆子的预算可用于为他人担保，每人最多 {max}。",
   "You’re using part of your credit line, so you can give {free} Beans of it at most now.": "你正在使用部分信用额度，因此现在最多只能赠予其中的 {free} 豆子。",
   "You’re using the credit line someone gave you, so none of it is free to give now.": "你正在使用他人赠予你的信用额度，因此目前没有任何可赠予的额度。",
@@ -1017,5 +1017,7 @@
   "Get it on Google Play": "前往 Google Play 获取",
   "An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first to make a new one.": "这个人已有一份邀请，由 @{callsign} 创建，还剩 {days} 天。请先撤销它，再创建新的。",
   "An invite for this person is out already, made by @{callsign}, with {days} days left. Ask @{callsign} or an owner to revoke it first.": "这个人已有一份邀请，由 @{callsign} 创建，还剩 {days} 天。请先让 @{callsign} 或某位所有者撤销它。",
-  "An invite for this person is out already, with {days} days left. Ask an owner to revoke it first.": "这个人已有一份邀请，还剩 {days} 天。请先让某位所有者撤销它。"
+  "An invite for this person is out already, with {days} days left. Ask an owner to revoke it first.": "这个人已有一份邀请，还剩 {days} 天。请先让某位所有者撤销它。",
+  "Only an owner makes an admin a voucher or stops an admin’s budget.": "只有所有者才能将管理员设为担保人或停止管理员的预算。",
+  "Only an admin can be made a voucher without a names-list entry. Anyone else needs a confirmed name on the names list.": "只有管理员可以在没有名单条目的情况下被设为担保人。其他人需要名单上已确认的姓名。"
 }

@@ -13,7 +13,7 @@ const NATIVE = path.resolve(HERE, '..');
 const ROOT = path.resolve(NATIVE, '../..');
 const SCALE = 1.3;
 const WIDTH = 320;
-const SHOTS_DIR = path.join(NATIVE, 'e2e', 'screenshots', 'vouch-v3');
+const SHOTS_DIR = process.env.VOUCH_SHOTS_DIR || path.join(NATIVE, 'e2e', 'screenshots', 'vouch-v3');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vouch-native-320-'));
@@ -170,7 +170,7 @@ globalThis.__store = new Map([
 ]);
 
 function App() {
-    const [preset, setPreset] = useState<number | null>(25);
+    const [preset, setPreset] = useState<number | null>(Number(q.get('pick')) || 25);
 
     if (view === 'profile') {
         return <PublicProfileScreen />;
@@ -183,9 +183,10 @@ function App() {
             <VouchPresetChoice
                 value={preset}
                 onChange={setPreset}
-                budgetLeft={550}
+                budgetLeft={Number(q.get('left')) || 550}
                 budgetTotal={1000}
                 noLimit={q.get('owner') === '1'}
+                raiseFrom={Number(q.get('raise')) || undefined}
             />
         </ScrollView>
     );
@@ -244,6 +245,12 @@ const cases = [
     // An owner (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit".
     { view: 'presets', scheme: 'light', owner: true, name: 'native-owner-presets-320dp-light.png' },
     { view: 'presets', scheme: 'dark', owner: true, name: 'native-owner-presets-320dp-dark.png' },
+    // A raise (invites-vouching I6): "Raise to" the totals above what was vouched, no None; a voucher at 25 with 30 left (50 open, 75 and 100 greyed
+    // on the difference), and an owner at 100 (200 and 500, nothing greyed).
+    { view: 'presets', scheme: 'light', raise: 25, pick: 50, left: 30, name: 'native-raise-voucher-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', raise: 25, pick: 50, left: 30, name: 'native-raise-voucher-320dp-dark.png' },
+    { view: 'presets', scheme: 'light', owner: true, raise: 100, pick: 200, name: 'native-raise-owner-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', owner: true, raise: 100, pick: 200, name: 'native-raise-owner-320dp-dark.png' },
     { view: 'profile', scheme: 'light', name: 'native-profile-320dp-light.png' },
     { view: 'profile', scheme: 'dark', name: 'native-profile-320dp-dark.png' },
     { view: 'ledger', scheme: 'light', name: 'native-ledger-320dp-light.png' },
@@ -255,7 +262,7 @@ try {
         const context = await browser.newContext({ viewport: { width: WIDTH, height: 640 }, deviceScaleFactor: 2 });
         const page = await context.newPage();
         page.on("pageerror", (e) => console.log(`[${c.view}/${c.scheme}] page error: ${String(e.message).slice(0, 300)}`));
-        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}${c.owner ? '&owner=1' : ''}`);
+        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}${c.owner ? '&owner=1' : ''}${c.raise ? `&raise=${c.raise}&pick=${c.pick}` : ''}${c.left ? `&left=${c.left}` : ''}`);
         await page.waitForTimeout(500);
         // #2915 round 4: the vouch card is below the fold inside the profile's ScrollView.
         if (c.view === "profile") { await page.evaluate(() => document.querySelector("[data-testid=\"profile-vouch\"]")?.scrollIntoView({ block: "start" })); await page.waitForTimeout(300); }

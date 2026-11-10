@@ -1256,7 +1256,8 @@ router.post('/api/invite/generate', async (ctx) => {
 });
 
 // A vouch from a member's profile (engine/vouchers.ts vouchFromProfile; DESIGN-invites-and-names-list-amend2-fable.md §4 Q1,
-// Marty's §9): `{ memberPubkey, vouchAmount, raise? }`, from the signer's own budget, landing at once. The signer is the
+// Marty's §9): `{ memberPubkey, vouchAmount }` for a first vouch or `{ memberPubkey, raiseTo }` for a raise (the total it ends
+// at; DESIGN-invites-vouching-review-fable.md §4, I6), from the signer's own budget, landing at once. The signer is the
 // voucher; the body names only the person vouched for. Every rule is checked in the vouch's own transaction.
 router.post('/api/vouch', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;

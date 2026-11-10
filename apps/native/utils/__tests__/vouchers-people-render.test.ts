@@ -153,6 +153,8 @@ const WAITING = { entryId: '7'.repeat(32), level: 1000, vouchAmount: 25, madeBy:
 const BLOCK = {
     vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
     waiting: [WAITING],
+    // Whom "+ Make someone a voucher" offers (invites-vouching I5): an admin with no budget, and a name confirmed on the list.
+    candidates: { admins: [{ memberPubkey: key('9'), callsign: 'Kit' }], confirmed: [{ memberPubkey: key('8'), callsign: 'liz', entryId: '6'.repeat(32) }], adminsOffered: true },
     settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
 };
 const COMMITTEE_ONLY = 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.';
@@ -224,10 +226,19 @@ describe('People â†’ Invites: the Vouchers block, exactly as the node answers (Â
             const heading = inviteHeading();
             expect(heading).not.toBeNull();
             expect(b!.compareDocumentPosition(heading!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            // The last row opens the names list.
+            // The last row opens the sheet of whom the node offers (I5; it opened the names list before Marty's 10 Nov rule),
+            // in a full-screen modal kept inside the safe area, with the community's default budget to start from.
             const make = Array.from(b!.querySelectorAll('button')).find((x) => x.getAttribute('aria-label') === '+ Make someone a voucher');
             await act(async () => { (make as HTMLElement).click(); });
-            expect(nav.pushed).toEqual(['/names-list']);
+            await settle();
+            expect(nav.pushed).toEqual([]);
+            const safe = host.querySelector('[data-modal] [data-testid="make-voucher-modal"]');
+            expect(safe, 'the sheet sits in a SafeAreaView').not.toBeNull();
+            expect(safe!.getAttribute('data-safe-area')!.split(',')).toEqual(expect.arrayContaining(['top', 'bottom']));
+            expect(Array.from(safe!.querySelectorAll('[data-testid="make-voucher-admin-row"]')).map((r) => r.textContent)).toEqual(['@Kit']);
+            expect(Array.from(safe!.querySelectorAll('[data-testid="make-voucher-confirmed-row"]')).map((r) => r.textContent)).toEqual(['@liz']);
+            await act(async () => { (safe!.querySelector('[data-testid="make-voucher-admin-row"]') as HTMLElement).click(); });
+            expect(safe!.querySelector('[data-testid="make-voucher-budget"]')?.textContent).toContain('Budget: 1,000 Beans');
         });
     }
 

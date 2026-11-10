@@ -73,6 +73,17 @@ export function vouchMaxFor(owner: boolean): number {
     return owner ? OWNER_VOUCH_MAX : VOUCH_MAX;
 }
 
+/**
+ * The totals a voucher may raise a vouch for one person TO (DESIGN-invites-vouching-review-fable.md §3 and §4, slice I6): the
+ * voucher's own presets above what they have vouched for this person already, up to the most one voucher's vouches come to.
+ * A raise names the total it ends at, never an amount to add: an owner at 100 is offered 200 and 500. The server lands the
+ * difference and refuses a target at or below the total. Nothing is offered once the total is at the most (an empty list).
+ */
+export function raiseTargetsFor(owner: boolean, total: number): number[] {
+    const max = vouchMaxFor(owner);
+    return vouchPresetsFor(owner).filter((p) => p > total && p <= max);
+}
+
 /** What every vouch for one person may come to: 500 once an owner vouched for them, 300 otherwise. */
 export function personVouchMax(ownerVouched: boolean): number {
     return ownerVouched ? PERSON_VOUCH_MAX_WITH_OWNER : PERSON_VOUCH_MAX;
@@ -122,8 +133,7 @@ export const VOUCH_PRESET_WORDS = {
     setBudgetToTitle: word('Set budget to'),
     vouchers: word('Vouchers'),
     makeSomeoneVoucher: word('+ Make someone a voucher'),
-    makeSomeoneVoucherHelp: word('Make vouchers on the names list in the phone app.'),
-    pastMax: word('Your vouches for @{name} can’t go past {max} Beans.'),
+    waitingNameHelp: word('Their name is sealed in the names list: open it in the phone app to see who this is.'),
     seeWhoTheyBroughtIn: word('See who they brought in'),
     theirBudget: word('Their budget'),
     budgetHistoryCount: word('Budget history ({count})'),
@@ -133,9 +143,7 @@ export const VOUCH_PRESET_WORDS = {
     voucherCardSections: word('Voucher card sections'),
     hasNotVouchedAnyone: word('Has not vouched for anyone yet.'),
     noBudgetHistoryYet: word('No budget history yet.'),
-    raiseConfirmQuestion: word('You vouched {prior} for @{name} before. Raise it to {newTotal}?'),
-    raise: word('Raise'),
-    raiseTitle: word('Raise vouch?'),
+    raiseTo: word('Raise to'),
     tradingWithOthers: word('trading with others'),
     tradingInsideOnly: word('trading inside only'),
     noTradesYet: word('no trades yet'),
@@ -162,7 +170,7 @@ export const vouchPresets = {
     fromBudget: VOUCH_PRESET_WORDS.fromBudget,
     fromBudgetNoLimit: VOUCH_PRESET_WORDS.fromBudgetNoLimit,
     notEnough: VOUCH_PRESET_WORDS.notEnough,
-    pastMax: VOUCH_PRESET_WORDS.pastMax,
+    raiseTo: VOUCH_PRESET_WORDS.raiseTo,
     noneLeft: VOUCH_PRESET_WORDS.noneLeft,
     notAVoucher: VOUCH_PRESET_WORDS.notAVoucher,
     beans: VOUCH_PRESET_WORDS.beans,

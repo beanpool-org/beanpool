@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, revokeInvite, getInviteTree, getMyVouching, getVouchersBlock,
-    myNodeRoleOnce, request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
+    myNodeRoleOnce, request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary, type VouchersBlockData,
 } from '../lib/api';
 import type { WaitingVoucherRow } from '@beanpool/core';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -27,7 +27,8 @@ import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
-import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
+import { WaitingNameNotice } from '../components/WaitingNameNotice';
+import { MakeVoucherSheet } from '../components/MakeVoucherSheet';
 import { LOCAL_COMMUNITY_LINES, formatDate, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
@@ -156,7 +157,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     // Invites not used yet that promise a budget (the Vouchers block's Waiting to join): their names are on the phone.
     const [waitingData, setWaitingData] = useState<WaitingVoucherRow[]>([]);
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
-    const [showMakeVoucherNotice, setShowMakeVoucherNotice] = useState(false);
+    // A waiting row's name is on the phone (the names list); "+ Make someone a voucher" opens the sheet of whom the node offers (I5).
+    const [showWaitingNotice, setShowWaitingNotice] = useState(false);
+    const [makeSheet, setMakeSheet] = useState<{ candidates: VouchersBlockData['candidates']; voucherBudget: number | null } | null>(null);
+    const [showMakeSheet, setShowMakeSheet] = useState(false);
 
     // An answer that lands after the page has gone sets nothing (a test's torn-down window once turned main red, 6 Nov).
     const mounted = useRef(true);
@@ -180,14 +184,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         if (isPreview) return;
         let data: VoucherSummary[] | null;
         let waiting: WaitingVoucherRow[] = [];
+        let sheet: { candidates: VouchersBlockData['candidates']; voucherBudget: number | null } | null = null;
         try {
             const block = await getVouchersBlock();
             data = block?.vouchers ?? null;
             waiting = block?.waiting ?? [];
+            sheet = block ? { candidates: block.candidates, voucherBudget: block.settings?.voucherBudget ?? null } : null;
         } catch {
             data = null;
         }
-        if (mounted.current) { setVouchersData(data); setWaitingData(waiting); }
+        if (mounted.current) { setVouchersData(data); setWaitingData(waiting); setMakeSheet(sheet); }
     }, [isPreview]);
 
     useEffect(() => {
@@ -600,7 +606,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                 <button
                                                     key={w.entryId}
                                                     type="button"
-                                                    onClick={() => setShowMakeVoucherNotice(true)}
+                                                    onClick={() => setShowWaitingNotice(true)}
                                                     className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-start justify-between gap-2 border-0 bg-transparent cursor-pointer"
                                                     data-testid="voucher-waiting-row"
                                                 >
@@ -613,7 +619,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 })()}
                                 <button
                                     type="button"
-                                    onClick={() => setShowMakeVoucherNotice(true)}
+                                    onClick={() => setShowMakeSheet(true)}
                                     className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-center gap-2 border-0 bg-transparent cursor-pointer text-sm font-bold text-bp-ink-accent"
                                     data-testid="make-voucher-button"
                                 >
@@ -875,7 +881,15 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 />
             )}
 
-            {showMakeVoucherNotice && <MakeVoucherNotice onClose={() => setShowMakeVoucherNotice(false)} />}
+            {showWaitingNotice && <WaitingNameNotice onClose={() => setShowWaitingNotice(false)} />}
+            {showMakeSheet && makeSheet && (
+                <MakeVoucherSheet
+                    candidates={makeSheet.candidates}
+                    defaultBudget={makeSheet.voucherBudget}
+                    onClose={() => setShowMakeSheet(false)}
+                    onMade={() => { void loadVouchersBlock(); }}
+                />
+            )}
         </div>
     );
 }

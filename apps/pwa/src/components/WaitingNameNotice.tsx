@@ -1,14 +1,14 @@
 /**
- * "+ Make someone a voucher", the last row of the web's Vouchers block (design amendment 2 §11). The web has no names list
- * yet, and vouchers are made on the names list (§2, §11), which is the phone app's: so this says where, in one plain
- * sentence, and nothing about screens to come. A dialog as the app's others are: named by its heading, focus in on open and
- * back to the row on close, Escape closes it.
+ * A Waiting to join row opened on the web (invites-vouching I4, I5): the invite's name is sealed in the names list, which
+ * only the phone app opens, so this says where to read it, in one plain sentence, and nothing about screens to come. (The
+ * web makes vouchers itself since I5: "+ Make someone a voucher" opens MakeVoucherSheet.) A dialog as the app's others
+ * are: named by its heading, focus in on open and back to the row on close, Escape closes it.
  */
 import { useRef } from 'react';
-import { t, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { t, waitingHeading, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { useDialogFocus } from './dialog-focus';
 
-export function MakeVoucherNotice({ onClose }: { onClose: () => void }) {
+export function WaitingNameNotice({ onClose }: { onClose: () => void }) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose);
     return (
@@ -17,7 +17,7 @@ export function MakeVoucherNotice({ onClose }: { onClose: () => void }) {
             className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/50"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="make-voucher-title"
+            aria-labelledby="waiting-name-title"
             data-testid="make-voucher-notice"
             onClick={onClose}
         >
@@ -25,11 +25,11 @@ export function MakeVoucherNotice({ onClose }: { onClose: () => void }) {
                 className="w-full max-w-[420px] p-5 rounded-2xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <h2 id="make-voucher-title" tabIndex={-1} className="m-0 mb-2 text-base font-extrabold text-nature-950 dark:text-white outline-none">
-                    {t(VOUCH_PRESET_WORDS.makeSomeoneVoucher)}
+                <h2 id="waiting-name-title" tabIndex={-1} className="m-0 mb-2 text-base font-extrabold text-nature-950 dark:text-white outline-none">
+                    {waitingHeading()}
                 </h2>
                 <p className="m-0 mb-4 text-sm text-nature-600 dark:text-nature-300 leading-relaxed">
-                    {t(VOUCH_PRESET_WORDS.makeSomeoneVoucherHelp)}
+                    {t(VOUCH_PRESET_WORDS.waitingNameHelp)}
                 </p>
                 <button
                     type="button"

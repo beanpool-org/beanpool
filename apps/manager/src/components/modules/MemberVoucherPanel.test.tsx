@@ -169,6 +169,21 @@ describe('MemberVoucherPanel', () => {
         );
     });
 
+    it('an admin an owner made a voucher reads "made by @owner", never "by role" (review, 10 Nov; I5)', () => {
+        render(
+            <MemberVoucherPanel
+                nodeUrl={NODE}
+                pubkey={ALICE_PK}
+                displayName="Alice"
+                initialCard={{ ...FIXTURE_ROLE_CARD, noLimit: false, madeBy: 'b'.repeat(64), madeByCallsign: 'owen' }}
+            />
+        );
+
+        expect(screen.getByTestId('voucher-panel-header').textContent).toBe(
+            'Voucher · 550 of 1,000 left · made by @owen'
+        );
+    });
+
     it('fetches card from node and renders nothing on 404 (not a voucher)', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
             new Response(JSON.stringify({ error: 'not_voucher' }), { status: 404 })

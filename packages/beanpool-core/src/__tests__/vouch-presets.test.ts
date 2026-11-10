@@ -10,12 +10,14 @@ import {
     isOwnerVouchPreset,
     vouchPresetsFor,
     vouchMaxFor,
+    raiseTargetsFor,
     personVouchMax,
     VOUCHER_BUDGET_MIN,
     VOUCHER_BUDGET_MAX,
     isVouchPreset,
     isBudgetLevel,
     formatHistoryLine,
+    VOUCH_PRESET_WORDS,
     type HistoryLineLike,
 } from '../vouch-presets.js';
 
@@ -178,5 +180,35 @@ describe('vouch-presets core logic and history line formatting', () => {
         expect(textStop).toBe('−450 budget stopped by @marty');
         expect(textStop).not.toMatch(/[0-9a-f]{64}/i);
         expect(textStop).not.toMatch(/\bstop\b/i);
+    });
+
+    it("a raise is offered as the totals it can end at (slice I6): the voucher's own presets above what they vouched, up to their most", () => {
+        // In hundredths, as every vouch is: an owner at 100 is offered 200 and 500: 300 is not a preset, so it is not a total anyone can vouch.
+        expect(raiseTargetsFor(true, 10000)).toEqual([20000, 50000]);
+        expect(raiseTargetsFor(true, 2500)).toEqual([5000, 7500, 10000, 20000, 50000]);
+        expect(raiseTargetsFor(true, 20000)).toEqual([50000]);
+        expect(raiseTargetsFor(true, 50000)).toEqual([]);
+        // Everyone else tops out at 100 and is never offered an owner's 200 or 500.
+        expect(raiseTargetsFor(false, 2500)).toEqual([5000, 7500, 10000]);
+        expect(raiseTargetsFor(false, 7500)).toEqual([10000]);
+        expect(raiseTargetsFor(false, 10000)).toEqual([]);
+        // A total between presets is offered the presets above it only.
+        expect(raiseTargetsFor(true, 12500)).toEqual([20000, 50000]);
+        // Nothing offered is at or below the total, or past the voucher's most.
+        for (const owner of [true, false]) {
+            for (const total of [2500, 5000, 7500, 10000, 12500, 20000, 30000, 50000]) {
+                for (const target of raiseTargetsFor(owner, total)) {
+                    expect(target).toBeGreaterThan(total);
+                    expect(target).toBeLessThanOrEqual(vouchMaxFor(owner));
+                }
+            }
+        }
+    });
+
+    it('says "Raise to" once, and keeps no sentence for the old add-an-amount raise', () => {
+        expect(VOUCH_PRESET_WORDS.raiseTo).toBe('Raise to');
+        for (const gone of ['raiseConfirmQuestion', 'raise', 'raiseTitle', 'pastMax']) {
+            expect(Object.keys(VOUCH_PRESET_WORDS)).not.toContain(gone);
+        }
     });
 });

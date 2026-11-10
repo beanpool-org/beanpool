@@ -65,7 +65,7 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, type PulseSubmitRouteDeps } from './routes/pulse-submit.js';
 import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
-import { lockedDm } from './dm-test-payload.js';
+import { lockedColumn, lockedDm } from './dm-test-payload.js';
 import { resolveChannel, prunePulseItems, type SsrfSafeResponse } from './engine/pulse-resolver.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -148,9 +148,9 @@ const line = (from: Id, conversationId: string, payload: Record<string, unknown>
 const invite = (id: Id) => call('POST', id, '/api/invite/generate', { publicKey: id.pk });
 const enterprise = (id: Id, name: string) => call('POST', id, '/api/enterprise', { name, purpose: `${name}, a test enterprise` });
 const group = (id: Id, name: string) => call('POST', id, '/api/groups', { name });
-/** A line's ciphertext of exactly `chars` base64 characters (a multiple of 4), in the encrypted form a DM takes. */
+/** A line's ciphertext of exactly `chars` base64 characters (a multiple of 4), in the form a DM takes (format 4). */
 function lineOf(chars: number): { ciphertext: string; nonce: string } {
-    const ciphertext = crypto.randomBytes((chars / 4) * 3).toString('base64');
+    const ciphertext = lockedColumn((chars / 4) * 3);
     if (ciphertext.length !== chars) throw new Error(`fixture: ${ciphertext.length} characters, wanted ${chars}`);
     return { ciphertext, nonce: lockedDm().nonce };
 }
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
         assert(count('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?', conv) === before, 'and neither is stored');
         const photo = await line(fay, conv, {
             ...lockedDm(), type: 'image',
-            attachment: { data: crypto.randomBytes(300 * 1024).toString('base64'), nonce: lockedDm().nonce, mime: 'image/jpeg' },
+            attachment: { data: lockedColumn(300 * 1024), nonce: lockedDm().nonce, mime: 'image/jpeg' },
         });
         assert(photo.status === 200, `a photo of 300 KB goes as an attachment, not counted in the line (${show(photo)})`);
         const edit = await call('POST', fay, '/api/messages/edit', { messageId: exact.body?.message?.id, ...lineOf(LIMIT + 4), authorPubkey: fay.pk });

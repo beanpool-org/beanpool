@@ -22,7 +22,8 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
             category: 'food',
             authorCallsign: 'BakerBob',
             authorPublicKey: 'pk-baker-12345678',
-            price: 5,
+            // The node's price_c: whole hundredths of a Bean (525 is 5.25 Beans).
+            price_c: 525,
             createdAt: '2026-09-10T08:00:00.000Z',
         },
         {
@@ -33,7 +34,7 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
             category: 'tools',
             authorCallsign: 'GreenThumb',
             authorPublicKey: 'pk-gardener-87654321',
-            price: 15,
+            price_c: 1500,
             createdAt: '2026-09-12T10:30:00.000Z',
         },
         {
@@ -44,7 +45,7 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
             category: 'energy',
             authorCallsign: 'SparkySam',
             authorPublicKey: 'pk-sparky-11223344',
-            price: 40,
+            price_c: 4000,
             createdAt: '2026-09-14T14:00:00.000Z',
         },
     ];
@@ -172,7 +173,7 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
                 description: undefined,
                 type: 99 as any,
                 category: false as any,
-                price: 'not-a-number' as any,
+                price_c: 'not-a-number' as any,
             },
         ];
 
@@ -186,6 +187,15 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
 
         expect(screen.getByText('1 of 1 posts')).toBeInTheDocument();
         expect(screen.getByText('Untitled Listing')).toBeInTheDocument();
+        // A price that isn't whole hundredths is no price at all: nothing shown, never a number.
+        expect(screen.queryByText(/🫘/)).toBeNull();
+    });
+
+    it("shows each listing's price_c as Beans to the cent", () => {
+        render(<PostModerationPanel posts={mockPosts} activeNode={mockNode} onRefresh={vi.fn()} />);
+        expect(screen.getByText('5.25 🫘')).toBeInTheDocument();
+        expect(screen.getByText('15 🫘')).toBeInTheDocument();
+        expect(screen.getByText('40 🫘')).toBeInTheDocument();
     });
 
     it('allows cancelling the delete confirmation dialog', async () => {

@@ -14,10 +14,11 @@ describe('HomeScreen Component', () => {
         onCreateEnterprise: vi.fn(),
         onDownloadBackup: vi.fn().mockResolvedValue(undefined),
         onRunLedgerAudit: vi.fn().mockResolvedValue(undefined),
-        auditState: { running: false, result: { ok: true, drift: 0, sumBalances: 100 } },
+        // The audit's figures are whole hundredths of a Bean (engine audit.ts runConservationCheck).
+        auditState: { running: false, result: { ok: true, drift: 0, sumBalances: 10000 } },
     };
 
-    it('renders 0 enterprises and 0.0 circulation beans on cold start / empty node data', () => {
+    it('renders 0 enterprises and 0 circulation beans on cold start / empty node data', () => {
         // A cold-start node's real answer: no members yet, and trade totals of zero (every node sends tradeTotals). A 0
         // here is the node's; a payload without the field is "couldn't load" (below), never 0.
         render(<HomeScreen {...defaultProps} nodeData={{ members: [], tradeTotals: { deals: 0, volume: 0, cancelled: 0 } }} />);
@@ -26,9 +27,9 @@ describe('HomeScreen Component', () => {
         const enterpriseCard = screen.getByRole('button', { name: /Shared Enterprises/i });
         expect(enterpriseCard).toHaveTextContent('0');
 
-        // Circulation card should render 0.0 beans
+        // Circulation card should render 0 beans (a whole figure has no decimals: formatHundredths)
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
-        expect(circulationCard).toHaveTextContent('0.0 beans');
+        expect(circulationCard).toHaveTextContent('0 beans');
     });
 
     it('derives enterprises count and circulation volume dynamically from nodeData', () => {
@@ -42,7 +43,8 @@ describe('HomeScreen Component', () => {
                 'pk-user1': { posts: 1, messages: 2 },
                 'pk-corp1': { posts: 4, messages: 0 },
             },
-            tradeTotals: { deals: 3, volume: 50.4, cancelled: 0 },
+            // The volume is whole hundredths (getTradeTotals sums amount_c): 5040 is 50.40 Beans.
+            tradeTotals: { deals: 3, volume: 5040, cancelled: 0 },
         };
 
         render(<HomeScreen {...defaultProps} nodeData={mockNodeData} />);
@@ -53,7 +55,7 @@ describe('HomeScreen Component', () => {
 
         // The community's completed volume, from its trade totals (member stats carry no trades)
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
-        expect(circulationCard).toHaveTextContent('50.4 beans');
+        expect(circulationCard).toHaveTextContent('50.40 beans');
     });
 
     it('renders plain-language reassurance card on clean recovery after unclean shutdown', async () => {
@@ -232,7 +234,8 @@ describe('HomeScreen Component', () => {
     describe("the server's alerts and figures that didn't load (Marty, 19 Oct: 'This server has alerts: 1' on the phone, 'All clear' and 0 members here)", () => {
         const loaded = {
             members: [{ publicKey: 'a', isTreasury: false }, { publicKey: 'b', isTreasury: false }, { publicKey: 'c', isTreasury: true }],
-            reportCount: 0, escrowDisputesCount: 0, tradeTotals: { deals: 2, volume: 12.5, cancelled: 0 }, commonsBalance: 40.25,
+            // Whole hundredths of a Bean, as /admin/data sends both (getTradeTotals, getCommonsBalance).
+            reportCount: 0, escrowDisputesCount: 0, tradeTotals: { deals: 2, volume: 1250, cancelled: 0 }, commonsBalance: 4025,
         };
         const alertItems = [
             { key: 'backups.none', title: 'backups stay on this server', priority: 2, since: 1, detail: 'Backups stay on this server: no destination and no recovery code.' },
@@ -306,9 +309,10 @@ describe('HomeScreen Component', () => {
         });
 
         it("the Commons pool is the node's pot, not the ledger audit's sum of balances", () => {
-            render(<HomeScreen {...defaultProps} auditState={{ running: false, result: { ok: true, drift: 0, sumBalances: -9.82 } }} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
+            render(<HomeScreen {...defaultProps} auditState={{ running: false, result: { ok: true, drift: 0, sumBalances: -982 } }} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
             const pool = screen.getByTestId('home-figure-pool');
-            expect(pool).toHaveTextContent('40.3 beans');
+            // Exact, to the cent: 4025 is 40.25 Beans (never 40.3, never 4,025).
+            expect(pool).toHaveTextContent('40.25 beans');
             expect(pool).not.toHaveTextContent('9.8');
         });
 
@@ -316,7 +320,7 @@ describe('HomeScreen Component', () => {
             const onNavigate = vi.fn();
             render(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={loaded} diag={diagWith({ count: 0, items: [] })} />);
             fireEvent.click(screen.getByTestId('home-figure-pool'));
-            // The Pool sub-tab still shows a fixed "240.0 beans" and "0.0 drift" (EconomySection), next to the real pot here.
+            // The Pool sub-tab's drift tile is still fixed text (EconomySection), so the card opens Shared Projects & Economy.
             expect(onNavigate).toHaveBeenCalledWith('economy');
         });
 

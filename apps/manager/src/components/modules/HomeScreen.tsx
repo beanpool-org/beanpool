@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
 import { getTfaSessionToken } from '../../lib/node-client';
-import { FEEDBACK_LIVE } from '@beanpool/core';
+import { FEEDBACK_LIVE, isHundredths } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 import { SuggestChangePanel } from './SuggestChangePanel';
 import { WebVisitsCard } from './WebVisitsCard';
 import { AppVersionsCard } from './AppVersionsCard';
@@ -143,25 +144,15 @@ export function HomeScreen({
         ? nodeData.enterprises.length
         : (counts ? counts.treasuries : (members ? members.filter((m: MemberItem) => m && m.isTreasury).length : null));
 
-    const circulationVolume = (() => {
-        if (typeof nodeData?.tradeVolume === 'number') {
-            return nodeData.tradeVolume.toFixed(1);
-        }
-        if (typeof nodeData?.circulation === 'number') {
-            return nodeData.circulation.toFixed(1);
-        }
-        // The community's completed trade volume, each trade once: member stats carry no member's trades (queue item 29).
-        if (typeof nodeData?.tradeTotals?.volume === 'number') {
-            return nodeData.tradeTotals.volume.toFixed(1);
-        }
-        return null;
-    })();
+    // The community's completed trade volume, each trade once: member stats carry no member's trades (queue item 29). Whole
+    // hundredths of a Bean (state-engine getTradeTotals sums amount_c), in words; a figure that isn't one is no figure.
+    const tradeVolume_c = nodeData?.tradeTotals?.volume;
+    const circulationVolume = isHundredths(tradeVolume_c) ? beansFigure(tradeVolume_c) : null;
 
-    // The Commons pot, from the node's data (routes/admin.ts /admin/data). Not the ledger audit's sum of balances: that is
-    // the conservation baseline, which is no pool at all.
-    const commonsBalance = typeof nodeData?.commonsBalance === 'number' && Number.isFinite(nodeData.commonsBalance)
-        ? nodeData.commonsBalance.toFixed(1)
-        : null;
+    // The Commons pot, from the node's data (routes/admin.ts /admin/data): whole hundredths under its old name. Not the
+    // ledger audit's sum of balances: that is the conservation baseline, which is no pool at all.
+    const commonsBalance_c = nodeData?.commonsBalance;
+    const commonsBalance = isHundredths(commonsBalance_c) ? beansFigure(commonsBalance_c) : null;
 
     // Disk/storage usage percentage: prefer real diskHealth if provided by server
     const storagePercent = !diag ? null : typeof diag.diskHealth?.usedPercent === 'number'
@@ -304,8 +295,9 @@ export function HomeScreen({
     ].filter(Boolean) as string[];
     const figuresLoading = missingFigures.length > 0 && dataState === 'loading';
 
+    // The audit's drift is whole hundredths (engine audit.ts runConservationCheck); null when it wasn't a number.
     const driftText = auditState.result
-        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${Number.isFinite(auditState.result.drift) ? auditState.result.drift : 'not a number'} drift)`
+        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${isHundredths(auditState.result.drift) ? beansFigure(auditState.result.drift) : 'not a number'} drift)`
         : 'Ledger not audited yet';
     const connections = typeof diag?.activeWsConnections === 'number' ? diag.activeWsConnections : null;
 

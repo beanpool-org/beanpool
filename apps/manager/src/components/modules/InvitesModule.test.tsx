@@ -315,9 +315,9 @@ describe('InvitesModule', () => {
         it('does NOT render presets under key session if the node says not a voucher', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: false,
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
 
             render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
@@ -331,10 +331,10 @@ describe('InvitesModule', () => {
         it('renders presets under key session when the node says is a voucher', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,
-                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: 55000, level: 100000, held: 10000, vouched: 35000 },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
 
             render(<InvitesModule activeNode={mockNode} viewer={ADMIN_KEY} />);
@@ -356,16 +356,16 @@ describe('InvitesModule', () => {
         it('passes selected preset to generateNodeInvite and displays vouch badge on generated card', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,
-                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: 55000, level: 100000, held: 10000, vouched: 35000 },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
             vi.mocked(nodeClient.generateNodeInvite).mockResolvedValue({
                 success: true,
                 code: 'INV-VOUCH-25',
                 type: 'standard',
-                vouchAmount: 25,
+                vouchAmount: 2500,
             });
 
             render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
@@ -390,12 +390,13 @@ describe('InvitesModule', () => {
                 expect(screen.getByText('Generated Passes (1)')).toBeInTheDocument();
             });
 
+            // The preset as the node takes it: `vouchAmount` in whole hundredths, 25 Beans is 2500.
             expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
                 'https://test-node.beanpool.org',
                 'secretpassword',
                 'standard',
                 undefined,
-                25
+                2500
             );
 
             expect(screen.getByTestId('card-vouch-badge')).toHaveTextContent('🤝 25 Beans vouched');
@@ -404,10 +405,10 @@ describe('InvitesModule', () => {
         it('does not display vouch badge if node response omits vouchAmount', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,
-                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: 55000, level: 100000, held: 10000, vouched: 35000 },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
             vi.mocked(nodeClient.generateNodeInvite).mockResolvedValue({
                 success: true,
@@ -440,10 +441,10 @@ describe('InvitesModule', () => {
         it('disables presets that exceed budget and warns when budget is 0', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,
-                budget: { left: 50, level: 1000, held: 600, vouched: 350 },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: 5000, level: 100000, held: 60000, vouched: 35000 },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
 
             const { unmount: unmount1 } = render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
@@ -463,10 +464,10 @@ describe('InvitesModule', () => {
             // When left === 0
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,
-                budget: { left: 0, level: 1000, held: 650, vouched: 350 },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: 0, level: 100000, held: 65000, vouched: 35000 },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
             });
 
             render(<InvitesModule activeNode={{ ...mockNode, id: 'node-2' }} viewer={OWNER_KEY} />);
@@ -484,22 +485,23 @@ describe('InvitesModule', () => {
 
     describe('presets hold across renders and fit the whole batch (#2923 review)', () => {
         const OWNER_KEY: any = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
-        const voucher = (left: number) => ({ voucher: true, budget: { left, level: 1000, held: 0, vouched: 1000 - left },
-            presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000 });
+        // Every figure as GET /api/local/admin/vouchers/me sends it: whole hundredths of a Bean (engine/vouchers.ts myVouching).
+        const voucher = (left: number) => ({ voucher: true, budget: { left, level: 100000, held: 0, vouched: 100000 - left },
+            presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000 });
 
         it('five cards at 25 with 100 left: refused before the first card, with the reason, and nothing is made', async () => {
-            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(100) as any);
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(10000) as any);
             render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
             await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
             await userEvent.click(screen.getByRole('button', { name: '5' }));
             await userEvent.click(screen.getByTestId('vouch-preset-25'));
             await userEvent.click(screen.getByRole('button', { name: /Generate 5 Pass/i }));
-            expect(await screen.findByText(/Not enough budget left for 5 cards at 25 each/)).toBeInTheDocument();
+            expect(await screen.findByText('Not enough budget left for 5 cards at 25 each: 100 left. Choose fewer cards or a smaller amount.')).toBeInTheDocument();
             expect(nodeClient.generateNodeInvite).not.toHaveBeenCalled();
         });
 
         it('a new viewer object for the same person keeps the chosen amount and reads the budget once', async () => {
-            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(550) as any);
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(55000) as any);
             const view = render(<InvitesModule activeNode={mockNode} viewer={{ ...OWNER_KEY }} />);
             await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
             await userEvent.click(screen.getByTestId('vouch-preset-50'));
@@ -509,8 +511,18 @@ describe('InvitesModule', () => {
             expect(nodeClient.fetchMyVouching).toHaveBeenCalledTimes(1);
         });
 
+        it('says a budget to the cent as hundredths, never 100 times over', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(4925) as any);
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+            await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
+            expect(screen.getByTestId('vouch-budget-left')).toHaveTextContent('From your budget: 49.25 of 1,000 left');
+            // 49.25 left: the 25 preset fits, 50 and up do not.
+            expect(screen.getByTestId('vouch-preset-25')).not.toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-50')).toBeDisabled();
+        });
+
         it('the amounts are a radio group a screen reader can read', async () => {
-            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(550) as any);
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(55000) as any);
             render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
             await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
             const radios = screen.getAllByRole('radio');

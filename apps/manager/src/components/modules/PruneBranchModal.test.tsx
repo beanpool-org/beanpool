@@ -58,7 +58,8 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
     ];
 
     // The branch above as the node counts it: root + 2 children + 1 grandchild, 150.5 + 50.25 + 200 + 75.25 in surplus.
-    const branchFigures: BranchPruneFigures = { members: 4, badDebt: 0, surplus: 476, net: 476 };
+    // The money figures are whole hundredths of a Bean (server branchPrunePreview): 47600 is 476 Beans.
+    const branchFigures: BranchPruneFigures = { members: 4, badDebt_c: 0, surplus_c: 47600, net_c: 47600 };
     void mockDownstreamMembers;
 
     it("shows the node's figures for the branch, and enforces type-to-confirm", async () => {
@@ -220,7 +221,7 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         render(
             <PruneBranchModal
                 rootMember={root}
-                loadFigures={figuresOf({ members: 2, badDebt: 250, surplus: 400, net: 150 })}
+                loadFigures={figuresOf({ members: 2, badDebt_c: 25000, surplus_c: 40000, net_c: 15000 })}
                 onConfirm={vi.fn()}
                 onClose={vi.fn()}
             />
@@ -311,11 +312,13 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         await userEvent.click(pruneBtn);
         expect(handleConfirm).not.toHaveBeenCalled();
 
-        resolveFigures({ members: 1_250, badDebt: 300.4, surplus: 10, net: -290.4 });
+        // Whole hundredths: 30040 is 300.40 Beans, and a net below zero has the true minus.
+        resolveFigures({ members: 1_250, badDebt_c: 30040, surplus_c: 1000, net_c: -29040 });
         await waitFor(() => expect(document.getElementById('prune-members-affected')?.textContent).toBe('1250'));
         expect(screen.queryByTestId('prune-figures-loading')).toBeNull();
-        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('300.4 🫘 bad debt');
-        expect(document.getElementById('prune-net-impact')?.textContent).toBe('-290.4 🫘');
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('300.40 🫘 bad debt');
+        expect(document.getElementById('prune-credit-confiscated')?.textContent).toBe('10 🫘 credit');
+        expect(document.getElementById('prune-net-impact')?.textContent).toBe('−290.40 🫘');
         expect(pruneBtn).toBeEnabled();
     });
 

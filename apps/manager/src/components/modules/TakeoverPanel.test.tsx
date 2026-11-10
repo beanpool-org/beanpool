@@ -246,7 +246,8 @@ describe('TakeoverPanel', () => {
     });
 
     it("says why the ledger audit failed: a copy that adds up but isn't the main server's, a difference, or no record", async () => {
-        const lastCopy = { accounts: 7, holdings: 76.71, generatedAt: '2026-09-20T00:59:00.000Z' };
+        // The audit's money figures are whole hundredths of a Bean (server engine/audit.ts): 7671 is 76.71 Beans.
+        const lastCopy = { accounts: 7, holdings: 7671, generatedAt: '2026-09-20T00:59:00.000Z' };
         const complete = (audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>) => {
             const p = progress('complete', 13);
             return { ...p, result: { ...p.result, audit } };
@@ -255,7 +256,7 @@ describe('TakeoverPanel', () => {
             // Every balance 0: the difference is 0, so "does NOT add up (difference 0)" would contradict the steps list.
             {
                 audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: true, copy: { match: false, here: { accounts: 7, holdings: 0 }, lastCopy } },
-                says: [/The ledger is not the main server's as this server last copied it: here 7 account\(s\) holding 0\.00 Beans, the main server's 7 account\(s\) holding 76\.71 Beans\. Check it before members trade\./],
+                says: [/The ledger is not the main server's as this server last copied it: here 7 account\(s\) holding 0 Beans, the main server's 7 account\(s\) holding 76\.71 Beans\. Check it before members trade\./],
                 never: [/does NOT add up/],
             },
             {
@@ -264,23 +265,25 @@ describe('TakeoverPanel', () => {
                 never: [/does NOT add up/],
             },
             {
-                audit: { ok: false, drift: -9.82, strandedEscrows: 0, addsUp: false, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
-                says: [/The ledger does NOT add up \(difference -9\.82\)\. Check it before members trade\./],
+                audit: { ok: false, drift: -982, strandedEscrows: 0, addsUp: false, copy: { match: true, here: { accounts: 7, holdings: 7671 }, lastCopy } },
+                says: [/The ledger does NOT add up \(difference −9\.82\)\. Check it before members trade\./],
                 never: [/not the main server's/],
             },
             // A server from before the copy was checked: its "not ok" is the sum's, as it always said.
-            { audit: { ok: false, drift: 2.5, strandedEscrows: 0 }, says: [/The ledger does NOT add up \(difference 2\.5\)\. Check it before members trade\./], never: [/main server's/] },
+            { audit: { ok: false, drift: 250, strandedEscrows: 0 }, says: [/The ledger does NOT add up \(difference 2\.50\)\. Check it before members trade\./], never: [/main server's/] },
+            // One hundredth off is off: whole hundredths have no slack to round under.
+            { audit: { ok: false, drift: 1, strandedEscrows: 0, addsUp: false }, says: [/The ledger does NOT add up \(difference 0\.01\)\. Check it before members trade\./], never: [/main server's/] },
             // Balances that are not a number, and nothing else: said as themselves, never "does NOT add up (difference 0)".
             {
-                audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: false, badBalances: 2, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
+                audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: false, badBalances: 2, copy: { match: true, here: { accounts: 7, holdings: 7671 }, lastCopy } },
                 says: [/2 account balance\(s\) are not a number, so the ledger can't add up\. Check it before members trade\./],
                 never: [/does NOT add up/, /not the main server's/],
             },
             // A balance of Infinity, as a real take-over sends it (test-takeover-infinite-balance): JSON wrote the drift as
             // null. Said as the balance that isn't a number and the copy; never "difference null", and nothing throws.
             {
-                audit: { ok: false, drift: null, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: false, here: { accounts: 1, holdings: 5 }, lastCopy: { accounts: 2, holdings: 10, generatedAt: '2026-10-02T00:00:00.000Z' } } },
-                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger is not the main server's as this server last copied it: here 1 account\(s\) holding 5\.00 Beans, the main server's 2 account\(s\) holding 10\.00 Beans\. Check it before members trade\./],
+                audit: { ok: false, drift: null, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: false, here: { accounts: 1, holdings: 500 }, lastCopy: { accounts: 2, holdings: 1000, generatedAt: '2026-10-02T00:00:00.000Z' } } },
+                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger is not the main server's as this server last copied it: here 1 account\(s\) holding 5 Beans, the main server's 2 account\(s\) holding 10 Beans\. Check it before members trade\./],
                 never: [/null/, /NaN/, /Infinity/],
             },
             // A drift that isn't a number with no count of bad balances (or a holdings figure that isn't one): plain words.
@@ -297,8 +300,8 @@ describe('TakeoverPanel', () => {
             },
             // Both: each said.
             {
-                audit: { ok: false, drift: -3, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
-                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger does NOT add up \(difference -3\)\. Check it before members trade\./],
+                audit: { ok: false, drift: -300, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: true, here: { accounts: 7, holdings: 7671 }, lastCopy } },
+                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger does NOT add up \(difference −3\)\. Check it before members trade\./],
                 never: [/not the main server's/],
             },
         ];

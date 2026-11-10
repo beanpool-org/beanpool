@@ -9,7 +9,11 @@
  */
 export const BULK_DELETE_BATCH_SIZE = 200;
 
-/** One escrow the node could not refund in full while deleting (the server's EscrowRefundShortfall). */
+/**
+ * One escrow the node could not refund in full while deleting (the server's EscrowRefundShortfall). `owed` and `refunded`
+ * keep their names and are whole hundredths of a Bean (engine/posts.ts: the trade's amount_c, the escrow's balance_c): say
+ * them through lib/beans.ts, never as Beans.
+ */
 export interface BulkDeleteRefundShortfall {
     transactionId: string;
     postId: string;

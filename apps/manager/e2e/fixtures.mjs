@@ -85,7 +85,7 @@ const MEMBERS = [
         canOperate: true,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 4820,
+        earnedCredit: 482000,
         avatarUrl: null,
     },
     {
@@ -101,7 +101,7 @@ const MEMBERS = [
         canOperate: true,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 1930,
+        earnedCredit: 193000,
         avatarUrl: null,
     },
     {
@@ -117,7 +117,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 640,
+        earnedCredit: 64000,
         avatarUrl: null,
     },
     {
@@ -131,7 +131,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: true,
         isFrozen: true,
-        earnedCredit: 15,
+        earnedCredit: 1500,
         avatarUrl: null,
     },
     {
@@ -145,7 +145,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 3110,
+        earnedCredit: 311000,
         avatarUrl: null,
     },
     {
@@ -159,7 +159,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 280,
+        earnedCredit: 28000,
         avatarUrl: null,
     },
     {
@@ -173,7 +173,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 40,
+        earnedCredit: 4000,
         avatarUrl: null,
     },
     {
@@ -187,7 +187,7 @@ const MEMBERS = [
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
-        earnedCredit: 505,
+        earnedCredit: 50500,
         avatarUrl: null,
     },
 ];
@@ -283,12 +283,12 @@ const LISTED_REPORTS = [
 ];
 
 const POSTS = [
-    { id: 'post-2001', type: 'offer', title: 'Split Ironbark Firewood, 1 Trailer Load', description: 'Seasoned, ready to burn. Farm gate pickup only.', category: 'firewood', price: 45, authorCallsign: MEMBER_NAMES[1], authorPublicKey: MEMBERS[1].publicKey, createdAt: '2026-09-12T04:10:00.000Z' },
-    { id: 'post-2002', type: 'offer', title: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription', description: 'Free range, weekly drop at the Saturday market stall.', category: 'produce', price: 25, authorCallsign: MEMBER_NAMES[5], authorPublicKey: MEMBERS[5].publicKey, createdAt: '2026-09-14T22:41:00.000Z' },
-    { id: 'post-2003', type: 'request', title: 'Need a hand moving a fridge up two flights of stairs', description: 'Saturday morning, will feed you afterwards.', category: 'labour', price: 0, authorCallsign: MEMBER_NAMES[6], authorPublicKey: MEMBERS[6].publicKey, createdAt: '2026-09-15T09:02:00.000Z' },
-    { id: 'post-2004', type: 'offer', title: 'Tool Library: Petrol Rotary Hoe Available for Loan', description: 'Book through the Tool Library treasury, 3 day max loan.', category: 'tools', price: 8, authorCallsign: MEMBER_NAMES[0], authorPublicKey: MEMBERS[0].publicKey, createdAt: '2026-09-16T01:30:00.000Z' },
-    { id: 'post-2005', type: 'offer', title: 'Handwoven Cane Baskets, Made to Order', description: 'Two week turnaround, three sizes.', category: 'crafts', price: 30, authorCallsign: MEMBER_NAMES[7], authorPublicKey: MEMBERS[7].publicKey, createdAt: '2026-09-17T06:15:00.000Z' },
-    { id: 'post-2006', type: 'request', title: 'Looking for someone to mind chickens over the long weekend', description: 'Twice daily, feed and eggs provided as thanks.', category: 'other', price: 10, authorCallsign: MEMBER_NAMES[4], authorPublicKey: MEMBERS[4].publicKey, createdAt: '2026-09-18T11:00:00.000Z' },
+    { id: 'post-2001', type: 'offer', title: 'Split Ironbark Firewood, 1 Trailer Load', description: 'Seasoned, ready to burn. Farm gate pickup only.', category: 'firewood', price_c: 4500, authorCallsign: MEMBER_NAMES[1], authorPublicKey: MEMBERS[1].publicKey, createdAt: '2026-09-12T04:10:00.000Z' },
+    { id: 'post-2002', type: 'offer', title: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription', description: 'Free range, weekly drop at the Saturday market stall.', category: 'produce', price_c: 2500, authorCallsign: MEMBER_NAMES[5], authorPublicKey: MEMBERS[5].publicKey, createdAt: '2026-09-14T22:41:00.000Z' },
+    { id: 'post-2003', type: 'request', title: 'Need a hand moving a fridge up two flights of stairs', description: 'Saturday morning, will feed you afterwards.', category: 'labour', price_c: 0, authorCallsign: MEMBER_NAMES[6], authorPublicKey: MEMBERS[6].publicKey, createdAt: '2026-09-15T09:02:00.000Z' },
+    { id: 'post-2004', type: 'offer', title: 'Tool Library: Petrol Rotary Hoe Available for Loan', description: 'Book through the Tool Library treasury, 3 day max loan.', category: 'tools', price_c: 800, authorCallsign: MEMBER_NAMES[0], authorPublicKey: MEMBERS[0].publicKey, createdAt: '2026-09-16T01:30:00.000Z' },
+    { id: 'post-2005', type: 'offer', title: 'Handwoven Cane Baskets, Made to Order', description: 'Two week turnaround, three sizes.', category: 'crafts', price_c: 3000, authorCallsign: MEMBER_NAMES[7], authorPublicKey: MEMBERS[7].publicKey, createdAt: '2026-09-17T06:15:00.000Z' },
+    { id: 'post-2006', type: 'request', title: 'Looking for someone to mind chickens over the long weekend', description: 'Twice daily, feed and eggs provided as thanks.', category: 'other', price_c: 1000, authorCallsign: MEMBER_NAMES[4], authorPublicKey: MEMBERS[4].publicKey, createdAt: '2026-09-18T11:00:00.000Z' },
 ];
 
 const ENTERPRISES = [
@@ -296,10 +296,10 @@ const ENTERPRISES = [
         publicKey: pubkey('treasury-tool-library'),
         name: 'Riverbend Tool Library & Repair Cooperative',
         avatar: '\u{1F6E0}️',
-        balance: 615.5,
-        creditLine: 800,
+        balance_c: 61550,
+        creditLine_c: 80000,
         liveOffers: 4,
-        workingCapitalCeiling: 1000,
+        workingCapitalCeiling_c: 100000,
         purpose: 'Community-owned tool lending and small-engine repair, funded by loan fees and demurrage rebates',
         keepers: [MEMBERS[0].publicKey, MEMBERS[2].publicKey],
         lat: -37.0625,
@@ -311,10 +311,10 @@ const ENTERPRISES = [
         publicKey: pubkey('treasury-market-garden'),
         name: 'District Market Garden Collective',
         avatar: '\u{1F33E}',
-        balance: 1204,
-        creditLine: 1500,
+        balance_c: 120400,
+        creditLine_c: 150000,
         liveOffers: 9,
-        workingCapitalCeiling: 2000,
+        workingCapitalCeiling_c: 200000,
         purpose: 'Shared plots, bulk seed buying and weekly produce boxes for members',
         keepers: [MEMBERS[1].publicKey, MEMBERS[5].publicKey, MEMBERS[7].publicKey],
         lat: -37.0701,
@@ -326,10 +326,10 @@ const ENTERPRISES = [
         publicKey: pubkey('treasury-care-roster'),
         name: 'Mutual Aid Care Roster Trust',
         avatar: '\u{1F91D}',
-        balance: 88.25,
-        creditLine: 300,
+        balance_c: 8825,
+        creditLine_c: 30000,
         liveOffers: 1,
-        workingCapitalCeiling: null,
+        workingCapitalCeiling_c: null,
         purpose: 'Coordinates unpaid care shifts and reimburses out-of-pocket costs only',
         keepers: [MEMBERS[4].publicKey],
         lat: null,
@@ -540,7 +540,7 @@ const DISPUTES = [
         buyerName: 'Josephine Wren',
         sellerCallsign: MEMBER_NAMES[1],
         sellerName: 'Maria Santos',
-        credits: 45,
+        amount_c: 4500,
         status: 'pending',
         createdAt: Date.parse('2026-09-09T00:00:00.000Z'),
         daysStuck: 10,
@@ -551,8 +551,7 @@ const DISPUTES = [
             authorPubkey: MEMBERS[1].publicKey,
             authorName: 'Maria Santos',
             authorCallsign: MEMBER_NAMES[1],
-            priceCredits: 45,
-            unitPrice: 45,
+            price_c: 4500,
             category: 'firewood',
         },
         chatContext: [
@@ -570,7 +569,7 @@ const DISPUTES = [
         sellerPubkey: MEMBERS[5].publicKey,
         buyerCallsign: MEMBER_NAMES[6],
         sellerCallsign: MEMBER_NAMES[5],
-        credits: 25,
+        amount_c: 2500,
         status: 'pending',
         createdAt: Date.parse('2026-09-04T00:00:00.000Z'),
         daysStuck: 15,
@@ -579,8 +578,7 @@ const DISPUTES = [
             title: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription',
             description: 'Free range, weekly drop at the Saturday market stall.',
             authorPubkey: MEMBERS[5].publicKey,
-            priceCredits: 25,
-            unitPrice: 5,
+            price_c: 2500,
             category: 'produce',
         },
         chatContext: [],
@@ -824,9 +822,9 @@ const FUNNEL_ROWS = (() => {
 })();
 
 const COMMONS_PROJECTS = [
-    { id: 'proj-1', title: 'Replace Tool Library rotary hoe', description: 'Petrol rotary hoe damaged during a loan, needs full replacement.', requestedAmount: 180 },
-    { id: 'proj-2', title: 'Community Garden irrigation timer upgrade', description: 'Solar-powered drip irrigation controller for the market garden plots.', requestedAmount: 95 },
-    { id: 'proj-3', title: 'Printed seed-swap noticeboard signage', description: 'Weatherproof signage for the three seed swap boxes around town.', requestedAmount: 40 },
+    { id: 'proj-1', title: 'Replace Tool Library rotary hoe', description: 'Petrol rotary hoe damaged during a loan, needs full replacement.', requestedAmount: 18000 },
+    { id: 'proj-2', title: 'Community Garden irrigation timer upgrade', description: 'Solar-powered drip irrigation controller for the market garden plots.', requestedAmount: 9500 },
+    { id: 'proj-3', title: 'Printed seed-swap noticeboard signage', description: 'Weatherproof signage for the three seed swap boxes around town.', requestedAmount: 4000 },
 ];
 
 const SNAPSHOTS = [
@@ -1107,21 +1105,22 @@ const COMMUNITY_SHAPE = {
             },
             includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true },
         },
+        // The shape reads money in whole hundredths of a Bean (config/community-shape.ts readShape).
         knownFloor: {
-            value: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
-            configured: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
+            value: { on: true, floor: 100000, cap: 200000, capMax: 500000 },
+            configured: { on: true, floor: 100000, cap: 200000, capMax: 500000 },
             source: 'default',
             lock: null,
         },
         voucherBudget: {
-            value: 1000,
-            configured: 1000,
+            value: 100000,
+            configured: 100000,
             source: 'default',
             lock: null,
         },
         memberGift: {
-            value: 100,
-            configured: 100,
+            value: 10000,
+            configured: 10000,
             source: 'default',
             lock: null,
         },
@@ -1173,8 +1172,8 @@ const COMMUNITY_SHAPE = {
             actorCallsign: null,
             actorRole: 'owner',
             setting: 'knownFloor.cap',
-            from: '2000',
-            to: '3000',
+            from: '200000',
+            to: '300000',
             note: null,
         },
     ],
@@ -1240,16 +1239,16 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
             reportCount: REPORTS.length,
             escrowDisputesCount: DISPUTES.length,
             memberStats: { active: 7, suspended: 1, newcomers: 2, residents: 3, stewards: 1, elders: 2 },
-            tradeVolume: 8492.75,
-            circulation: 12500,
-            commonsBalance: 240,
+            // Whole hundredths of a Bean, as /admin/data sends them (getTradeTotals, getCommonsBalance).
+            tradeTotals: { deals: 48, volume: 849275, cancelled: 3 },
+            commonsBalance: 24000,
             enterprises: ENTERPRISES,
         });
     }
     if (pathname === '/api/local/admin/logs') return ok({ logs: LOGS });
     if (pathname === '/api/local/admin/onboarding-funnel') return ok({ days: Number(searchParams.get('days')) || 30, rows: FUNNEL_ROWS, openDoor: true });
     if (pathname === '/api/local/admin/web-visits') return ok({ days: 30, retentionDays: 400, series: WEB_VISITS });
-    if (pathname === '/api/local/admin/ledger-audit') return ok({ success: true, ok: true, drift: 0, sumBalances: 8492.75, baseline: 8492.75, strandedEscrows: 0 });
+    if (pathname === '/api/local/admin/ledger-audit') return ok({ success: true, ok: true, drift: 0, sumBalances: 849275, baseline: 849275, strandedEscrows: 0 });
 
     // ---- gateway ----
     if (pathname === '/api/local/admin/gateway') return ok(GATEWAY_CONFIG);
@@ -1258,7 +1257,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/community-health') {
         return ok({
             totals: {
-                beansInCirculation: 1234567, sumOfCredit: 1234567, sumOfDebt: 987654, membersInDebit: 1234, commonsPot: 300000, tradesThisMonth: 4100,
+                beansInCirculation_c: 123456700, sumOfCredit_c: 123456700, sumOfDebt_c: 98765400, membersInDebit: 1234, commonsPot_c: 30000000, tradesThisMonth: 4100,
                 newMembers: {
                     beans: true, anyTrades: true, minGroup: 5,
                     last90Days: { joined: 1234, firstListing: 412, firstTrade: 95, daysToFirstListing: 3, daysFromListingToTrade: null },
@@ -1580,11 +1579,12 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/vouchers/me' || pathname === '/api/local/admin/vouchers/me') {
         return ok({
             voucher: true,
-            budget: { left: 550, level: 1000, held: 100, vouched: 350 },
+            // Every figure whole hundredths of a Bean (engine/vouchers.ts myVouching).
+            budget: { left: 55000, level: 100000, held: 10000, vouched: 35000 },
             source: 'entry',
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             history: [],
         });
     }
@@ -1593,10 +1593,10 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
             memberPubkey: 'a'.repeat(64),
             callsign: 'jane',
             source: 'entry',
-            left: 550,
-            level: 1000,
-            held: 100,
-            vouched: 350,
+            left: 55000,
+            level: 100000,
+            held: 10000,
+            vouched: 35000,
             history: [],
             people: [],
             canChange: true,
@@ -1655,17 +1655,17 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/members\/[^/]+\/offboard\/preview$/.test(pathname)) {
         return ok({
             member: { publicKey: MEMBERS[3].publicKey, callsign: MEMBER_NAMES[3], status: 'suspended', joinedAt: '2025-12-01T00:00:00.000Z' },
-            balance: 15,
-            commonsBalance: 240,
-            costToCommunity: 0,
-            projectedCommonsBalance: 255,
+            balance_c: 1500,
+            commonsBalance_c: 24000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 25500,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: MEMBERS.filter((mm) => mm.status === 'active').map((mm) => ({ publicKey: mm.publicKey, callsign: mm.callsign })),
         });
     }
     if (/^\/api\/local\/admin\/members\/[^/]+\/offboard$/.test(pathname)) {
-        return ok({ success: true, memberPubkey: MEMBERS[3].publicKey, callsign: MEMBER_NAMES[3], resolution: 'donate_to_commons', balanceSettled: 15 });
+        return ok({ success: true, memberPubkey: MEMBERS[3].publicKey, callsign: MEMBER_NAMES[3], resolution: 'donate_to_commons', balanceSettled: 1500 });
     }
 
     // ---- AI assistants (admin MCP S3: Connected assistants, the owner switch, "What it sees", the alerts line) ----

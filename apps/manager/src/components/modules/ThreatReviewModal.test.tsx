@@ -9,7 +9,8 @@ describe('ThreatReviewModal', () => {
         id: 'threat-1',
         type: 'sybil_ring',
         severity: 'critical',
-        description: 'Detected 0.85 insularity with reciprocal flow ratio 0.45 gross: 1200.00 and 2 cohort component of 5 members for wash1-1784649014864123',
+        // The node writes the gross in Beans, grouped, to the cent (state-engine wash check: formatHundredths(gross, 'en') Beans).
+        description: 'Detected 0.85 insularity with reciprocal flow ratio 0.45 (gross: 1,200.50 Beans) and 2 cohort component of 5 members for wash1-1784649014864123',
     };
 
     const mockMembers: MemberItem[] = [
@@ -39,7 +40,7 @@ describe('ThreatReviewModal', () => {
         expect(screen.getByText('Reciprocal Flow Ratio')).toBeInTheDocument();
         expect(screen.getByText('0.45')).toBeInTheDocument();
         expect(screen.getByText('Gross Volume')).toBeInTheDocument();
-        expect(screen.getByText('1200.00 BP')).toBeInTheDocument();
+        expect(screen.getByText('1,200.50 Beans')).toBeInTheDocument();
     });
 
     it('calls onClose when close button is clicked', async () => {

@@ -22,10 +22,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 150,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 650,
+            balance_c: 15000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 65000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [
@@ -43,7 +43,7 @@ describe('OffboardMemberWizard', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('+150.00 Beans')).toBeDefined();
+            expect(screen.getByText('+150 Beans')).toBeDefined();
             expect(screen.getByText('Donate to the Commons Pool')).toBeDefined();
             expect(screen.getByText('Gift to another community member')).toBeDefined();
         });
@@ -58,10 +58,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 200,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 700,
+            balance_c: 20000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 70000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [
@@ -81,7 +81,7 @@ describe('OffboardMemberWizard', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('+200.00 Beans')).toBeDefined();
+            expect(screen.getByText('+200 Beans')).toBeDefined();
         });
 
         const giftRadio = screen.getByLabelText(/Gift to another community member/);
@@ -117,10 +117,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 100,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 600,
+            balance_c: 10000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 60000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [
@@ -138,7 +138,7 @@ describe('OffboardMemberWizard', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('+100.00 Beans')).toBeDefined();
+            expect(screen.getByText('+100 Beans')).toBeDefined();
         });
 
         // Gated on who is signed in, so it stays focusable and carries its reason.
@@ -177,10 +177,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: -180,
-            commonsBalance: 300,
-            costToCommunity: 180,
-            projectedCommonsBalance: 120,
+            balance_c: -18000,
+            commonsBalance_c: 30000,
+            costToCommunity_c: 18000,
+            projectedCommonsBalance_c: 12000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [],
@@ -191,7 +191,7 @@ describe('OffboardMemberWizard', () => {
             memberPubkey: mockMember.publicKey,
             callsign: 'dave',
             resolution: 'write_off_commons',
-            balanceSettled: -180,
+            balanceSettled: -18000,
         });
 
         const onSuccess = vi.fn();
@@ -206,9 +206,9 @@ describe('OffboardMemberWizard', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('-180.00 Beans')).toBeDefined();
+            expect(screen.getByText('−180 Beans')).toBeDefined();
             expect(screen.getByText(/Cost to Community/)).toBeDefined();
-            expect(screen.getByText(/300.00 → 120.00 Beans/)).toBeDefined();
+            expect(screen.getByText(/300 → 120 Beans/)).toBeDefined();
         });
 
         const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ });
@@ -236,10 +236,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 0,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 500,
+            balance_c: 0,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 50000,
             pendingEscrowsCount: 0,
             isSoleOwner: true,
             activeMembers: [],
@@ -276,10 +276,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 0,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 500,
+            balance_c: 0,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 50000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [],
@@ -331,10 +331,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 100,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 600,
+            balance_c: 10000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 60000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [], // Departing member is only active member
@@ -350,7 +350,7 @@ describe('OffboardMemberWizard', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('+100.00 Beans')).toBeDefined();
+            expect(screen.getByText('+100 Beans')).toBeDefined();
             const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
             expect(giftRadio).toHaveAttribute('aria-disabled', 'true');
             expect(screen.getByText(/No other active members available to receive a gift/)).toBeDefined();
@@ -372,10 +372,10 @@ describe('OffboardMemberWizard', () => {
                 status: 'active',
                 joinedAt: '2026-01-01',
             },
-            balance: 0,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 500,
+            balance_c: 0,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 50000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [],
@@ -425,10 +425,10 @@ describe('OffboardMemberWizard', () => {
     it('names the removal it settles, where the community voted for one', async () => {
         vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
             member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'disabled', joinedAt: '2026-01-01' },
-            balance: 20,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 520,
+            balance_c: 2000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 52000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
@@ -443,10 +443,10 @@ describe('OffboardMemberWizard', () => {
     it('names the removal it settles as an owner\'s, where too few could vote', async () => {
         vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
             member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'disabled', joinedAt: '2026-01-01' },
-            balance: 20,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 520,
+            balance_c: 2000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 52000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
@@ -460,17 +460,50 @@ describe('OffboardMemberWizard', () => {
     it('says nothing of a removal where the community has no vote', async () => {
         vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
             member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'active', joinedAt: '2026-01-01' },
-            balance: 20,
-            commonsBalance: 500,
-            costToCommunity: 0,
-            projectedCommonsBalance: 520,
+            balance_c: 2000,
+            commonsBalance_c: 50000,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 52000,
             pendingEscrowsCount: 0,
             isSoleOwner: false,
             activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
             settlesRemoval: null,
         });
         render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
-        await waitFor(() => expect(screen.getByText('+20.00 Beans')).toBeDefined());
+        await waitFor(() => expect(screen.getByText('+20 Beans')).toBeDefined());
         expect(screen.queryByTestId('offboard-settles-removal')).toBeNull();
+    });
+
+    // The node's figures are whole hundredths of a Bean (getOffboardPreview's *_c fields): 4925 is 49.25 Beans, never 4,925.
+    it('shows whole hundredths as Beans to the cent: a surplus, and a debt with the true minus', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'active', joinedAt: '2026-01-01' },
+            balance_c: 4925,
+            commonsBalance_c: 1000050,
+            costToCommunity_c: 0,
+            projectedCommonsBalance_c: 1004975,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [],
+        });
+        const { unmount } = render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        await waitFor(() => expect(screen.getByText('+49.25 Beans')).toBeDefined());
+        expect(screen.getByText('10,000.50 Beans')).toBeDefined();
+        expect(screen.getByText('Adds 49.25 beans to community funds (New Commons pool: 10,049.75 beans).')).toBeDefined();
+        unmount();
+
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'active', joinedAt: '2026-01-01' },
+            balance_c: -982,
+            commonsBalance_c: 500,
+            costToCommunity_c: 982,
+            projectedCommonsBalance_c: -482,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [],
+        });
+        render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        await waitFor(() => expect(screen.getByText('−9.82 Beans')).toBeDefined());
+        expect(screen.getByText('5 → −4.82 Beans')).toBeDefined();
     });
 });

@@ -18,6 +18,8 @@ import {
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
 import { RecoveryCopiesLine, useRecoveryCopies } from './RecoveryCopiesLine';
+import { beans } from '@beanpool/core';
+import { parseBeans, beansRefusalText } from '../../lib/beans';
 
 export interface ColdStartWizardProps {
     activeNode: NodeProfile;
@@ -51,6 +53,7 @@ export { generateOfflineQrUrl };
 
 const FOUNDING_INVITE_COUNT = 3;
 
+/** `firstOfferCredits`: what the price box starts with, in whole Beans as the owner reads it; read back by parseHundredths and sent as `price_c`. */
 const FIRST_ENTERPRISE_PRESETS = [
     {
         id: 'food',
@@ -93,7 +96,7 @@ type TfaState = 'checking' | 'unknown' | 'off' | 'starting' | 'awaiting-code' | 
 type Step1Outcome = { reachable: boolean; reachError: string | null; saved: boolean; saveError: string | null };
 
 // `offerPhoto`: the first offer has no photo yet, so it was not sent (the node refuses a new Offer with none).
-type Step3Errors = { create?: string; keeper?: string; offer?: string; offerPhoto?: boolean };
+type Step3Errors = { create?: string; keeper?: string; offer?: string; offerPhoto?: boolean; offerPrice?: string };
 
 async function errorFrom(res: Response | null): Promise<string> {
     if (!res) return 'no answer';
@@ -468,7 +471,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         {
                             name: enterpriseName.trim(),
                             avatar: enterpriseAvatar.trim(),
-                            workingCapitalCeiling: 250,
+                            // 250 Beans, as whole hundredths: the node takes `workingCapitalCeiling_c` (routes/treasury.ts).
+                            workingCapitalCeiling_c: beans(250),
                             purpose: enterprisePurpose.trim() || undefined,
                         },
                         nodeCredential(activeNode),
@@ -492,10 +496,14 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
             }
 
             // With no photo the offer is not sent: the node would refuse it. The enterprise and its keeper are still made,
-            // and the step says what is missing; Retry, once a photo is chosen, posts only the offer.
+            // and the step says what is missing; Retry, once a photo is chosen, posts only the offer. The same for a price
+            // that isn't Beans to the cent: said here, in words, and never replaced by a price nobody typed.
+            const price = parseBeans(firstOfferPrice);
             if (treasuryPk && !offerPosted && firstOfferPhotos.length === 0) {
                 errors.offerPhoto = true;
-            } else if (treasuryPk && !offerPosted) {
+            } else if (treasuryPk && !offerPosted && !price.ok) {
+                errors.offerPrice = beansRefusalText(price.refusal);
+            } else if (treasuryPk && !offerPosted && price.ok) {
                 try {
                     await seedTreasuryOffer(
                         activeNode.url,
@@ -503,7 +511,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         {
                             title: firstOfferTitle.trim(),
                             category: selectedPresetId === 'food' ? 'food' : 'tools',
-                            credits: Number(firstOfferPrice) || 15,
+                            // The price as typed, in Beans, to whole hundredths: the node takes `price_c` (15 Beans is 1500).
+                            price_c: price.value,
                             photos: firstOfferPhotos,
                             description: `First community offer for ${enterpriseName}`,
                         },
@@ -516,7 +525,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 }
             }
 
-            if (errors.create || errors.keeper || errors.offer || errors.offerPhoto) {
+            if (errors.create || errors.keeper || errors.offer || errors.offerPhoto || errors.offerPrice) {
                 setStep3Errors(errors);
             } else {
                 setStep3Errors(null);
@@ -1106,10 +1115,12 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 />
                             </div>
                             <div>
-                                <label className="block text-[11px] text-nature-400 mb-1">Price (Beans)</label>
+                                <label htmlFor="first-offer-price" className="block text-[11px] text-nature-400 mb-1">Price (Beans)</label>
                                 <input
+                                    id="first-offer-price"
                                     type="number"
                                     min="1"
+                                    step="0.01"
                                     value={firstOfferPrice}
                                     onChange={(e) => setFirstOfferPrice(e.target.value)}
                                     required
@@ -1144,6 +1155,11 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 {step3Errors.offerPhoto && (
                                     <p className="m-0 break-words">
                                         The first offer was not posted: every Offer needs a photo. Add one under First Offer, then Retry.
+                                    </p>
+                                )}
+                                {step3Errors.offerPrice && (
+                                    <p className="m-0 break-words">
+                                        The first offer was not posted: its price is Beans, to the cent. {step3Errors.offerPrice} Then Retry.
                                     </p>
                                 )}
                                 <div className="flex flex-wrap gap-3 pt-1">

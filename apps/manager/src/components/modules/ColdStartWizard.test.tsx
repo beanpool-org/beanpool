@@ -597,12 +597,14 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
 
+        // The ceiling as the node takes it: whole hundredths (250 Beans is 25000), under `workingCapitalCeiling_c`.
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
-            expect.any(Object),
+            expect.objectContaining({ workingCapitalCeiling_c: 25000 }),
             mockProfile.adminPassword,
             'tfa-wizard-token'
         );
+        expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
         expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
@@ -610,13 +612,15 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             mockProfile.adminPassword,
             'tfa-wizard-token'
         );
+        // The food preset's 15 Beans, as the node takes a price: `price_c`, whole hundredths, never the old `credits`.
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
-            expect.objectContaining({ photos: [PICKED_PHOTO] }),
+            expect.objectContaining({ photos: [PICKED_PHOTO], price_c: 1500 }),
             mockProfile.adminPassword,
             'tfa-wizard-token'
         );
+        expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
 
         await click(screen.getByRole('button', { name: /Next: Founding Invites/i }));
         await click(screen.getByRole('button', { name: /Generate 3 Founding Invites/i }));
@@ -795,6 +799,26 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(offer).toEqual(expect.objectContaining({ photos: [PICKED_PHOTO] }));
         expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
         expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('✓');
+    });
+
+    it('step 3: the first offer\'s price is sent to the cent as price_c; one finer than a cent is said, and not sent', async () => {
+        await goToStep3({ nodeData: ownerNodeData });
+        await pickOfferPhoto();
+        const priceBox = screen.getByLabelText('Price (Beans)');
+        fireEvent.change(priceBox, { target: { value: '12.505' } });
+        // Past the box's own step (a browser refuses it there), the wizard refuses it in words and sends no offer.
+        await act(async () => {
+            fireEvent.submit(priceBox.closest('form')!);
+        });
+        expect(screen.getByRole('alert')).toHaveTextContent('The first offer was not posted: its price is Beans, to the cent. Type at most 2 decimals, like 12.5. Then Retry.');
+        expect(nodeClient.seedTreasuryOffer).not.toHaveBeenCalled();
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledTimes(1);
+
+        fireEvent.change(priceBox, { target: { value: '12.50' } });
+        await click(screen.getByRole('button', { name: 'Retry' }));
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledTimes(1);
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).toEqual(expect.objectContaining({ price_c: 1250 }));
     });
 
     it('step 3: with no photo, Continue anyway still moves on, with the step marked unfinished (never a hard gate)', async () => {

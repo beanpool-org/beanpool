@@ -20,7 +20,7 @@ const member = (i: number) => ({ publicKey: key(i), callsign: `Member ${i}`, inv
 
 const SUMMARY = {
     health: { flags: [] }, reports: [], reportCount: 0, escrowDisputesCount: 0, knockCount: 0,
-    tradeTotals: { deals: 3, volume: 12, cancelled: 0 }, commonsBalance: 5,
+    tradeTotals: { deals: 3, volume: 1200, cancelled: 0 }, commonsBalance: 500,
     counts: { members: 3_500, treasuries: 1, doorMembers: 40, owners: 2, platforms: { ios: 10, android: 20, web: 0, unknown: 3_470 } },
 };
 
@@ -173,11 +173,12 @@ describe("the prune-branch dialog confirms on the node's figures for the whole b
         expect(document.getElementById('prune-members-affected')?.textContent).toBe('…');
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-        await act(async () => { answer({ members: 2_400, badDebt: 812.5, surplus: 40, net: -772.5 }); });
+        // The node's figures are whole hundredths of a Bean (server branchPrunePreview): 81250 is 812.50 Beans.
+        await act(async () => { answer({ members: 2_400, badDebt_c: 81250, surplus_c: 4000, net_c: -77250 }); });
         await waitFor(() => expect(document.getElementById('prune-members-affected')?.textContent).toBe('2400'));
-        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('812.5 🫘 bad debt');
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('812.50 🫘 bad debt');
         expect(document.getElementById('prune-credit-confiscated')?.textContent).toBe('40 🫘 credit');
-        expect(document.getElementById('prune-net-impact')?.textContent).toBe('-772.5 🫘');
+        expect(document.getElementById('prune-net-impact')?.textContent).toBe('−772.50 🫘');
         expect(confirm).toBeEnabled();
         const asked = fetchMock.mock.calls.find(([u]) => String(u).endsWith(`/branches/${key(0)}/prune`));
         expect((asked?.[1] as RequestInit | undefined)?.method ?? 'GET').toBe('GET');

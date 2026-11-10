@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
+import { TIER_LEVELS, isHundredths, tierForCredit, tierIndexForName } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 import type { NodeProfile } from '../../lib/profiles';
 import { pruneInviteBranch, fetchBranchPruneFigures, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
@@ -59,10 +60,11 @@ export function AncestryTreePanel({
             : {};
     }, [nodeData?.memberStats]);
 
-    // Of trades, only the community's totals: the node sends no member's deals, volume or cancelled (queue item 29).
+    // Of trades, only the community's totals: the node sends no member's deals, volume or cancelled (queue item 29). The
+    // volume is whole hundredths of a Bean (state-engine getTradeTotals sums amount_c).
     const tradeTotals = useMemo(() => {
         const t = (nodeData as NodeDataPayload | null)?.tradeTotals;
-        return t && typeof t.deals === 'number' && typeof t.volume === 'number' && typeof t.cancelled === 'number' ? t : null;
+        return t && typeof t.deals === 'number' && isHundredths(t.volume) && typeof t.cancelled === 'number' ? t : null;
     }, [nodeData?.tradeTotals]);
 
     // Lookup maps
@@ -345,7 +347,8 @@ export function AncestryTreePanel({
         const isActive = !isPruned && !isFrozen;
 
         // Tier badge — the node's own tier (admin data carries it). Only when a node sends none, fall back to
-        // the core table on earnedCredit, which on the admin feed is the granted lane alone.
+        // the core table on earnedCredit, which on the admin feed is the granted lane alone: whole hundredths, as the
+        // table's thresholds are (TIER_LEVELS: 1,400 Beans is 140000).
         const nodeTierIdx = tierIndexForName(typeof m?.tier === 'string' ? m.tier : undefined);
         const earnedCredit = typeof m?.earnedCredit === 'number' ? m.earnedCredit : 0;
         const tier = nodeTierIdx >= 0 ? TIER_LEVELS[nodeTierIdx] : tierForCredit(earnedCredit);
@@ -587,7 +590,7 @@ export function AncestryTreePanel({
                 <div id="community-trade-totals" className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-nature-300 space-y-1">
                     <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono">
                         <span>🤝 Deals: <strong className="text-white">{tradeTotals.deals}</strong></span>
-                        <span>💰 Volume: <strong className="text-white">{tradeTotals.volume} Beans</strong></span>
+                        <span>💰 Volume: <strong className="text-white">{beansFigure(tradeTotals.volume)} Beans</strong></span>
                         <span>🚫 Cancelled: <strong className="text-white">{tradeTotals.cancelled}</strong></span>
                     </div>
                     <p className="m-0 text-nature-400">The whole community's trades. No member's trades are shown here.</p>

@@ -1,8 +1,13 @@
-import { formatCount } from '@beanpool/core';
+import { VOUCHER_BUDGET_DEFAULT } from '@beanpool/core';
+import { beansFigure } from './beans';
 
+/**
+ * One line of a voucher's budget history, as GET /api/local/admin/known-floor/vouchers/member/:pubkey sends it (server
+ * engine/vouchers.ts historyOf): `amount_c` whole hundredths of a Bean, signed as the allocation ledger keeps it.
+ */
 export interface VoucherHistoryLine {
     kind: string;
-    amount: number;
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
@@ -13,6 +18,10 @@ export interface VoucherHistoryLine {
     person?: { memberPubkey: string; callsign: string } | null;
 }
 
+/**
+ * A voucher's card (server engine/vouchers.ts readVoucherCard): its budget figures keep their names (left, level, held,
+ * vouched) and are whole hundredths of a Bean, like every voucher budget figure.
+ */
 export interface VoucherCard {
     memberPubkey: string;
     callsign: string;
@@ -59,7 +68,8 @@ export function historyLineWords(h: VoucherHistoryLine): string {
     const date = formatHistoryDate(h.at);
     const datePart = date ? `, ${date}` : '';
     const actor = voucherActorWords(h);
-    const amount = formatCount(Math.abs(h.amount));
+    // Whole hundredths in words, without its sign (each kind says its own): 100000 is "1,000", 2550 is "25.50".
+    const amount = beansFigure(typeof h.amount_c === 'number' ? Math.abs(h.amount_c) : h.amount_c);
     switch (h.kind) {
         case 'grant':
             return `+${amount} budget, made a voucher by ${actor}${datePart}`;
@@ -83,10 +93,14 @@ export function historyLineWords(h: VoucherHistoryLine): string {
     }
 }
 
-/** Header line for the voucher panel: "Voucher · 550 of 1,000 left · made from the names list" (or "by role"). */
+/**
+ * Header line for the voucher panel: "Voucher · 550 of 1,000 left · made from the names list" (or "by role"). `left` and
+ * `level` are whole hundredths (55000 of 100000); a card without a level reads the default budget (core
+ * VOUCHER_BUDGET_DEFAULT, 1,000 Beans), as it always did.
+ */
 export function voucherPanelHeader(card: { left: number; level?: number; source?: string | null }): string {
-    const leftStr = formatCount(card.left);
-    const levelStr = formatCount(card.level ?? 1000);
+    const leftStr = beansFigure(card.left);
+    const levelStr = beansFigure(card.level ?? VOUCHER_BUDGET_DEFAULT);
     const sourceStr = card.source === 'role' ? 'by role' : 'made from the names list';
     return `Voucher · ${leftStr} of ${levelStr} left · ${sourceStr}`;
 }

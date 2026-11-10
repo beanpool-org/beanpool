@@ -31,7 +31,7 @@ function shapeWith(over: { core?: Shape['core'] | null; settings?: Partial<Shape
         knocks: { value: true, configured: true, source: 'default', lock: null },
         preview: { value: false, configured: false, source: 'server', lock: null },
         beans: { value: true, configured: true, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } },
-        knownFloor: { value: { on: true, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: true, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: null },
+        knownFloor: { value: { on: true, floor: 100000, cap: 200000, capMax: 500000 }, configured: { on: true, floor: 100000, cap: 200000, capMax: 500000 }, source: 'default', lock: null },
         decisions: { value: true, configured: true, source: 'default', lock: null },
         shareOutside: { value: true, configured: true, source: 'default', lock: null },
         recoveryCopies: { value: 'vault', configured: 'vault', source: 'default', lock: null },
@@ -235,7 +235,8 @@ describe('Core settings — locked: Unlock to change', () => {
         const shape = locked();
         const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
         shape.log = [
-            { ...by, id: '3', setting: 'memberGift', from: '100', to: '0' },
+            // The log keeps hundredths text: '10000' is 100 Beans.
+            { ...by, id: '3', setting: 'memberGift', from: '10000', to: '0' },
             { ...by, id: '2', setting: 'core.unlock', from: null, to: 'memberGift' },
             { ...by, id: '1', setting: 'advice.memberGift', from: null, to: null, actorRole: 'admin', note: 'Keep it on' },
         ];
@@ -252,7 +253,7 @@ describe('Core settings — locked: Unlock to change', () => {
         const shape = locked();
         const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
         shape.log = [
-            { ...by, id: '3', setting: 'voucherBudget', from: '1000', to: '1500' },
+            { ...by, id: '3', setting: 'voucherBudget', from: '100000', to: '150000' },
             { ...by, id: '2', setting: 'core.unlock', from: null, to: 'voucherBudget' },
             { ...by, id: '1', setting: 'advice.voucherBudget', from: null, to: null, actorRole: 'admin', note: 'Give vouchers 1,500' },
         ];
@@ -267,8 +268,9 @@ describe('Core settings — locked: Unlock to change', () => {
 
     it('Core settings’ two numbers go through the lock: fresh proof when locked (V5)', async () => {
         const shape = locked();
-        shape.settings.voucherBudget = { value: 1000, configured: 1000, source: 'default', lock: null };
-        shape.settings.memberGift = { value: 100, configured: 100, source: 'default', lock: null };
+        // Whole hundredths, as the shape reads both (engine/vouchers.ts voucherBudgetFromRow, memberGiftFromRow).
+        shape.settings.voucherBudget = { value: 100000, configured: 100000, source: 'default', lock: null };
+        shape.settings.memberGift = { value: 10000, configured: 10000, source: 'default', lock: null };
 
         // Test voucherBudget
         const { sent } = mockApi(shape, [
@@ -285,12 +287,12 @@ describe('Core settings — locked: Unlock to change', () => {
 
         const input = await screen.findByTestId('fresh-proof-input');
         expect(sent[0].body.code).toBeUndefined();
-        expect(sent[0].body.changes).toEqual({ voucherBudget: 1500 });
+        expect(sent[0].body.changes).toEqual({ voucherBudget: 150000 });
         fireEvent.change(input, { target: { value: '123456' } });
         fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
         expect(sent).toHaveLength(2);
-        expect(sent[1].body.changes).toEqual({ voucherBudget: 1500 });
+        expect(sent[1].body.changes).toEqual({ voucherBudget: 150000 });
         expect(sent[1].body.code).toBe('123456');
 
         cleanup();
@@ -305,17 +307,20 @@ describe('Core settings — locked: Unlock to change', () => {
 
         fireEvent.click(within(screen.getByTestId('shape-row-memberGift')).getByRole('button', { name: 'Unlock to change' }));
         const inputGift = screen.getByLabelText(/Most one gift can be/i);
+        // A gift setting is whole Beans (core isMemberGiftSetting): a figure with cents leaves Save off.
+        fireEvent.change(inputGift, { target: { value: '50.25' } });
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
         fireEvent.change(inputGift, { target: { value: '50' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
         const input2 = await screen.findByTestId('fresh-proof-input');
         expect(sentGift[0].body.code).toBeUndefined();
-        expect(sentGift[0].body.changes).toEqual({ memberGift: 50 });
+        expect(sentGift[0].body.changes).toEqual({ memberGift: 5000 });
         fireEvent.change(input2, { target: { value: '654321' } });
         fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
         expect(sentGift).toHaveLength(2);
-        expect(sentGift[1].body.changes).toEqual({ memberGift: 50 });
+        expect(sentGift[1].body.changes).toEqual({ memberGift: 5000 });
         expect(sentGift[1].body.code).toBe('654321');
     });
 });
@@ -415,7 +420,7 @@ describe('Core settings — the walkthrough', () => {
     it('Beans off now, On chosen: the known floor is the owner\'s to choose, not held by today\'s beans_off lock', async () => {
         const beansOff = shapeWith({ settings: {
             beans: { value: false, configured: false, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } } as any,
-            knownFloor: { value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
+            knownFloor: { value: { on: false, floor: 100000, cap: 200000, capMax: 500000 }, configured: { on: false, floor: 100000, cap: 200000, capMax: 500000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
         } });
         const { sent } = await walk(beansOff);
         next(); next(); // intro → join → beans
@@ -432,13 +437,14 @@ describe('Core settings — the walkthrough', () => {
         fireEvent.click(screen.getByTestId('walk-confirm'));
         await waitFor(() => expect(sent).toHaveLength(1));
         expect(sent[0].body.lock).toBe(true);
-        expect(sent[0].body.changes).toEqual({ beans: true, knownFloor: { on: true, floor: 500, cap: 2000 } });
+        // As config/community-shape-write.ts takes it: `{ on, floor_c, cap_c }` in whole hundredths.
+        expect(sent[0].body.changes).toEqual({ beans: true, knownFloor: { on: true, floor_c: 50000, cap_c: 200000 } });
     });
 
     it('Beans off and left off: no known floor step, and the review does not list one', async () => {
         const beansOff = shapeWith({ settings: {
             beans: { value: false, configured: false, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } } as any,
-            knownFloor: { value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
+            knownFloor: { value: { on: false, floor: 100000, cap: 200000, capMax: 500000 }, configured: { on: false, floor: 100000, cap: 200000, capMax: 500000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
         } });
         await walk(beansOff, 'review');
         expect(screen.queryByTestId('walk-review-knownFloor')).toBeNull();
@@ -456,8 +462,8 @@ describe('Core settings — the walkthrough', () => {
 
     it('the review shows the members\' credit-line gift as it stands, so Confirm and lock never locks it unseen (G1)', async () => {
         const gift = (configured: number) => shapeWith({ settings: { memberGift: { value: configured, configured, source: 'owner', lock: null } } as never });
-        const { sent } = await walk(gift(40), 'review');
-        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('On · up to 40 Beans');
+        const { sent } = await walk(gift(4050), 'review');
+        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('On · up to 40.50 Beans');
         fireEvent.click(screen.getByTestId('walk-confirm'));
         await waitFor(() => expect(sent).toHaveLength(1));
         expect(sent[0].body.changes).toEqual({});

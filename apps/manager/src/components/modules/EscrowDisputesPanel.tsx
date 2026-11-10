@@ -9,6 +9,8 @@ import {
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
+import { feeOf, halves, isMoveAmount } from '@beanpool/core';
+import { beansFigure } from '../../lib/beans';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
@@ -175,31 +177,34 @@ export function EscrowDisputesPanel({
         }
     };
 
-    const computeBreakdown = (credits: number, action: 'release_to_seller' | 'refund_to_buyer' | 'split') => {
-        const FEE_PERCENT = 0.015;
+    /**
+     * What each ruling pays, in whole hundredths of a Bean, worked out the way the node moves it (server engine/escrow.ts
+     * resolveEscrowDispute): a release pays the seller the deal less the 1.5% fee (core feeOf, truncated once); a refund
+     * returns it whole, fee-free; a split halves it (core halves: the buyer's half truncated, the seller's the rest), the
+     * buyer's half fee-free and the seller's less its fee. A deal amount that isn't whole hundredths gets no figures ("—").
+     */
+    const computeBreakdown = (amount_c: number, action: 'release_to_seller' | 'refund_to_buyer' | 'split') => {
+        if (!isMoveAmount(amount_c)) return { buyerRefund: NaN, sellerPayout: NaN, commonsFee: NaN };
         if (action === 'release_to_seller') {
-            const fee = Math.round(credits * FEE_PERCENT * 100) / 100;
-            const sellerPayout = Math.round((credits - fee) * 100) / 100;
+            const fee = feeOf(amount_c);
             return {
                 buyerRefund: 0,
-                sellerPayout,
+                sellerPayout: amount_c - fee,
                 commonsFee: fee,
             };
         } else if (action === 'refund_to_buyer') {
             return {
-                buyerRefund: credits,
+                buyerRefund: amount_c,
                 sellerPayout: 0,
                 commonsFee: 0,
             };
         } else {
             // split
-            const buyerShare = Math.round((credits / 2) * 100) / 100;
-            const sellerShare = Math.round((credits - buyerShare) * 100) / 100;
-            const fee = Math.round(sellerShare * FEE_PERCENT * 100) / 100;
-            const sellerPayout = Math.round((sellerShare - fee) * 100) / 100;
+            const [buyerShare, sellerShare] = halves(amount_c);
+            const fee = feeOf(sellerShare);
             return {
                 buyerRefund: buyerShare,
-                sellerPayout,
+                sellerPayout: sellerShare - fee,
                 commonsFee: fee,
             };
         }
@@ -374,7 +379,7 @@ export function EscrowDisputesPanel({
                                             {postTitle}
                                         </h3>
                                         <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
-                                            {dispute.credits.toFixed(2)} BEAN
+                                            {beansFigure(dispute.amount_c)} BEAN
                                         </span>
                                         {isPending ? (
                                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
@@ -531,7 +536,7 @@ export function EscrowDisputesPanel({
                                                 <span>✅</span> Release to Seller
                                             </span>
                                             <span className="text-[10px] font-normal text-emerald-400 mt-0.5">
-                                                Pay seller ({computeBreakdown(dispute.credits, 'release_to_seller').sellerPayout} BEAN)
+                                                Pay seller ({beansFigure(computeBreakdown(dispute.amount_c, 'release_to_seller').sellerPayout)} BEAN)
                                             </span>
                                         </button>
 
@@ -544,7 +549,7 @@ export function EscrowDisputesPanel({
                                                 <span>↩️</span> Refund to Buyer
                                             </span>
                                             <span className="text-[10px] font-normal text-amber-400 mt-0.5">
-                                                Full 100% refund ({dispute.credits} BEAN)
+                                                Full 100% refund ({beansFigure(dispute.amount_c)} BEAN)
                                             </span>
                                         </button>
 
@@ -633,31 +638,31 @@ export function EscrowDisputesPanel({
 
                             {/* Credit Breakdown Table */}
                             {(() => {
-                                const breakdown = computeBreakdown(selectedDispute.credits, selectedAction);
+                                const breakdown = computeBreakdown(selectedDispute.amount_c, selectedAction);
                                 return (
                                     <div className="space-y-1.5 text-xs pt-2 border-t border-nature-800/80">
                                         <div className="flex justify-between text-nature-300">
                                             <span>Buyer ({selectedDispute.buyerCallsign || selectedDispute.buyerName || 'Buyer'}):</span>
                                             <span className="font-mono font-bold text-white">
-                                                +{breakdown.buyerRefund.toFixed(2)} BEAN
+                                                +{beansFigure(breakdown.buyerRefund)} BEAN
                                             </span>
                                         </div>
                                         <div className="flex justify-between text-nature-300">
                                             <span>Seller ({selectedDispute.sellerCallsign || selectedDispute.sellerName || 'Seller'}):</span>
                                             <span className="font-mono font-bold text-white">
-                                                +{breakdown.sellerPayout.toFixed(2)} BEAN
+                                                +{beansFigure(breakdown.sellerPayout)} BEAN
                                             </span>
                                         </div>
                                         <div className="flex justify-between text-nature-400">
                                             <span>Commons Pool Fee (1.5%):</span>
                                             <span className="font-mono text-nature-300">
-                                                +{breakdown.commonsFee.toFixed(2)} BEAN
+                                                +{beansFigure(breakdown.commonsFee)} BEAN
                                             </span>
                                         </div>
                                         <div className="flex justify-between pt-1 border-t border-nature-800/60 font-bold text-bp-ink-terra">
                                             <span>Total Conserved:</span>
                                             <span className="font-mono">
-                                                {selectedDispute.credits.toFixed(2)} BEAN
+                                                {beansFigure(selectedDispute.amount_c)} BEAN
                                             </span>
                                         </div>
                                     </div>

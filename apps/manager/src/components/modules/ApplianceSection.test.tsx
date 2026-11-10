@@ -109,6 +109,27 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByRole('button', { name: /deploy update/i })).not.toBeInTheDocument();
     });
 
+    // The ledger audit's figures are whole hundredths of a Bean (engine audit.ts runConservationCheck): said in Beans.
+    it('says the ledger audit\'s drift and total in Beans to the cent, and a figure that is not one as "not a number"', async () => {
+        vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockResolvedValue({ success: true } as nodeClient.StrandedEscrowsResponse);
+        const props = {
+            activeNode: mockProfile, diag: mockDiag, gateway: mockGateway, gatewayLoading: false, gatewaySuccess: null, gatewaySaving: false,
+            nodeLogs: [], onChangeGateway: vi.fn(), onSaveGateway: vi.fn(), onRefreshDiag: vi.fn(), onRefreshLogs: vi.fn(),
+            onDownloadBackup: vi.fn(), onRunLedgerAudit: vi.fn(),
+        };
+        let view!: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(<ApplianceSection {...props} auditState={{ running: false, result: { ok: false, drift: -982, sumBalances: 4925, baseline: 5907, strandedEscrows: 0 } }} />);
+        });
+        expect(screen.getByText('−9.82 beans')).toBeInTheDocument();
+        expect(screen.getByText('49.25 beans')).toBeInTheDocument();
+        view.unmount();
+        await act(async () => {
+            render(<ApplianceSection {...props} auditState={{ running: false, result: { ok: false, drift: null, sumBalances: 12.5, strandedEscrows: 0 } }} />);
+        });
+        expect(screen.getAllByText('not a number')).toHaveLength(2);
+    });
+
     it('shows the node\'s real backup schedule, and "Unknown" when it can\'t be read, never a made-up default', async () => {
         const renderBackups = () => render(
             <ApplianceSection

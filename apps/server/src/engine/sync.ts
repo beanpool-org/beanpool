@@ -1356,7 +1356,8 @@ function isRegularMemberAccount(pk: string): boolean {
         && !pk.startsWith('escrow_') && !pk.startsWith('project_');
 }
 
-function verifyTransactionAuthorship(tx: Transaction): boolean {
+/** Exported for the hundredths suite (test-hundredths-conservation.ts T4): a standby's re-check of a member's signed send. */
+export function verifyTransactionAuthorship(tx: Transaction): boolean {
     if (!isRegularMemberAccount(tx.from) || !isRegularMemberAccount(tx.to)) return true;
     if (!tx.authSigner || !tx.authSignature || !tx.authPayload) return false;
     try {

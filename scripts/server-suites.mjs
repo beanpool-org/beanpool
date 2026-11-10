@@ -200,6 +200,8 @@ export const SUITES = [
     'test-ledger-export',
     'test-ledger-audit-startup',
     'test-ledger-verified',
+    'test-hundredths-conservation',
+    'test-hundredths-step',
     'test-mirror-sync-audit-log',
     'test-federation-bridge',
     'test-connector-credit-cap',

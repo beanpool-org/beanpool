@@ -2484,61 +2484,6 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
 
-    // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus_c for pre-existing enterprises
-    // from historical completed external sales. Gated behind node_config so it runs strictly once
-    // and never resets legitimately spent surplus on server reboot ("infinite wage glitch").
-    try {
-        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").get();
-        if (!alreadyMigrated) {
-            db.prepare(`
-                UPDATE members
-                SET earned_surplus = MAX(0, COALESCE((
-                    SELECT SUM(credits) FROM marketplace_transactions
-                    WHERE seller_pubkey = members.public_key AND status = 'completed'
-                      AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-                ), 0) - COALESCE((
-                    SELECT SUM(credits) FROM marketplace_transactions
-                    WHERE buyer_pubkey = members.public_key AND status = 'completed'
-                      AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-                ), 0))
-                WHERE is_treasury = 1
-            `).run();
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
-        }
-    } catch (e) {
-        console.error('[DB] Failed to backfill earned_surplus:', e);
-    }
-
-    // Migration: Replace table-wide transaction_id UNIQUE on deferred_wage_claims with partial unique index
-    try {
-        const tableSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='deferred_wage_claims'").get() as any)?.sql || '';
-        if (tableSql.includes('transaction_id    TEXT UNIQUE') || tableSql.includes('transaction_id TEXT UNIQUE')) {
-            db.exec(`
-                CREATE TABLE deferred_wage_claims_new (
-                    id                TEXT PRIMARY KEY,
-                    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-                    post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
-                    transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
-                    amount            REAL NOT NULL,
-                    status            TEXT NOT NULL DEFAULT 'pending',
-                    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    paid_at           DATETIME,
-                    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                );
-                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at, updated_at FROM deferred_wage_claims;
-                DROP TABLE deferred_wage_claims;
-                ALTER TABLE deferred_wage_claims_new RENAME TO deferred_wage_claims;
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
-                ON deferred_wage_claims(transaction_id)
-                WHERE transaction_id IS NOT NULL AND status IN ('pending', 'paid');
-                CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
-                CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
-            `);
-        }
-    } catch (e) {
-        console.error('[DB] Failed to rebuild deferred_wage_claims schema:', e);
-    }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta

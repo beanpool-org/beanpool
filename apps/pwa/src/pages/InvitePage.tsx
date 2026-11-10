@@ -28,7 +28,7 @@ import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,

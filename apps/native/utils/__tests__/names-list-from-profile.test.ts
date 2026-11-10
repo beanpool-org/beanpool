@@ -15,9 +15,9 @@ const src = readFileSync(join(__dirname, '..', '..', 'app', 'names-list.tsx'), '
 describe('names-list.tsx, arrived at from a profile', () => {
     it('reads the three params, once, only a 64-hex member key, and only when the list is open', () => {
         expect(src).toMatch(/useLocalSearchParams<\{ community\?: string; act\?: string; forMember\?: string; forCallsign\?: string \}>\(\)/);
-        expect(src).toMatch(/if \(arrived\.current \|\| !opened \|\| !list \|\| loading\) return;/);
+        expect(src).toMatch(/if \(arrived\.current === arrival \|\| !opened \|\| !list \|\| loading\) return;/);
         expect(src).toMatch(/\(params\.act !== 'add' && params\.act !== 'make'\) \|\| !\/\^\[0-9a-f\]\{64\}\$\/\.test\(member\)/);
-        expect(src).toMatch(/arrived\.current = true;/);
+        expect(src).toMatch(/arrived\.current = arrival;/);
     });
 
     it('add: the form opens with the callsign as the name, a fresh entry id, and the member to confirm', () => {

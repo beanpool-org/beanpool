@@ -58,7 +58,11 @@ export function VouchersBlock({ vouchers, waiting = [], names, onNeedNames, onOp
         addText: { fontSize: 15, fontWeight: '700', color: colors.brand.primary },
     }));
     const { owners, others } = vouchersBlockSections(vouchers);
-    useEffect(() => { onNeedNames?.(waiting.length > 0); }, [waiting.length, onNeedNames]);
+    // Asked for while a waiting row is on screen, and let go of when it goes (the block is gone, or nobody waits any more).
+    useEffect(() => {
+        onNeedNames?.(waiting.length > 0);
+        return () => onNeedNames?.(false);
+    }, [waiting.length, onNeedNames]);
 
     const voucherRow = (v: VoucherSummaryRow) => {
         const words = voucherRowText(v);

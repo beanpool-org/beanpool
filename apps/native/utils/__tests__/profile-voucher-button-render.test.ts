@@ -85,7 +85,7 @@ describe('the profile’s button follows the person’s state', () => {
         await draw({ state: 'voucher', left: 400, noLimit: false });
         expect(btn()?.textContent).toBe('Voucher · 400 left ›');
         expect(host.querySelector('[data-modal]')).toBeNull();
-        await act(async () => { btn()!.click(); });
+        await act(async () => { btn()!.click(); await new Promise((r) => setTimeout(r, 0)); });
         const card = host.querySelector('[data-modal] [data-testid="profile-voucher-card-modal"] [data-testid="stub-voucher-card"]');
         expect(card?.textContent, 'the card for this member').toBe(PAM);
         expect(nav.pushed, 'it does not leave the profile').toEqual([]);

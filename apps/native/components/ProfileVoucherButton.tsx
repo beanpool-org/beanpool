@@ -10,13 +10,13 @@
  * The state is the node's (the trust profile's `voucherButton`, engine/vouchers.ts profileVoucherButton); this never decides it,
  * and shows nothing for a state it does not know. The words are core's, so the web says the same. A budget left is not a balance.
  */
-import React, { useState } from 'react';
+import React, { useState, type ComponentType } from 'react';
 import { Modal, Pressable, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { isProfileVoucherButton, profileVoucherButtonWords } from '@beanpool/core';
 import { useStyles, useTheme } from '../app/ThemeContext';
-import { VoucherCard } from './VoucherCard';
+import type { VoucherCardProps } from './VoucherCard';
 import type { BeanPoolIdentity } from '../utils/identity';
 
 export function ProfileVoucherButton({ button, memberPubkey, callsign, anchorUrl, identity }: {
@@ -31,22 +31,32 @@ export function ProfileVoucherButton({ button, memberPubkey, callsign, anchorUrl
         text: { fontSize: 15, fontWeight: '700', color: c.brand.primary },
     }));
     const [cardOpen, setCardOpen] = useState(false);
+    // The card (and the names-list code behind it) is loaded when it is first wanted, not with every profile: a profile is read far
+    // more often than a voucher's card is opened, and most profiles show no button at all.
+    const [Card, setCard] = useState<ComponentType<VoucherCardProps> | null>(null);
     if (!isProfileVoucherButton(button)) return null;
     const words = profileVoucherButtonWords(button);
-    const press = () => {
-        if (button.state === 'voucher') { setCardOpen(true); return; }
+    const press = async () => {
+        if (button.state === 'voucher') {
+            if (!Card) {
+                const loaded = await import('./VoucherCard');
+                setCard(() => loaded.VoucherCard);
+            }
+            setCardOpen(true);
+            return;
+        }
         router.push({ pathname: '/names-list', params: { act: button.state, forMember: memberPubkey, forCallsign: callsign } });
     };
     return (
         <>
-            <Pressable onPress={press} accessibilityRole="button" accessibilityLabel={words} style={styles.button} testID="profile-voucher-button">
+            <Pressable onPress={() => { void press(); }} accessibilityRole="button" accessibilityLabel={words} style={styles.button} testID="profile-voucher-button">
                 <Text style={styles.text} maxFontSizeMultiplier={1.3}>{words}</Text>
             </Pressable>
             {button.state === 'voucher' ? (
                 <Modal visible={cardOpen} animationType="slide" onRequestClose={() => setCardOpen(false)}>
                     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']} testID="profile-voucher-card-modal">
-                        {cardOpen && identity && anchorUrl ? (
-                            <VoucherCard anchorUrl={anchorUrl} identity={identity} memberPubkey={memberPubkey} onClose={() => setCardOpen(false)} />
+                        {cardOpen && Card && identity && anchorUrl ? (
+                            <Card anchorUrl={anchorUrl} identity={identity} memberPubkey={memberPubkey} onClose={() => setCardOpen(false)} />
                         ) : null}
                     </SafeAreaView>
                 </Modal>

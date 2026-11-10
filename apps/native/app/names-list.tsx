@@ -350,12 +350,14 @@ export default function NamesListScreen() {
     // Arriving from a member's profile (invites-vouching I4, DESIGN §3 ask 2): `act=add` opens the one-step add-and-confirm form
     // with the name prefilled with their callsign; `act=make` opens Make a voucher for their confirmed entry. Once, when the
     // list is open: a phone that can't open it (no key yet) shows the list's own guidance, as always.
-    const arrived = useRef(false);
+    const arrived = useRef('');
     useEffect(() => {
-        if (arrived.current || !opened || !list || loading) return;
         const member = typeof params.forMember === 'string' ? params.forMember : '';
+        // Once per arrival: the same screen opened again for another member (or another act) is a new arrival.
+        const arrival = `${params.act}:${member}`;
+        if (arrived.current === arrival || !opened || !list || loading) return;
         if ((params.act !== 'add' && params.act !== 'make') || !/^[0-9a-f]{64}$/.test(member)) return;
-        arrived.current = true;
+        arrived.current = arrival;
         const forCallsign = typeof params.forCallsign === 'string' ? params.forCallsign : '';
         if (params.act === 'add') {
             setName(forCallsign);
@@ -779,7 +781,7 @@ export default function NamesListScreen() {
                 <Text style={styles.hint}>{t('A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.')}</Text>
                 {formError ? <View style={styles.error}><Text style={styles.errorText}>{say(formError)}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn(mode.confirmFor ? t('Add and confirm @{member}', { member: mode.confirmFor.callsign }) : t('Save'), saveChecked, 'primary')}
+                    {mode.confirmFor ? btn(t('Add and confirm @{member}', { member: mode.confirmFor.callsign }), saveChecked, 'primary') : btn(t('Save'), saveChecked, 'primary')}
                     {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
                 {entry ? <View style={styles.buttonRow}>{btn(t('Delete this entry'), () => remove(entry), 'danger')}</View> : null}

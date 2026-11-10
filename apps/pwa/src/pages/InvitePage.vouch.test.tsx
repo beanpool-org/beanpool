@@ -189,9 +189,10 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         await waitFor(() => expect(screen.getByTestId('vouchers-block')).toBeInTheDocument());
 
         expect(screen.getByText('Vouchers')).toBeInTheDocument();
-        expect(screen.getByText(/Jane Albury/)).toBeInTheDocument();
-        expect(screen.getByText(/4 vouched/)).toBeInTheDocument();
-        expect(screen.getByText(/1 below zero/)).toBeInTheDocument();
+        // A row says only what matters (invites-vouching I4): who, and what is left. The numbers are on the card.
+        const row = screen.getByTestId('voucher-row-Jane Albury');
+        expect(row).toHaveTextContent(/^@Jane Albury · 550 left ›$/);
+        expect(row.textContent).not.toMatch(/vouched|below zero/);
         expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument();
     });
 

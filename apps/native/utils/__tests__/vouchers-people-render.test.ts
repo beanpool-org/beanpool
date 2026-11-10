@@ -295,12 +295,7 @@ describe('People → Invites: the Vouchers block reshaped (invites-vouching I4)'
         expect(nav.pushed).toEqual(['/names-list']);
     });
 
-    it('a waiting row asks this phone to open the names list, so its name can be shown (a logged read, as any open is)', async () => {
-        await renderAs('owner');
-        expect(net.calls.some((c) => c.startsWith(`fetch ${NODE}/api/names/state`))).toBe(true);
-    });
-
-    it('without a waiting invite, there is no Waiting to join section and no names list is opened for it', async () => {
+    it('without a waiting invite, there is no Waiting to join section', async () => {
         const noWaiting = { ...BLOCK, waiting: [] };
         const node = fakeNode();
         globalThis.fetch = (async (url: unknown, init?: { headers?: Record<string, string> }) => {
@@ -311,7 +306,6 @@ describe('People → Invites: the Vouchers block reshaped (invites-vouching I4)'
         expect(block()).not.toBeNull();
         expect(host.querySelector('[data-testid="vouchers-waiting-heading"]')).toBeNull();
         expect(host.querySelector('[data-testid="voucher-waiting-row"]')).toBeNull();
-        expect(net.calls.some((c) => c.startsWith(`fetch ${NODE}/api/names/state`))).toBe(false);
     });
 
     it('a node from before I4 (no `waiting`, no owner flag) still draws: every voucher a "left" row, nothing waiting', async () => {

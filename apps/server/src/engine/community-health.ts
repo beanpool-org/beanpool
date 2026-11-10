@@ -129,7 +129,7 @@ export function confirmationOf(pubkey: string): { confirmed: boolean; confirmedA
 export function stepBackFromConfirmed(member: string) {
     return stepBack(member, () => {
         const b = getBalance(member);
-        return b.balance < b.floor;
+        return b.balance_c < b.floor;
     });
 }
 
@@ -172,9 +172,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  */
 export function communityTotals(now = new Date()) {
     const t = db.prepare(`SELECT
-            COALESCE(SUM(CASE WHEN a.balance > 0 THEN a.balance ELSE 0 END), 0) AS credit,
-            COALESCE(SUM(CASE WHEN a.balance < 0 THEN -a.balance ELSE 0 END), 0) AS debt,
-            COALESCE(SUM(CASE WHEN a.balance < 0 THEN 1 ELSE 0 END), 0) AS in_debit,
+            COALESCE(SUM(CASE WHEN a.balance_c > 0 THEN a.balance_c ELSE 0 END), 0) AS credit,
+            COALESCE(SUM(CASE WHEN a.balance_c < 0 THEN -a.balance_c ELSE 0 END), 0) AS debt,
+            COALESCE(SUM(CASE WHEN a.balance_c < 0 THEN 1 ELSE 0 END), 0) AS in_debit,
             COUNT(*) AS accounts
         FROM accounts a JOIN members m ON m.public_key = a.public_key WHERE m.status = 'active'`).get() as
         { credit: number; debt: number; in_debit: number; accounts: number };
@@ -228,15 +228,15 @@ export function openExceptions(actor: string, now = Date.now()) {
     for (const r of rows) {
         if (!told || !isConfirmed(db, r.member_pubkey) || isVisitorKey(r.member_pubkey)) continue;
         const b = getBalance(r.member_pubkey);
-        if (!(b.balance < 0)) continue;
+        if (!(b.balance_c < 0)) continue;
         const floor = Math.abs(b.floor);
         const reasons: HealthException['reasons'] = [];
-        if (-b.balance > (floor * debtLinePct) / 100) reasons.push('past_debt_line');
+        if (-b.balance_c > (floor * debtLinePct) / 100) reasons.push('past_debt_line');
         const saleAt = (lastSale.get(r.member_pubkey) as { at: string | null }).at;
         // Quiet: no sale since the window opened, and confirmed before it opened (a new member has had no chance yet).
         if ((!saleAt || saleAt < quietSince) && r.confirmed_at < quietSince) reasons.push('quiet_in_debit');
         // Only which line was crossed: never a trade fact (when the last sale was), which the rule doesn't show.
-        if (reasons.length) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor, reasons });
+        if (reasons.length) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance_c, floor, reasons });
     }
     // Who stepped back owing past their ordinary line, until they are back within it. Their step-back, not a later
     // confirmation that never went live: one an admin got seconded takes them back into the list above.
@@ -249,8 +249,8 @@ export function openExceptions(actor: string, now = Date.now()) {
         if (isVisitorKey(r.member_pubkey)) continue;
         const b = getBalance(r.member_pubkey);
         // Back within it, they are off the list for good: a line that falls later is no reason to see them again.
-        if (b.balance >= b.floor) { db.prepare('UPDATE confirmations SET stepped_back_owing = 0 WHERE id = ?').run(r.id); continue; }
-        if (told) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor: Math.abs(b.floor), reasons: ['stepped_back_owing'] });
+        if (b.balance_c >= b.floor) { db.prepare('UPDATE confirmations SET stepped_back_owing = 0 WHERE id = ?').run(r.id); continue; }
+        if (told) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance_c, floor: Math.abs(b.floor), reasons: ['stepped_back_owing'] });
     }
     const departed = listDebts().filter(d => d.status === 'open')
         .map(d => ({ id: d.id, entryId: d.entry_id, amount: d.amount, reason: d.reason, removedAt: d.removed_at, repaid: d.repaid, repaying: !!d.repaying_pubkey }));

@@ -15,7 +15,8 @@ export interface MarketplaceTransaction {
     buyerCallsign: string;
     sellerPublicKey: string;
     sellerCallsign: string;
-    credits: number;
+    /** The deal's price, whole hundredths of a Bean (0 for a free listing). */
+    amount_c: number;
     hours?: number;
     status: 'requested' | 'pending' | 'completed' | 'cancelled' | 'rejected' | string;
     createdAt: string;
@@ -88,7 +89,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
-               sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
@@ -117,7 +118,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         buyerCallsign: r.buyerCallsign,
         sellerPublicKey: r.seller_pubkey,
         sellerCallsign: r.sellerCallsign,
-        credits: r.credits,
+        amount_c: r.amount_c,
         hours: r.hours ?? undefined,
         status: r.status,
         createdAt: r.created_at,
@@ -148,7 +149,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
-               sd.phase as sdPhase, sd.beans_per_period as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
@@ -189,7 +190,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             buyerCallsign: r.buyerCallsign,
             sellerPublicKey: r.seller_pubkey,
             sellerCallsign: r.sellerCallsign,
-            credits: r.credits,
+            amount_c: r.amount_c,
             hours: r.hours ?? undefined,
             status: r.status,
             createdAt: r.created_at,

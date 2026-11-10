@@ -103,7 +103,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     db.transaction(() => {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
                     VALUES (?, ?, ?, ?, ?)`).run(adminPublicKey, callsign, new Date().toISOString(), 'genesis', 'genesis');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(adminPublicKey);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(adminPublicKey);
     })();
 
     ledger.initializeGenesisAccount(adminPublicKey);
@@ -321,7 +321,7 @@ export function registerMemberInternal(
     db.transaction(() => {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                     VALUES (?, ?, ?, ?, ?)`).run(publicKey, callsign, new Date().toISOString(), invitedBy, inviteCode);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
 
     ledger.initializeGenesisAccount(publicKey);
@@ -408,7 +408,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     db.transaction(() => {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, is_visitor)
                     VALUES (?, ?, ?, ?, ?, ?, 1)`).run(publicKey, generatedCallsign, new Date().toISOString(), null, null, homeNodeUrl || null);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
     bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);

@@ -14,7 +14,7 @@ import {
 const SCHEMA = `
     CREATE TABLE members (public_key TEXT PRIMARY KEY, joined_at TEXT);
     CREATE TABLE marketplace_transactions (
-        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, credits REAL, status TEXT, completed_at TEXT
+        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, amount_c REAL, status TEXT, completed_at TEXT
     );
     CREATE INDEX idx_mt_buyer_status ON marketplace_transactions(buyer_pubkey, status);
     CREATE INDEX idx_mt_seller_status ON marketplace_transactions(seller_pubkey, status);
@@ -36,7 +36,7 @@ const key = (i: number) => `k${String(i).padStart(6, '0')}`;
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 let tradeN = 0;
 function trade(db: Database.Database, buyer: string, seller: string, credits: number, at = daysAgo(60)): void {
-    db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`)
         .run(`t${tradeN++}`, buyer, seller, credits, at);
 }
 function member(db: Database.Database, pk: string, joinedDaysAgo: number): void {
@@ -45,7 +45,7 @@ function member(db: Database.Database, pk: string, joinedDaysAgo: number): void 
 
 /** The pair step as it was before the paging: one GROUP BY over every completed trade (origin/main 78b24da0). */
 function unpagedPairs(db: Database.Database): { flagged: string[]; details: WashAnalysis['pairDetails'] } {
-    const rows = db.prepare(`SELECT buyer_pubkey, seller_pubkey, SUM(credits) as vol FROM marketplace_transactions
+    const rows = db.prepare(`SELECT buyer_pubkey, seller_pubkey, SUM(amount_c) as vol FROM marketplace_transactions
         WHERE status = 'completed' AND buyer_pubkey != seller_pubkey GROUP BY buyer_pubkey, seller_pubkey`).all() as { buyer_pubkey: string; seller_pubkey: string; vol: number }[];
     const pairs = new Map<string, { u: string; v: string; uv: number; vu: number }>();
     for (const r of rows) {
@@ -140,8 +140,8 @@ describe('wash analysis: paged pair totals (S1)', () => {
                 db.transaction(() => {
                     const rows = db.prepare('SELECT * FROM marketplace_transactions').all() as Record<string, unknown>[];
                     db.prepare('DELETE FROM marketplace_transactions').run();
-                    const ins = db.prepare(`INSERT OR REPLACE INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
-                        VALUES (@id, @buyer_pubkey, @seller_pubkey, @credits, @status, @completed_at)`);
+                    const ins = db.prepare(`INSERT OR REPLACE INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
+                        VALUES (@id, @buyer_pubkey, @seller_pubkey, @amount_c, @status, @completed_at)`);
                     for (const r of rows.reverse()) ins.run(r);
                     trade(db, 'late-a', 'late-b', 400);
                     trade(db, 'late-b', 'late-a', 390);

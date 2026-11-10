@@ -1,7 +1,7 @@
 export interface LedgerAccount {
     id: string; // User or Node ID
     /** Whole hundredths of a Bean (hundredths.ts). */
-    balance: Hundredths;
+    balance_c: Hundredths;
     lastDemurrageEpoch: number; // Unix Epoch (Days since 1970)
 }
 
@@ -182,7 +182,7 @@ export class LedgerManager {
      * Ensures an account starts with 0 balance and the Mutual Credit architecture.
      */
     initializeGenesisAccount(id: string): LedgerAccount {
-        const account = { id, balance: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
+        const account = { id, balance_c: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
         this.accounts.set(id, account);
         return account;
     }
@@ -191,7 +191,7 @@ export class LedgerManager {
         let account = this.accounts.get(id);
         if (!account) {
             // Auto-create new accounts with 0 balance
-            account = { id, balance: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
+            account = { id, balance_c: 0, lastDemurrageEpoch: this.getCurrentEpoch() };
             this.accounts.set(id, account);
         }
 
@@ -220,7 +220,7 @@ export class LedgerManager {
 
         // A balance that is not a finite number (a NULL row loaded as null, a NaN) decays nothing: `NaN <= 0` is false,
         // so it used to fall through and credit the Commons with NaN, spreading one broken account to the pot.
-        if (epochsPassed <= 0 || !isFiniteBalance(account.balance) || account.balance <= 0 || isExempt) {
+        if (epochsPassed <= 0 || !isFiniteBalance(account.balance_c) || account.balance_c <= 0 || isExempt) {
             // Only positive, non-exempt balances decay
             account.lastDemurrageEpoch = currentEpoch;
             return account;
@@ -257,7 +257,7 @@ export class LedgerManager {
 
         const monthsPassed = epochsPassed / 30;
         // Truncated ONCE to whole hundredths (circulation.ts): the holder keeps the part below a hundredth.
-        const decayedAmount = circulationChargeOf(account.balance, monthsPassed);
+        const decayedAmount = circulationChargeOf(account.balance_c, monthsPassed);
 
         // Below one hundredth: forfeit it (circulationChargeOf gives 0). The old form credited the Commons anyway and
         // skipped the event, leaving a credit with no traceable source that `loadState` could not unwind.
@@ -267,7 +267,7 @@ export class LedgerManager {
         }
 
         COMMONS_BALANCE += decayedAmount;
-        account.balance -= decayedAmount;
+        account.balance_c -= decayedAmount;
         account.lastDemurrageEpoch = currentEpoch;
         this.decayEvents.push({
             accountId: account.id,
@@ -319,7 +319,7 @@ export class LedgerManager {
         if (Number.isNaN(floor)) return refused;
 
         // Mutual Credit: ensure the fromAccount doesn't exceed the credit floor
-        if (fromAccount.balance - amount < floor) {
+        if (fromAccount.balance_c - amount < floor) {
             // Insufficient credit
             return refused;
         }
@@ -330,15 +330,15 @@ export class LedgerManager {
 
         // Never a balance that is not whole hundredths, on either side or in the pot: refused before anything moves. An
         // account already holding one (a NULL row, a NaN, a float) moves nothing either, so the damage cannot spread.
-        if (!isFiniteBalance(fromAccount.balance) || !isFiniteBalance(toAccount.balance) || !isHundredths(COMMONS_BALANCE)
-            || !Number.isSafeInteger(fromAccount.balance - amount) || !Number.isSafeInteger(toAccount.balance + netAmount)
+        if (!isFiniteBalance(fromAccount.balance_c) || !isFiniteBalance(toAccount.balance_c) || !isHundredths(COMMONS_BALANCE)
+            || !Number.isSafeInteger(fromAccount.balance_c - amount) || !Number.isSafeInteger(toAccount.balance_c + netAmount)
             || !Number.isSafeInteger(COMMONS_BALANCE + fee)) {
             return refused;
         }
 
         // Execute transfer: three integers that sum to zero.
-        fromAccount.balance -= amount;
-        toAccount.balance += netAmount;
+        fromAccount.balance_c -= amount;
+        toAccount.balance_c += netAmount;
         if (fee > 0) {
             COMMONS_BALANCE += fee;
         }
@@ -378,13 +378,13 @@ export class LedgerManager {
         const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
         if (Number.isNaN(floor)) return false;
 
-        if (fromAccount.balance - amount < floor) return false;
-        if (!isFiniteBalance(fromAccount.balance) || !isHundredths(COMMONS_BALANCE) || !Number.isSafeInteger(fromAccount.balance - amount)
+        if (fromAccount.balance_c - amount < floor) return false;
+        if (!isFiniteBalance(fromAccount.balance_c) || !isHundredths(COMMONS_BALANCE) || !Number.isSafeInteger(fromAccount.balance_c - amount)
             || !Number.isSafeInteger(COMMONS_BALANCE + amount)) {
             return false;
         }
 
-        fromAccount.balance -= amount;
+        fromAccount.balance_c -= amount;
         COMMONS_BALANCE += amount;
         // Epoch already settled by `getAccount()` above — see the note in `transfer()`.
         return true;

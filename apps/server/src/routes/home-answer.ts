@@ -935,7 +935,7 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     const book = getEnterpriseLedger(id, { since: monthStartOf(c.now), limit: 1 });
     const last = book.entries[book.entries.length - 1];
     return {
-        ...card, balance: book.enterprise.balance,
+        ...card, balance: book.enterprise.balance_c,
         // In as the ledger credited it, net of a payment's fee, as the Beans card and the latest line say it: the book's
         // net change plus what went out. Its totalIncome is gross, so one 100-Bean payment would read "+100 in" beside
         // "Latest: +98.5" and a balance that rose by 98.5 (review of #2416).
@@ -1402,7 +1402,7 @@ function beansCard(c: Ctx): HomeCards['beans'] | undefined {
     const b = getBalance(c.me!);
     // Room to spend: down to the floor they may use (credit-model), never below nothing.
     return {
-        balance: b.balance, room: Math.max(0, round2(b.balance - b.usableFloor)), tier: b.tier.name, activated: b.activated, frozen: b.frozen,
+        balance: b.balance_c, room: Math.max(0, round2(b.balance_c - b.usableFloor)), tier: b.tier.name, activated: b.activated, frozen: b.frozen,
         month: ownMonthOf(c.me!, c.now),
     };
 }

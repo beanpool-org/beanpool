@@ -19,8 +19,8 @@ describe('community circulation', () => {
     /** What the ledger itself takes from `balance` over one month (30 epochs) of applyDecay, and credits the Commons. */
     const ledgerMonth = (balance: number) => {
         core.setCommonsBalance(0);
-        ledger.loadState([{ id: 'm', balance, lastDemurrageEpoch: ledger.getCurrentEpoch() - 30 }]);
-        const after = ledger.getAccount('m').balance;
+        ledger.loadState([{ id: 'm', balance_c: balance, lastDemurrageEpoch: ledger.getCurrentEpoch() - 30 }]);
+        const after = ledger.getAccount('m').balance_c;
         ledger.drainDecayEvents();
         return { taken: balance - after, credited: core.COMMONS_BALANCE };
     };

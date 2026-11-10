@@ -285,19 +285,19 @@ const BUDGET_LINE = (a: string) => `NOT EXISTS (SELECT 1 FROM voucher_allocation
 
 export function budgetOf(pk: string, at = Date.now()): Budget {
     const cutoff = lifeCutoff(at);
-    const lines = (db.prepare(`SELECT COALESCE(SUM(a.amount), 0) AS n FROM voucher_allocations a WHERE a.member_pubkey = ? AND ${BUDGET_LINE('a')}`).get(pk) as { n: number }).n;
-    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
+    const lines = (db.prepare(`SELECT COALESCE(SUM(a.amount_c), 0) AS n FROM voucher_allocations a WHERE a.member_pubkey = ? AND ${BUDGET_LINE('a')}`).get(pk) as { n: number }).n;
+    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount_c), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
     const left = lines + lapsed;
-    const held = db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n, COUNT(*) AS c FROM voucher_allocations h
+    const held = db.prepare(`SELECT COALESCE(SUM(-h.amount_c), 0) AS n, COUNT(*) AS c FROM voucher_allocations h
         JOIN invite_codes ic ON ic.code = h.ref
         WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${OPEN_HOLD} AND ic.used_by IS NULL AND ic.created_at > ?`).get(pk, cutoff) as { n: number; c: number };
-    const vouched = db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts
+    const vouched = db.prepare(`SELECT COALESCE(SUM(amount_c), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts
         WHERE from_pubkey = ? AND kind = 'vouch'`).get(pk) as { n: number; c: number };
     return { left, held: held.n, heldInvites: held.c, vouched: vouched.n, peopleVouched: vouched.c, level: left + held.n };
 }
 
 function addLine(pk: string, kind: 'grant' | 'top_up' | 'lower' | 'hold' | 'return' | 'stop', amount: number, actor: string, ref: string | null = null): void {
-    db.prepare('INSERT INTO voucher_allocations (id, member_pubkey, kind, amount, actor, ref, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    db.prepare('INSERT INTO voucher_allocations (id, member_pubkey, kind, amount_c, actor, ref, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(newId(), pk, kind, amount, actor, ref, now());
 }
 
@@ -313,7 +313,7 @@ function assertUnderCeiling(pk: string): void {
  */
 export function returnLapsedHolds(pk: string | null = null, at = Date.now()): number {
     if (getNodeRole() !== 'primary') return 0;
-    const lapsed = db.prepare(`SELECT h.member_pubkey AS pk, h.ref AS ref, -h.amount AS amount FROM voucher_allocations h
+    const lapsed = db.prepare(`SELECT h.member_pubkey AS pk, h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h
         WHERE ${LAPSED_HOLD} AND (? IS NULL OR h.member_pubkey = ?)`)
         .all(lifeCutoff(at), pk, pk) as { pk: string; ref: string; amount: number }[];
     db.transaction(() => { for (const l of lapsed) addLine(l.pk, 'return', l.amount, 'node', l.ref); })();
@@ -325,7 +325,7 @@ export function returnLapsedHolds(pk: string | null = null, at = Date.now()): nu
  * line for what is left, and the row stopped. Room already given stays given.
  */
 function stopBudget(pk: string, actor: string, reason: 'role_lost' | 'stopped' | 'revoked' | 'departed'): void {
-    const open = db.prepare(`SELECT h.ref AS ref, -h.amount AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${OPEN_HOLD}
+    const open = db.prepare(`SELECT h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${OPEN_HOLD}
           AND NOT EXISTS (SELECT 1 FROM invite_codes ic WHERE ic.code = h.ref AND ic.used_by IS NOT NULL)`).all(pk) as { ref: string; amount: number }[];
     for (const o of open) addLine(pk, 'return', o.amount, actor, o.ref);
     const { left } = budgetOf(pk);
@@ -477,7 +477,7 @@ export function makeVoucher(actor: string, body: { entryId?: unknown; amount?: u
         .get(body.entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
     if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
     if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
-    const debt = db.prepare("SELECT amount FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount: number } | undefined;
+    const debt = db.prepare("SELECT amount_c FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount: number } | undefined;
     if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount));
     const pk = conf.member_pubkey;
     const m = getMember(db, pk);
@@ -618,7 +618,7 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
 
 /** The stored balance, never read through the ledger (memory boot-getbalance-before-exemptions): below zero now? */
 function belowZeroNow(pk: string): boolean {
-    return ((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0) < 0;
+    return ((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance_c ?? 0) < 0;
 }
 
 /**
@@ -627,8 +627,8 @@ function belowZeroNow(pk: string): boolean {
  * OWNER_VOUCH_ACTOR, from a profile or on an invite), which lifts what they may hold in all from 300 to 500.
  */
 function pairOf(voucher: string, person: string): { total: number; vouchers: number; personTotal: number; ownerVouched: boolean } {
-    const total = (db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND to_pubkey = ?`).get(voucher, person) as { n: number }).n;
-    const all = db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS c, COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { c: number; n: number };
+    const total = (db.prepare(`SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND to_pubkey = ?`).get(voucher, person) as { n: number }).n;
+    const all = db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS c, COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { c: number; n: number };
     const ownerVouched = !!db.prepare(`SELECT 1 FROM room_gifts g WHERE g.kind = 'vouch' AND g.to_pubkey = ? AND EXISTS (SELECT 1 FROM voucher_allocations h
         WHERE h.member_pubkey = g.from_pubkey AND h.kind = 'hold' AND h.actor = ? AND h.ref IN (g.id, g.invite_code)) LIMIT 1`).get(person, OWNER_VOUCH_ACTOR);
     return { total, vouchers: all.c, personTotal: all.n, ownerVouched };
@@ -637,7 +637,7 @@ function pairOf(voucher: string, person: string): { total: number; vouchers: num
 /** Inside a vouch's transaction: the vouch's room_gifts row, from the voucher's budget (its hold written by the caller). */
 function addVouchRow(voucher: string, person: string, amount: number, inviteCode: string | null): string {
     const id = newId();
-    db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount, invite_code, at) VALUES (?, ?, ?, ?, 'vouch', ?, ?, ?)`)
+    db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c, invite_code, at) VALUES (?, ?, ?, ?, 'vouch', ?, ?, ?)`)
         .run(id, voucher, person, voucher, amount, inviteCode, now());
     return id;
 }
@@ -738,7 +738,7 @@ export function holdForInvite(maker: string, code: string, amount: number): void
  * owner presets, and lands as it was made, whatever their role at the redeem: it was an owner's vouch when they made it.
  */
 export function landInviteVouch(maker: string, code: string, joiner: string, amount: number): { landed: number } | { ended: string } {
-    const hold = db.prepare(`SELECT -h.amount AS amount, h.actor AS actor FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
+    const hold = db.prepare(`SELECT -h.amount_c AS amount_c, h.actor AS actor FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
         .get(maker, code) as { amount: number; actor: string } | undefined;
     const preset = hold?.actor === OWNER_VOUCH_ACTOR ? isOwnerVouchPreset(amount) : isVouchPreset(amount);
     if (!hold || hold.amount !== amount || !preset) return { ended: VOUCHER_WORDS.voucherEnded };
@@ -834,11 +834,11 @@ export function landInviteVoucher(maker: string, entryId: string, joiner: string
  * never lands with its invite still saying it waits.
  */
 export function landAwaitingInviteVoucher(member: string, entryId: string): VoucherNotice | undefined {
-    const inv = db.prepare(`SELECT code, created_by, voucher_level FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
-        AND voucher_outcome = 'awaiting_second' AND voucher_level IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
-        { code: string; created_by: string; voucher_level: number } | undefined;
+    const inv = db.prepare(`SELECT code, created_by, voucher_level_c FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
+        AND voucher_outcome = 'awaiting_second' AND voucher_level_c IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
+        { code: string; created_by: string; voucher_level_c: number } | undefined;
     if (!inv) return undefined;
-    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level);
+    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level_c);
     db.prepare('UPDATE invite_codes SET voucher_outcome = ? WHERE code = ?').run(r.outcome, inv.code);
     return r.notice;
 }
@@ -888,9 +888,9 @@ export function vouchingOnDeparture(pk: string, actor: string, balance: number):
         if (row && !row.stopped_at) stopBudget(pk, actor, 'departed');
         // In cents, as Beans are kept: the debt the Commons paid, shared over the pieces they still held, oldest first.
         let debtCents = balance < 0 ? Math.round(-balance * 100) : 0;
-        const pieces = db.prepare(`SELECT g.id, g.amount - COALESCE((SELECT SUM(p.amount) FROM room_gifts p WHERE p.source_gift_id = g.id), 0) AS open
-            FROM room_gifts g WHERE g.to_pubkey = ? AND g.written_off IS NULL ORDER BY g.at ASC, g.id ASC`).all(pk) as { id: string; open: number }[];
-        const stamp = db.prepare('UPDATE room_gifts SET written_off = ?, written_off_at = ? WHERE id = ?');
+        const pieces = db.prepare(`SELECT g.id, g.amount_c - COALESCE((SELECT SUM(p.amount_c) FROM room_gifts p WHERE p.source_gift_id = g.id), 0) AS open
+            FROM room_gifts g WHERE g.to_pubkey = ? AND g.written_off_c IS NULL ORDER BY g.at ASC, g.id ASC`).all(pk) as { id: string; open: number }[];
+        const stamp = db.prepare('UPDATE room_gifts SET written_off_c = ?, written_off_at = ? WHERE id = ?');
         const at = now();
         for (const p of pieces) {
             const shareCents = Math.max(0, Math.min(debtCents, Math.round(p.open * 100)));
@@ -937,8 +937,8 @@ function tradingOf(pk: string): Map<string, TradingMark> {
  */
 function passedOnOf(pk: string): { amount: number; people: number; belowZero: number } {
     const pieces = (db.prepare(`SELECT g.to_pubkey AS holder,
-            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
-        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off IS NULL`).all(pk) as { holder: string; open: number }[])
+            g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off_c IS NULL`).all(pk) as { holder: string; open: number }[])
         .filter((p) => p.open > 0);
     const holders = new Set(pieces.map((p) => p.holder));
     const below = new Set([...holders].filter((h) => belowZeroNow(h)));
@@ -955,8 +955,8 @@ export function voucherSummary(pk: string) {
     const b = budgetOf(pk);
     const people = db.prepare(`SELECT DISTINCT to_pubkey AS pk FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ?`).all(pk) as { pk: string }[];
     const below = people.filter((p) => belowZeroNow(p.pk)).length;
-    const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
-    const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount IS NOT NULL').get(pk) as { n: number }).n;
+    const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off_c), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
+    const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount_c IS NOT NULL').get(pk) as { n: number }).n;
     const marks = [...tradingOf(pk).values()];
     return {
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
@@ -1003,7 +1003,7 @@ export interface HistoryLine {
  */
 function historyOf(pk: string, limit = 200): HistoryLine[] {
     const cutoff = lifeCutoff(Date.now());
-    const rows = db.prepare('SELECT kind, amount, actor, ref, at FROM voucher_allocations WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, limit) as
+    const rows = db.prepare('SELECT kind, amount_c, actor, ref, at FROM voucher_allocations WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, limit) as
         { kind: string; amount: number; actor: string; ref: string | null; at: string }[];
     const giftTo = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE id = ? AND from_pubkey = ? AND kind = 'vouch'");
     const landedOn = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE invite_code = ? AND from_pubkey = ? AND kind = 'vouch' LIMIT 1");
@@ -1035,14 +1035,14 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
  */
 function peopleOf(pk: string) {
     const trading = tradingOf(pk);
-    return (db.prepare(`SELECT to_pubkey AS pk, SUM(amount) AS amount, COUNT(*) AS pieces, MIN(at) AS first_at, MAX(invite_code IS NOT NULL) AS by_invite,
-            SUM(COALESCE(written_off, 0)) AS written_off FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? GROUP BY to_pubkey ORDER BY first_at DESC`).all(pk) as
-        { pk: string; amount: number; pieces: number; first_at: string; by_invite: number; written_off: number }[])
+    return (db.prepare(`SELECT to_pubkey AS pk, SUM(amount_c) AS amount_c, COUNT(*) AS pieces, MIN(at) AS first_at, MAX(invite_code IS NOT NULL) AS by_invite,
+            SUM(COALESCE(written_off_c, 0)) AS written_off_c FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? GROUP BY to_pubkey ORDER BY first_at DESC`).all(pk) as
+        { pk: string; amount: number; pieces: number; first_at: string; by_invite: number; written_off_c: number }[])
         .map((r) => {
             const m = getMember(db, r.pk);
             return {
                 memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount: r.amount, raised: r.pieces > 1,
-                byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off,
+                byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off_c,
                 vouchesForMe: pairOf(r.pk, pk).total > 0, trading: trading.get(r.pk) ?? 'none',
             };
         });
@@ -1081,7 +1081,7 @@ export function myVouching(pk: string) {
         ...(live ? { budget: budgetOf(pk), source: voucherRow(pk)!.source, history: historyOf(pk, 50) } : {}),
         noLimit: owner, presets: [...vouchPresetsFor(owner)], vouchMax: vouchMaxFor(owner), budgetMax: VOUCHER_BUDGET_MAX,
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
-        vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount) AS amount, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
+        vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount_c) AS amount_c, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
             GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount: number; at: string }[])
             .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount: r.amount, at: r.at })),
     };

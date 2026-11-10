@@ -148,9 +148,9 @@ describe('the core ledger moves whole hundredths', () => {
         l.initializeGenesisAccount('a');
         l.initializeGenesisAccount('b');
         expect(l.transfer('a', 'b', 4925, -4925, true)).toEqual({ ok: true, fee: 0 });
-        expect(l.getAccount('a').balance).toBe(-4925);
+        expect(l.getAccount('a').balance_c).toBe(-4925);
         expect(l.transfer('a', 'b', 1, -4925, true).ok).toBe(false);
-        expect(l.getAccount('a').balance).toBe(-4925);
+        expect(l.getAccount('a').balance_c).toBe(-4925);
     });
     it('a 1-Bean deal pays 99 to the seller and 1 to the pot, and returns the fee it took', () => {
         setCommonsBalance(0);
@@ -158,8 +158,8 @@ describe('the core ledger moves whole hundredths', () => {
         l.initializeGenesisAccount('buyer');
         l.initializeGenesisAccount('seller');
         expect(l.transfer('buyer', 'seller', 100, -100)).toEqual({ ok: true, fee: 1 });
-        expect(l.getAccount('buyer').balance).toBe(-100);
-        expect(l.getAccount('seller').balance).toBe(99);
+        expect(l.getAccount('buyer').balance_c).toBe(-100);
+        expect(l.getAccount('seller').balance_c).toBe(99);
         expect(COMMONS_BALANCE).toBe(1);
     });
     it('refuses a float, a string or a negative before anything moves', () => {
@@ -167,21 +167,21 @@ describe('the core ledger moves whole hundredths', () => {
         for (const bad of [20.5, '2000' as unknown as number, -1, NaN]) {
             expect(l.transfer('a', 'b', bad, -100000).ok).toBe(false);
         }
-        expect(l.getAccount('a').balance).toBe(0);
+        expect(l.getAccount('a').balance_c).toBe(0);
     });
     it('an escrow pays out exactly what it holds, never a hundredth more', () => {
         expect(ESCROW_FLOOR).toBe(0);
-        const l = new LedgerManager([{ id: 'escrow_x', balance: 1235, lastDemurrageEpoch: 0 }]);
+        const l = new LedgerManager([{ id: 'escrow_x', balance_c: 1235, lastDemurrageEpoch: 0 }]);
         const [buyer, seller] = halves(1235);
         expect(l.transfer('escrow_x', 'b', buyer, -Infinity, true).ok).toBe(true);
         expect(l.transfer('escrow_x', 's', seller + 1, -Infinity, true).ok).toBe(false);
         expect(l.transfer('escrow_x', 's', seller, -Infinity, true).ok).toBe(true);
-        expect(l.getAccount('escrow_x').balance).toBe(0);
+        expect(l.getAccount('escrow_x').balance_c).toBe(0);
     });
     it('T1 (core) 20,000 random moves with fees over 50 accounts conserve to the hundredth', () => {
         setCommonsBalance(0);
         const ids = Array.from({ length: 50 }, (_, i) => `m${i}`);
-        const l = new LedgerManager(ids.map((id) => ({ id, balance: 0, lastDemurrageEpoch: l0() })));
+        const l = new LedgerManager(ids.map((id) => ({ id, balance_c: 0, lastDemurrageEpoch: l0() })));
         let seed = 7;
         const next = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed; };
         for (let i = 1; i <= 20_000; i++) {
@@ -190,9 +190,9 @@ describe('the core ledger moves whole hundredths', () => {
             const amount = next() % 50_000;
             l.transfer(from, to, amount, -200000, next() % 3 === 0);
             if (i % 1000 === 0) {
-                const sum = ids.reduce((s, id) => s + l.getAccount(id).balance, 0) + COMMONS_BALANCE;
+                const sum = ids.reduce((s, id) => s + l.getAccount(id).balance_c, 0) + COMMONS_BALANCE;
                 expect(sum).toBe(0);
-                for (const id of ids) expect(Number.isSafeInteger(l.getAccount(id).balance)).toBe(true);
+                for (const id of ids) expect(Number.isSafeInteger(l.getAccount(id).balance_c)).toBe(true);
             }
         }
     });
@@ -213,8 +213,8 @@ describe('T8 circulation: a whole charge, truncated once', () => {
         expect(charge).toBeGreaterThan(0);
         setCommonsBalance(0);
         const today = l0();
-        const l = new LedgerManager([{ id: 'holder', balance: 100000, lastDemurrageEpoch: today - 30 }]);
-        const after = l.getAccount('holder').balance;
+        const l = new LedgerManager([{ id: 'holder', balance_c: 100000, lastDemurrageEpoch: today - 30 }]);
+        const after = l.getAccount('holder').balance_c;
         expect(after).toBe(100000 - charge);
         expect(after + COMMONS_BALANCE).toBe(100000);
         const [event] = l.drainDecayEvents();
@@ -224,8 +224,8 @@ describe('T8 circulation: a whole charge, truncated once', () => {
         setCommonsBalance(0);
         const today = l0();
         // 200.01 Beans for a day: 1 hundredth at 1 % a month for a thirtieth of a month is far below one hundredth.
-        const l = new LedgerManager([{ id: 'h', balance: 20001, lastDemurrageEpoch: today - 1 }]);
-        expect(l.getAccount('h').balance).toBe(20001);
+        const l = new LedgerManager([{ id: 'h', balance_c: 20001, lastDemurrageEpoch: today - 1 }]);
+        expect(l.getAccount('h').balance_c).toBe(20001);
         expect(l.getAccount('h').lastDemurrageEpoch).toBe(today);
         expect(COMMONS_BALANCE).toBe(0);
         expect(l.drainDecayEvents()).toEqual([]);

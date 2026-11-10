@@ -160,7 +160,7 @@ export function checkStandingStart(
  * paid, one period done, the next due when the first ends.
  */
 export function insertStandingDeal(v: CheckedStandingStart, txId: string): void {
-    db.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase,
+    db.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period_c, period_unit, starts_at, max_periods, phase,
                     periods_done, current_tx_id, next_due_at, auth_signer, auth_signature, auth_payload)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', 1, ?, ?, ?, ?, ?)`)
         .run(v.auth.standingId, v.auth.listingId, v.payer, v.payee, v.auth.beansPerPeriod, v.auth.unit, v.auth.startsAt, v.auth.maxPeriods,
@@ -182,7 +182,7 @@ interface StandingRow {
     post_id: string;
     payer_pubkey: string;
     payee_pubkey: string;
-    beans_per_period: number;
+    beans_per_period_c: number;
     period_unit: StandingPeriodUnit;
     starts_at: string;
     max_periods: number | null;
@@ -315,7 +315,7 @@ const sameMember = (signed: string, now: string): boolean => signed === now || c
 function boundsRow(sd: StandingRow): boolean {
     const a = parseStandingAuthorisation(sd.auth_payload);
     return !!a && a.standingId === sd.id && a.listingId === sd.post_id && sameMember(a.payee, sd.payee_pubkey) && a.unit === sd.period_unit
-        && a.startsAt === sd.starts_at && a.maxPeriods === sd.max_periods && Math.abs(a.beansPerPeriod - sd.beans_per_period) < 1e-9
+        && a.startsAt === sd.starts_at && a.maxPeriods === sd.max_periods && Math.abs(a.beansPerPeriod - sd.beans_per_period_c) < 1e-9
         && standingAuthorisationText(a) === sd.auth_payload;
 }
 
@@ -432,10 +432,10 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
         if (!post || marketplacePostOutOfSight(post, sd.payer_pubkey)) throw new Error('its listing is not in the payer\'s sight');
         assertBuyerMayTrade(sd.payer_pubkey);
         if (post.authorPublicKey !== sd.payee_pubkey) throw new Error('its listing has another author');
-        const p = offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
+        const p = offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period_c, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
         return { ...p, oneAtATime: !raw.repeatable };
     }
-    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, credits: sd.beans_per_period };
+    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, credits: sd.beans_per_period_c };
     const p = requestHoldChecks(hooks, deal, raw, sd.payer_pubkey, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
     if (!p) throw new Error('its payer is no longer the listing\'s author');
     return p;
@@ -518,7 +518,7 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
                                       WHERE id = ? AND phase = ? AND periods_done = ?`).run(txId, nextDue, sd.id, sd.phase, sd.periods_done);
             if (moved.changes !== 1) throw new Error('the standing deal moved on since it was read');
             paid = payStandingPeriod(hooks, {
-                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount: sd.beans_per_period,
+                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount: sd.beans_per_period_c,
                 memo: standingLines.memo(sd.period_unit, title, n),
                 auth: { signer: sd.auth_signer, payload: standingPaymentPayload(sd.id, n) },
                 row: 'insert', paidAt, takeListing: parties.oneAtATime,
@@ -526,8 +526,8 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
             row = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(txId);
             if (covered) {
                 told = [
-                    ...keep([sd.payer_pubkey], standingLines.coveredPayer(sd.period_unit, title, sd.beans_per_period, nameOf(sd.payee_pubkey)), sd, 'standing_covered', { period: n }),
-                    ...keep([sd.payee_pubkey], standingLines.coveredPayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period, title), sd, 'standing_covered', { period: n }),
+                    ...keep([sd.payer_pubkey], standingLines.coveredPayer(sd.period_unit, title, sd.beans_per_period_c, nameOf(sd.payee_pubkey)), sd, 'standing_covered', { period: n }),
+                    ...keep([sd.payee_pubkey], standingLines.coveredPayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title), sd, 'standing_covered', { period: n }),
                 ];
             }
             if (sd.max_periods !== null && n === sd.max_periods) {
@@ -545,9 +545,9 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
     // Each period paid on time: the payee's push, as every payment received; the payer's Ledger row and the chat line only.
     // Covered in the grace: both get the covered notice (a push and a bell row) instead, and the record its line.
     afterRelease(hooks, row, post, paid!, 'SYSTEM', covered ? null
-        : { title: standingLines.noticeTitle(), body: standingLines.paidIn(sd.period_unit, sd.beans_per_period, title, nameOf(sd.payer_pubkey), n) });
+        : { title: standingLines.noticeTitle(), body: standingLines.paidIn(sd.period_unit, sd.beans_per_period_c, title, nameOf(sd.payer_pubkey), n) });
     hooks.clearEnterpriseFloorCache?.();
-    if (covered) chatLine(hooks, sd, standingLines.chatCovered(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period, title, nameOf(sd.payee_pubkey)));
+    if (covered) chatLine(hooks, sd, standingLines.chatCovered(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, nameOf(sd.payee_pubkey)));
     tellStanding(hooks, told);
     return 'paid';
 }
@@ -573,11 +573,11 @@ function markShort(hooks: StandingHooks, sd: StandingRow, now: number): 'short' 
         if (moved.changes !== 1 || sd.phase === 'short') return;
         began = true;
         told = [
-            ...keep([sd.payer_pubkey], standingLines.duePayer(sd.period_unit, title, sd.beans_per_period, nameOf(sd.payee_pubkey), until), sd, 'standing_short', { period: due.n }),
-            ...keep([sd.payee_pubkey], standingLines.duePayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period, title, until), sd, 'standing_short', { period: due.n }),
+            ...keep([sd.payer_pubkey], standingLines.duePayer(sd.period_unit, title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), until), sd, 'standing_short', { period: due.n }),
+            ...keep([sd.payee_pubkey], standingLines.duePayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, until), sd, 'standing_short', { period: due.n }),
         ];
     })();
-    if (began) chatLine(hooks, sd, standingLines.chatDue(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period, title, until));
+    if (began) chatLine(hooks, sd, standingLines.chatDue(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, until));
     tellStanding(hooks, told);
     return 'short';
 }
@@ -650,13 +650,13 @@ function graceCadence(hooks: StandingHooks, now: number): void {
         let payeeBody = '';
         if (now >= dayBefore) {
             kind = 'standing_day_before';
-            payerBody = standingLines.dayBeforePayer(title, sd.beans_per_period, nameOf(sd.payee_pubkey), until);
-            payeeBody = standingLines.dayBeforePayee(sd.period_unit, nameOf(sd.payer_pubkey), title, sd.beans_per_period, until);
+            payerBody = standingLines.dayBeforePayer(title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), until);
+            payeeBody = standingLines.dayBeforePayee(sd.period_unit, nameOf(sd.payer_pubkey), title, sd.beans_per_period_c, until);
         } else if (sd.period_unit === 'month' && now >= halfway) {
             const days = Math.floor((now - dueMs) / 86_400_000);
             kind = 'standing_halfway';
-            payerBody = standingLines.halfwayPayer(title, sd.beans_per_period, days, until);
-            payeeBody = standingLines.halfwayPayee(nameOf(sd.payer_pubkey), sd.beans_per_period, title, days, until);
+            payerBody = standingLines.halfwayPayer(title, sd.beans_per_period_c, days, until);
+            payeeBody = standingLines.halfwayPayee(nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, days, until);
         }
         if (!kind || toldBefore(sd, kind, due.n)) continue;
         const k = kind;
@@ -682,12 +682,12 @@ function warnAhead(hooks: StandingHooks, now: number): void {
         const period = sd.periods_done + 1;
         if (toldBefore(sd, 'standing_short_ahead', period)) continue;
         const { balance, usableFloor } = hooks.getBalance(sd.payer_pubkey);
-        const shortBy = usableFloor - (balance - sd.beans_per_period);
+        const shortBy = usableFloor - (balance - sd.beans_per_period_c);
         if (!(shortBy > 1e-9)) continue;
         const title = titleOf(sd.post_id);
         let told: StandingNotice[] = [];
         db.transaction(() => {
-            told = keep([sd.payer_pubkey], standingLines.shortAheadNotice(title, sd.beans_per_period, nameOf(sd.payee_pubkey), dayOf(sd.next_due_at), shortBy), sd, 'standing_short_ahead', { period });
+            told = keep([sd.payer_pubkey], standingLines.shortAheadNotice(title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), dayOf(sd.next_due_at), shortBy), sd, 'standing_short_ahead', { period });
         })();
         markTold(sd.id, 'standing_short_ahead', period);
         tellStanding(hooks, told);
@@ -719,7 +719,7 @@ export function standingDealView(id: string): Record<string, unknown> | null {
     const sd = readStanding(id);
     if (!sd) return null;
     return {
-        id: sd.id, postId: sd.post_id, payerPublicKey: sd.payer_pubkey, payeePublicKey: sd.payee_pubkey, beansPerPeriod: sd.beans_per_period,
+        id: sd.id, postId: sd.post_id, payerPublicKey: sd.payer_pubkey, payeePublicKey: sd.payee_pubkey, beansPerPeriod: sd.beans_per_period_c,
         unit: sd.period_unit, startsAt: sd.starts_at, maxPeriods: sd.max_periods, phase: sd.phase, periodsDone: sd.periods_done,
         currentTransactionId: sd.current_tx_id, nextDueAt: sd.next_due_at, shortSince: sd.short_since,
         stopped: !!sd.stopped_at, endedAt: sd.ended_at, endedReason: sd.ended_reason,
@@ -751,10 +751,10 @@ export function stopStandingDeal(hooks: EscrowCallbacks, id: string, actor: stri
                 .run(actor, at, id, fresh.periods_done);
             if (moved.changes !== 1 || !endStanding(fresh, 'stopped', at)) throw new Error('the standing deal moved on since it was read');
             const body = side === 'payer'
-                ? standingLines.stoppedInGraceByPayer(sd.period_unit, nameOf(who), title, sd.beans_per_period, dueSince)
-                : standingLines.stoppedInGraceByPayee(sd.period_unit, nameOf(who), title, sd.beans_per_period);
+                ? standingLines.stoppedInGraceByPayer(sd.period_unit, nameOf(who), title, sd.beans_per_period_c, dueSince)
+                : standingLines.stoppedInGraceByPayee(sd.period_unit, nameOf(who), title, sd.beans_per_period_c);
             told = keep([other], body, sd, 'standing_stopped', { period: duePeriodOf(fresh).n });
-            line = standingLines.chatStoppedInGrace(sd.period_unit, nameOf(who), title, sd.beans_per_period, dueSince);
+            line = standingLines.chatStoppedInGrace(sd.period_unit, nameOf(who), title, sd.beans_per_period_c, dueSince);
             return;
         }
         const moved = db.prepare(`UPDATE standing_deals SET stopped_by = ?, stopped_at = ? WHERE id = ? AND phase = 'paid' AND stopped_at IS NULL`).run(actor, at, id);
@@ -782,7 +782,7 @@ export function extendStandingDeal(hooks: EscrowCallbacks, id: string, actor: st
     if (!signsFor(hooks, actor, sd.payer_pubkey) || !signedBy(payload as string, signature, actor)) throw authRefused('the extension is not signed by the payer');
     if (!hostIsOurs(auth.host, actor, s.requestHost)) throw authRefused(`the extension was signed for ${auth.host}`);
     const same = auth.standingId === sd.id && auth.listingId === sd.post_id && sameMember(auth.payee, sd.payee_pubkey) && auth.unit === sd.period_unit
-        && auth.startsAt === sd.starts_at && Math.abs(auth.beansPerPeriod - sd.beans_per_period) < 1e-9;
+        && auth.startsAt === sd.starts_at && Math.abs(auth.beansPerPeriod - sd.beans_per_period_c) < 1e-9;
     if (!same) throw authRefused('the extension changes more than the count');
     const longer = auth.maxPeriods === null ? sd.max_periods !== null : sd.max_periods !== null && auth.maxPeriods > sd.max_periods;
     if (!longer) throw authRefused('the extension is not longer');

@@ -16,7 +16,7 @@ import {
 const SCHEMA = `
     CREATE TABLE members (public_key TEXT PRIMARY KEY, joined_at TEXT);
     CREATE TABLE marketplace_transactions (
-        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, credits REAL NOT NULL, status TEXT,
+        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, amount_c REAL NOT NULL, status TEXT,
         completed_at DATETIME
     );
     CREATE INDEX idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -41,7 +41,7 @@ type Row = { buyer_pubkey: string; seller_pubkey: string; credits: number };
 /** The 30-day query as it was before the paging: one query (origin/main 48d2b72a, trust.ts). */
 function mainRows(db: Database.Database): Row[] {
     return db.prepare(`
-        SELECT buyer_pubkey, seller_pubkey, credits
+        SELECT buyer_pubkey, seller_pubkey, amount_c
         FROM marketplace_transactions
         WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
           AND completed_at > datetime('now', '-30 days')
@@ -111,7 +111,7 @@ function mainClusters(db: Database.Database): { flaggedClusters: Map<string, num
         }
         const placeholders = comp.map(() => '?').join(',');
         const res = db.prepare(`
-            SELECT COALESCE(SUM(credits), 0) as s FROM marketplace_transactions
+            SELECT COALESCE(SUM(amount_c), 0) as s FROM marketplace_transactions
             WHERE status = 'completed' AND (buyer_pubkey IN (${placeholders}) OR seller_pubkey IN (${placeholders}))
         `).get(...comp, ...comp) as { s: number };
         const totalVol = res ? res.s : 0;
@@ -176,7 +176,7 @@ function seedGraph(db: Database.Database, seed: number, size: typeof LARGE = LAR
     // Few distinct times: many rows share each.
     const times = Array.from({ length: size.times }, () => iso(Math.floor(rnd() * 29 * day) + 60_000));
     let id = 0;
-    const ins = db.prepare('INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, ?, ?)');
+    const ins = db.prepare('INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, ?, ?)');
     const trade = (b: string, s: string, credits: number, at: string | null, status = 'completed') =>
         ins.run(`t${seed}-${(id++).toString(36)}-${Math.floor(rnd() * 1e9).toString(36)}`, b, s, credits, status, at);
     const addMember = db.prepare('INSERT OR IGNORE INTO members (public_key, joined_at) VALUES (?, ?)');
@@ -283,7 +283,7 @@ describe('wash analysis: the 30-day query in pages (#1908)', { timeout: 60_000 }
     it('a tie on completed_at across a page edge: the next page goes on by rowid', () => {
         const db = fileDb();
         const at = new Date(Date.now() - 86400_000).toISOString();
-        const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
+        const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
         for (let i = 0; i < 10; i++) ins.run(`z${9 - i}`, `b${i}`, `s${i}`, i, at);
         for (const size of [1, 2, 3, 4, 9, 10, 11]) {
             const got = pagesUpTo(db, size, 10).flat().map((r) => r.credits);
@@ -307,7 +307,7 @@ function ringWorld(oldOut: number): string {
     const now = Date.now(), day = 86400_000;
     const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
     const addMember = db.prepare('INSERT INTO members (public_key, joined_at) VALUES (?, ?)');
-    const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
+    const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
     db.transaction(() => {
         for (let i = 0; i < 3000; i++) addMember.run(`k${i}`, iso((100 + rnd() * 200) * day));
         for (const m of ['r0', 'r1', 'r2', 'r3']) addMember.run(m, iso(3 * day));
@@ -340,7 +340,7 @@ const ringOf = (a: WashAnalysis) => ({ flagged: a.flaggedClusters.has('r0'), int
 describe('the metrics audit\'s wash analysis: one snapshot for every step (#1919)', { timeout: 120_000 }, () => {
     const writes = [
         // The deferred-wage payout (apps/server/src/state-engine.ts) on a completed trade in the first page.
-        ['moved on, from the first page to the last', 16, (db: Database.Database) => db.prepare(`UPDATE marketplace_transactions SET credits = credits + 1, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 'ring-r0|r1'`).run()],
+        ['moved on, from the first page to the last', 16, (db: Database.Database) => db.prepare(`UPDATE marketplace_transactions SET amount_c = amount_c + 1, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 'ring-r0|r1'`).run()],
         // A standby's upsert (apps/server/src/engine/sync.ts) giving a trade in the last page an earlier completed_at.
         ['moved back, from the last page to the first', 10, (db: Database.Database) => db.prepare(`UPDATE marketplace_transactions SET completed_at = ? WHERE id = 'ring-r2|r3'`).run(new Date(Date.now() - 29.95 * 86400_000).toISOString())],
     ] as const;

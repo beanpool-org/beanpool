@@ -259,7 +259,7 @@ export function beginOutboundSettlement(input: {
         // Only the insert knows which call made it. An escrow's balance never says so: see the guard above.
         if (!created) return row;
 
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`)
             .run(escrowAccount);
 
         // 'escrow' method, not 'direct': that is what bounds the debit by the member's offer-banded

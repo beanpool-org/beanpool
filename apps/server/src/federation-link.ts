@@ -189,7 +189,7 @@ function findLinkTreasury(peerId: string): string | null {
 
 /** The link for a peer, or null. */
 export function getFederationLink(peerId: string): FederationLink | null {
-    const row = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling, l.created_at, m.callsign
+    const row = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling_c, l.created_at, m.callsign
                             FROM federation_links l
                             JOIN members m ON m.public_key = l.treasury_pubkey
                             WHERE l.peer_id = ?`).get(peerId) as any;
@@ -198,7 +198,7 @@ export function getFederationLink(peerId: string): FederationLink | null {
 
 /** The link backing a treasury account, or null when that treasury is an ordinary enterprise. */
 export function getLinkByTreasury(treasuryPubkey: string): FederationLink | null {
-    const row = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling, l.created_at, m.callsign
+    const row = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling_c, l.created_at, m.callsign
                             FROM federation_links l
                             JOIN members m ON m.public_key = l.treasury_pubkey
                             WHERE l.treasury_pubkey = ?`).get(treasuryPubkey) as any;
@@ -218,7 +218,7 @@ export function getLinkByTreasury(treasuryPubkey: string): FederationLink | null
  * than that.
  */
 export function listFederationLinks(): FederationLink[] {
-    const rows = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling, l.created_at, m.callsign
+    const rows = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling_c, l.created_at, m.callsign
                              FROM federation_links l
                              JOIN members m ON m.public_key = l.treasury_pubkey
                              ORDER BY m.callsign COLLATE NOCASE`).all() as any[];
@@ -226,9 +226,9 @@ export function listFederationLinks(): FederationLink[] {
 
     const wanted = rows.flatMap(r => [r.treasury_pubkey, bridgeAccountId(r.peer_id)]);
     const balances = new Map<string, number>(
-        (db.prepare(`SELECT public_key, balance FROM accounts
+        (db.prepare(`SELECT public_key, balance_c FROM accounts
                      WHERE public_key IN (${wanted.map(() => '?').join(',')})`).all(...wanted) as any[])
-            .map(a => [a.public_key, a.balance]),
+            .map(a => [a.public_key, a.balance_c]),
     );
     const at = (key: string): number => balances.get(key) ?? 0;
 
@@ -240,7 +240,7 @@ export function listFederationLinks(): FederationLink[] {
         // energyBalanceExact), 4dp for a balance.
         energyBalance: Math.round(at(bridgeAccountId(row.peer_id)) * 100) / 100,
         treasuryBalance: Math.round(at(row.treasury_pubkey) * 10000) / 10000,
-        commissionCeiling: row.commission_ceiling,
+        commissionCeiling: row.commission_ceiling_c,
         createdAt: row.created_at ?? null,
     }));
 }
@@ -252,7 +252,7 @@ function hydrate(row: any): FederationLink {
         name: row.callsign,
         energyBalance: getEnergyBalance(row.peer_id),
         treasuryBalance: balanceOf(row.treasury_pubkey),
-        commissionCeiling: row.commission_ceiling,
+        commissionCeiling: row.commission_ceiling_c,
         createdAt: row.created_at ?? null,
     };
 }
@@ -264,8 +264,8 @@ function hydrate(row: any): FederationLink {
  * avoid, and it also applies demurrage-on-read, which a link treasury is exempt from anyway.
  */
 function balanceOf(publicKey: string): number {
-    const row = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(publicKey) as any;
-    return Math.round((row?.balance ?? 0) * 10000) / 10000;
+    const row = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(publicKey) as any;
+    return Math.round((row?.balance_c ?? 0) * 10000) / 10000;
 }
 
 /**
@@ -277,7 +277,7 @@ function balanceOf(publicKey: string): number {
 export function setCommissionCeiling(peerId: string, ceiling: number): FederationLink | null {
     assertPlainTablesWritable();
     if (!Number.isFinite(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a non-negative number');
-    const res = db.prepare('UPDATE federation_links SET commission_ceiling = ? WHERE peer_id = ?')
+    const res = db.prepare('UPDATE federation_links SET commission_ceiling_c = ? WHERE peer_id = ?')
         .run(Math.round(ceiling * 100) / 100, peerId);
     if (res.changes === 0) return null;
     logger.info('P2P', `[Link] Commissioning ceiling for ${peerId.slice(-8)} set to ${ceiling}`);

@@ -94,7 +94,7 @@ interface Piece { id: string; root: string; open: number }
 /** The member's received pieces with an open part, oldest first: what a gift splits, in that order. */
 function openPieces(pk: string): Piece[] {
     return (db.prepare(`SELECT g.id AS id, g.root_pubkey AS root,
-            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+            g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
         FROM room_gifts g WHERE g.to_pubkey = ? ORDER BY g.at ASC, g.rowid ASC`).all(pk) as Piece[]).filter((p) => p.open > 0);
 }
 
@@ -128,7 +128,7 @@ function giverState(giver: string): GiverState {
  */
 function freeRoom(giver: string, p: ReturnType<typeof getMemberTrustProfile>, room: number): number {
     const b = getBalance(giver);
-    const debt = Math.max(0, -b.balance);
+    const debt = Math.max(0, -b.balance_c);
     const cap = creditCap(db);
     const usableAfter = (g: number) => usableAllowance({ knownGrant: p.knownGrant, roomHeld: p.roomHeld - g, otherAllowance: p.otherAllowance, cap, liveOffers: b.liveOffers });
     const most = b.liveOffers >= 1
@@ -224,7 +224,7 @@ export function giveCreditLine(giver: string, body: { memberPubkey?: unknown; am
     const { notice, rows } = db.transaction(() => {
         const plan = planGift(giver, to, body.amount);
         const at = now();
-        const insert = db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount, source_gift_id, at)
+        const insert = db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c, source_gift_id, at)
             VALUES (?, ?, ?, ?, 'gift', ?, ?, ?)`);
         const written: { id: string; root: string; amount: number; sourceGiftId: string }[] = [];
         for (const { piece, take } of plan.takes) {

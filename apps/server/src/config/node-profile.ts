@@ -660,7 +660,7 @@ export function ledgerHistory(): string | null {
     const any = (sql: string) => !!db.prepare(sql).get();
     if (any('SELECT 1 FROM transactions LIMIT 1')) return 'it has recorded transactions';
     if (any('SELECT 1 FROM marketplace_transactions LIMIT 1')) return 'it has opened escrows';
-    if (any('SELECT 1 FROM accounts WHERE balance != 0 LIMIT 1')) return 'an account holds a balance';
+    if (any('SELECT 1 FROM accounts WHERE balance_c != 0 LIMIT 1')) return 'an account holds a balance';
     if (any('SELECT 1 FROM enterprise_pledges LIMIT 1')) return 'members have pledged backing';
     if (any('SELECT 1 FROM settlements LIMIT 1')) return 'it has settled with another community';
     return null;

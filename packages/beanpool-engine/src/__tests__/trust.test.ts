@@ -24,7 +24,7 @@ describe('beanpool-engine trust', () => {
                 id TEXT PRIMARY KEY,
                 buyer_pubkey TEXT,
                 seller_pubkey TEXT,
-                credits REAL,
+                amount_c REAL,
                 status TEXT,
                 completed_at TEXT
             );
@@ -35,7 +35,7 @@ describe('beanpool-engine trust', () => {
 
         // Insert completed trade of 1000 credits (above 500 cap)
         db.prepare(`
-            INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
+            INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
             VALUES ('tx1', 'pub_buyer', 'pub_seller', 1000, 'completed', '2026-01-02')
         `).run();
 
@@ -64,7 +64,7 @@ function node(): Database.Database {
 }
 let gift = 0;
 const room = (db: Database.Database, from: string, to: string, amount: number, kind: 'vouch' | 'gift' = 'vouch', root = from) =>
-    db.prepare("INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount) VALUES (?, ?, ?, ?, ?, ?)").run(`g${++gift}`, from, to, root, kind, amount);
+    db.prepare("INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c) VALUES (?, ?, ?, ?, ?, ?)").run(`g${++gift}`, from, to, root, kind, amount);
 
 describe('room held: the credit line people gave a member', () => {
     it('is what they received, less what they gave on; a voucher’s own vouches come from their budget, never their line', () => {
@@ -99,7 +99,7 @@ describe('room held: the credit line people gave a member', () => {
 
     it('reads 0 on a database from before the table (the boot’s vouching reset reads profiles before schema.sql makes it)', () => {
         const db = new Database(':memory:');
-        db.exec("CREATE TABLE members (public_key TEXT PRIMARY KEY, joined_at TEXT, earned_credit REAL DEFAULT 0, credit_frozen INTEGER DEFAULT 0, is_treasury INTEGER DEFAULT 0)");
+        db.exec("CREATE TABLE members (public_key TEXT PRIMARY KEY, joined_at TEXT, earned_credit_c REAL DEFAULT 0, credit_frozen INTEGER DEFAULT 0, is_treasury INTEGER DEFAULT 0)");
         expect(roomHeldOf(db, 'sam')).toBe(0);
         expect(vouchesFor(db, 'sam')).toEqual([]);
     });

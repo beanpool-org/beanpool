@@ -33,7 +33,7 @@ export interface DebtRecord {
     work_off_confirmation_id: string | null; work_off_floor_before: string | null; work_off_floor_set_at: string | null;
     /** What a hardship grant gave the member working this debt off, as far as they still hold it (never swept). It is this
      *  work-off's alone: 0 again when it ends (revoked, the member leaves), a new one starts, or the debt is settled or forgiven. */
-    hardship_held: number;
+    hardship_held_c: number;
 }
 
 export class DebtError extends Error {
@@ -50,11 +50,11 @@ const nowIso = () => new Date().toISOString();
  * stops repaying it: that record stays open, with nobody repaying.
  */
 export function recordDepartedDebt(pubkey: string, entryId: string | null, balance: number, reason: 'removed' | 'account_deleted'): void {
-    db.prepare(`UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0
+    db.prepare(`UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held_c = 0
                 WHERE repaying_pubkey = ? AND status = 'open'`).run(pubkey);
     const amount = round2(-balance);
     if (!entryId || !(amount > 0)) return;
-    db.prepare('INSERT INTO names_debts (id, entry_id, amount, reason, removed_at) VALUES (?, ?, ?, ?, ?)')
+    db.prepare('INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at) VALUES (?, ?, ?, ?, ?)')
         .run(crypto.randomBytes(16).toString('hex'), entryId, amount, reason, nowIso());
 }
 
@@ -107,8 +107,8 @@ export function assertPayableDebt(debtId: unknown, beans: number): { id: string;
  * member's own payment, the admin for a payment an admin names (settleByPayment). Returns what is left after it.
  */
 export function countDebtPayment(debtId: string, txId: string, payer: string, amount: number, settledBy = 'node'): number {
-    db.prepare('INSERT INTO names_debt_payments (transaction_id, debt_id, payer_pubkey, amount, paid_at) VALUES (?, ?, ?, ?, ?)').run(txId, debtId, payer, amount, nowIso());
-    const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
+    db.prepare('INSERT INTO names_debt_payments (transaction_id, debt_id, payer_pubkey, amount_c, paid_at) VALUES (?, ?, ?, ?, ?)').run(txId, debtId, payer, amount, nowIso());
+    const counted = db.prepare(`UPDATE names_debts SET repaid_c = ROUND(repaid_c + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid_c + ?, 2) <= amount_c`)
         .run(amount, debtId, amount);
     if (counted.changes !== 1) {
         const row = debtRecord(debtId);
@@ -116,8 +116,8 @@ export function countDebtPayment(debtId: string, txId: string, payer: string, am
         const left = row ? round2(row.amount - row.repaid) : 0;
         throw new DebtError(409, 'more_than_left', tr('Only {left} Beans are left on that debt. Pay {left} Beans to settle it.', { left }));
     }
-    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?, hardship_held = 0
-                WHERE id = ? AND status = 'open' AND repaid >= amount`).run(settledBy, nowIso(), txId, debtId);
+    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?, hardship_held_c = 0
+                WHERE id = ? AND status = 'open' AND repaid_c >= amount_c`).run(settledBy, nowIso(), txId, debtId);
     const after = debtRecord(debtId)!;
     return round2(after.amount - after.repaid);
 }
@@ -129,7 +129,7 @@ export function debtRecord(id: string): DebtRecord | undefined {
 const WORK_OFF_FLOOR = '0 (working off a debt)';
 
 type FloorRow = { amount: number | null; frozen: number; set_at: string };
-const floorRow = (member: string) => db.prepare('SELECT amount, frozen, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(member) as FloorRow | undefined;
+const floorRow = (member: string) => db.prepare('SELECT amount_c, frozen, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(member) as FloorRow | undefined;
 const describeFloor = (r: FloorRow | undefined) => !r ? 'default' : r.frozen ? 'frozen' : String(r.amount);
 // What a work-off replaced, put back whole on its revoke: a freeze keeps the amount it froze ('frozen 50'; plain 'frozen'
 // kept the community's known floor), so the 0 the work-off wrote over it must go back too.
@@ -147,7 +147,7 @@ const logFloor = (actor: string, action: string, member: string, oldValue: strin
  * member's grant never protects what this one holds (`hardship_held` back to 0; endWorkOff and recordDepartedDebt clear it too).
  */
 export function startWorkOff(actor: string, debtId: string, member: string, confirmationId: string, live: boolean): void {
-    db.prepare(`UPDATE names_debts SET repaying_pubkey = ?, work_off_confirmation_id = ?, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0
+    db.prepare(`UPDATE names_debts SET repaying_pubkey = ?, work_off_confirmation_id = ?, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held_c = 0
                 WHERE id = ? AND status = 'open'`).run(member, confirmationId, debtId);
     if (live) setWorkOffFloor(actor, debtId, member);
 }
@@ -169,7 +169,7 @@ export function endWorkOff(actor: string, member: string, confirmationId: string
     const debt = db.prepare("SELECT id, work_off_floor_before, work_off_floor_set_at FROM names_debts WHERE work_off_confirmation_id = ? AND repaying_pubkey = ? AND status = 'open'")
         .get(confirmationId, member) as Pick<DebtRecord, 'id' | 'work_off_floor_before' | 'work_off_floor_set_at'> | undefined;
     if (!debt) return;
-    db.prepare('UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0 WHERE id = ?').run(debt.id);
+    db.prepare('UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held_c = 0 WHERE id = ?').run(debt.id);
     const before = debt.work_off_floor_before;
     if (before === null) return;
     const now = floorRow(member);
@@ -180,9 +180,9 @@ export function endWorkOff(actor: string, member: string, confirmationId: string
     if (before === 'default') db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(member);
     else if (before.startsWith('frozen')) {
         const kept = before === 'frozen' ? null : Number(before.slice('frozen '.length));
-        db.prepare(`UPDATE known_floor_exceptions SET amount = ?, frozen = 1, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(kept, actor, member);
+        db.prepare(`UPDATE known_floor_exceptions SET amount_c = ?, frozen = 1, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(kept, actor, member);
     }
-    else db.prepare(`UPDATE known_floor_exceptions SET amount = ?, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(Number(before), actor, member);
+    else db.prepare(`UPDATE known_floor_exceptions SET amount_c = ?, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(Number(before), actor, member);
     logFloor(actor, 'exception_restored', member, WORK_OFF_FLOOR, (before.startsWith('frozen') ? 'frozen' : before) + ' (the work-off confirmation was revoked)');
 }
 
@@ -200,8 +200,8 @@ export function workOffHoldsFloor(member: string): boolean {
 /** The 0 floor, with what it replaced and the set_at it wrote kept on the debt: what its revoke may put back (endWorkOff). */
 function setWorkOffFloor(actor: string, debtId: string, member: string): void {
     const before = floorBefore(floorRow(member));
-    db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, 0, 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                ON CONFLICT(member_pubkey) DO UPDATE SET amount = 0, frozen = 0, set_by = excluded.set_by, set_at = excluded.set_at`).run(member, actor);
+    db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by, set_at) VALUES (?, 0, 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                ON CONFLICT(member_pubkey) DO UPDATE SET amount_c = 0, frozen = 0, set_by = excluded.set_by, set_at = excluded.set_at`).run(member, actor);
     db.prepare('UPDATE names_debts SET work_off_floor_before = ?, work_off_floor_set_at = ? WHERE id = ?').run(before, floorRow(member)!.set_at, debtId);
     logFloor(actor, 'exception_lowered', member, before.startsWith('frozen') ? 'frozen' : before, WORK_OFF_FLOOR);
 }
@@ -240,7 +240,7 @@ export function settleByPayment(actor: string, id: unknown, body: { transactionI
     requireOpen(row);
     const note = cleanNote(body.note);
     const txId = typeof body.transactionId === 'string' ? body.transactionId : '';
-    const tx = txId ? db.prepare('SELECT id, from_pubkey, to_pubkey, amount, memo FROM transactions WHERE id = ?').get(txId) as { id: string; from_pubkey: string; to_pubkey: string; amount: number; memo: string | null } | undefined : undefined;
+    const tx = txId ? db.prepare('SELECT id, from_pubkey, to_pubkey, amount_c, memo FROM transactions WHERE id = ?').get(txId) as { id: string; from_pubkey: string; to_pubkey: string; amount: number; memo: string | null } | undefined : undefined;
     if (!tx || tx.to_pubkey !== 'COMMONS_POOL' || tx.memo !== PAID_TO_COMMONS_MEMO) throw new DebtError(400, 'not_a_payment', word('Name a payment to the Commons that a member made.'));
     const payer = getMember(db, tx.from_pubkey);
     if (!payer || payer.isTreasury || isVisitorKey(db, tx.from_pubkey) || tx.from_pubkey === 'SYSTEM') {
@@ -267,6 +267,6 @@ export function forgiveDebt(actor: string, id: unknown, body: { note?: unknown; 
     requireOpen(row);
     const note = cleanNote(body.note);
     db.prepare(`UPDATE names_debts SET status = 'forgiven', settled_how = 'forgiven', settled_by = ?, settled_at = ?, settle_ref = ?,
-                note = COALESCE(?, note), repaying_pubkey = NULL, hardship_held = 0 WHERE id = ?`).run(actor, nowIso(), body.ref ?? null, note, row.id);
+                note = COALESCE(?, note), repaying_pubkey = NULL, hardship_held_c = 0 WHERE id = ?`).run(actor, nowIso(), body.ref ?? null, note, row.id);
     return debtRow(row.id);
 }

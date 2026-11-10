@@ -132,7 +132,7 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
 
     // The code, its vouch's hold and its voucher budget's promise together, or none of them.
     db.transaction(() => {
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount, voucher_level) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount_c, voucher_level_c) VALUES (?, ?, ?, ?, ?, ?, ?)`)
             .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch, level);
         if (vouch) holdForInvite(inviterPubkey, code, vouch);
         if (level && boundEntry) promiseInviteVoucher(inviterPubkey, boundEntry, level);
@@ -173,7 +173,7 @@ export function adminGenerateInvite(
     const createdAt = new Date().toISOString();
 
     db.transaction(() => {
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by, vouch_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by, vouch_amount_c) VALUES (?, ?, ?, ?, ?, ?, ?)`)
           .run(code, adminPubkey, createdAt, genesisType, intendedFor || null, issuedBy || null, vouch);
         if (vouch && issuedBy) holdForInvite(issuedBy, code, vouch);
     })();
@@ -332,13 +332,13 @@ export function redeemInvite(
         if (!m) return null;
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         // The joiner's kept notice is their record of it: a member this new has no socket open and no push token yet.
-        const voucher = invite.names_entry_id && invite.voucher_level != null
-            ? landInviteVoucher(invite.created_by, invite.names_entry_id, publicKey, invite.voucher_level, outcome)
+        const voucher = invite.names_entry_id && invite.voucher_level_c != null
+            ? landInviteVoucher(invite.created_by, invite.names_entry_id, publicKey, invite.voucher_level_c, outcome)
             : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ?, voucher_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, voucher?.outcome ?? null, code);
         const voucherMaker = invite.issued_by || invite.created_by;
-        if (invite.vouch_amount) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount);
+        if (invite.vouch_amount_c) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount_c);
         return m;
     })();
     if (!member) {
@@ -350,9 +350,9 @@ export function redeemInvite(
     if (genesisType !== 'standard') {
         const earnedCredit = getGenesisEarnedCredit(genesisType);
         if (earnedCredit > 0) {
-            db.prepare("UPDATE members SET earned_credit = ? WHERE public_key = ?").run(earnedCredit, publicKey);
+            db.prepare("UPDATE members SET earned_credit_c = ? WHERE public_key = ?").run(earnedCredit, publicKey);
             const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - earnedCredit);
-            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit: ${earnedCredit})`);
+            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit_c: ${earnedCredit})`);
         }
     }
 

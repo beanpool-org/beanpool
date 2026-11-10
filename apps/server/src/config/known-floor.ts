@@ -144,7 +144,7 @@ export function setKnownFloorSettings(actor: string, body: { confirmation?: unkn
 }
 
 export function knownFloorExceptions(): KnownFloorException[] {
-    return (db.prepare('SELECT member_pubkey, amount, frozen, set_by, set_at FROM known_floor_exceptions ORDER BY set_at DESC').all() as any[])
+    return (db.prepare('SELECT member_pubkey, amount_c, frozen, set_by, set_at FROM known_floor_exceptions ORDER BY set_at DESC').all() as any[])
         .map(r => ({ memberPubkey: r.member_pubkey, amount: r.amount, frozen: r.frozen === 1, setBy: r.set_by, setAt: r.set_at }));
 }
 
@@ -202,7 +202,7 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
     const m = getMember(pk);
     if (!m || m.status !== 'active' || m.isTreasury) throw new KnownFloorError(404, 'not_member', 'Only an active member of this community has a known floor.');
     if (pk === actor) throw new KnownFloorError(403, 'own_floor', 'Another admin or the owner sets your own known floor.');
-    const old = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pk) as { amount: number | null; frozen: number } | undefined;
+    const old = db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pk) as { amount: number | null; frozen: number } | undefined;
     const describe = (r: { amount: number | null; frozen: number | boolean } | undefined) =>
         !r ? 'default' : (r.frozen ? 'frozen' : String(r.amount));
     const line = () => ({ memberPubkey: pk, confirmed: isConfirmed(db, pk), exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null });
@@ -233,8 +233,8 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
                 db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
             } else {
                 // A freeze leaves the amount as it is (a fresh row's is NULL); anything else writes it.
-                db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                    ON CONFLICT(member_pubkey) DO UPDATE SET amount = CASE WHEN excluded.frozen = 1 THEN amount ELSE excluded.amount END,
+                db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    ON CONFLICT(member_pubkey) DO UPDATE SET amount_c = CASE WHEN excluded.frozen = 1 THEN amount_c ELSE excluded.amount_c END,
                         frozen = excluded.frozen, set_by = excluded.set_by, set_at = excluded.set_at`)
                     .run(pk, amount, frozen ? 1 : 0, actor);
             }

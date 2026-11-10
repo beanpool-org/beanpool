@@ -267,7 +267,7 @@ function node(): Database.Database {
     registerGeoFunctions(db);
     const member = db.prepare("INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, '2026-11-01')");
     for (const pk of ['alice', 'bob', 'cleo']) member.run(pk, pk);
-    const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng)
+    const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng)
                              VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`);
     const rows: Array<[string, string, string, string, string, string, number, number]> = [
         ['p1', 'offer', 'food', 'Eggs', 'Free range', 'alice', -37.81, 144.96],

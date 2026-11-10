@@ -825,7 +825,7 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
+            id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
@@ -1081,7 +1081,7 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
     if (!creditsChange && !unitChange) return;
     // A standing deal's periods don't freeze it (DESIGN-standing-deals-fable §2.4): the standing deal keeps the price per
-    // period its payer signed for (standing_deals.beans_per_period), whatever the listing says after.
+    // period its payer signed for (standing_deals.beans_per_period_c), whatever the listing says after.
     const open = db.prepare(
         "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') AND standing_id IS NULL LIMIT 1"
     ).get(id);

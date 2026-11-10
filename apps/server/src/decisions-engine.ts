@@ -1013,7 +1013,7 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
 /**
  * Check if a member is eligible to author a decision (§3.2, §10):
  * - Active member, not frozen, not treasury.
- * - Qualified trade value > 0, or node admin. A trust badge (members.earned_credit) is no standing: badges unlock nothing.
+ * - Qualified trade value > 0, or node admin. A trust badge (members.earned_credit_c) is no standing: badges unlock nothing.
  * - Max 1 open community decision per author; an enterprise's keepers' vote is that enterprise's, not this (§2.1).
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
@@ -1043,7 +1043,7 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
     if (frozenRow?.credit_frozen === 1) return { ok: false, error: word('Member credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprises cannot propose decisions') };
 
-    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit, which
+    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit_c, which
     // adminSetTier and genesis invites write): badges are recognition and unlock nothing (Marty, 23 Oct).
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
@@ -1186,8 +1186,8 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
     // (the code's ISO-8601, and SQLite datetime()'s 'YYYY-MM-DD HH:MM:SS', see parseDbTime).
     const row = db.prepare(`
         SELECT
-            COALESCE(SUM(CASE WHEN to_pubkey = 'COMMONS_POOL' THEN amount ELSE 0 END), 0) AS into_pool,
-            COALESCE(SUM(COALESCE(tax_fee, 0)), 0) AS fees
+            COALESCE(SUM(CASE WHEN to_pubkey = 'COMMONS_POOL' THEN amount_c ELSE 0 END), 0) AS into_pool,
+            COALESCE(SUM(COALESCE(fee_c, 0)), 0) AS fees
         FROM transactions
         WHERE timestamp >= @cutoffDay
           AND julianday(timestamp) > julianday(@cutoff)
@@ -1248,8 +1248,8 @@ export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's de
  */
 export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
     const member = getMember(subjectPubkey);
-    const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
-    const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(subjectPubkey)?.balance ?? 0);
+    const accRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
+    const memberBalance = accRow !== undefined ? accRow.balance_c : (getBalance(subjectPubkey)?.balance_c ?? 0);
     return {
         memberName: member?.callsign || nameGiven || subjectPubkey.slice(0, 8),
         debt: memberBalance < 0 ? Math.abs(memberBalance) : 0, // Authoritatively computed from ledger
@@ -1799,7 +1799,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
         }
         const entAccount = ledger.getAccount(decision.subject);
-        const deficit = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+        const deficit = entAccount && entAccount.balance_c < 0 ? Math.abs(entAccount.balance_c) : 0;
         // A deficit that isn't a finite number is a corrupted balance, not one to queue and wait on for 90 days.
         if (!Number.isFinite(deficit)) {
             return { status: 'blocked', reason: 'Invalid enterprise deficit' };
@@ -2086,18 +2086,18 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         throw new Error('Insufficient commons funds during grant execution');
                     }
                     const account = ledger.getAccount(entPubkey);
-                    account.balance += amount;
+                    account.balance_c += amount;
                     db.prepare(`
-                        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(public_key) DO UPDATE SET
-                            balance = excluded.balance,
+                            balance_c = excluded.balance_c,
                             last_demurrage_epoch = excluded.last_demurrage_epoch,
                             last_updated_at = excluded.last_updated_at
-                    `).run(entPubkey, account.balance, account.lastDemurrageEpoch, now);
+                    `).run(entPubkey, account.balance_c, account.lastDemurrageEpoch, now);
 
                     db.prepare(`
-                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), entPubkey, amount, `Commons grant: ${decision.title.slice(0, 80)}`, now, authSigner);
 
@@ -2112,23 +2112,23 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         throw new Error('Insufficient commons funds during hardship execution');
                     }
                     const account = ledger.getAccount(memberPubkey);
-                    account.balance += amount;
+                    account.balance_c += amount;
                     db.prepare(`
-                        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(public_key) DO UPDATE SET
-                            balance = excluded.balance,
+                            balance_c = excluded.balance_c,
                             last_demurrage_epoch = excluded.last_demurrage_epoch,
                             last_updated_at = excluded.last_updated_at
-                    `).run(memberPubkey, account.balance, account.lastDemurrageEpoch, now);
+                    `).run(memberPubkey, account.balance_c, account.lastDemurrageEpoch, now);
 
                     db.prepare(`
-                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), memberPubkey, amount, `Hardship grant: ${decision.title.slice(0, 80)}`, now, authSigner);
                     // A member working off a debt keeps the grant: the next payment they receive sweeps only what it
                     // brought (state-engine.ts sweepRepayment), not this.
-                    db.prepare(`UPDATE names_debts SET hardship_held = ROUND(hardship_held + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
+                    db.prepare(`UPDATE names_debts SET hardship_held_c = ROUND(hardship_held_c + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
                         .run(amount, memberPubkey);
 
                     persistDecayEvents();
@@ -2142,19 +2142,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'write_off_deficit': {
                     const entPubkey = decision.subject!;
                     const entAccount = ledger.getAccount(entPubkey);
-                    if (entAccount && entAccount.balance < 0) {
-                        const deficit = Math.abs(entAccount.balance);
+                    if (entAccount && entAccount.balance_c < 0) {
+                        const deficit = Math.abs(entAccount.balance_c);
                         if (!ledger.deductFromCommons(deficit)) {
                             throw new Error('Insufficient commons funds to write off deficit');
                         }
-                        entAccount.balance = 0;
+                        entAccount.balance_c = 0;
                         db.prepare(`
-                            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                            INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
                             VALUES (?, 0, ?, ?)
-                            ON CONFLICT(public_key) DO UPDATE SET balance = 0, last_updated_at = excluded.last_updated_at
+                            ON CONFLICT(public_key) DO UPDATE SET balance_c = 0, last_updated_at = excluded.last_updated_at
                         `).run(entPubkey, entAccount.lastDemurrageEpoch, now);
                         db.prepare(`
-                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer)
                             VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                         `).run(crypto.randomUUID(), entPubkey, deficit, `Deficit write-off: ${decision.title.slice(0, 80)}`, now, authSigner);
                         persistDecayEvents();
@@ -2173,7 +2173,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     if (!txn) throw new Error(`The enterprise could not pay ${beansText(amount * 100)} Beans now`);
                     // A wage comes out of earned surplus (Rules 5 and 6), as a deferred wage claim's does.
                     if (wage) {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?').run(amount, ent);
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?').run(amount, ent);
                     }
                     touchedEnterprises.push(ent);
                     touchedProfiles.push(to);
@@ -4521,7 +4521,7 @@ export function tickDecisions(asOfTime?: number): {
         if (top.effect === 'write_off_deficit' && top.subject) {
             const entAccount = ledger.getAccount(top.subject);
             // No deficit left is 0: the write-off completes without moving anything.
-            requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+            requiredAmount = entAccount && entAccount.balance_c < 0 ? Math.abs(entAccount.balance_c) : 0;
             if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
         } else {
             let parsed: any = {};
@@ -4593,10 +4593,10 @@ export class ScopedNotFoundError extends Error {
     constructor() { super('Not found'); }
 }
 
-interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus: number | null }
+interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus_c: number | null }
 
 function enterpriseRow(pubkey: string): EnterpriseRow | null {
-    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
+    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus_c FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
     return r && r.is_treasury ? r : null;
 }
 
@@ -4820,11 +4820,11 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
         if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error(word('Name a member or an enterprise of this community to pay.'));
         if (recipient.status === 'completed') throw new Error(RECIPIENT_WOUND_UP);
         if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
-        const held = floorCents(getBalance(opts.scopeId).balance);
+        const held = floorCents(getBalance(opts.scopeId).balance_c);
         if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
-        if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+        if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus_c) || 0))) {
             throw new Error(tr('Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {surplus} Beans now.',
-                { surplus: beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) }));
+                { surplus: beansText(floorCents(Math.max(0, Number(ent.earned_surplus_c) || 0))) }));
         }
         const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
         // The recipient is the subject, so a re-key mid-vote moves it with every other subject (engine/key-move.ts).
@@ -4951,9 +4951,9 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
         if (to === decision.authorPubkey) return { status: 'blocked', reason: PAY_SELF_REFUSAL };
         const cents = floorCents(Number(decision.params?.amount));
         if (!Number.isFinite(cents) || cents <= 0) return { status: 'blocked', reason: 'Invalid pay-out amount' };
-        const held = floorCents(getBalance(decision.scopeId!).balance);
+        const held = floorCents(getBalance(decision.scopeId!).balance_c);
         if (held < cents) return { status: 'blocked', reason: `The enterprise holds ${beansText(Math.max(0, held))} Beans now, less than the ${beansText(cents)} voted` };
-        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus_c) || 0))) {
             return { status: 'blocked', reason: WAGE_NEEDS_SURPLUS };
         }
         return { status: 'ok' };

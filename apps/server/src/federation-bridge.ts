@@ -50,7 +50,7 @@ export function ensureBridgeAccount(peerId: string): string {
     // continues, so that is reachable — it would take ~56 years of compound demurrage on first read and
     // wipe the balance. Being exempt makes this unreachable in the happy path; seeding correctly makes
     // it harmless in the unhappy one.
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)`)
         .run(id, ledger.getCurrentEpoch());
     ledger.setDecayExempt(id);
     return id;
@@ -85,8 +85,8 @@ export function getEnergyBalance(peerId: string): number {
  * number that is not exceeded, so the check has to use the stored value and rounding stays presentational.
  */
 export function energyBalanceExact(peerId: string): number {
-    const row = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(bridgeAccountId(peerId)) as any;
-    return row?.balance ?? 0;
+    const row = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(bridgeAccountId(peerId)) as any;
+    return row?.balance_c ?? 0;
 }
 
 /** How much credit we have currently extended to a peer — the magnitude of the negative side only. */
@@ -244,7 +244,7 @@ export function listEnergyBalances(): Array<{
  * normal — it is the net of what we owe outward against what is owed to us.
  */
 export function totalEnergyPosition(): number {
-    const row = db.prepare("SELECT COALESCE(SUM(balance), 0) AS t FROM accounts WHERE public_key LIKE 'bridge_%'").get() as any;
+    const row = db.prepare("SELECT COALESCE(SUM(balance_c), 0) AS t FROM accounts WHERE public_key LIKE 'bridge_%'").get() as any;
     return Math.round((row?.t ?? 0) * 100) / 100;
 }
 

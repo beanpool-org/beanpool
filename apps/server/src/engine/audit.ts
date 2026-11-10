@@ -59,7 +59,7 @@ export type { ReplicaConsistency, AuditSyncPayload };
 export function persistCommonsBalance(): void {
     assertLedgerWritable();
     assertCommonsPotFinite();
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
 }
 
 /**
@@ -115,15 +115,15 @@ export function persistDecayEvents(): void {
     const events = ledger.drainDecayEvents();
     if (events.length === 0) return;
 
-    const insertTxn = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', ?, 0, ?, ?)`);
-    const updateAcc = db.prepare(`UPDATE accounts SET balance=?, last_demurrage_epoch=?, last_updated_at=? WHERE public_key=?`);
+    const insertTxn = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', ?, 0, ?, ?)`);
+    const updateAcc = db.prepare(`UPDATE accounts SET balance_c=?, last_demurrage_epoch=?, last_updated_at=? WHERE public_key=?`);
 
     db.transaction(() => {
         for (const ev of events) {
             const id = `demurrage_${ev.accountId.slice(0, 16)}_${ev.toEpoch - ev.epochsPassed}_${ev.toEpoch}`;
             insertTxn.run(id, ev.accountId, Math.round(ev.amount * 10000) / 10000, `Circulation fee (demurrage, ${ev.epochsPassed}d)`, ev.timestamp);
             const acc = ledger.getAccount(ev.accountId);
-            updateAcc.run(acc.balance, acc.lastDemurrageEpoch, new Date().toISOString(), ev.accountId);
+            updateAcc.run(acc.balance_c, acc.lastDemurrageEpoch, new Date().toISOString(), ev.accountId);
         }
     })();
 }
@@ -206,19 +206,19 @@ export interface BrokenBalance {
 
 /**
  * The accounts whose balance is not a finite number, at most `limit` of them (#1445 re-review, NON-BLOCKING 3): the
- * conservation check gives only a count, and on a node whose `accounts.balance` is already NOT NULL nothing else names
+ * conservation check gives only a count, and on a node whose `accounts.balance_c` is already NOT NULL nothing else names
  * them. The Commons pot is listed too when the row is fine but the pot in memory isn't.
  */
 export function listBrokenBalances(limit = 50): { total: number; accounts: BrokenBalance[] } {
     const rows = db.prepare(`
-        SELECT a.public_key AS account, m.callsign AS callsign, a.balance AS balance, typeof(a.balance) AS t
+        SELECT a.public_key AS account, m.callsign AS callsign, a.balance_c AS balance_c, typeof(a.balance_c) AS t
         FROM accounts a LEFT JOIN members m ON m.public_key = a.public_key
-        WHERE ${BROKEN_BALANCE_SQL.replace(/\bbalance\b/g, 'a.balance')}
+        WHERE ${BROKEN_BALANCE_SQL.replace(/\bbalance\b/g, 'a.balance_c')}
         ORDER BY a.public_key`).all() as { account: string; callsign: string | null; balance: unknown; t: string }[];
     const accounts: BrokenBalance[] = rows.map((r) => ({
         account: r.account,
         callsign: r.callsign ?? (r.account === 'COMMONS_POOL' ? 'the Commons pot' : null),
-        holds: r.t === 'null' ? 'NULL' : r.t === 'text' ? `text ${JSON.stringify(String(r.balance)).replace(/^"|"$/g, "'")}` : String(r.balance),
+        holds: r.t === 'null' ? 'NULL' : r.t === 'text' ? `text ${JSON.stringify(String(r.balance_c)).replace(/^"|"$/g, "'")}` : String(r.balance_c),
     }));
     if (!Number.isFinite(COMMONS_BALANCE) && !rows.some((r) => r.account === 'COMMONS_POOL')) {
         accounts.unshift({ account: 'COMMONS_POOL', callsign: 'the Commons pot', holds: `in memory: ${String(COMMONS_BALANCE)}` });
@@ -332,7 +332,7 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
  * since this check existed), and then it can't say the ledger is the main server's.
  */
 export function ledgerAgainstLastCopy(): { match: boolean; here: LedgerSummary; lastCopy: MainLedgerRecord | null } {
-    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance FROM accounts').all() as { publicKey: string; balance: number }[]);
+    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance_c FROM accounts').all() as { publicKey: string; balance: number }[]);
     const lastCopy = mainLedgerAtLastCopy();
     return { match: !!lastCopy && lastCopy.digest === here.digest, here, lastCopy };
 }
@@ -358,8 +358,8 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     const commonsBalance = Math.round(COMMONS_BALANCE * 100) / 100;
     const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));
 
-    const accountRows = db.prepare("SELECT public_key, balance FROM accounts").all() as { public_key: string; balance: number }[];
-    const balanceMap = new Map(accountRows.map(r => [r.public_key, r.balance]));
+    const accountRows = db.prepare("SELECT public_key, balance_c FROM accounts").all() as { public_key: string; balance: number }[];
+    const balanceMap = new Map(accountRows.map(r => [r.public_key, r.balance_c]));
 
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
     balancesCsv += `commons,Community Pool,System,${commonsBalance}\n`;
@@ -401,12 +401,12 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
  */
 export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
     const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as { callsign: string } | undefined;
-    const account = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(publicKey) as { balance: number } | undefined;
+    const account = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(publicKey) as { balance: number } | undefined;
 
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
     balancesCsv += `commons,Community Pool,System,${Math.round(COMMONS_BALANCE * 100) / 100}\n`;
-    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${Math.round((account?.balance ?? 0) * 100) / 100}\n`;
-    const pendingTxs = db.prepare("SELECT id, credits FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; credits: number }[];
+    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${Math.round((account?.balance_c ?? 0) * 100) / 100}\n`;
+    const pendingTxs = db.prepare("SELECT id, amount_c FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; credits: number }[];
     for (const tx of pendingTxs) {
         balancesCsv += `escrow_${tx.id},Escrow (Payer: ${(member?.callsign || 'you').replace(/,/g, '')}),Pending_Trade,${tx.credits}\n`;
     }

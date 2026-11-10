@@ -146,7 +146,7 @@ export function claimSettlement(input: {
     // Validating whatever row actually ends up in the table closes both orderings with one check.
     const inserted = db.prepare(`
         INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
-                                 post_id, amount, fee, reserved_until, state)
+                                 post_id, amount_c, fee_c, reserved_until, state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(key) DO NOTHING
     `).run(
@@ -299,7 +299,7 @@ export const unfinalisedSettlementsSql = (direction?: SettlementDirection): stri
  */
 export function reservedAgainstPeer(peerId: string, excludeKey?: string): number {
     const row = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) AS total FROM settlements
+        SELECT COALESCE(SUM(amount_c), 0) AS total FROM settlements
         WHERE direction = 'inbound' AND peer_id = ?
           AND (state = 'held' OR (state = 'reserved' AND (reserved_until IS NULL OR reserved_until >= ?)))
           AND (? IS NULL OR key != ?)
@@ -340,7 +340,7 @@ export function expiredReservations(nowIso = new Date().toISOString()): Settleme
  */
 export function memberForeignExposure(publicKey: string): number {
     const row = db.prepare(`
-        SELECT COALESCE(SUM(amount + fee), 0) AS total FROM settlements
+        SELECT COALESCE(SUM(amount_c + fee_c), 0) AS total FROM settlements
         WHERE direction = 'outbound' AND buyer_pubkey = ?
           AND state IN ('escrowed', 'committed', 'settled')
     `).get(publicKey) as any;

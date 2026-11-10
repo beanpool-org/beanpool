@@ -555,8 +555,8 @@ async function stagerChild(): Promise<void> {
         const result = await importCopyPart(page, part!);
         count(page);
         for (const acc of Array.isArray(page.accounts) ? page.accounts : []) {
-            if (typeof acc?.publicKey === 'string') accounts.push({ publicKey: acc.publicKey, balance: acc.balance });
-            if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey) || typeof acc.balance !== 'number') unreadableAccounts++;
+            if (typeof acc?.publicKey === 'string') accounts.push({ publicKey: acc.publicKey, balance: acc.balance_c });
+            if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey) || typeof acc.balance_c !== 'number') unreadableAccounts++;
         }
         for (const v of result.valuesLeftOut) valuesLeftOutNames.push(valueLeftOutName(v));
         plainLeftOutEntries.push(...result.plainTablesLeftOut);
@@ -664,8 +664,8 @@ async function stagerChild(): Promise<void> {
                 const backup = (db.prepare(`SELECT COUNT(*) AS n FROM ${q(t)}${where ? ` WHERE (${where})` : ''}`).get() as { n: number }).n;
                 tables.push({ name: t, primary, backup, match: primary === backup });
             }
-            const copyTotal = accounts.reduce((n, x) => n + (typeof x.balance === 'number' && Number.isFinite(x.balance) ? x.balance : 0), 0);
-            const hereTotal = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            const copyTotal = accounts.reduce((n, x) => n + (typeof x.balance_c === 'number' && Number.isFinite(x.balance_c) ? x.balance_c : 0), 0);
+            const hereTotal = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
             return {
                 checkedAt: new Date(now).toISOString(),
                 snapshotGeneratedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null,
@@ -686,8 +686,8 @@ async function stagerChild(): Promise<void> {
         const live = new Database(a.live, { readonly: true, fileMustExist: true });
         try {
             live.exec('BEGIN');
-            const stagedTotal = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
-            const liveTotal = (live.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            const stagedTotal = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
+            const liveTotal = (live.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
             const stagedAccounts = (db.prepare('SELECT COUNT(*) AS n FROM accounts').get() as { n: number }).n;
             if (!a.seed && stagedAccounts === 0) {
                 throw refused('[Sync] Conservation violation: a whole copy that carries no ledger; rejecting it', 'conservation');

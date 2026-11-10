@@ -14,6 +14,7 @@ import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
 import { resetVouching, type VouchResetReport } from './vouch-reset.js';
+import { runHundredthsStep, hundredthsStepLogLine } from './hundredths-step.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from '../engine/photo-upload-budget.js';
@@ -166,7 +167,7 @@ db.transaction = function (fn: any) {
 
 // A2-1: the in-memory LedgerManager (in state-engine) is the source of truth for
 // balance checks — getBalance/transfer read it, and transfer writes it back over
-// the accounts table. A few crowdfund operations below mutate accounts.balance
+// the accounts table. A few crowdfund operations below mutate accounts.balance_c
 // directly via raw SQL, outside the ledger. Without a resync the in-memory ledger
 // goes stale and the next transfer() clobbers the DB with the stale value,
 // ERASING the raw-SQL mutation (credit minting / pledge-debit loss). state-engine
@@ -612,7 +613,7 @@ function bringMembersToSchemaRules(schemaSql: string): void {
 }
 
 /**
- * Makes `accounts.balance` NOT NULL on a node whose table predates it (schema.sql), by rebuilding the table once.
+ * Makes `accounts.balance_c` NOT NULL on a node whose table predates it (schema.sql), by rebuilding the table once.
  *
  * WHY (review FABLE-sec-input F1, 2026-10-01, measured). better-sqlite3 binds NaN as NULL, and the column was nullable, so
  * a NaN balance — a listing priced "abc" poisoned every buyer approved for it — was written as NULL without a word. With
@@ -634,17 +635,17 @@ export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebui
     try {
         const col = db.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as { nn: number } | undefined;
         if (!col || col.nn === 1) return 'already';
-        const broken = db.prepare(`SELECT public_key, balance, typeof(balance) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
+        const broken = db.prepare(`SELECT public_key, balance_c, typeof(balance_c) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
             .all() as { public_key: string; balance: unknown; t: string }[];
         if (broken.length > 0) {
             console.error('');
             console.error('╔════════════════════════════════════════════════════════════════════════╗');
             console.error('║ 🛑 LEDGER: ACCOUNTS WHOSE BALANCE IS NOT A NUMBER — MIGRATION STOPPED   ║');
             console.error('╚════════════════════════════════════════════════════════════════════════╝');
-            console.error(`[DB] ${broken.length} account row(s) hold a balance that is not a finite number, so accounts.balance`);
+            console.error(`[DB] ${broken.length} account row(s) hold a balance that is not a finite number, so accounts.balance_c`);
             console.error('[DB] was NOT made NOT NULL. Nothing was changed: no value is guessed for them. Work out what each');
             console.error('[DB] should hold from its transactions, set it, and restart; this runs again at every boot.');
-            for (const r of broken.slice(0, 50)) console.error(`[DB]   ${r.public_key}  balance=${String(r.balance)} (${r.t})`);
+            for (const r of broken.slice(0, 50)) console.error(`[DB]   ${r.public_key}  balance=${String(r.balance_c)} (${r.t})`);
             if (broken.length > 50) console.error(`[DB]   … and ${broken.length - 50} more`);
             return 'refused';
         }
@@ -664,11 +665,11 @@ export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebui
             db.exec(`ALTER TABLE ${staged} RENAME TO accounts`);
             db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_last_updated_at ON accounts(last_updated_at)`);
         })();
-        console.log(`[DB] ✅ accounts.balance is now NOT NULL (${copied} account row(s) kept as they were)`);
+        console.log(`[DB] ✅ accounts.balance_c is now NOT NULL (${copied} account row(s) kept as they were)`);
         return 'rebuilt';
     } catch (e) {
         // The old table stays, rows and all; the next boot tries again. Loud, because a NaN would still land as NULL.
-        console.error('[DB] ❌ Could not make accounts.balance NOT NULL; a balance that is not a number can still be stored as NULL:', e);
+        console.error('[DB] ❌ Could not make accounts.balance_c NOT NULL; a balance that is not a number can still be stored as NULL:', e);
         return 'failed';
     }
 }
@@ -1363,6 +1364,11 @@ export function takeVouchResetReport(): VouchResetReport | null {
 }
 
 export function initSchema() {
+    // Money is whole hundredths in INTEGER *_c columns (db/hundredths-step.ts): a database from before has its old money
+    // dropped (never converted) FIRST, before anything below touches a money table. A failure changed nothing and stops
+    // the boot: this code cannot run against the old columns.
+    const hundredths = runHundredthsStep(db);
+    if (hundredths.ran) console.log(hundredthsStepLogLine(hundredths));
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
         console.log("🧨 Nuking messages and conversations for Version 3 Typed Messaging overhaul...");
@@ -1382,8 +1388,6 @@ export function initSchema() {
 
     // Ensure all tables have updated_at columns so schema.sql triggers/indexes can compile successfully
     try { db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // A hardship grant's shield on a debt being worked off (state-engine.ts sweepRepayment).
-    try { db.prepare(`ALTER TABLE names_debts ADD COLUMN hardship_held REAL NOT NULL DEFAULT 0`).run(); } catch { }
     // Hard credit freeze: forced 0 floor when set by admin. Also added before schema.sql for the trigger whitelist.
     try { db.prepare(`ALTER TABLE members ADD COLUMN credit_frozen INTEGER DEFAULT 0`).run(); } catch { }
     // Community treasury + operator capability. Added BEFORE schema.sql exec so the re-created
@@ -1541,15 +1545,11 @@ export function initSchema() {
     // "no such column", and the node fails to boot. Adding the columns first makes the index compile.
     //
     //   seller_pubkey   — inbound: who we pay when the receipt lands
-    //   fee             — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal
+    //   fee_c           — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal (schema.sql)
     //   reserved_until  — inbound: when the cap reservation lapses (indexed by schema.sql)
     //   receipt_payload — outbound: the exact signed receipt object, so a retry replays identical bytes
     //
-    // A CHECK constraint cannot be added by ALTER TABLE in SQLite, so `fee >= 0` binds only on tables
-    // created from schema.sql. Pre-existing rows are all fee = 0, and every writer goes through
-    // crossNodeFee(), which cannot return a negative for a positive amount.
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN fee REAL NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
 
@@ -1566,7 +1566,7 @@ export function initSchema() {
     //
     //   posts.updated_at        → INDEX idx_posts_updated_at        FATAL: "no such column: updated_at"
     //   posts.search_keywords   → TRIGGERS posts_ai / ad / au       boots fine (FTS5 mirror, body reference)
-    //   members.earned_credit   → TRIGGER members_touch_updated_at  boots fine, and later FIRES correctly
+    //   members.earned_credit_c → TRIGGER members_touch_updated_at  boots fine, and later FIRES correctly
     //   members.profile_updated_at → same trigger                   boots fine
     //
     // Indexes resolve their columns at CREATE time; triggers resolve theirs when they fire. Only the index
@@ -1583,20 +1583,14 @@ export function initSchema() {
     } catch { }
     // FTS5 search: the posts_ai/ad/au triggers mirror this into posts_fts.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
-    // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
-    // Enterprise Credit Model (Rules 6 & 7)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
-    // Grandfathered enterprise floor (Slice 4)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN legacy_credit_floor REAL DEFAULT NULL`).run(); } catch { }
+    // The money columns (earned_credit_c, earned_surplus_c, working_capital_ceiling_c, goal_amount_c, paused_floor_snapshot_c)
+    // are added to an older table by db/hundredths-step.ts, at the top of this function.
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
     try { db.prepare(`ALTER TABLE members ADD COLUMN archetype TEXT`).run(); } catch { }
     // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
     try { db.prepare(`ALTER TABLE members ADD COLUMN purpose TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN goal_amount REAL DEFAULT NULL`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN deadline_at DATETIME DEFAULT NULL`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN lifecycle TEXT DEFAULT 'ongoing'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused INTEGER DEFAULT 0`).run(); } catch { }
@@ -1656,7 +1650,7 @@ export function initSchema() {
     // start, and the only symptom is `no such column: <x>` at boot.
     //
     // This has now happened twice: #127 (posts.updated_at, posts.search_keywords,
-    // members.earned_credit, members.profile_updated_at) and #172 (abuse_reports.status).
+    // members.earned_credit_c, members.profile_updated_at) and #172 (abuse_reports.status).
     // Both times the fix was to move the one offending column. test-schema-alter-ordering.ts
     // enforces the rule for all of them instead, and will fail the build if a new ALTER
     // appears below this point or names a column that schema.sql does not also declare.
@@ -1667,7 +1661,6 @@ export function initSchema() {
     // ---------------------------------------------------------------------------------
     try { db.prepare(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN hours REAL`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
@@ -1675,10 +1668,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
-    // The vouch an invite carries (engine/vouchers.ts), held from its maker's budget.
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN vouch_amount INTEGER`).run(); } catch { }
-    // The voucher budget a names-bound invite promises, and what became of it (engine/vouchers.ts landInviteVoucher).
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN voucher_level INTEGER`).run(); } catch { }
+    // The vouch an invite carries and the voucher budget a names-bound invite promises (engine/vouchers.ts): whole
+    // hundredths, vouch_amount_c and voucher_level_c, added to an older table by db/hundredths-step.ts.
+    // What became of the promised budget (engine/vouchers.ts landInviteVoucher).
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN voucher_outcome TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
@@ -1825,11 +1817,9 @@ export function initSchema() {
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_by TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_floor_snapshot REAL`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
     // Enterprise keeper answers (A, G, M): a lead installed automatically (community removal of the old lead, or
@@ -2494,7 +2484,7 @@ export function initSchema() {
     } catch { }
 
     // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
-    // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
+    // posts.updated_at, posts.search_keywords, members.earned_credit_c and members.profile_updated_at used to
     // be added HERE. They moved above the exec (#127) because schema.sql objects depend on them.
     //
     // Protocol v1: Admin Genesis Invites — store invite tier type
@@ -2573,7 +2563,7 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
 
-    // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus for pre-existing enterprises
+    // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus_c for pre-existing enterprises
     // from historical completed external sales. Gated behind node_config so it runs strictly once
     // and never resets legitimately spent surplus on server reboot ("infinite wage glitch").
     try {
@@ -2595,7 +2585,7 @@ export function initSchema() {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
         }
     } catch (e) {
-        console.error('[DB] Failed to backfill earned_surplus:', e);
+        console.error('[DB] Failed to backfill earned_surplus_c:', e);
     }
 
     // Migration: Replace table-wide transaction_id UNIQUE on deferred_wage_claims with partial unique index
@@ -2695,9 +2685,9 @@ export function initSchema() {
 }
 
 /**
- * The moment the rule on what the admins can see started here (config/balance-rule.ts): this first boot, no notice. Written
+ * The moment the rule on what the admins can see started here (config/balance_c-rule.ts): this first boot, no notice. Written
  * once on a main server and never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config
- * only and reads no balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
+ * only and reads no balance_c (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
  * main server's (config/community-settings.ts), or, from a main server older than the rule, this runs as it takes over.
  * A failure leaves no row, which lists nobody on the rule (engine/community-health.ts), and the next boot tries again.
  */
@@ -2929,18 +2919,18 @@ export function migrateLegacyState() {
     `);
 
     const insertAccount = db.prepare(`
-        INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, ?)
     `);
 
     const insertTransaction = db.prepare(`
-        INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp)
+        INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp)
         VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const insertPost = db.prepare(`
         INSERT OR IGNORE INTO posts (
-            id, type, category, title, description, credits, author_pubkey, created_at,
+            id, type, category, title, description, price_c, author_pubkey, created_at,
             active, status, repeatable, accepted_by, accepted_at, pending_transaction_id,
             completed_at, lat, lng, origin_node
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2953,7 +2943,7 @@ export function migrateLegacyState() {
 
     const insertMarketplaceTx = db.prepare(`
         INSERT OR IGNORE INTO marketplace_transactions (
-            id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at
+            id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
@@ -3024,7 +3014,7 @@ export function migrateLegacyState() {
         // 3. Accounts
         if (state.ledgerAccounts) {
             for (const acc of state.ledgerAccounts) {
-                insertAccount.run(acc.id, acc.balance, acc.lastDemurrageEpoch || 0);
+                insertAccount.run(acc.id, acc.balance_c, acc.lastDemurrageEpoch || 0);
             }
         }
 
@@ -3144,8 +3134,8 @@ export interface ProjectRow {
     title: string;
     description: string;
     photos: string; // JSON string array
-    goal_amount: number;
-    current_amount: number;
+    goal_amount_c: number;
+    current_amount_c: number;
     deadline_at: string | null;
     status: string;
     created_at: string;
@@ -3161,24 +3151,24 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     if (!photos) {
         photos = e.avatar_url ? JSON.stringify([e.avatar_url]) : '[]';
     }
-    const goalAmount = Number(e.goal_amount ?? legacyP?.goal_amount ?? 0);
+    const goalAmount = Number(e.goal_amount_c ?? legacyP?.goal_amount_c ?? 0);
 
     let currentAmount = 0;
-    if (legacyP && legacyP.current_amount != null) {
-        currentAmount = Number(legacyP.current_amount);
+    if (legacyP && legacyP.current_amount_c != null) {
+        currentAmount = Number(legacyP.current_amount_c);
     }
     try {
         // Pledges in, less any sent back out of the escrow to a backer (a pledge made after the goal, returned at boot by
         // engine/stranded-pledges.ts, or an unfunded project's, a week after its end date by engine/unfunded-pledges.ts): those
         // never reached the project. The sweep to the enterprise is neither.
         const txSum = (db.prepare(`
-            SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount ELSE amount END), 0) as s FROM transactions
+            SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount_c ELSE amount_c END), 0) as s FROM transactions
             WHERE project_id = ? AND (
                 ((to_pubkey = ? OR to_pubkey = 'escrow_' || ?) AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%')
                 OR (from_pubkey = 'escrow_' || ? AND to_pubkey != ?)
             )
         `).get(e.public_key, e.public_key, e.public_key, e.public_key, e.public_key, e.public_key) as any)?.s || 0;
-        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
+        const accBal = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance_c || 0;
         // The sum in cents, as every pledge is: SQLite's sum of REALs is not 0 where every pledge went back (0.1, 0.2 and 0.7
         // from one backer, 0.3 and 0.6 from another, leave 2.8e-17), and the update read that as pledges received. Review of #2525.
         currentAmount = Math.max(currentAmount, Math.round(Number(txSum) * 100) / 100, accBal);
@@ -3192,8 +3182,8 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         title,
         description,
         photos,
-        goal_amount: goalAmount,
-        current_amount: currentAmount,
+        goal_amount_c: goalAmount,
+        current_amount_c: currentAmount,
         deadline_at: e.deadline_at ?? legacyP?.deadline_at ?? null,
         status,
         created_at: e.joined_at ?? legacyP?.created_at ?? new Date().toISOString(),
@@ -3219,7 +3209,7 @@ const PROJECT_LIST_COLUMNS = 'id, creator_pubkey, description, goal_amount, curr
 export function getCrowdfundProjects(): ProjectRow[] {
     const enterprises = (db.prepare(`
         SELECT m.public_key, m.callsign, m.avatar_ref, m.bio, m.purpose,
-               m.goal_amount, m.deadline_at, m.status, m.joined_at,
+               m.goal_amount_c, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
@@ -3243,7 +3233,7 @@ export function getCrowdfundProjects(): ProjectRow[] {
 export function getCrowdfundProject(id: string): ProjectRow | undefined {
     const e = db.prepare(`
         SELECT m.public_key, m.callsign, mp.photo AS avatar_url, m.bio, m.purpose,
-               m.goal_amount, m.deadline_at, m.status, m.joined_at,
+               m.goal_amount_c, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
@@ -3451,7 +3441,7 @@ export function createCrowdfundProject(
     title: string,
     description: string,
     photos: string[],
-    goal_amount: number,
+    goal_amount_c: number,
     deadline_at: string | null
 ) {
     if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
@@ -3486,12 +3476,12 @@ export function createCrowdfundProject(
         db.prepare(`
             INSERT INTO members (
                 public_key, callsign, joined_at, status,
-                is_treasury, earned_credit, earned_surplus,
-                purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
+                is_treasury, earned_credit_c, earned_surplus_c,
+                purpose, goal_amount_c, deadline_at, lifecycle, paused, updated_at
             ) VALUES (?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
         `).run(id, callsign, now, description || title.trim(), goal_amount, deadline_at, now);
         setMemberPhoto(db, id, photoUrl || null);
-        db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
+        db.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
         if (creator_pubkey) {
             db.prepare(`
                 INSERT OR IGNORE INTO treasury_operators (
@@ -3502,7 +3492,7 @@ export function createCrowdfundProject(
         }
 
         db.prepare(`
-            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
         `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
@@ -3518,7 +3508,7 @@ export function updateCrowdfundProject(
     title: string,
     description: string,
     photos: string[],
-    goal_amount: number,
+    goal_amount_c: number,
     deadline_at?: string | null
 ) {
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
@@ -3533,7 +3523,7 @@ export function updateCrowdfundProject(
     assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     // In cents, as pledgeToProject reads a goal: a float residue where every pledge went back is no pledge received.
-    if (Math.round(Number(project.current_amount) * 100) > 0 && Number(goal_amount) !== project.goal_amount) {
+    if (Math.round(Number(project.current_amount_c) * 100) > 0 && Number(goal_amount) !== project.goal_amount_c) {
         throw new Error("Cannot change funding goal after receiving pledges");
     }
 
@@ -3561,25 +3551,25 @@ export function updateCrowdfundProject(
         if (deadline_at !== undefined) {
             db.prepare(`
                 UPDATE projects
-                SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET title = ?, description = ?, photos = ?, goal_amount_c = ?, deadline_at = ?, updated_at = ?
                 WHERE id = ?
             `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id);
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount_c = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
             `).run(rowName, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
-                SET title = ?, description = ?, photos = ?, goal_amount = ?, updated_at = ?
+                SET title = ?, description = ?, photos = ?, goal_amount_c = ?, updated_at = ?
                 WHERE id = ?
             `).run(title, description, JSON.stringify(photos), goal_amount, now, id);
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount_c = ?, updated_at = ?
                 WHERE public_key = ?
             `).run(rowName, description, goal_amount, now, id);
         }
@@ -3615,13 +3605,13 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
 
     let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) {
-        const memberEnterprise = db.prepare(`SELECT public_key, callsign, purpose, bio, goal_amount, deadline_at, status FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).get(projectId) as any;
+        const memberEnterprise = db.prepare(`SELECT public_key, callsign, purpose, bio, goal_amount_c, deadline_at, status FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).get(projectId) as any;
         if (!memberEnterprise) throw new Error("Project not found");
         const lead = (db.prepare(`SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead' LIMIT 1`).get(projectId) as any)?.member_pubkey || memberEnterprise.public_key;
         db.prepare(`
-            INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
             VALUES (?, ?, ?, ?, '[]', ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-        `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
+        `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount_c || 0, memberEnterprise.deadline_at, projectId);
         project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
     }
     // Only an ACTIVE project takes a pledge. A FUNDED one used to take it too: the Beans went into its escrow, but only
@@ -3663,15 +3653,15 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     const targetAccount = project.enterprise_pubkey || projectId;
     onSettleDemurrage?.([targetAccount, project.creator_pubkey, fromPubkey]);
 
-    const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
+    const sender = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
-    if (sender.balance < amount) throw new Error("Insufficient balance for pledge");
+    if (sender.balance_c < amount) throw new Error("Insufficient balance for pledge");
 
     const escrowPubkey = `escrow_${projectId}`;
 
     const executePledge = db.transaction(() => {
         // Ensure synthetic escrow account exists natively
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(escrowPubkey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES (?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(escrowPubkey);
 
         // These escrow legs write last_updated_at in ISO-8601 form (not
         // CURRENT_TIMESTAMP's space-separated shape) so the ledger watermark stays
@@ -3679,43 +3669,43 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         // sorts BEFORE any same-day ISO cursor (' ' < 'T'), which would make the
         // `WHERE last_updated_at > :since` delta scan silently miss the mutated row.
         // Debit backer
-        db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, fromPubkey);
+        db.prepare(`UPDATE accounts SET balance_c = balance_c - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, fromPubkey);
 
         // Credit Escrow instead of Creator
-        db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, escrowPubkey);
+        db.prepare(`UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, escrowPubkey);
 
         // Record tx — SRV-20: this is the member-authored leg (backer → escrow),
         // so persist the caller's request signature for re-verification on import.
         // The escrow sweep/refund legs below are node-authoritative (from escrow_)
         // and accepted via the payload-level pin gate (verifySyncPayload).
         db.prepare(`
-            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id, auth_signer, auth_signature, auth_payload)
+            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id, auth_signer, auth_signature, auth_payload)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(txId, fromPubkey, escrowPubkey, amount, memo, projectId,
             auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null);
 
         // Update Project Goals
-        db.prepare(`UPDATE projects SET current_amount = current_amount + ? WHERE id = ?`).run(amount, projectId);
+        db.prepare(`UPDATE projects SET current_amount_c = current_amount_c + ? WHERE id = ?`).run(amount, projectId);
 
-        const updatedProject = db.prepare(`SELECT current_amount, goal_amount FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
+        const updatedProject = db.prepare(`SELECT current_amount_c, goal_amount_c FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
         // In cents: SQLite sums REALs, and 0.70 + 0.10 + 0.10 + 0.10 is 0.9999999999999999, short of a goal of 1.
-        if (updatedProject && Math.round(updatedProject.current_amount * 100) >= Math.round(updatedProject.goal_amount * 100) && project.status === 'ACTIVE') {
+        if (updatedProject && Math.round(updatedProject.current_amount_c * 100) >= Math.round(updatedProject.goal_amount_c * 100) && project.status === 'ACTIVE') {
             db.prepare(`UPDATE projects SET status = 'FUNDED' WHERE id = ?`).run(projectId);
             db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 
             // Auto-Sweep Escrow to Enterprise Account (Slice 3: pledges land in enterprise account!)
-            const escrowBalanceRow = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(escrowPubkey) as { balance: number };
-            const escrowBalance = escrowBalanceRow ? escrowBalanceRow.balance : Math.max(0, updatedProject.current_amount);
+            const escrowBalanceRow = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowPubkey) as { balance: number };
+            const escrowBalance = escrowBalanceRow ? escrowBalanceRow.balance_c : Math.max(0, updatedProject.current_amount_c);
 
             if (escrowBalance > 0) {
                 // Drain Escrow
-                db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
+                db.prepare(`UPDATE accounts SET balance_c = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
                 // Credit Enterprise Treasury Account (Slice 3: pledges land in enterprise account)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
+                db.prepare(`UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
 
                 // Record atomic Sweep Transaction to the enterprise
                 db.prepare(`
-                    INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
+                    INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `).run(`sweep_${txId}`, escrowPubkey, targetAccount, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
@@ -3736,7 +3726,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
  * project takes pledges again, and only those are still held. Before any return, every pledge, as it always was.
  */
 const HELD_PLEDGES_SQL = `
-    SELECT t.from_pubkey, t.amount, t.id FROM transactions t
+    SELECT t.from_pubkey, t.amount_c, t.id FROM transactions t
     WHERE t.to_pubkey = @escrow AND t.project_id = @project
       AND NOT EXISTS (
           SELECT 1 FROM transactions o
@@ -3759,9 +3749,9 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     }
 
     // Guard against non-zero account balance to maintain ledger conservation
-    const account = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
-    if (account && Math.abs(account.balance) > 0.0001) {
-        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
+    const account = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (account && Math.abs(account.balance_c) > 0.0001) {
+        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance_c}). Drain or sweep funds first.`);
     }
 
     // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that already
@@ -3804,11 +3794,11 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             let totalRefunded = 0;
             for (const pledge of refunds) {
                 // Return Beans to Backer
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
+                db.prepare(`UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
 
                 // Record the localized Refund Transaction
                 db.prepare(`
-                    INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
+                    INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `).run(`refund_${pledge.id}`, escrowPubkey, pledge.from_pubkey, pledge.amount, 'Escrow Refund: Project Deleted', projectId);
 
@@ -3816,22 +3806,22 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             }
 
             // Drain the escrow account to reconcile the economy symmetrically
-            db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(totalRefunded, escrowPubkey);
+            db.prepare(`UPDATE accounts SET balance_c = balance_c - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(totalRefunded, escrowPubkey);
         }
 
         // #139: Unlink transactions from the project before deletion to prevent SQLITE_CONSTRAINT_FOREIGNKEY
         // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
 
-        const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
-        if (acc && Math.abs(acc.balance) > 1e-9) {
-            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+        const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+        if (acc && Math.abs(acc.balance_c) > 1e-9) {
+            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance_c} Beans). Sweep or refund funds first.`);
         }
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance_c) < 0.0001`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         try {
             const cpRow = db.prepare("SELECT value FROM node_config WHERE key = 'commons_projects'").get() as any;

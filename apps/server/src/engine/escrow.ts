@@ -68,7 +68,7 @@ export function recordDeferredWageClaim(
     if (existing) return existing.id;
     const id = crypto.randomUUID();
     db.prepare(`
-        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at)
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(id, enterprisePubkey, keeperPubkey, postId || null, transactionId || null, amount);
     return id;
@@ -485,7 +485,7 @@ export function requestPost(
         createdAt: new Date().toISOString()
     };
 
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
@@ -536,8 +536,8 @@ function assertHoldFunded(cb: EscrowCallbacks, p: HoldParties, amount: number, o
 }): void {
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(p.payer);
     if (p.isPayeeKeeper) {
-        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(p.payer) as any;
-        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+        const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(p.payer) as any;
+        const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
         const name = opts.payerName;
 
         // Rule 5: credit buys inputs, profit pays people (docs/the-commons.md §2.4).
@@ -612,7 +612,7 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
           .run(h.postId, h.txId);
     }
 
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${h.txId}`);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${h.txId}`);
 
     const escrowResult = cb.transfer(h.parties.payer, `escrow_${h.txId}`, h.amount, h.memo, 'escrow', true, h.auth);
     if (!escrowResult) {
@@ -622,12 +622,12 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
     }
 
     if (h.parties.isPayeeKeeper) {
-        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
             .run(h.amount, h.parties.payer);
     }
 
     if (h.row === 'insert') {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
             .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount, h.hours ?? null, h.createdAt);
     }
 }
@@ -662,11 +662,11 @@ export interface StandingPayment {
 export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { releaseResult: any; releaseCredits: number } {
     if (p.row === 'approve') {
         // The helper's request becomes period 1, paid now; when they asked (created_at) stays as it was.
-        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, credits=?, hours=NULL, standing_id=?, period_no=?
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, amount_c=?, hours=NULL, standing_id=?, period_no=?
                                 WHERE id=? AND status='requested'`).run(p.paidAt, p.amount, p.standingId, p.periodNo, p.txId);
         if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
     } else {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, standing_id, period_no)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, standing_id, period_no)
                     VALUES (?, ?, ?, ?, ?, NULL, 'completed', ?, ?, ?, ?)`)
             .run(p.txId, p.postId, p.parties.payer, p.parties.payee, p.amount, p.paidAt, p.paidAt, p.standingId, p.periodNo);
     }
@@ -1292,7 +1292,7 @@ export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released:
         );
         // Rule 6: Only genuine external sales count toward earned surplus (exclude wash trades with own keepers)
         if (!isBuyerKeeper) {
-            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+            db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                 .run(releaseCredits, row.seller_pubkey);
         }
         // Process any deferred wage claims now that the enterprise has earned surplus and balance
@@ -1484,8 +1484,8 @@ export function completePostTransaction(
                     );
                     const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
                     if (isPayeeKeeper) {
-                        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
-                        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+                        const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+                        const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
                         if (balance - diff < 0 || diff > earnedSurplus) {
                             // Extra hours cannot be funded from balance or earned surplus.
                             // Record deferred wage claim for the difference (diff), release the base hold
@@ -1493,7 +1493,7 @@ export function completePostTransaction(
                             recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
                             releaseCredits = row.credits;
                         } else {
-                            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                            db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
                                 .run(diff, row.buyer_pubkey);
                             // THROW, don't ignore. The release below pays the seller `releaseCredits`, which is
                             // the base hold PLUS this top-up. If the top-up silently fails the escrow is short by
@@ -1520,7 +1520,7 @@ export function completePostTransaction(
                             .get(row.buyer_pubkey, row.seller_pubkey)
                     );
                     if (isPayeeKeeper) {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                             .run(Math.abs(diff), row.buyer_pubkey);
                     }
                     // The mirror case, and it was ignored too: fewer hours than booked, so the unearned part goes back
@@ -1529,7 +1529,7 @@ export function completePostTransaction(
                     const refunded = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
                     if (!refunded) throw new Error(word('Failed to refund the unearned escrow hours'));
                 }
-                db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
+                db.prepare(`UPDATE marketplace_transactions SET amount_c=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
                 return releaseCredits;
             },
         });
@@ -1570,7 +1570,7 @@ export function cancelPostTransaction(
                     .get(row.buyer_pubkey, row.seller_pubkey)
             );
             if (isPayeeKeeper) {
-                db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                     .run(row.credits, row.buyer_pubkey);
             }
         }
@@ -1730,7 +1730,7 @@ export function resolveEscrowDispute(
                         .get(row.seller_pubkey, row.buyer_pubkey)
                 );
                 if (!isBuyerKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                         .run(sellerShare, row.seller_pubkey);
                 }
             }
@@ -1762,7 +1762,7 @@ export function resolveEscrowDispute(
                         .get(row.buyer_pubkey, row.seller_pubkey)
                 );
                 if (isPayeeKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                         .run(row.credits, row.buyer_pubkey);
                 }
             }
@@ -1806,7 +1806,7 @@ export function resolveEscrowDispute(
                             .get(row.seller_pubkey, row.buyer_pubkey)
                     );
                     if (!isBuyerKeeper) {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                             .run(sellerShare, row.seller_pubkey);
                     }
                 }
@@ -1820,7 +1820,7 @@ export function resolveEscrowDispute(
                         .get(row.buyer_pubkey, row.seller_pubkey)
                 );
                 if (isPayeeKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                         .run(buyerShare, row.buyer_pubkey);
                 }
             }

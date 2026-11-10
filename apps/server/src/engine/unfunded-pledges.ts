@@ -81,8 +81,8 @@ interface ProjectRow {
     id: string;
     title: string | null;
     status: string | null;
-    goal_amount: number | null;
-    current_amount: number | null;
+    goal_amount_c: number | null;
+    current_amount_c: number | null;
     creator_pubkey: string | null;
     deadline: string | null;
     enterprise: string;
@@ -92,10 +92,10 @@ interface ProjectRow {
 
 /** A project's rows as the return reads them: its end date as pledgeToProject reads it (its own row's, else its enterprise's). */
 const PROJECT_SQL = `
-    SELECT p.id, p.title, p.status, p.goal_amount, p.current_amount, p.creator_pubkey,
+    SELECT p.id, p.title, p.status, p.goal_amount_c, p.current_amount_c, p.creator_pubkey,
            COALESCE(p.deadline_at, m.deadline_at) AS deadline,
            COALESCE(NULLIF(p.enterprise_pubkey, ''), p.id) AS enterprise, m.status AS enterprise_status,
-           a.balance
+           a.balance_c
     FROM projects p
     LEFT JOIN members m ON m.public_key = COALESCE(NULLIF(p.enterprise_pubkey, ''), p.id)
     LEFT JOIN accounts a ON a.public_key = 'escrow_' || p.id`;
@@ -109,8 +109,8 @@ function leaderOf(projectId: string, creator: string | null): string | null {
 
 /** Whether its rows say it reached its goal: in cents, as pledgeToProject decides it, or its enterprise's row says so. */
 function readsFunded(p: ProjectRow): boolean {
-    const goal = Math.round(Number(p.goal_amount || 0) * 100);
-    return goal <= 0 || Math.round(Number(p.current_amount || 0) * 100) >= goal || p.enterprise_status === 'funded';
+    const goal = Math.round(Number(p.goal_amount_c || 0) * 100);
+    return goal <= 0 || Math.round(Number(p.current_amount_c || 0) * 100) >= goal || p.enterprise_status === 'funded';
 }
 
 /**
@@ -118,17 +118,17 @@ function readsFunded(p: ProjectRow): boolean {
  * or why nobody can be paid. Reads only.
  */
 export function findUnfundedProjectsDue(now: number = Date.now()): UnfundedProjectDue[] {
-    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance > ? ORDER BY p.id`).all(DUST_THRESHOLD) as ProjectRow[];
+    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance_c > ? ORDER BY p.id`).all(DUST_THRESHOLD) as ProjectRow[];
     return rows.filter((p) => isPledgeReturnDue(p.deadline, now)).map((p) => {
         const extra = { deadline: p.deadline as string, leader: leaderOf(p.id, p.creator_pubkey) };
         if (readsFunded(p)) {
             return {
-                projectId: p.id, title: p.title ?? '', status: p.status ?? '', escrow: `escrow_${p.id}`, held: Number(p.balance), ok: false as const,
-                reason: `its rows say it reached its goal (raised ${p.current_amount} of ${p.goal_amount}, its enterprise ${p.enterprise_status}), so nothing goes back`,
+                projectId: p.id, title: p.title ?? '', status: p.status ?? '', escrow: `escrow_${p.id}`, held: Number(p.balance_c), ok: false as const,
+                reason: `its rows say it reached its goal (raised ${p.current_amount_c} of ${p.goal_amount_c}, its enterprise ${p.enterprise_status}), so nothing goes back`,
                 ...extra,
             };
         }
-        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance), { closedToCommons: true }), ...extra };
+        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c), { closedToCommons: true }), ...extra };
     });
 }
 
@@ -237,7 +237,7 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
             // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
             // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was
             // 2.2e-16, which the leader's update read as pledges received and the page as Beans held. Review of #2525.
-            db.prepare('UPDATE projects SET current_amount = 0 WHERE id = ?').run(s.projectId);
+            db.prepare('UPDATE projects SET current_amount_c = 0 WHERE id = ?').run(s.projectId);
             // Kept with the money: a crash after the commit still leaves every one of them to read.
             told = [
                 ...backers.map((to) => ({ to, title: backerTitle, body: backerBody, id: keepNotice(to, backerTitle, backerBody, data) })),
@@ -320,8 +320,8 @@ export function noticeEndDateMoved(
         if (getNodeRole() === 'backup') return 0;
         const p = db.prepare(`${PROJECT_SQL} WHERE p.id = ?`).get(projectId) as ProjectRow | undefined;
         if (!p || p.status !== 'ACTIVE' || (p.deadline ?? null) === (before ?? null)) return 0;
-        if (!isPastDeadline(before, now) || !(Number(p.balance) > DUST_THRESHOLD)) return 0;
-        const owed = owedFromProjectEscrow(p.id, p.title ?? '', p.status, Number(p.balance));
+        if (!isPastDeadline(before, now) || !(Number(p.balance_c) > DUST_THRESHOLD)) return 0;
+        const owed = owedFromProjectEscrow(p.id, p.title ?? '', p.status, Number(p.balance_c));
         if (!owed.ok) {
             console.warn(`[Pledges] The end date of project ${projectId} moved, but who holds its pledges can't be worked out, so nobody was told: ${owed.reason}.`);
             return 0;

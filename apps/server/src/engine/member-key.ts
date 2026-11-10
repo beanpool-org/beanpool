@@ -84,7 +84,7 @@ export interface MisspeltMemberKey {
 export function findMisspeltMemberKeys(): MisspeltMemberKey[] {
     const rows = db.prepare(`
         SELECT m.public_key, m.callsign, m.status, m.is_visitor,
-               (SELECT balance FROM accounts a WHERE a.public_key = m.public_key) AS balance,
+               (SELECT balance_c FROM accounts a WHERE a.public_key = m.public_key) AS balance_c,
                (SELECT role FROM node_roles r WHERE r.member_pubkey = m.public_key) AS node_role,
                (SELECT t.callsign FROM members t WHERE t.public_key = lower(m.public_key) AND t.public_key != m.public_key) AS same_key_as
         FROM members m
@@ -97,7 +97,7 @@ export function findMisspeltMemberKeys(): MisspeltMemberKey[] {
         callsign: r.callsign,
         status: r.status ?? null,
         isVisitor: !!r.is_visitor,
-        balance: Number(r.balance ?? 0),
+        balance: Number(r.balance_c ?? 0),
         nodeRole: r.node_role ?? null,
         sameKeyAs: r.same_key_as ?? null,
     }));
@@ -123,7 +123,7 @@ export function reportMisspeltMemberKeys(log: (line: string) => void = line => c
     for (const m of found) {
         const shown = m.publicKey.length > 16 ? `${m.publicKey.slice(0, 16)}…` : m.publicKey;
         log(`   - "${m.callsign}" (key ${JSON.stringify(shown)}, ${m.isVisitor ? 'visitor' : 'member'}, ${m.status ?? 'active'}, `
-            + `${m.balance} Beans${m.nodeRole ? `, holds the ${m.nodeRole} role` : ''})`
+            + `${m.balance_c} Beans${m.nodeRole ? `, holds the ${m.nodeRole} role` : ''})`
             + (m.sameKeyAs ? ` is the same key as "${m.sameKeyAs}", spelt another way.` : '.'));
     }
     log('   What to do: remove each one in Settings → People → Remove (a closed account keeps its row and its history; '

@@ -57,7 +57,7 @@ interface StrandedBase {
     title: string;
     status: string;
     escrow: string;
-    /** What the escrow holds now (accounts.balance). */
+    /** What the escrow holds now (accounts.balance_c). */
     held: number;
 }
 
@@ -78,7 +78,7 @@ interface EscrowRow {
     from_pubkey: string;
     to_pubkey: string;
     amount: number;
-    tax_fee: number | null;
+    fee_c: number | null;
     project_id: string | null;
 }
 
@@ -93,13 +93,13 @@ const near = (a: number, b: number) => Math.abs(a - b) <= DUST_THRESHOLD;
 /** Every project that isn't ACTIVE and whose escrow holds more than dust, with who is owed what or why nobody can be. Reads only. */
 export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
     const projects = db.prepare(`
-        SELECT p.id, p.title, p.status, a.balance
+        SELECT p.id, p.title, p.status, a.balance_c
         FROM projects p
         JOIN accounts a ON a.public_key = 'escrow_' || p.id
-        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance > ?
+        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance_c > ?
         ORDER BY p.id
     `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance: number }[];
-    return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance)));
+    return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c)));
 }
 
 /**
@@ -161,7 +161,7 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
     // Oldest first. A pledge and the sweep it triggers share a millisecond, so the row order breaks the tie: the sweep is
     // written after its pledge, in the same transaction (db.ts pledgeToProject).
     const rows = db.prepare(`
-        SELECT id, from_pubkey, to_pubkey, amount, tax_fee, project_id
+        SELECT id, from_pubkey, to_pubkey, amount_c, fee_c, project_id
         FROM transactions
         WHERE from_pubkey = ? OR to_pubkey = ?
         ORDER BY timestamp ASC, rowid ASC
@@ -170,7 +170,7 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
     let running = 0;
     let lastZero = -1;
     rows.forEach((r, i) => {
-        if (r.to_pubkey === escrow) running += Number(r.amount) - Number(r.tax_fee || 0);
+        if (r.to_pubkey === escrow) running += Number(r.amount) - Number(r.fee_c || 0);
         if (r.from_pubkey === escrow) running -= Number(r.amount);
         if (near(running, 0)) lastZero = i;
     });
@@ -185,7 +185,7 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
                 return stop(`transaction ${r.id} put Beans into it that are not a member's pledge to this project`);
             }
             const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount: 0, pledgeIds: [] };
-            o.amount += Number(r.amount) - Number(r.tax_fee || 0);
+            o.amount += Number(r.amount) - Number(r.fee_c || 0);
             o.pledgeIds.push(r.id);
             owed.set(r.from_pubkey, o);
         } else {
@@ -244,7 +244,7 @@ export function returnStrandedPledges(ledger: StrandedPledgeLedger): { returned:
                     db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
                 }
                 const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
-                db.prepare('UPDATE projects SET current_amount = MAX(0, current_amount - ?) WHERE id = ?').run(total, s.projectId);
+                db.prepare('UPDATE projects SET current_amount_c = MAX(0, current_amount_c - ?) WHERE id = ?').run(total, s.projectId);
             });
             returned++;
             const lines = s.returns.map((o) => `${o.amount} to ${o.backer} (${o.pledgeIds.join(', ')})`).join('; ');

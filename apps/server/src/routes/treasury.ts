@@ -69,8 +69,8 @@ import { answerPotPaused } from '../engine/audit.js';
 export function pledgeDispatchKind(treasury: string, body: { type?: unknown; memo?: unknown } | null | undefined): 'backing' | 'crowdfund' {
     if (body?.type === 'backing') return 'backing';
     if (body?.memo !== undefined) return 'crowdfund';
-    const ent = db.prepare('SELECT goal_amount FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as { goal_amount: number | null } | undefined;
-    return ent && ent.goal_amount != null ? 'crowdfund' : 'backing';
+    const ent = db.prepare('SELECT goal_amount_c FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as { goal_amount_c: number | null } | undefined;
+    return ent && ent.goal_amount_c != null ? 'crowdfund' : 'backing';
 }
 
 /**
@@ -205,7 +205,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
-            `SELECT public_key, callsign, avatar_ref, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_ref, earned_credit_c, legacy_credit_floor, earned_surplus_c, working_capital_ceiling_c, purpose, goal_amount_c, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
             !(r.status === 'suspended' || r.status === 'disabled' || r.status === 'rejected')
             || adminSignIn
@@ -250,10 +250,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 // detail read returns.
                 const link = linksByTreasury.get(r.public_key);
                 let currentAmount: number | null = null;
-                if (r.goal_amount != null) {
-                    const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(r.public_key) as any;
-                    const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${r.public_key}`) as any)?.balance || 0;
-                    currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
+                if (r.goal_amount_c != null) {
+                    const pRow = db.prepare("SELECT current_amount_c FROM projects WHERE id = ?").get(r.public_key) as any;
+                    const escBal = (db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(`escrow_${r.public_key}`) as any)?.balance_c || 0;
+                    currentAmount = Math.max(Number(pRow?.current_amount_c || 0), Number(escBal));
                 }
                 return {
                     publicKey: r.public_key, name: r.callsign,
@@ -261,15 +261,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     avatar: avatarUrlOf(r.public_key, r.avatar_ref),
                     // The photo's URL, as `avatar` (#1478): both apps read `avatar` first and this only where it is empty.
                     avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
-                    balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+                    balance: b.balance_c, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     allowance: floorInfo.allowance,
                     derivedAllowance: floorInfo.derivedAllowance,
                     legacyFloor: floorInfo.legacyFloor,
                     liveOffers: b.liveOffers,
-                    earnedSurplus: r.earned_surplus ?? 0,
-                    workingCapitalCeiling: r.working_capital_ceiling ?? null,
+                    earnedSurplus: r.earned_surplus_c ?? 0,
+                    workingCapitalCeiling: r.working_capital_ceiling_c ?? null,
                     purpose: r.purpose ?? null,
-                    goalAmount: r.goal_amount != null ? Number(r.goal_amount) : null,
+                    goalAmount: r.goal_amount_c != null ? Number(r.goal_amount_c) : null,
                     currentAmount,
                     deadlineAt: r.deadline_at ?? null,
                     lifecycle: r.lifecycle ?? 'ongoing',
@@ -277,7 +277,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     paused: !!r.paused,
                     pausedAt: r.paused_at ?? null,
                     pausedBy: r.paused_by ?? null,
-                    pausedFloorSnapshot: r.paused_floor_snapshot != null ? Number(r.paused_floor_snapshot) : null,
+                    pausedFloorSnapshot: r.paused_floor_snapshot_c != null ? Number(r.paused_floor_snapshot_c) : null,
                     pauseExpiresAt,
                     pauseDaysRemaining,
                     pauseExpiringSoon,
@@ -355,7 +355,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, bio, joined_at, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, bio, joined_at, earned_surplus_c, working_capital_ceiling_c, purpose, goal_amount_c, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
@@ -388,7 +388,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const readerMayReadListings = !deps.enforceReadAuth || (!!ctx.state?.actor && passesReadGate(ctx.state.actor));
         const posts = readerMayReadListings ? db.prepare(
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
-            "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, type, category, title, description, price_c, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
         ).all(treasury) as any[] : [];
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
@@ -405,7 +405,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
         // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
         const flow = (db.prepare(
-            'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
+            'SELECT from_pubkey, to_pubkey, amount_c, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount,
             memo: isOperator || (!!actor && (f.from_pubkey === actor || f.to_pubkey === actor)) ? f.memo : '',
@@ -415,9 +415,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // PR #775 review: Sensitive worker wage history (keeper_pubkey, transaction_id, historical payouts)
         // must not leak to unauthenticated / non-operator clients. Public view only sees pending claims without worker identifiers.
         const deferredClaims = isOperator ? (db.prepare(
-            "SELECT id, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC LIMIT 50"
+            "SELECT id, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC LIMIT 50"
         ).all(treasury) as any[]) : (db.prepare(
-            "SELECT id, amount, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
+            "SELECT id, amount_c, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
         ).all(treasury) as any[]);
 
         // Each deal's other party's photo as its URL, never the photo (#1478): up to 50 rows of each kind. `peer_avatar`
@@ -451,10 +451,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         let currentAmount: number | null = null;
         // When the node gave the backers their Beans back, its goal not reached a week after its end date: the page says so.
         let pledgesReturnedAt: string | null = null;
-        if (m.goal_amount != null) {
-            const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(treasury) as any;
-            const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance || 0;
-            currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
+        if (m.goal_amount_c != null) {
+            const pRow = db.prepare("SELECT current_amount_c FROM projects WHERE id = ?").get(treasury) as any;
+            const escBal = (db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance_c || 0;
+            currentAmount = Math.max(Number(pRow?.current_amount_c || 0), Number(escBal));
             pledgesReturnedAt = pledgesReturnedAtFor(treasury);
         }
 
@@ -463,18 +463,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             callsign: m.callsign,
             avatar: avatarUrlOf(treasury, m.avatar_ref),
             avatarUrl: m.avatar_url,
-            balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+            balance: b.balance_c, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             allowance: floorInfo.allowance,
             derivedAllowance: floorInfo.derivedAllowance,
             legacyFloor: floorInfo.legacyFloor,
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
-            earnedSurplus: m.earned_surplus ?? 0,
-            workingCapitalCeiling: m.working_capital_ceiling ?? null,
+            earnedSurplus: m.earned_surplus_c ?? 0,
+            workingCapitalCeiling: m.working_capital_ceiling_c ?? null,
             purpose: m.purpose ?? null,
             // Its About, in its keepers' words, and when it started (round 3 §3: "since Sep 2026").
             about: m.bio ?? null,
             since: m.joined_at ?? null,
-            goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
+            goalAmount: m.goal_amount_c != null ? Number(m.goal_amount_c) : null,
             currentAmount,
             deadlineAt: m.deadline_at ?? null,
             pledgesReturnedAt,
@@ -483,7 +483,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             paused: !!m.paused,
             pausedAt: m.paused_at ?? null,
             pausedBy: m.paused_by ?? null,
-            pausedFloorSnapshot: m.paused_floor_snapshot != null ? Number(m.paused_floor_snapshot) : null,
+            pausedFloorSnapshot: m.paused_floor_snapshot_c != null ? Number(m.paused_floor_snapshot_c) : null,
             pauseExpiresAt,
             pauseDaysRemaining,
             pauseExpiringSoon,
@@ -716,7 +716,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (parsedLifecycle === 'bounded') {
                 try {
                     db.prepare(`
-                        INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+                        INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                     `).run(
                         res.publicKey,
@@ -795,7 +795,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Ceiling must be a non-negative finite number or null' };
             return;
         }
-        db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(parsedCeiling, treasury);
+        db.prepare('UPDATE members SET working_capital_ceiling_c = ? WHERE public_key = ?').run(parsedCeiling, treasury);
         sweepEnterpriseCeiling(treasury);
         ctx.body = { success: true, workingCapitalCeiling: parsedCeiling };
     });
@@ -1058,7 +1058,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         // To the cent, as a member's payment to the Commons is (LED-05).
         if (!isWholeCents(amt)) { ctx.status = 400; ctx.body = { error: WHOLE_CENTS_ERROR }; return; }
-        if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: word('Cannot sweep more than the treasury holds') }; return; }
+        if (amt > getBalance(treasury).balance_c) { ctx.status = 400; ctx.body = { error: word('Cannot sweep more than the treasury holds') }; return; }
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
         // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
         // beans and breaking the node's zero-sum invariant. Measured: 40 in, 40 gone.
@@ -1096,7 +1096,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: word('That sweep could not be completed — check the treasury still holds that much.') };
             return;
         }
-        ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
+        ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance_c };
     });
 
     // ---- Enterprise Season / Lifecycle (docs/the-commons.md §2.2) -----------------------

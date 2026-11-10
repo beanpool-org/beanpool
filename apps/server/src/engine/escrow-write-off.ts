@@ -135,19 +135,19 @@ function balanceRefusal(balance: number, tradeStatus: string | null): { code: Wr
  */
 export function listStrandedEscrows(): StrandedEscrowList {
     const rows = db.prepare(`
-        SELECT a.public_key AS escrowId, a.balance AS rowBalance,
-               mt.status, mt.credits, mt.post_id AS postId, mt.created_at AS createdAt, mt.completed_at AS completedAt,
+        SELECT a.public_key AS escrowId, a.balance_c AS rowBalance,
+               mt.status, mt.amount_c, mt.post_id AS postId, mt.created_at AS createdAt, mt.completed_at AS completedAt,
                mt.id AS tradeRowId
         FROM accounts a
         LEFT JOIN marketplace_transactions mt ON mt.id = SUBSTR(a.public_key, 8)
-        WHERE a.public_key LIKE 'escrow_%' AND ABS(a.balance) > ?
+        WHERE a.public_key LIKE 'escrow_%' AND ABS(a.balance_c) > ?
           AND ${escrowNotHeldOpenSql(db, 'a.public_key')}
-        ORDER BY a.balance ASC, a.public_key ASC
+        ORDER BY a.balance_c ASC, a.public_key ASC
     `).all(DUST_THRESHOLD) as any[];
 
     const commons = getCommonsBalanceExact();
     const countStmt = db.prepare(`SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?`);
-    const lastStmt = db.prepare(`SELECT memo, amount, timestamp FROM transactions WHERE from_pubkey = ? OR to_pubkey = ? ORDER BY timestamp DESC LIMIT 1`);
+    const lastStmt = db.prepare(`SELECT memo, amount_c, timestamp FROM transactions WHERE from_pubkey = ? OR to_pubkey = ? ORDER BY timestamp DESC LIMIT 1`);
     const priorStmt = db.prepare(`SELECT 1 FROM transactions WHERE from_pubkey = 'COMMONS_POOL' AND to_pubkey = ? LIMIT 1`);
 
     let totalEligible = 0;
@@ -220,7 +220,7 @@ export function writeOffStrandedEscrow(
         return refuse(409, 'already_written_off', `The Commons already covered this escrow on ${prior.timestamp}`, { writtenOffAt: prior.timestamp });
     }
 
-    const row = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(escrowId) as { balance: number } | undefined;
+    const row = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowId) as { balance: number } | undefined;
     if (!row) return refuse(404, 'not_found', 'No such escrow account on this node');
 
     const tradeId = tradeIdOf(escrowId);
@@ -228,13 +228,13 @@ export function writeOffStrandedEscrow(
 
     // The in-memory ledger is what `payFromCommons` moves, so its figure is the one that must reach exactly 0.
     // Read after the row check: `getAccount` would otherwise create an account for an id nobody holds.
-    const balance = ledger.getAccount(escrowId).balance;
+    const balance = ledger.getAccount(escrowId).balance_c;
 
     // Memory and row must agree, or paying |memory| lands the row somewhere other than 0 and the audit drifts.
     // Before the shape check, so a disagreement is never reported as something else.
-    if (Math.abs(Number(row.balance) - balance) > DUST_THRESHOLD) {
+    if (Math.abs(Number(row.balance_c) - balance) > DUST_THRESHOLD) {
         return refuse(409, 'ledger_mismatch',
-            `This escrow reads ${balance} in memory but ${row.balance} on disk. Restart the node so it reloads the ledger, then try again`);
+            `This escrow reads ${balance} in memory but ${row.balance_c} on disk. Restart the node so it reloads the ledger, then try again`);
     }
 
     const shape = balanceRefusal(balance, trade?.status ?? null);
@@ -256,7 +256,7 @@ export function writeOffStrandedEscrow(
     const txn = conservingTransaction(() => {
         const paid = payFromCommons(escrowId, amount, memo, { allowDeficit: deficit, authSigner: actor });
         if (!paid) throw new Error(`Commons payment for the write-off of ${escrowId} was refused`);
-        const after = ledger.getAccount(escrowId).balance;
+        const after = ledger.getAccount(escrowId).balance_c;
         if (after !== 0) throw new Error(`Write-off of ${escrowId} left it at ${after}, not 0 — rolled back`);
         return paid;
     });
@@ -270,6 +270,6 @@ export function writeOffStrandedEscrow(
         memo,
         commonsBefore: round2(commonsBefore),
         commonsAfter: round2(getCommonsBalanceExact()),
-        escrowBalanceAfter: ledger.getAccount(escrowId).balance,
+        escrowBalanceAfter: ledger.getAccount(escrowId).balance_c,
     };
 }

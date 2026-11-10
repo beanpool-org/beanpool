@@ -1225,7 +1225,7 @@ interface MadeRow {
 
 /** What update_post can change and my_posts reads back, and what either has to know first. */
 const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags, shown_from_host,
-    description, category, credits, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
+    description, category, price_c, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
     (SELECT COUNT(*) FROM post_photos WHERE post_id = posts.id) AS photo_count,
     lendable, lend_max_days, lend_terms, replacement_value,
     event_start_at, event_end_at, event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,

@@ -2545,7 +2545,7 @@ function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
         nodeRole: rolesByPubkey.get(r.public_key) ?? null,
         avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
         profileUpdatedAt: r.profile_updated_at || null,
-        earnedCredit: r.earned_credit ?? 0,
+        earnedCredit: r.earned_credit_c ?? 0,
         archetype: r.archetype || null,
     }));
 }

@@ -93,7 +93,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
     if (!peerId) return [];
 
     const rows = db.prepare(`
-        SELECT p.id, p.type, p.category, p.title, p.description, p.credits, p.price_type,
+        SELECT p.id, p.type, p.category, p.title, p.description, p.price_c, p.price_type,
                p.author_pubkey, p.created_at, p.updated_at, p.reach, p.reach_peers, p.tags, p.free_tags,
                m.callsign AS author_callsign
         FROM posts p
@@ -172,7 +172,7 @@ export function cacheRemoteListings(
     // Keyed to the peer, not merely to its address: matches this peer's listings (under any previous URL)
     // as well as any listings currently tied to this originNode (so a new peer identity at this address
     // never inherits a previous peer's listings). An exact prefix compare, not LIKE: LIKE ignores case, and peer ids do not.
-    const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
+    const heldForPeer = db.prepare(`SELECT id, type, category, title, description, price_c, price_type, author_pubkey, created_at,
         updated_at, active, status, reach, origin_node, tags, free_tags FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
     let changed = false;
     db.transaction(() => {
@@ -235,7 +235,7 @@ export function cacheRemoteListings(
                 const tags = copiedPostTags(l.tags);
                 const freeTags = copiedFreeTags(l.freeTags);
                 db.prepare(`INSERT INTO posts (
-                    id, type, category, title, description, credits, price_type, author_pubkey, created_at,
+                    id, type, category, title, description, price_c, price_type, author_pubkey, created_at,
                     active, status, repeatable, updated_at, search_keywords, origin_node, reach, tags, free_tags
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', 0, ?, ?, ?, 'local', ?, ?)`).run(
                     localId,

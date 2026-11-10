@@ -179,7 +179,7 @@ export function rowToMember(row: any): Member {
         status: row.status || 'active',
         lastActiveAt: row.last_active_at || null,
         updatedAt: row.updated_at || null,
-        earnedCredit: row.earned_credit ?? 0,
+        earnedCredit: row.earned_credit_c ?? 0,
         isTreasury: !!row.is_treasury,
         archetype: row.archetype || null,
         nodeRole: row.node_role ?? null,
@@ -342,7 +342,7 @@ export interface DirectoryRow {
     joined_at: unknown;
     avatar_ref: string | null;
     profile_updated_at: unknown;
-    earned_credit: number | null;
+    earned_credit_c: number | null;
     archetype: string | null;
     is_treasury: unknown;
     /**
@@ -624,8 +624,8 @@ export function getInvitesByMember(db: Db, pubkey: string): MyInvite[] {
             usedAt: r.used_at,
             intendedFor: r.intended_for || undefined,
             namesEntryId: r.names_entry_id || null,
-            vouchAmount: r.vouch_amount || null,
-            voucherLevel: r.voucher_level || null,
+            vouchAmount: r.vouch_amount_c || null,
+            voucherLevel: r.voucher_level_c || null,
             expiresAt: Number.isFinite(madeAt) ? new Date(madeAt + INVITE_LIFE_MS).toISOString() : null,
         };
     });

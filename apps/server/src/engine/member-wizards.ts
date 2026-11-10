@@ -852,7 +852,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
     const settles = removalToSettle(cleanPub);
 
     const balanceInfo = getBalance(cleanPub);
-    const balance = balanceInfo.balance;
+    const balance = balanceInfo.balance_c;
     const commonsBalance = getCommonsBalanceExact();
     const isOwner = isSoleOwner(cleanPub);
 
@@ -996,8 +996,8 @@ export function executeOffboard(
         // prune_zero_balance. The two can only disagree about the sign when the shown figure is 0.00, i.e.
         // under half a cent either way, and that dust is left to `adminPruneUser`, which settles the exact
         // balance itself.
-        const shownBalance = getBalance(cleanPub).balance;
-        const balance = ledger.getAccount(cleanPub).balance;
+        const shownBalance = getBalance(cleanPub).balance_c;
+        const balance = ledger.getAccount(cleanPub).balance_c;
         balanceSettled = balance;
 
         if (shownBalance > 0) {

@@ -565,7 +565,7 @@ export interface BoundInvite {
 export function readBoundInvites(): BoundInvite[] {
     const rows = db.prepare(
         `SELECT names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
-                names_bind_outcome AS outcome, voucher_level AS voucherLevel, voucher_outcome AS voucherOutcome
+                names_bind_outcome AS outcome, voucher_level_c AS voucherLevel, voucher_outcome AS voucherOutcome
          FROM invite_codes WHERE names_entry_id IS NOT NULL ORDER BY created_at DESC LIMIT 500`,
     ).all() as BoundInvite[];
     // `names_bind_outcome` is what the redeem did, kept as written. A redeem that left the confirmation waiting for a second

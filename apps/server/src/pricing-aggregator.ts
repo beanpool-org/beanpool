@@ -54,14 +54,14 @@ export function runPricingAggregationCycle(): {
                      AND p.status IN ('active', 'pending', 'completed')`;
     const hasPhoto = `(SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo`;
     const postsQuery = config.dataSource === 'local'
-        ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+        ? `SELECT p.id, p.title, p.description, p.price_c, p.category, p.created_at,
                   ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0 AND ${onBoard}`
-        : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+           WHERE p.active = 1 AND p.origin_node IS NULL AND p.price_c > 0 AND ${onBoard}`
+        : `SELECT p.id, p.title, p.description, p.price_c, p.category, p.created_at,
                   ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.credits > 0 AND ${onBoard}`;
+           WHERE p.active = 1 AND p.price_c > 0 AND ${onBoard}`;
 
     const posts = db.prepare(postsQuery).all() as any[];
 

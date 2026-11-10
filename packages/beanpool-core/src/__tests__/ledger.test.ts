@@ -25,11 +25,11 @@ import * as core from '../ledger.js';
 
 /** The whole ledger as one number, in whole hundredths. This is the figure that must not move: compared with `toBe`, exactly. */
 const total = (l: LedgerManager, ids: string[]) =>
-    ids.reduce((t, id) => t + l.getAccount(id).balance, 0) + core.COMMONS_BALANCE;
+    ids.reduce((t, id) => t + l.getAccount(id).balance_c, 0) + core.COMMONS_BALANCE;
 
 /** An account whose stored epoch is `daysStale` behind, so the next read applies real demurrage. */
 const stale = (l: LedgerManager, id: string, balance: number, daysStale: number): LedgerAccount =>
-    ({ id, balance, lastDemurrageEpoch: l.getCurrentEpoch() - daysStale });
+    ({ id, balance_c: balance, lastDemurrageEpoch: l.getCurrentEpoch() - daysStale });
 
 describe('demurrage accounting', () => {
     let ledger: LedgerManager;
@@ -43,7 +43,7 @@ describe('demurrage accounting', () => {
         ledger.loadState([stale(ledger, 'alice', 50000, 60)]);
         const before = total(ledger, []) + 50000;   // rows not yet read, so add the stored balance
 
-        const decayed = ledger.getAccount('alice').balance;
+        const decayed = ledger.getAccount('alice').balance_c;
         expect(decayed).toBeLessThan(50000);
 
         const credited = core.COMMONS_BALANCE;
@@ -85,7 +85,7 @@ describe('demurrage accounting', () => {
 
         // A drain hands ownership to the host, so a later resync must NOT unwind it — the debit is durable by
         // then. This is the other half of the rule, and getting it backwards would destroy beans instead.
-        ledger.loadState([{ id: 'alice', balance: ledger.getAccount('alice').balance, lastDemurrageEpoch: ledger.getCurrentEpoch() }]);
+        ledger.loadState([{ id: 'alice', balance_c: ledger.getAccount('alice').balance_c, lastDemurrageEpoch: ledger.getCurrentEpoch() }]);
         expect(core.COMMONS_BALANCE).toBe(credit);
     });
 
@@ -110,7 +110,7 @@ describe('demurrage accounting', () => {
         ledger.loadState([stale(ledger, 'modest', 19999, 4000)]);
         const account = ledger.getAccount('modest');
 
-        expect(account.balance).toBe(19999);
+        expect(account.balance_c).toBe(19999);
         expect(core.COMMONS_BALANCE).toBe(0);
         expect(ledger.drainDecayEvents()).toHaveLength(0);
     });
@@ -120,7 +120,7 @@ describe('demurrage accounting', () => {
         ledger.loadState([stale(ledger, 'sliver', JUST_OVER_GREEN_ZONE, 1)]);
         const account = ledger.getAccount('sliver');
 
-        expect(account.balance).toBe(JUST_OVER_GREEN_ZONE);   // not decayed
+        expect(account.balance_c).toBe(JUST_OVER_GREEN_ZONE);   // not decayed
         expect(core.COMMONS_BALANCE).toBe(0);                 // and no unaccounted credit
         expect(ledger.drainDecayEvents()).toHaveLength(0);
         // The epoch IS stamped. Forfeiting costs at most this one sub-threshold decay; carrying the interval
@@ -138,7 +138,7 @@ describe('demurrage accounting', () => {
         const THIN_SLIVER = 20010;
         ledger.loadState([
             stale(ledger, 'sliver', THIN_SLIVER, 60),
-            { id: 'whale', balance: 5_000_000, lastDemurrageEpoch: ledger.getCurrentEpoch() },
+            { id: 'whale', balance_c: 5_000_000, lastDemurrageEpoch: ledger.getCurrentEpoch() },
         ]);
         ledger.getAccount('sliver');                       // sub-threshold: forfeited, interval closed
         expect(core.COMMONS_BALANCE).toBe(0);
@@ -147,7 +147,7 @@ describe('demurrage accounting', () => {
         const after = ledger.getAccount('sliver');
 
         // No retrospective charge: the only decay owed is on the interval since the deposit, which is zero.
-        expect(after.balance).toBe(THIN_SLIVER + 1_000_000);
+        expect(after.balance_c).toBe(THIN_SLIVER + 1_000_000);
         expect(core.COMMONS_BALANCE).toBe(0);
         expect(ledger.drainDecayEvents()).toHaveLength(0);
     });
@@ -155,8 +155,8 @@ describe('demurrage accounting', () => {
     it('collects a recordable decay on the read inside a transfer, and still balances', () => {
         const staleEpoch = ledger.getCurrentEpoch() - 30;
         ledger.loadState([
-            { id: 'sliver', balance: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
-            { id: 'payee', balance: 0, lastDemurrageEpoch: staleEpoch },
+            { id: 'sliver', balance_c: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
+            { id: 'payee', balance_c: 0, lastDemurrageEpoch: staleEpoch },
         ]);
         const opening = JUST_OVER_GREEN_ZONE;
 
@@ -180,7 +180,7 @@ describe('demurrage accounting', () => {
             const creditAtCap = core.COMMONS_BALANCE;
             const overflow = ledger.getAccount('overflow');
 
-            expect(overflow.balance).toBe(50000);                 // forfeited, not decayed
+            expect(overflow.balance_c).toBe(50000);                 // forfeited, not decayed
             expect(core.COMMONS_BALANCE).toBe(creditAtCap);       // and the Commons did not move
             // Interval closed here too — carrying it would risk charging it against a later, larger balance.
             // The forfeited amount can be material at the cap, which is why this path warns.
@@ -210,8 +210,8 @@ describe('demurrage accounting', () => {
         ['escrow_abc', 'COMMONS_POOL', 'debtor', 'treasury_1'].forEach(id => ledger.getAccount(id));
         expect(core.COMMONS_BALANCE).toBe(0);
         expect(ledger.drainDecayEvents()).toHaveLength(0);
-        expect(ledger.getAccount('escrow_abc').balance).toBe(50000);
-        expect(ledger.getAccount('treasury_1').balance).toBe(50000);
-        expect(ledger.getAccount('debtor').balance).toBe(-5000);
+        expect(ledger.getAccount('escrow_abc').balance_c).toBe(50000);
+        expect(ledger.getAccount('treasury_1').balance_c).toBe(50000);
+        expect(ledger.getAccount('debtor').balance_c).toBe(-5000);
     });
 });

@@ -34,7 +34,7 @@ describe('a word with an apostrophe on the node (#1828 check, finding 1)', () =>
         db.exec(`${POSTS_FIXTURE_DDL}
             CREATE VIRTUAL TABLE posts_fts USING fts5(title, description, search_keywords, content='posts', content_rowid='rowid');
             INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');`);
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at)
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at)
                                 VALUES (?, 'offer', 'other', ?, ?, 0, 'author1', datetime('now'))`);
         for (const row of [
             ['1', "L'eau de source", "Bouteilles d'eau de source, livraison locale"],
@@ -128,7 +128,7 @@ const POSTS_FIXTURE_DDL = `
         callsign TEXT NOT NULL,
         avatar_ref TEXT,
         status TEXT DEFAULT 'active',
-        earned_credit REAL DEFAULT 0,
+        earned_credit_c REAL DEFAULT 0,
         paused INTEGER DEFAULT 0,
         joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_visitor INTEGER NOT NULL DEFAULT 0,
@@ -161,7 +161,7 @@ const POSTS_FIXTURE_DDL = `
         id TEXT PRIMARY KEY,
         from_pubkey TEXT,
         to_pubkey TEXT,
-        amount REAL
+        amount_c REAL
     );
     CREATE TABLE marketplace_transactions (
         id TEXT PRIMARY KEY,
@@ -243,7 +243,7 @@ describe('Posts ignore archetypes', () => {
         db.exec(`
             ${POSTS_FIXTURE_DDL}
             INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, target_archetypes)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, target_archetypes)
             VALUES ('p1', 'offer', 'tools', 'Hammer', 'A hammer', 5, 'author1', datetime('now'), '["guardian"]'),
                    ('p2', 'offer', 'tools', 'Saw', 'A saw', 5, 'author1', datetime('now'), NULL);
         `);
@@ -304,7 +304,7 @@ describe('Distance search (G4)', () => {
         registerGeoFunctions(db);
         db.exec(POSTS_FIXTURE_DDL);
         db.exec(`INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');`);
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng)
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng)
                                 VALUES (?, 'offer', 'tools', ?, '', 0, 'author1', ?, ?, ?, ?)`);
         // Most recent first is the reverse of nearest first, so the two orders can be told apart.
         const rows: Array<[string, number | null]> = [['near', 1], ['mid', 10], ['far', 100], ['nowhere', null]];
@@ -478,7 +478,7 @@ describe("The enterprise's banner on its listings (Pictures S6)", () => {
                      ('shop_ent_old', 'ent', '2026-10-01T00:00:00.000Z', 'old1'),
                      ('shop_ent', 'ent', '2026-10-20T00:00:00.000Z', 'abc123'),
                      ('shop_ann', 'ann', '2026-10-20T00:00:00.000Z', 'def456');`);
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at)
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at)
                                 VALUES (?, 'offer', 'food', ?, '', 0, ?, '2026-10-21T00:00:00.000Z', '2026-10-21T00:00:00.000Z')`);
         ins.run('p_ent', 'Bread', 'ent');
         ins.run('p_ann', 'Lemons', 'ann');
@@ -543,10 +543,10 @@ describe('Nearest first, searched in widening circles (G4)', { timeout: 60_000 }
         db.exec(POSTS_FIXTURE_DDL);
         db.exec('CREATE INDEX idx_posts_lat_lng ON posts(lat, lng)');
         // Authors with and without a trade, so the fields read after the ranking differ by author.
-        db.exec(`INSERT INTO members (public_key, callsign, earned_credit) VALUES ('a0', 'Ann', 0), ('a1', 'Bo', 12), ('a2', 'Cy', 0);
-                 INSERT INTO transactions (id, from_pubkey, to_pubkey, amount) VALUES ('t1', 'a1', 'a0', 5);
+        db.exec(`INSERT INTO members (public_key, callsign, earned_credit_c) VALUES ('a0', 'Ann', 0), ('a1', 'Bo', 12), ('a2', 'Cy', 0);
+                 INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES ('t1', 'a1', 'a0', 5);
                  INSERT INTO groups (id, name, slug) VALUES ('g1', 'Club', 'club');`);
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    active, hidden_by_reports_at, audience_scope, target_group_id)
                                 VALUES (?, 'offer', 'tools', ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         db.transaction(() => seeds.forEach((seed, i) => {
@@ -816,7 +816,7 @@ describe('Nearest first: circles only for the reads they suit (G4)', { timeout: 
         for (let i = 0; i < 400; i++) rows.push({ category: 'other', at: around(rand, hamlet.lat, hamlet.lng, 1.5 + rand() * 1.3) });
         for (let i = 0; i < 500; i++) rows.push({ category: 'other', at: around(rand, hamlet.lat, hamlet.lng, 4.5 + rand() * 4.5) });
         for (let i = 0; i < 200; i++) rows.push({ category: 'crop', at: around(rand, hamlet.lat, hamlet.lng, 3500 + rand() * 5000) });
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    active, status, hidden_by_reports_at, audience_scope, target_group_id, target_pubkey, event_end_at,
                                                    cash_also_needed)
                                 VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);

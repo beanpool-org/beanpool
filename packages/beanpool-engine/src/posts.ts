@@ -89,7 +89,8 @@ export interface MarketplacePost {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    /** The price, whole hundredths of a Bean; 0 is Free. */
+    price_c: number;
     priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string;
     authorPublicKey: string;
     authorCallsign: string;
@@ -157,7 +158,7 @@ export interface MarketplacePost {
     shownFromPostId?: string;
     /**
      * An Offer's or Need's price at home, as words for a reader to draw ('<beans> <unit>', @beanpool/core copyPriceOf). Never a
-     * price here: `credits` stays 0, and it can't be bought, taken or compared.
+     * price here: `price_c` stays 0, and it can't be bought, taken or compared.
      */
     shownPrice?: string;
     /**
@@ -857,7 +858,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         category: row.category,
         title: row.title,
         description: row.description,
-        credits: row.credits,
+        price_c: row.price_c,
         priceType: row.price_type || 'fixed',
         authorPublicKey: row.author_pubkey,
         authorCallsign: row.author_callsign,
@@ -974,7 +975,7 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
         category: post.category,
         title: '',
         description: '',
-        credits: 0,
+        price_c: 0,
         priceType: post.priceType,
         // A copy names nobody, hidden or not: this shape has no shownFromHost, so readOfCopy can't mask it afterwards.
         authorPublicKey: post.shownFromHost === undefined ? post.authorPublicKey : HIDDEN_AUTHOR,
@@ -1260,7 +1261,7 @@ export function liveOfferCount(db: Db, publicKey: string): number {
 const POST_ROW_SELECT = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
-               COALESCE(m.earned_credit, 0) as author_earned_credit,
+               COALESCE(m.earned_credit_c, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t
                       WHERE (t.from_pubkey = m.public_key OR t.to_pubkey = m.public_key)
@@ -2698,7 +2699,7 @@ type GuestRule<K extends keyof MarketplacePost> = 'keep' | 'drop' | ((post: Mark
  * (key, name, face, standing), who took it and when, who voted, who is going, who it was for, and where exactly.
  */
 const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = {
-    id: 'keep', type: 'keep', category: 'keep', title: 'keep', description: 'keep', credits: 'keep', priceType: 'keep',
+    id: 'keep', type: 'keep', category: 'keep', title: 'keep', description: 'keep', price_c: 'keep', priceType: 'keep',
     createdAt: 'keep', updatedAt: 'keep', active: 'keep',
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',

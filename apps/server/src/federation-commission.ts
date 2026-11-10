@@ -284,7 +284,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
 export function originOfCachedPost(postId: string): { originNode: string; authorPublicKey: string; credits: number; title: string } | null {
     if (!postId) return null;
     const row = db.prepare(`
-        SELECT origin_node, author_pubkey, credits, title
+        SELECT origin_node, author_pubkey, price_c, title
         FROM posts
         WHERE id = ? AND origin_node IS NOT NULL AND active = 1 AND status = 'active'
           AND hidden_by_reports_at IS NULL

@@ -314,7 +314,7 @@ export interface MainLedgerRecord extends LedgerSummary {
  */
 export function noteMainLedger(accounts: readonly SyncAccount[], generatedAt: string | null): void {
     const summary = summariseLedger(accounts.filter((a) => typeof a?.publicKey === 'string')
-        .map((a) => ({ publicKey: a.publicKey, balance: a.balance })));
+        .map((a) => ({ publicKey: a.publicKey, balance: a.balance_c })));
     const last = mainLedgerAtLastCopy();
     if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
         const record: MainLedgerRecord = { ...summary, generatedAt };
@@ -1348,7 +1348,7 @@ const MAX_LEDGER_BALANCE = Number.MAX_SAFE_INTEGER / 10_000;
 
 /** What this server's ledger holds between all its accounts, as SQLite sums it (compensated, MAX_LEDGER_BALANCE). */
 function ledgerTotal(): number {
-    return (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+    return (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
 }
 
 function isRegularMemberAccount(pk: string): boolean {
@@ -1609,11 +1609,11 @@ function replaceTreasuryOperators(rows: unknown[]): { changes: number; skipped: 
     const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
     const here = new Map((db.prepare('SELECT * FROM treasury_operators').all() as Record<string, unknown>[])
         .map((r) => [`${r.treasury_pubkey}|${r.member_pubkey}`, r]));
-    const upsert = db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by, backing, auto_promoted_at)
+    const upsert = db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by, backing_c, auto_promoted_at)
                                VALUES (?, ?, ?, ?, ?, ?, ?)
                                ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET
                                    role = excluded.role, granted_at = excluded.granted_at, granted_by = excluded.granted_by,
-                                   backing = excluded.backing, auto_promoted_at = excluded.auto_promoted_at`);
+                                   backing_c = excluded.backing_c, auto_promoted_at = excluded.auto_promoted_at`);
     const named = new Set<string>();
     let changes = 0, skipped = 0;
     for (const raw of rows) {
@@ -1646,13 +1646,13 @@ function replaceTreasuryOperators(rows: unknown[]): { changes: number; skipped: 
  */
 function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: number; skipped: number } {
     const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
-    const upsert = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+    const upsert = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                                VALUES (?, ?, ?, ?, ?, ?)
                                ON CONFLICT(id) DO UPDATE SET
-                                   keeper = excluded.keeper, enterprise = excluded.enterprise, amount = excluded.amount,
+                                   keeper = excluded.keeper, enterprise = excluded.enterprise, amount_c = excluded.amount_c,
                                    pledged_at = excluded.pledged_at, released_at = excluded.released_at
                                WHERE enterprise_pledges.keeper IS NOT excluded.keeper OR enterprise_pledges.enterprise IS NOT excluded.enterprise
-                                  OR enterprise_pledges.amount IS NOT excluded.amount OR enterprise_pledges.pledged_at IS NOT excluded.pledged_at
+                                  OR enterprise_pledges.amount_c IS NOT excluded.amount_c OR enterprise_pledges.pledged_at IS NOT excluded.pledged_at
                                   OR enterprise_pledges.released_at IS NOT excluded.released_at`);
     let changes = 0, skipped = 0;
     const named = new Set<string>();
@@ -1826,7 +1826,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     // no number for a balance isn't one: the import leaves that account as it is, and the whole-copy check counts it.
     // A conservation violation, as the guard's refusals are, so the puller logs it at SECURITY, not as a pull to retry.
     for (const acc of Array.isArray(remote.accounts) ? remote.accounts : []) {
-        const b = acc?.balance as unknown;
+        const b = acc?.balance_c as unknown;
         if (typeof b === 'number' && !(Math.abs(b) <= MAX_LEDGER_BALANCE)) {
             throw new Error(`[Sync] Conservation violation: import payload account ${String(acc?.publicKey).slice(0, 16)} has a balance of ${b}, beyond what any ledger holds (|balance| ≤ ${MAX_LEDGER_BALANCE}); rejecting payload`);
         }
@@ -2072,7 +2072,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     : null;
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
                                 event_start_local, event_end_local, event_tz, event_online, event_link,
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
@@ -2140,7 +2140,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         origin_node = ?,
                         title = ?,
                         description = ?,
-                        credits = ?,
+                        price_c = ?,
                         active = ?,
                         status = ?,
                         repeatable = ?,
@@ -2279,7 +2279,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // stamp's own migration fills it (db.ts): a NULL one is in no delta, and any tombstone for it would win.
                 // `keeper_left_at` too: without it, a server that took over would let a maker removed as its last keeper
                 // cancel it again (db.ts mayCancelProject).
-                const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at, keeper_left_at)
+                const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, current_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at, keeper_left_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const pr of remote.projects) {
                     writeProject.run(
@@ -2288,8 +2288,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         pr.title,
                         pr.description,
                         pr.photos,
-                        pr.goal_amount,
-                        pr.current_amount,
+                        pr.goal_amount_c,
+                        pr.current_amount_c,
                         pr.deadline_at,
                         pr.status,
                         pr.migrated_at ?? null,
@@ -2334,15 +2334,15 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // it differs here, stamps included, and one it no longer holds (an empty escrow its sweep deleted, a deleted
                 // project's) goes. A comparison of stamps let this standby's own rows win: the members import made a zero
                 // row for each new member stamped with this clock, and every balance made before the first copy stayed 0.
-                const local = new Map((db.prepare('SELECT public_key, balance, last_updated_at, last_demurrage_epoch FROM accounts').all() as
+                const local = new Map((db.prepare('SELECT public_key, balance_c, last_updated_at, last_demurrage_epoch FROM accounts').all() as
                     { public_key: string; balance: number | null; last_updated_at: string | null; last_demurrage_epoch: number | null }[])
                     .map((r) => [r.public_key, r]));
                 const named = new Set<string>();
                 const refusedBalances: string[] = [];
-                const writeAccount = db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch)
+                const writeAccount = db.prepare(`INSERT INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch)
                             VALUES (?, ?, ?, ?)
                             ON CONFLICT(public_key) DO UPDATE SET
-                                balance = excluded.balance,
+                                balance_c = excluded.balance_c,
                                 last_updated_at = excluded.last_updated_at,
                                 last_demurrage_epoch = excluded.last_demurrage_epoch`);
                 for (const acc of remote.accounts!) {
@@ -2354,21 +2354,21 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // No number to copy: the row here stays as it is, and the whole-copy check counts the entry. A NULL
                     // (a NaN, as JSON and better-sqlite3 both carry it), text or infinite balance is REFUSED, never
                     // imported (review F1, 2026-10-01): the main server's ledger holding one is broken, and this standby
-                    // keeps the last balance it had for that account. accounts.balance is NOT NULL besides.
-                    if (typeof acc.balance !== 'number' || !Number.isFinite(acc.balance)) {
+                    // keeps the last balance it had for that account. accounts.balance_c is NOT NULL besides.
+                    if (typeof acc.balance_c !== 'number' || !Number.isFinite(acc.balance_c)) {
                         conflictsSkipped++;
-                        refusedBalances.push(`${acc.publicKey.slice(0, 16)}=${JSON.stringify(acc.balance) ?? String(acc.balance)}`);
+                        refusedBalances.push(`${acc.publicKey.slice(0, 16)}=${JSON.stringify(acc.balance_c) ?? String(acc.balance_c)}`);
                         continue;
                     }
                     const stamp = acc.lastUpdatedAt ?? null;
                     const epoch = acc.lastDemurrageEpoch ?? null;
                     const mine = local.get(acc.publicKey);
-                    if (mine && mine.balance === acc.balance && mine.last_updated_at === stamp && mine.last_demurrage_epoch === epoch) continue;
-                    writeAccount.run(acc.publicKey, acc.balance, stamp, epoch);
+                    if (mine && mine.balance_c === acc.balance_c && mine.last_updated_at === stamp && mine.last_demurrage_epoch === epoch) continue;
+                    writeAccount.run(acc.publicKey, acc.balance_c, stamp, epoch);
                     accountChanges++;
                     // What the row holds now: an account the copy names twice is written twice, and its second entry is
                     // compared with its first.
-                    local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance, last_updated_at: stamp, last_demurrage_epoch: epoch });
+                    local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance_c, last_updated_at: stamp, last_demurrage_epoch: epoch });
                 }
                 if (refusedBalances.length > 0) {
                     console.warn(`[Sync] SECURITY: ${refusedBalances.length} account(s) in this copy carry a balance that is not a finite number; `
@@ -2394,7 +2394,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // A copy with no account set at all (none a main server sends: its export always carries every account).
                 // Each member it named without an account gets an empty one, as the members import used to give them, stamped
                 // with nothing, so nothing here claims to be newer than a main server's row.
-                const openAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, NULL, 0)`);
+                const openAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES (?, 0, NULL, 0)`);
                 for (const rm of remote.members ?? []) {
                     if (typeof rm?.publicKey === 'string' && rm.publicKey && isWellFormedKey(rm.publicKey)) openAccount.run(rm.publicKey);
                 }
@@ -2433,13 +2433,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // here that isn't the main server's is one this standby wrote itself: the main server's is written over
                 // it. A main server from before the fee and the project were sent sends neither: 0 and none, as its copy
                 // always had them.
-                const writeTransaction = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload, project_id)
+                const writeTransaction = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer, auth_signature, auth_payload, project_id)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(id) DO UPDATE SET
                                 from_pubkey = excluded.from_pubkey,
                                 to_pubkey = excluded.to_pubkey,
-                                amount = excluded.amount,
-                                tax_fee = excluded.tax_fee,
+                                amount_c = excluded.amount_c,
+                                fee_c = excluded.fee_c,
                                 memo = excluded.memo,
                                 timestamp = excluded.timestamp,
                                 auth_signer = excluded.auth_signer,
@@ -2447,7 +2447,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 auth_payload = excluded.auth_payload,
                                 project_id = excluded.project_id
                             WHERE transactions.from_pubkey IS NOT excluded.from_pubkey OR transactions.to_pubkey IS NOT excluded.to_pubkey
-                               OR transactions.amount IS NOT excluded.amount OR transactions.tax_fee IS NOT excluded.tax_fee
+                               OR transactions.amount_c IS NOT excluded.amount_c OR transactions.fee_c IS NOT excluded.fee_c
                                OR transactions.memo IS NOT excluded.memo OR transactions.timestamp IS NOT excluded.timestamp
                                OR transactions.auth_signer IS NOT excluded.auth_signer OR transactions.auth_signature IS NOT excluded.auth_signature
                                OR transactions.auth_payload IS NOT excluded.auth_payload OR transactions.project_id IS NOT excluded.project_id`);
@@ -2481,7 +2481,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // Every column, as the main server holds it, its stamp included (G1b): a resolved dispute stays resolved
                 // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
                 // stamp is the main server's, which phones' deltas read after a take-over.
-                const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at,
+                const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at,
                                     updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by, standing_id, period_no)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
@@ -2492,7 +2492,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     status = excluded.status,
                                     completed_at = excluded.completed_at,
                                     hours = excluded.hours,
-                                    credits = excluded.credits,
+                                    amount_c = excluded.amount_c,
                                     updated_at = excluded.updated_at,
                                     last_reminded_at = excluded.last_reminded_at,
                                     dispute_resolution = excluded.dispute_resolution,
@@ -2776,7 +2776,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // Prepared once, outside the loop — a snapshot can carry the whole outbox.
                 const insertSettlement = db.prepare(`INSERT OR REPLACE INTO settlements
                     (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey, post_id,
-                     amount, fee, reserved_until, state, receipt, receipt_payload, failure_reason,
+                     amount_c, fee_c, reserved_until, state, receipt, receipt_payload, failure_reason,
                      created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const st of remote.settlements) {

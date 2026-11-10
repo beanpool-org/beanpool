@@ -16,8 +16,9 @@ export interface Transaction {
     id: string;
     from: string;
     to: string;
-    amount: number;
-    taxFee?: number;
+    /** Whole hundredths (@beanpool/core hundredths.ts), as every money field here. */
+    amount_c: number;
+    fee_c?: number;
     memo: string;
     timestamp: string;
     authSigner?: string | null;
@@ -53,8 +54,8 @@ export interface Project {
     title: string;
     description: string | null;
     photos: string | null;
-    goal_amount: number;
-    current_amount: number;
+    goal_amount_c: number;
+    current_amount_c: number;
     deadline_at: string | null;
     status: string;
     /** When the unify migration made it an enterprise (apps/server db/unify-projects-migration.ts), or when it was made as one. */
@@ -68,7 +69,7 @@ export interface Project {
 
 export interface SyncAccount {
     publicKey: string;
-    balance: number;
+    balance_c: number;
     /** As the main server holds it: a standby's copy is its rows verbatim (null only for a row that has none). */
     lastUpdatedAt: string | null;
     lastDemurrageEpoch: number;
@@ -191,7 +192,7 @@ export interface SyncMarketplaceTransaction {
     sellerPubkey?: string;
     sellerPublicKey?: string;
     seller_pubkey?: string;
-    credits: number;
+    amount_c: number;
     hours: number | null;
     status: string;
     createdAt: string;
@@ -229,8 +230,8 @@ export interface SyncSettlement {
     buyerHomeNode: string | null;
     sellerPubkey: string | null;
     postId: string | null;
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     reservedUntil: string | null;
     state: string;
     receipt: string | null;
@@ -612,7 +613,7 @@ export interface SyncTreasuryOperator {
     role: string;
     grantedAt: string | null;
     grantedBy: string | null;
-    backing: number | null;
+    backing_c: number | null;
     autoPromotedAt: string | null;
 }
 
@@ -625,7 +626,7 @@ export interface SyncEnterprisePledge {
     id: string;
     keeper: string;
     enterprise: string;
-    amount: number;
+    amount_c: number;
     pledgedAt: string | null;
     releasedAt: string | null;
 }
@@ -645,7 +646,8 @@ export interface SyncPayload {
     conversations?: SyncConversation[];
     conversationParticipants?: SyncConversationParticipant[];
     messages?: Message[];
-    commonsBalance?: number;
+    /** The Commons pot, whole hundredths, exact. */
+    commonsBalance_c?: number;
     abuseReports?: SyncAbuseReport[];
     creatorChannels?: SyncCreatorChannel[];
     pulseItems?: SyncPulseItem[];
@@ -1015,7 +1017,7 @@ export function exportTreasuryOperators(db: Db): SyncTreasuryOperator[] {
             role: r.role,
             grantedAt: r.granted_at ?? null,
             grantedBy: r.granted_by ?? null,
-            backing: r.backing ?? null,
+            backing_c: r.backing_c ?? null,
             autoPromotedAt: r.auto_promoted_at ?? null,
         }));
     } catch {
@@ -1029,7 +1031,7 @@ function enterprisePledgeOfRow(r: any): SyncEnterprisePledge {
         id: r.id,
         keeper: r.keeper,
         enterprise: r.enterprise,
-        amount: r.amount,
+        amount_c: r.amount_c,
         pledgedAt: r.pledged_at ?? null,
         releasedAt: r.released_at ?? null,
     };
@@ -1071,7 +1073,7 @@ function postOfRow(row: any): MarketplacePost {
         category: row.category,
         title: row.title,
         description: row.description,
-        credits: row.credits,
+        price_c: row.price_c,
         priceType: row.price_type || 'fixed',
         authorPublicKey: row.author_pubkey,
         authorCallsign: '',
@@ -1172,7 +1174,7 @@ function ratingOfRow(r: any): Rating {
 function accountOfRow(row: any): SyncAccount {
     return {
         publicKey: row.public_key,
-        balance: row.balance,
+        balance_c: row.balance_c,
         lastUpdatedAt: row.last_updated_at ?? null,
         lastDemurrageEpoch: row.last_demurrage_epoch,
     };
@@ -1183,10 +1185,10 @@ function transactionOfRow(row: any): Transaction {
         id: row.id,
         from: row.from_pubkey,
         to: row.to_pubkey,
-        amount: row.amount,
+        amount_c: row.amount_c,
         // The Commons' fee on the trade and the project it belongs to, so a standby's trades are these ones (the grant cap
         // counts the fees, decisions-engine.ts commonsGrantCap).
-        taxFee: row.tax_fee ?? 0,
+        fee_c: row.fee_c ?? 0,
         projectId: row.project_id ?? null,
         memo: row.memo || '',
         timestamp: row.timestamp,
@@ -1216,7 +1218,7 @@ function marketplaceTransactionOfRow(row: any, ratingTxKeys: ReadonlySet<string>
         sellerPubkey: row.seller_pubkey,
         sellerPublicKey: row.seller_pubkey,
         seller_pubkey: row.seller_pubkey,
-        credits: row.credits,
+        amount_c: row.amount_c,
         hours: row.hours,
         status: row.status,
         createdAt: row.created_at,
@@ -1382,8 +1384,8 @@ function settlementOfRow(row: any): SyncSettlement {
         buyerHomeNode: row.buyer_home_node ?? null,
         sellerPubkey: row.seller_pubkey ?? null,
         postId: row.post_id ?? null,
-        amount: row.amount,
-        fee: row.fee ?? 0,
+        amount_c: row.amount_c,
+        fee_c: row.fee_c ?? 0,
         reservedUntil: row.reserved_until ?? null,
         state: row.state,
         receipt: row.receipt ?? null,
@@ -1864,9 +1866,9 @@ export function exportSyncState(
         conversations,
         conversationParticipants,
         messages,
-        // EXACT, not rounded to 2dp: a replica that loads a rounded pot cannot balance against the
-        // primary's books, and after promotion it would reverse trades using a figure it never held.
-        commonsBalance,
+        // EXACT whole hundredths: a replica that loads another pot cannot balance against the primary's books, and after
+        // promotion it would reverse trades using a figure it never held.
+        commonsBalance_c: commonsBalance,
         abuseReports,
         creatorChannels,
         pulseItems,

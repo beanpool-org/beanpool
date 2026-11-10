@@ -57,7 +57,7 @@ function seed() {
   `).run(pubkey, 'Community_Garden', new Date().toISOString(), 'genesis', 'legacy', 'active');
   
   db.prepare(`
-        INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, ?)
   `).run(pubkey, 100, 0);
 
@@ -65,7 +65,7 @@ function seed() {
 
   const insertPost = db.prepare(`
         INSERT OR IGNORE INTO posts (
-            id, type, category, title, description, credits, author_pubkey, created_at,
+            id, type, category, title, description, price_c, author_pubkey, created_at,
             active, status, repeatable, lat, lng
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);

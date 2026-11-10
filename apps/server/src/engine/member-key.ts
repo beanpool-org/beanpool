@@ -97,7 +97,7 @@ export function findMisspeltMemberKeys(): MisspeltMemberKey[] {
         callsign: r.callsign,
         status: r.status ?? null,
         isVisitor: !!r.is_visitor,
-        balance: Number(r.balance_c ?? 0),
+        balance_c: Number(r.balance_c ?? 0),
         nodeRole: r.node_role ?? null,
         sameKeyAs: r.same_key_as ?? null,
     }));

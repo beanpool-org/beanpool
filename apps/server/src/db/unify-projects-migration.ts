@@ -153,7 +153,8 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         const callsign = getUniqueCallsign(prop.title, enterprisePubkey);
                         const desc = prop.description || '';
                         const purpose = desc || prop.title;
-                        const goal = prop.requestedAmount != null ? Number(prop.requestedAmount) : null;
+                        // Money is whole hundredths now and an old figure is never carried across (no conversion code): no goal.
+                        const goal = null;
                         const status = (prop.status || 'proposed').toLowerCase();
                         const createdAt = prop.createdAt || new Date().toISOString();
 

@@ -33,8 +33,6 @@ import { reservedAgainstPeer } from './federation-settlement-state.js';
 export { bridgeAccountId, peerFromBridgeAccountId };
 
 /** Beans are quoted to members at 2dp; cap arithmetic works at 4dp and rounds only for presentation. */
-const round2 = (n: number): number => Math.round(n * 100) / 100;
-const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
 /**
  * Ensure the bridge account for a peer exists and is demurrage-exempt.
@@ -73,7 +71,7 @@ export function registerBridgeDecayExemptions(): number {
  * Positive = we owe them work. Negative = they owe us work (we extended credit).
  */
 export function getEnergyBalance(peerId: string): number {
-    return Math.round(energyBalanceExact(peerId) * 100) / 100;
+    return (energyBalanceExact(peerId));
 }
 
 /**
@@ -155,20 +153,20 @@ export function settlementCapacity(
     // Enforce at 4dp — the precision the settlement module actually carries prices at — and present at 2dp.
     // Comparing raw floats would refuse an exact fit on binary noise (10 − 7.1 renders as 2.9000000000000004);
     // comparing at 2dp would let 0.006 of headroom look like 0.01. 4dp is the honest middle, and it is the
-    // same precision `round4` uses everywhere else in the settlement path.
-    const headroom = round4(cap + balance - reserved);
-    if (round4(amount) > headroom) {
+    // whole hundredths, exact, as everywhere else in the settlement path.
+    const headroom = (cap + balance - reserved);
+    if (amount > headroom) {
         return {
             ok: false,
             reason: 'cap_exhausted',
             cap,
-            extended: round2(extended),
+            extended: extended,
             headroom: 0,
-            message: `This community has reached the credit limit set for them (${round2(extended)} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
+            message: `This community has reached the credit limit set for them (${extended} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
         };
     }
 
-    return { ok: true, headroom, cap, extended: round2(extended) };
+    return { ok: true, headroom, cap, extended: extended };
 }
 
 /**
@@ -227,10 +225,10 @@ export function listEnergyBalances(): Array<{
                 peerId,
                 address: c.address,
                 callsign: c.callsign,
-                balance,
+                balance_c: balance,
                 cap,
                 extended,
-                headroom: cap === null ? null : Math.round((cap - extended) * 100) / 100,
+                headroom: cap === null ? null : ((cap - extended)),
                 // Settleable needs BOTH a cap (an operator decided) and a known peerId (we have actually
                 // met this node). Either missing is fail-closed.
                 settleable: cap !== null && peerId !== null,
@@ -245,7 +243,7 @@ export function listEnergyBalances(): Array<{
  */
 export function totalEnergyPosition(): number {
     const row = db.prepare("SELECT COALESCE(SUM(balance_c), 0) AS t FROM accounts WHERE public_key LIKE 'bridge_%'").get() as any;
-    return Math.round((row?.t ?? 0) * 100) / 100;
+    return ((row?.t ?? 0));
 }
 
 /**

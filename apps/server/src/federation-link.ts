@@ -238,8 +238,8 @@ export function listFederationLinks(): FederationLink[] {
         name: row.callsign,
         // Rounded exactly as the single-link reads do: 2dp for the tab (presentation — enforcement uses
         // energyBalanceExact), 4dp for a balance.
-        energyBalance: Math.round(at(bridgeAccountId(row.peer_id)) * 100) / 100,
-        treasuryBalance: Math.round(at(row.treasury_pubkey) * 10000) / 10000,
+        energyBalance: (at(bridgeAccountId(row.peer_id))),
+        treasuryBalance: (at(row.treasury_pubkey)),
         commissionCeiling: row.commission_ceiling_c,
         createdAt: row.created_at ?? null,
     }));
@@ -265,7 +265,7 @@ function hydrate(row: any): FederationLink {
  */
 function balanceOf(publicKey: string): number {
     const row = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(publicKey) as any;
-    return Math.round((row?.balance_c ?? 0) * 10000) / 10000;
+    return ((row?.balance_c ?? 0));
 }
 
 /**
@@ -278,7 +278,7 @@ export function setCommissionCeiling(peerId: string, ceiling: number): Federatio
     assertPlainTablesWritable();
     if (!Number.isFinite(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a non-negative number');
     const res = db.prepare('UPDATE federation_links SET commission_ceiling_c = ? WHERE peer_id = ?')
-        .run(Math.round(ceiling * 100) / 100, peerId);
+        .run((ceiling), peerId);
     if (res.changes === 0) return null;
     logger.info('P2P', `[Link] Commissioning ceiling for ${peerId.slice(-8)} set to ${ceiling}`);
     return getFederationLink(peerId);

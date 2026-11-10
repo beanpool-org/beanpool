@@ -57,8 +57,6 @@ import { crossNodeFee } from './federation-settlement-exchange.js';
 import { logger } from './logger.js';
 import { COMMONS_POT_PAUSED } from './engine/audit.js';
 
-const round4 = (n: number): number => Math.round(n * 10000) / 10000;
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 export interface CommissionCapacity {
     peerId: string;
@@ -101,7 +99,7 @@ export interface CommissionCapacity {
  * caller might subtract somewhere and turn back into room.
  */
 export function commissionAllowanceFor(ceiling: number, energyBalance: number): number {
-    return Math.max(0, round4(ceiling - energyBalance));
+    return Math.max(0, (ceiling - energyBalance));
 }
 
 /** What a keeper of this link may commission right now, or null when the peer has no link. */
@@ -118,12 +116,12 @@ function capacityFor(link: FederationLink): CommissionCapacity {
         treasuryPubkey: link.treasuryPubkey,
         name: link.name,
         originNode: getConnectorByPeerId(link.peerId)?.publicUrl ?? null,
-        energyBalance: round4(tab),
+        energyBalance: tab,
         ceiling: link.commissionCeiling,
         allowance: commissionAllowanceFor(link.commissionCeiling, tab),
-        redeemable: Math.max(0, round4(-tab)),
+        redeemable: Math.max(0, (-tab)),
         treasuryBalance: link.treasuryBalance,
-        commonsBalance: round2(getCommonsBalanceExact()),
+        commonsBalance: (getCommonsBalanceExact()),
     };
 }
 
@@ -161,22 +159,22 @@ export function checkCommissionAllowance(peerId: string, amount: number): Commis
 
     const capacity = capacityFor(link);
     const fee = crossNodeFee(amount);
-    const total = round4(amount + fee);
+    const total = (amount + fee);
 
     if (total > capacity.allowance) {
         return {
             ok: false,
             reason: 'over_allowance',
-            allowance: round2(capacity.allowance),
-            needed: round2(total),
+            allowance: capacity.allowance,
+            needed: total,
             // Named in terms of the two things a keeper can actually act on: what is owed, and the ceiling
             // somebody set. "Allowance exceeded" tells them a number moved without telling them which one.
             message: capacity.ceiling === 0 && capacity.redeemable === 0
                 ? `${link.name} is square with us — there is no credit to call in, and no commissioning ceiling has been set for it. An operator can set one in Settings.`
-                : `That is more than ${link.name} can commission right now (${round2(total)} needed, ${round2(capacity.allowance)} available — ${round2(capacity.redeemable)} of credit owed to us plus a ceiling of ${capacity.ceiling}).`,
+                : `That is more than ${link.name} can commission right now (${total} needed, ${capacity.allowance} available — ${capacity.redeemable} of credit owed to us plus a ceiling of ${capacity.ceiling}).`,
         };
     }
-    return { ok: true, total, amount: round4(amount), fee, capacity };
+    return { ok: true, total, amount: amount, fee, capacity };
 }
 
 const noLink = (): CommissionRefusal => ({
@@ -215,28 +213,28 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
     const { total, fee, capacity } = allowed;
 
     // What the enterprise still needs on top of what it already holds.
-    const shortfall = round4(Math.max(0, total - link.treasuryBalance));
+    const shortfall = (Math.max(0, total - link.treasuryBalance));
     // A pot that isn't a finite number compares false with anything, so the test below let it through to payFromCommons
     // (#1445 confirmation, NB-3). Refused here, in words, before anything moves; payFromCommons refuses it too.
     if (shortfall > 0 && !Number.isFinite(getCommonsBalanceExact())) {
         return {
             ok: false,
             reason: 'commons_not_a_number',
-            shortfall: round2(shortfall),
+            shortfall: shortfall,
             // The words every Bean move gives while the pot is unknown (engine/audit.ts COMMONS_POT_PAUSED).
             message: COMMONS_POT_PAUSED,
         };
     }
-    if (shortfall > 0 && shortfall > round4(getCommonsBalanceExact())) {
+    if (shortfall > 0 && shortfall > (getCommonsBalanceExact())) {
         return {
             ok: false,
             reason: 'commons_short',
-            shortfall: round2(shortfall),
-            commonsBalance: round2(getCommonsBalanceExact()),
+            shortfall: shortfall,
+            commonsBalance: (getCommonsBalanceExact()),
             // NOT `allowDeficit`. A commission is a discretionary act by one person; pushing the community's
             // Commons into deficit for it is not theirs to decide, and unlike a reversal's stranded fee there
             // is no worse outcome on the other side of refusing. The pot is what the community has collected.
-            message: `${link.name} needs ${round2(shortfall)} more than the Commons pot holds (${round2(getCommonsBalanceExact())}). The pot fills from fees and demurrage; nothing has been moved.`,
+            message: `${link.name} needs ${shortfall} more than the Commons pot holds (${(getCommonsBalanceExact())}). The pot fills from fees and demurrage; nothing has been moved.`,
         };
     }
 
@@ -252,18 +250,18 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
             return {
                 ok: false,
                 reason: 'commons_short',
-                shortfall: round2(shortfall),
-                commonsBalance: round2(getCommonsBalanceExact()),
-                message: `The Commons pot could not cover ${round2(shortfall)} just now. Nothing has been moved.`,
+                shortfall: shortfall,
+                commonsBalance: (getCommonsBalanceExact()),
+                message: `The Commons pot could not cover ${shortfall} just now. Nothing has been moved.`,
             };
         }
         drawnFromCommons = shortfall;
     }
 
     logger.info('P2P', `[Commission] ${link.name}: funding ${total} (${drawnFromCommons} from the Commons, `
-        + `${round4(total - drawnFromCommons)} already held) — tab ${round2(capacity.energyBalance)}, ceiling ${capacity.ceiling}`);
+        + `${(total - drawnFromCommons)} already held) — tab ${capacity.energyBalance}, ceiling ${capacity.ceiling}`);
 
-    return { ok: true, total, amount: round4(amount), fee, drawnFromCommons, capacity };
+    return { ok: true, total, amount: amount, fee, drawnFromCommons, capacity };
 }
 
 /**

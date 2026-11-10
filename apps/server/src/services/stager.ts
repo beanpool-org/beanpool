@@ -555,8 +555,8 @@ async function stagerChild(): Promise<void> {
         const result = await importCopyPart(page, part!);
         count(page);
         for (const acc of Array.isArray(page.accounts) ? page.accounts : []) {
-            if (typeof acc?.publicKey === 'string') accounts.push({ publicKey: acc.publicKey, balance: acc.balance_c });
-            if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey) || typeof acc.balance_c !== 'number') unreadableAccounts++;
+            if (typeof acc?.publicKey === 'string') accounts.push({ publicKey: acc.publicKey, balance_c: acc.balance_c });
+            if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey) || !Number.isSafeInteger(acc.balance_c)) unreadableAccounts++;
         }
         for (const v of result.valuesLeftOut) valuesLeftOutNames.push(valueLeftOutName(v));
         plainLeftOutEntries.push(...result.plainTablesLeftOut);

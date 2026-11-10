@@ -2467,7 +2467,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         tx.id,
                         tx.from,
                         tx.to,
-                        tx.amount,
+                        tx.amount_c,
                         isHundredths(tx.fee_c) && tx.fee_c >= 0 && tx.fee_c <= tx.amount_c ? tx.fee_c : 0,
                         tx.memo,
                         tx.timestamp,

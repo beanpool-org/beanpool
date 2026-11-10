@@ -104,10 +104,11 @@ export interface OffboardPreview {
         status: string;
         joinedAt: string;
     };
+    /** Whole hundredths, as every money figure here (`*_c`). */
     balance_c: number;
-    commonsBalance: number;
-    costToCommunity: number;
-    projectedCommonsBalance: number;
+    commonsBalance_c: number;
+    costToCommunity_c: number;
+    projectedCommonsBalance_c: number;
     pendingEscrowsCount: number;
     isSoleOwner: boolean;
     activeMembers: Array<{
@@ -880,10 +881,10 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
             status: member.status || 'active',
             joinedAt: member.joinedAt || new Date().toISOString(),
         },
-        balance,
-        commonsBalance,
-        costToCommunity,
-        projectedCommonsBalance,
+        balance_c: balance,
+        commonsBalance_c: commonsBalance,
+        costToCommunity_c: costToCommunity,
+        projectedCommonsBalance_c: projectedCommonsBalance,
         pendingEscrowsCount: pendingEscrows,
         isSoleOwner: isOwner,
         activeMembers,

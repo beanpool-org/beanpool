@@ -77,7 +77,7 @@ interface EscrowRow {
     id: string;
     from_pubkey: string;
     to_pubkey: string;
-    amount: number;
+    amount_c: number;
     fee_c: number | null;
     project_id: string | null;
 }

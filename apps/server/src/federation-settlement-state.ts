@@ -172,7 +172,7 @@ export function claimSettlement(input: {
         // old row — an avoidable mismatch and reversal. `fee` and `buyerHomeNode` are deliberately excluded:
         // fee is derived from amount, and buyerHomeNode is informational rather than trade-defining.
         && (row.postId ?? null) === (input.postId ?? null)
-        && Math.round(row.amount * 10000) === Math.round(input.amount * 10000);
+        && row.amount === input.amount;
     if (!same) {
         throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
     }
@@ -304,7 +304,7 @@ export function reservedAgainstPeer(peerId: string, excludeKey?: string): number
           AND (state = 'held' OR (state = 'reserved' AND (reserved_until IS NULL OR reserved_until >= ?)))
           AND (? IS NULL OR key != ?)
     `).get(peerId, new Date().toISOString(), excludeKey ?? null, excludeKey ?? '') as any;
-    return Math.round((row?.total ?? 0) * 10000) / 10000;
+    return ((row?.total ?? 0));
 }
 
 /**
@@ -344,7 +344,7 @@ export function memberForeignExposure(publicKey: string): number {
         WHERE direction = 'outbound' AND buyer_pubkey = ?
           AND state IN ('escrowed', 'committed', 'settled')
     `).get(publicKey) as any;
-    return Math.round((row?.total ?? 0) * 10000) / 10000;
+    return ((row?.total ?? 0));
 }
 
 /**

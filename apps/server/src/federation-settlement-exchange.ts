@@ -33,7 +33,7 @@
 
 import crypto from 'node:crypto';
 import { db, idNamesMoney } from './db/db.js';
-import { TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { feeOf, isHundredths } from '@beanpool/core';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import {
     transfer, registerVisitor, getMember, moveToCommons, payFromCommons,
@@ -85,11 +85,9 @@ if (RESERVATION_TTL_MS <= PURCHASE_ASK_TIMEOUT_MS + RECEIPT_DELIVERY_TIMEOUT_MS)
     );
 }
 
-/** Beans are carried to 4dp internally; round every derived figure so escrow closes to exactly zero. */
-const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
-/** The fee the buyer pays ON TOP of the price (§2.1). */
-export const crossNodeFee = (amount: number): number => round4(amount * TRANSACTION_FEE_RATE);
+/** The fee the buyer pays ON TOP of the price (§2.1): whole hundredths, truncated once (core feeOf). */
+export const crossNodeFee = (amount: number): number => feeOf(amount);
 
 /** The local escrow account holding a pending cross-node purchase. Derived from the key, so no column. */
 const escrowAccountFor = (key: string): string => `escrow_${key}`;
@@ -148,7 +146,7 @@ export function settlementKeyFor(
         return { ok: false, status: 409, reason: 'key_conflict', error: NOT_YOUR_KEY };
     }
     if ((row.sellerPubkey ?? null) !== trade.sellerPublicKey || (row.postId ?? null) !== (trade.postId ?? null)
-        || round4(row.amount) !== round4(trade.amount)) {
+        || row.amount !== trade.amount) {
         return {
             ok: false, status: 409, reason: 'key_conflict',
             error: 'That key is for a different purchase. Try it again with the same seller, listing and amount. Nothing has been deducted.',
@@ -214,7 +212,7 @@ export function beginOutboundSettlement(input: {
 }): SettlementRow {
     requireAmount(input.amount);
 
-    const amount = round4(input.amount);
+    const amount = input.amount;
     const fee = crossNodeFee(amount);
     const escrowAccount = escrowAccountFor(input.key);
 
@@ -265,7 +263,7 @@ export function beginOutboundSettlement(input: {
         // 'escrow' method, not 'direct': that is what bounds the debit by the member's offer-banded
         // usableFloor rather than by a positive balance, which is the whole point of a credit line.
         const held = transfer(
-            input.buyerPublicKey, escrowAccount, round4(amount + fee),
+            input.buyerPublicKey, escrowAccount, (amount + fee),
             `Cross-community purchase hold (${input.key})`, 'escrow', /* isFeeExempt */ true,
         );
         if (!held) {
@@ -495,7 +493,7 @@ export function abandonOutboundSettlement(key: string, reason: string): Settleme
 
     return settlementTransaction(() => {
         mustTransfer(
-            escrowAccountFor(key), row.buyerPubkey, round4(row.amount + row.fee),
+            escrowAccountFor(key), row.buyerPubkey, (row.amount + row.fee),
             `Released cross-community hold (${key})`,
         );
         return advanceSettlement(key, 'abandoned', { failureReason: reason });
@@ -806,7 +804,7 @@ export function handlePurchaseRequest(input: {
         // returned `accepted: true`, the buyer then committed against those new terms, and receipt delivery
         // compared them to the old row and refused — a compensating reversal that need never have happened.
         // Idempotency has to mean "the same trade", and a trade is the whole tuple.
-        const sameTrade = round4(existing.amount) === round4(input.amount)
+        const sameTrade = existing.amount === input.amount
             && existing.buyerPubkey === input.buyerPublicKey
             && (existing.sellerPubkey ?? null) === input.sellerPublicKey
             && (existing.postId ?? null) === (input.postId ?? null);
@@ -898,7 +896,7 @@ export function handlePurchaseRequest(input: {
         buyerHomeNode: resolvedHomeNode,
         sellerPubkey: input.sellerPublicKey,
         postId: input.postId ?? null,
-        amount: round4(input.amount),
+        amount: input.amount,
         reservedUntil,
         state: 'reserved',
     });
@@ -1074,7 +1072,7 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
 function receiptMatchesRow(r: SettlementReceipt, row: SettlementRow): boolean {
     return !!r
         && r.key === row.key
-        && round4(r.amount) === round4(row.amount)
+        && r.amount === row.amount
         && r.buyerPublicKey === row.buyerPubkey
         && r.sellerPublicKey === (row.sellerPubkey ?? '')
         && (r.postId ?? null) === (row.postId ?? null);

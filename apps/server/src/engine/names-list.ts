@@ -64,7 +64,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getMember, isVisitorKey, confirmationDialOn, knownFloor } from '@beanpool/engine';
-import {
+import { formatHundredths,
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
     readNamesCopy, NAMES_COPY_MAX_BYTES, word, wordsFor,
 } from '@beanpool/core';
@@ -474,7 +474,7 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
     // A second chance is an admin's decision once the debt is addressed (design §4.2): paid back, worked off or forgiven.
     const debt = openDebtOfEntry(entry.id);
     if (debt && debt.id !== workOff?.debtId) {
-        throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: debt.amount }), { debtId: debt.id });
+        throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: formatHundredths(debt.amount_c, 'en') }), { debtId: debt.id });
     }
     if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', word('A member is confirmed against this entry already. One person, one entry.'));
     if (db.prepare('SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member)) {
@@ -502,7 +502,7 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
     if (debt.status !== 'open') throw new NamesListError(409, 'not_open', `That debt is ${debt.status} already.`);
     if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', word('Someone is working that debt off already.'));
     // Only while something is left: payments made for the debt count toward it as they are paid (engine/names-debts.ts).
-    if (!(Math.round((debt.amount - debt.repaid) * 100) > 0)) throw new NamesListError(409, 'nothing_left', word('Nothing is left to repay on that debt.'));
+    if (!(debt.amount_c - debt.repaid_c > 0)) throw new NamesListError(409, 'nothing_left', word('Nothing is left to repay on that debt.'));
     return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
 }
 
@@ -520,7 +520,7 @@ export function assertMayBindInvite(actor: string, entryId: unknown): string {
     if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', word('A member is confirmed against this entry already. One person, one entry.'));
     // The second-chance rule binds an invite too (design §4.2): no confirming against an entry whose debt is still open.
     const debt = openDebtOfEntry(entry.id);
-    if (debt) throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: debt.amount }), { debtId: debt.id });
+    if (debt) throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: formatHundredths(debt.amount_c, 'en') }), { debtId: debt.id });
     return entry.id;
 }
 

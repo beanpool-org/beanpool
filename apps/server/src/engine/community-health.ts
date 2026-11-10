@@ -201,7 +201,7 @@ export function healthSummary() {
 }
 
 export interface HealthException {
-    memberPubkey: string; entryId: string; balance_c: number; floor: number; reasons: Array<'past_debt_line' | 'quiet_in_debit' | 'stepped_back_owing'>;
+    memberPubkey: string; entryId: string; balance_c: number; floor_c: number; reasons: Array<'past_debt_line' | 'quiet_in_debit' | 'stepped_back_owing'>;
 }
 
 /**

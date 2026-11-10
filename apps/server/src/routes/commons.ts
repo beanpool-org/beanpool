@@ -39,6 +39,7 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
 import { isPastDeadline, word } from '@beanpool/core';
@@ -58,9 +59,10 @@ router.post('/api/commons/pay', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     // `requestId` (engine/money-requests.ts): the app's id for this one payment, so a retry is never paid twice.
-    const { amount, debtId, requestId } = (ctx as any).requestBody || {};
+    // `amount_c`: whole hundredths (payToCommons refuses anything else, 400).
+    const { amount_c, debtId, requestId } = (ctx as any).requestBody || {};
     try {
-        ctx.body = payToCommons(actor, amount, debtId, requestId);
+        ctx.body = payToCommons(actor, amount_c, debtId, requestId);
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;
         ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
@@ -75,7 +77,7 @@ router.get('/api/commons/repayment', async (ctx) => {
     if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     ctx.set('Cache-Control', 'no-store');
     const r = repaymentOf(actor.toLowerCase());
-    ctx.body = { repayment: r ? { debtId: r.id, amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
+    ctx.body = { repayment: r ? { debtId: r.id, amount_c: r.amount_c, repaid_c: r.repaid_c, left_c: r.amount_c - r.repaid_c } : null };
 });
 
 router.get('/api/commons/projects', async (ctx) => {
@@ -83,7 +85,7 @@ router.get('/api/commons/projects', async (ctx) => {
 });
 
 router.post('/api/commons/projects', async (ctx) => {
-    const { proposerPubkey, title, description, requestedAmount } = (ctx as any).requestBody || {};
+    const { proposerPubkey, title, description, requestedAmount_c: requestedAmount } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
@@ -107,7 +109,7 @@ router.post('/api/commons/projects', async (ctx) => {
     }
     // A muted member (G3) proposes nothing other members read.
     if (respondIfMuted(ctx, actor)) return;
-    const project = createProject(actor, title, description || '', Number(requestedAmount));
+    const project = createProject(actor, title, description || '', requestedAmount);
     if (!project) {
         ctx.status = 400;
         ctx.body = { error: word('Failed — must be a registered member, title/amount required') };
@@ -117,7 +119,7 @@ router.post('/api/commons/projects', async (ctx) => {
 });
 
 router.post('/api/commons/projects/update', async (ctx) => {
-    const { proposerPubkey, projectId, title, description, requestedAmount } = (ctx as any).requestBody || {};
+    const { proposerPubkey, projectId, title, description, requestedAmount_c: requestedAmount } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
@@ -131,7 +133,7 @@ router.post('/api/commons/projects/update', async (ctx) => {
     }
     if (respondIfMuted(ctx, actor)) return;
 
-    const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
+    const success = updateProject(actor, projectId, title, description || '', requestedAmount);
     if (!success) {
         ctx.status = 400;
         ctx.body = { error: word('Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.') };
@@ -633,23 +635,17 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
 
 router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     const projectId = ctx.params.id;
-    const { fromPubkey, amount, memo } = (ctx as any).requestBody || {};
+    const { memo } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
         return;
     }
-    const parsedAmount = Number(amount);
-    
-    // SECURITY (SRV-8): require a positive, finite amount. A negative parsedAmount
-    // is truthy and previously slipped past `!parsedAmount`, relying on the
-    // transactions CHECK(amount > 0) to abort mid-transaction.
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        ctx.status = 400;
-        ctx.body = { error: 'fromPubkey and a positive amount are required' };
-        return;
-    }
+    // SECURITY (SRV-8): whole hundredths above 0 (money-body.ts), before anything moves: a negative or a float never
+    // reaches the transactions CHECK (amount_c > 0).
+    const parsedAmount = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+    if (parsedAmount === null) return;
 
     // Same defect as the ledger transfer route (#102): the guard here verified the
     // pledger's home balance and then pledged locally, so a visitor's pledge was minted

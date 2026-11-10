@@ -263,7 +263,7 @@ export interface HomeMe {
 }
 
 export interface MarketItem {
-    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy of a listing (engine/event-copy.ts): where it is from, and its price there, in words. */
     shownCopy?: true; shownFrom?: ShownFrom; shownPrice?: string;
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): only on a pinned row, so an unpinned row and an older node's read as they did. */
@@ -273,7 +273,7 @@ export interface MarketItem {
  * One row of "Asked near you": a neighbour's open Need, with the Market card's own fields for the row (the category tile, the
  * title, the price line and how long ago). `credits` only where Beans are on; `priceType` only when the post has one.
  */
-export interface NeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+export interface NeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null }
 /**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
  * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
@@ -301,13 +301,14 @@ export interface DealItem { txId: string; postId: string; title: string; with: s
  * A month on a book (W3, §2), since the first of the month in UTC as `community.tradesThisMonth` counts it: its lines and
  * the Beans in and out. On the signer's own (`beans`), a circulation fee is no trade: those are `fees`, apart.
  */
-export interface MonthFigures { trades: number; in: number; out: number }
+/** A month's Beans in and out, whole hundredths (`*_c`). */
+export interface MonthFigures { trades: number; in_c: number; out_c: number }
 
 /**
  * An enterprise's latest line this month, for its keeper: the Beans (+ in, − out), when, and with whom. `who` is a member's
  * or an enterprise's name (`kind` 'member'); for a deal in escrow, the Commons or anything else the app says what it is.
  */
-export interface EnterpriseLine { amount: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
+export interface EnterpriseLine { amount_c: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
 
 /** An open Decision as a Decide row (W3, §2): `voted` is the signer's own ballot, never anyone else's. */
 export interface DecideItem { id: string; title: string; closesAt: string; voted: boolean }
@@ -361,7 +362,7 @@ export interface HomeCards {
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt: string | null }[] };
     /** `month`: the signer's own ledger this month; `more` when it held more lines than are read (MONTH_LINES). */
-    beans?: { balance_c: number; room: number; tier: string; activated: boolean; frozen: boolean; month: MonthFigures & { fees: number; more: boolean } };
+    beans?: { balance_c: number; room_c: number; tier: string; activated: boolean; frozen: boolean; month: MonthFigures & { fees_c: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /**
      * The community's figures, totals public by rule: `listings` (the public board's live listings) to anyone answered;
@@ -372,7 +373,7 @@ export interface HomeCards {
      */
     community?: {
         name: string | null; members: number; listings: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        joined7d?: number; eventsSoon?: number; commonsPot?: number;
+        joined7d?: number; eventsSoon?: number; commonsPot_c?: number;
     };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
@@ -541,7 +542,6 @@ function clip(s: string, max: number): string {
 function bounded(s: string | null | undefined, max: number): string | null {
     return typeof s === 'string' && s.length <= max ? s : null;
 }
-const round2 = (n: number) => Math.round(n * 100) / 100;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** Starred categories first, the rest after, each part in the order it came: interests reorder, they never filter (§4.3). */
@@ -912,7 +912,7 @@ function enterpriseLineOf(e: EnterpriseLedgerEntry): EnterpriseLine | null {
     if (!bounded(e.timestamp, ID_CHARS)) return null;
     const cp = e.counterparty;
     const kind: EnterpriseLine['kind'] = cp === 'COMMONS_POOL' ? 'commons' : cp.startsWith('escrow_') ? 'deal' : getMember(cp) ? 'member' : 'other';
-    return { amount: e.netAmount, at: e.timestamp, kind, who: kind === 'member' ? clip(e.counterpartyName, NAME_CHARS) : null };
+    return { amount_c: e.netAmount, at: e.timestamp, kind, who: kind === 'member' ? clip(e.counterpartyName, NAME_CHARS) : null };
 }
 
 function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
@@ -935,11 +935,11 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     const book = getEnterpriseLedger(id, { since: monthStartOf(c.now), limit: 1 });
     const last = book.entries[book.entries.length - 1];
     return {
-        ...card, balance: book.enterprise.balance_c,
+        ...card, balance_c: book.enterprise.balance_c,
         // In as the ledger credited it, net of a payment's fee, as the Beans card and the latest line say it: the book's
         // net change plus what went out. Its totalIncome is gross, so one 100-Bean payment would read "+100 in" beside
         // "Latest: +98.5" and a balance that rose by 98.5 (review of #2416).
-        month: { trades: book.summary.transactionCount, in: round2(book.summary.netChange + book.summary.totalSpend), out: book.summary.totalSpend },
+        month: { trades: book.summary.transactionCount, in_c: book.summary.netChange + book.summary.totalSpend, out_c: book.summary.totalSpend },
         latest: last ? enterpriseLineOf(last) : null,
     };
 }
@@ -1074,7 +1074,7 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
         .map((p): MarketItem => ({
             // The category is only checked to be text when it is written (engine/post-fields.ts): cut like the title.
             id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
-            ...(c.switches.beans ? { credits: p.credits } : {}),
+            ...(c.switches.beans ? { price_c: p.price_c } : {}),
             photoUrl: p.photos?.[0] ?? null,
             // Only where there is one, so a member's listing and every visitor's row read as before (test-home W3).
             ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
@@ -1115,7 +1115,7 @@ function askedCard(c: Ctx): HomeCards['asked'] | undefined {
     const newest = [...pool].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const items = starredFirst(newest, p => p.category, c.interests).slice(0, ASKED_ITEMS).map((p): NeedItem => ({
         id: p.id, title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
-        ...(c.switches.beans ? { credits: p.credits } : {}),
+        ...(c.switches.beans ? { price_c: p.price_c } : {}),
         ...(typeof p.priceType === 'string' && bounded(p.priceType, ID_CHARS) ? { priceType: p.priceType } : {}),
         createdAt: p.createdAt,
         photoUrl: p.photos?.[0] ?? null,
@@ -1150,7 +1150,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     }).filter(p => p.status === 'active' && p.active !== false && !!bounded(p.id, ID_CHARS));
     const items = pool.slice(0, SEARCH_ITEMS).map((p): MarketItem => ({
         id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
-        ...(c.switches.beans ? { credits: p.credits } : {}),
+        ...(c.switches.beans ? { price_c: p.price_c } : {}),
         photoUrl: p.photos?.[0] ?? null,
         ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
         ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
@@ -1385,14 +1385,14 @@ function ownMonthOf(me: string, now: number): NonNullable<HomeCards['beans']>['m
     let trades = 0, beansIn = 0, beansOut = 0, fees = 0;
     for (const t of read.slice(0, MONTH_LINES)) {
         if (!(Date.parse(t.timestamp) >= since)) continue;
-        if (isCirculationFee(t)) { fees += t.amount; continue; }
+        if (isCirculationFee(t)) { fees += t.amount_c; continue; }
         trades++;
-        if (t.to === me) beansIn += t.amount - (t.taxFee || 0);
-        if (t.from === me) beansOut += t.amount;
+        if (t.to === me) beansIn += t.amount_c - (t.fee_c || 0);
+        if (t.from === me) beansOut += t.amount_c;
     }
     // A line past the read that is still this month's: the month holds more than MONTH_LINES, and these are its newest.
     const more = read.length > MONTH_LINES && Date.parse(read[MONTH_LINES].timestamp) >= since;
-    return { trades, in: round2(beansIn), out: round2(beansOut), fees: round2(fees), more };
+    return { trades, in_c: beansIn, out_c: beansOut, fees_c: fees, more };
 }
 
 /** H0b: the signer's own Beans and nothing else, where Beans are on; W3: their own month too. */
@@ -1402,7 +1402,7 @@ function beansCard(c: Ctx): HomeCards['beans'] | undefined {
     const b = getBalance(c.me!);
     // Room to spend: down to the floor they may use (credit-model), never below nothing.
     return {
-        balance: b.balance_c, room: Math.max(0, round2(b.balance_c - b.usableFloor)), tier: b.tier.name, activated: b.activated, frozen: b.frozen,
+        balance_c: b.balance_c, room_c: Math.max(0, b.balance_c - b.usableFloor_c), tier: b.tier.name, activated: b.activated, frozen: b.frozen,
         month: ownMonthOf(c.me!, c.now),
     };
 }
@@ -1436,7 +1436,7 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // W3 (§2): the public board's live listings (getActivePostCount, the same count /api/community/info gives), to anyone
     // answered, after every field above, so a visitor's answer is what it was with this one added; then, to a member who
     // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
-    return { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance) : {}) };
+    return { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
 }
 
 /**
@@ -1451,7 +1451,7 @@ function communityCard(c: Ctx): HomeCards['community'] {
  * Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so the 1.5% a trade between any two members
  * pays in, or a circulation fee, moves nobody else's Home (its tag) until the pot moves by a Bean.
  */
-function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCards['community']>, 'joined7d' | 'eventsSoon' | 'commonsPot'> {
+function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCards['community']>, 'joined7d' | 'eventsSoon' | 'commonsPot_c'> {
     const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members
                                    WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                      AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(iso(c.now - JOINED_DAYS * DAY_MS)) as { c: number }).c;
@@ -1462,7 +1462,7 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
                                        AND COALESCE(event_state, '') != 'cancelled'
                                        AND (${UNNAMED_COPY_SQL} OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
                                             AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
-    return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
+    return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot_c: commonsBalance } : {}) };
 }
 
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────

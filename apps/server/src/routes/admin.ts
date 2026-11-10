@@ -1004,13 +1004,13 @@ router.post('/api/local/admin/stranded-escrows/:escrowId/write-off', async (ctx)
     }
     // The log redacts anything shaped like a 64-hex key, so a key session's actor goes in short, as on the other
     // admin lines here. The full signer is on the ledger row's auth_signer, which `transactionId` points to.
-    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount} Beans (Commons ${result.commonsBefore} → ${result.commonsAfter})`, {
+    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount_c} hundredths (Commons ${result.commonsBefore_c} → ${result.commonsAfter_c})`, {
         escrowId: result.escrowId,
         tradeId: result.tradeId,
-        amount: result.amount,
+        amount_c: result.amount_c,
         transactionId: result.transactionId,
-        commonsBefore: result.commonsBefore,
-        commonsAfter: result.commonsAfter,
+        commonsBefore_c: result.commonsBefore_c,
+        commonsAfter_c: result.commonsAfter_c,
         actor: /^[0-9a-f]{64}$/i.test(actor) ? actor.substring(0, 12) : actor,
         memo: result.memo,
     });

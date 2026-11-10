@@ -677,7 +677,8 @@ export interface CommunityProject {
     description: string;
     proposerPubkey: string;
     proposerCallsign: string;
-    requestedAmount: number;
+    /** Whole hundredths of a Bean. */
+    requestedAmount_c: number;
     status: 'proposed' | 'active' | 'funded' | 'rejected' | 'completed';
     createdAt: string;
     fundedAt?: string;
@@ -1620,7 +1621,7 @@ export function addWsClient(ws: any): void {
             type: 'state_snapshot',
             memberCount: counts.memberCount,
             postCount: counts.postCount,
-            commonsBalance: COMMONS_BALANCE,
+            commonsBalance_c: COMMONS_BALANCE,
         }));
     } catch { /* ignore */ }
 }
@@ -7122,7 +7123,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance_c: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
 
 interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
 
@@ -9769,12 +9770,12 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
 
 // ===================== COMMUNITY COMMONS =====================
 
-export function createProject(proposerPubkey: string, title: string, description: string, requestedAmount: number): CommunityProject | null {
+export function createProject(proposerPubkey: string, title: string, description: string, requestedAmount: unknown): CommunityProject | null {
     const member = getMember(proposerPubkey);
     // A2-5: reject non-finite/non-positive requested amounts (NaN/Infinity would
     // poison the grant + conservation math). The upper bound on what can actually
     // be funded is enforced at round close by deductFromCommons (≤ commons balance).
-    if (!member || !title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return null;
+    if (!member || !title.trim() || !isHundredths(requestedAmount) || requestedAmount <= 0) return null;
     // A project proposal creates an enterprise the proposer leads, so the enterprise-creation rules apply.
     if (member.status !== 'active') throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     // Checked before any write: a member whose operator switch an admin turned off must not get it back by proposing.
@@ -9785,7 +9786,7 @@ export function createProject(proposerPubkey: string, title: string, description
         title: title.trim().slice(0, 100),
         description: description.trim().slice(0, 500),
         proposerPubkey, proposerCallsign: member.callsign,
-        requestedAmount: Math.round(requestedAmount * 100) / 100,
+        requestedAmount_c: requestedAmount,
         status: 'proposed', createdAt: new Date().toISOString()
     };
     
@@ -9813,7 +9814,7 @@ export function createProject(proposerPubkey: string, title: string, description
                 ) VALUES (?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
             `).run(
                 project.id, callsign, now,
-                project.description || project.title, project.requestedAmount, now
+                project.description || project.title, project.requestedAmount_c, now
             );
             db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
             ledger.initializeGenesisAccount(project.id);
@@ -9834,8 +9835,8 @@ export function createProject(proposerPubkey: string, title: string, description
     return project;
 }
 
-export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
-    if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
+export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: unknown): boolean {
+    if (!title.trim() || !isHundredths(requestedAmount) || requestedAmount <= 0) return false;
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
     const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
@@ -9845,7 +9846,7 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
 
     projects[index].title = title.trim().slice(0, 100);
     projects[index].description = description.trim().slice(0, 500);
-    projects[index].requestedAmount = Math.round(requestedAmount * 100) / 100;
+    projects[index].requestedAmount_c = requestedAmount;
     
     const now = new Date().toISOString();
     // The enterprise row's name, by the one name rule, as at the create (engine projectRowName): the title is kept as typed.
@@ -9860,7 +9861,7 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
         `).run(
             rowName,
             projects[index].description || projects[index].title,
-            projects[index].requestedAmount,
+            projects[index].requestedAmount_c,
             now,
             projectId
         );
@@ -9949,7 +9950,7 @@ export function getAllProjects(): CommunityProject[] {
                 // Keep live values from members table so blob doesn't shadow SQL
                 existing.title = e.callsign || existing.title;
                 existing.description = e.purpose || e.bio || existing.description;
-                if (e.goal_amount_c != null) existing.requestedAmount = Number(e.goal_amount_c);
+                if (e.goal_amount_c != null) existing.requestedAmount_c = Number(e.goal_amount_c);
                 if (e.status) existing.status = e.status.toLowerCase() as any;
             } else {
                 blobProjects.push({
@@ -9958,7 +9959,7 @@ export function getAllProjects(): CommunityProject[] {
                     description: e.purpose || e.bio || '',
                     proposerPubkey: lead,
                     proposerCallsign: leadMember?.callsign || e.callsign,
-                    requestedAmount: Number(e.goal_amount_c || 0),
+                    requestedAmount_c: Number(e.goal_amount_c || 0),
                     status: (e.status || 'proposed').toLowerCase() as any,
                     createdAt: e.joined_at || new Date().toISOString(),
                 });

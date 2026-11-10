@@ -25,9 +25,7 @@ process.env.APP_VERSION = '1.2.20';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
-
-const PW = 'UpdateCheckNodeTags123!';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -69,10 +67,11 @@ const WITH_VAULT = [VAULT, rel('native-v1.2.28', '2026-10-04T00:00:00Z'), rel('v
 const TAGS = [tag('vault-v1.0.0'), tag('native-v1.2.28'), tag('v1.2.27'), tag('v1.2.26'), tag('native-v1.1.99')];
 
 let BASE = '';
-let tfa: ReturnType<typeof turnOn2faForTests>;
+/** An owner's automation token: check-update is an owner's or an admin's. */
+let asOwner: Record<string, string> = {};
 async function checkUpdate(): Promise<{ status: number; body: any }> {
     asked = [];
-    const r = await fetch(`${BASE}/api/admin/check-update`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tfa.headers() } });
+    const r = await fetch(`${BASE}/api/admin/check-update`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner } });
     return { status: r.status, body: await r.json().catch(() => null) };
 }
 async function version(): Promise<any> {
@@ -86,7 +85,7 @@ async function main() {
     initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerTokenHeaders('admin');
 
     // ── 1. A vault release is GitHub's Latest ───────────────────────────────────────────────────────────
     console.log('\n— 1. vault-v1.0.0 is Latest, v1.2.27 the newest node release —');

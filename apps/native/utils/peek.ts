@@ -25,7 +25,8 @@ export interface PeekPost {
     title: string;
     description?: string;
     category?: string;
-    credits?: number;
+    /** Its price, whole hundredths of a Bean (the node's `price_c`); left out when the answer's figure isn't one. */
+    price_c?: number;
     priceType?: string;
     photos?: string[];
     status?: string;
@@ -46,7 +47,7 @@ export function readPeekPost(raw: unknown, postId: string): PeekPost | null {
     return {
         id: postId, type: o.type, title: o.title.slice(0, 200),
         description: str(o.description)?.slice(0, 4000), category: str(o.category),
-        credits: typeof o.credits === 'number' && Number.isFinite(o.credits) ? o.credits : undefined,
+        price_c: typeof o.price_c === 'number' && Number.isSafeInteger(o.price_c) && o.price_c >= 0 ? o.price_c : undefined,
         priceType: str(o.priceType),
         // Only the node's own photo paths: a photo is fetched from the community the link named, never from anywhere else.
         photos: Array.isArray(o.photos) ? o.photos.filter((x): x is string => typeof x === 'string' && x.startsWith('/api/')).slice(0, 6) : [],

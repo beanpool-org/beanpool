@@ -36,7 +36,8 @@ const FEED = [
     post('honey', 'offer', 'food'),
     post('beans', 'need', 'food'),
     post('lift', 'offer', 'transport', { cash_also_needed: 1 }),
-    post('fence', 'need', 'labour', { author_energy_cycled: 600 }),
+    // A Steward's least credit, 600 Beans, in whole hundredths as the node sends it.
+    post('fence', 'need', 'labour', { author_energy_cycled: 60000 }),
     post('ute', 'offer', 'Transport'),
     post('vote', 'poll', 'governance'),
     event('market-today', WED + 2 * HOUR),
@@ -134,6 +135,9 @@ describe("the feed's own filters still work", () => {
     it('Trust keeps authors at or past the level', () => {
         expect(shown(state({ type: 'needs', trust: 'steward' }))).toEqual(['fence']);
         expect(shown(state({ type: 'needs', trust: 'new' }))).toEqual(['beans']);
+        // Exact in hundredths: one hundredth short of a Steward's 600 Beans is not one.
+        const edge = [post('at', 'need', 'labour', { author_energy_cycled: 60000 }), post('short', 'need', 'labour', { author_energy_cycled: 59999 })];
+        expect(shown(state({ type: 'needs', trust: 'steward' }), edge)).toEqual(['at']);
     });
 
     it('Distance drops located posts outside the radius and keeps posts with no location', () => {

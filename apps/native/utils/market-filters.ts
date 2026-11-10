@@ -222,7 +222,8 @@ export function feedPostVisible(p: any, state: MarketFilterState, ctx: MarketFil
     if (show.beans && state.beansOnly && (type === 'poll' || type === 'event' || p.cash_also_needed === 1)) return false;
 
     if (show.trust && state.trust !== 'all') {
-        // author_energy_cycled is the author's tier credit; 'resident' / 'steward' / 'elder' mean "at least".
+        // author_energy_cycled is the author's tier credit, whole hundredths of a Bean as the node sends it (core's tier
+        // thresholds are in hundredths too); 'resident' / 'steward' / 'elder' mean "at least".
         const tierIdx = tierIndexForCredit(p.author_energy_cycled ?? 0);
         if (state.trust === 'founding' && (type === 'poll' || type === 'event' || !p.authorFoundingNeeded)) return false;
         if (state.trust === 'new' && tierIdx > 0) return false;

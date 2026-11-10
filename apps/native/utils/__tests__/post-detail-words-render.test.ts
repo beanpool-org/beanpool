@@ -141,7 +141,7 @@ const KOFI = { pubkey: 'kofi-key', callsign: 'Kofi' };
 /** Another member's Offer, with every badge: a photo pair, cash too, recurring, a group's own. */
 const OFFER = {
     id: 'p-offer', type: 'offer', status: 'active', title: 'Bike repairs at home', description: 'Flat tyres, brakes, gears',
-    category: 'transport', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, credits: 12, price_type: 'fixed',
+    category: 'transport', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: 1200, price_type: 'fixed',
     photos: JSON.stringify(['https://mullum.example/p/1.jpg', 'https://mullum.example/p/2.jpg']), repeatable: 1, cash_also_needed: 1,
     audience_scope: 'group', target_group_id: 'g1', target_group_name: 'Garden club', created_at: iso(now - 3 * 60 * 60_000),
 };
@@ -149,21 +149,21 @@ const HOURLY = { ...OFFER, id: 'p-hourly', price_type: 'hourly', target_group_id
 /** The member's own Need, with two requests waiting. */
 const NEED = {
     id: 'p-need', type: 'need', status: 'active', title: 'Help moving a sofa', description: 'Second floor, no lift', category: 'labour',
-    author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'hourly', photos: '[]', created_at: iso(now - 26 * 60 * 60_000),
+    author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'hourly', photos: '[]', created_at: iso(now - 26 * 60 * 60_000),
 };
 const REQUESTS = [
-    { id: 'tx-r1', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 40, hours: 2 },
-    { id: 'tx-r2', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: 'mia-key', seller_callsign: 'Mia', credits: 20, hours: null },
+    { id: 'tx-r1', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 4000, hours: 2 },
+    { id: 'tx-r2', post_id: 'p-need', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: 'mia-key', seller_callsign: 'Mia', amount_c: 2000, hours: null },
 ];
 /** A deal held in trust on Kofi's Offer: the member pays. */
 const HELD = { ...HOURLY, id: 'p-held', status: 'pending', pending_transaction_id: 'tx-held' };
-const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 24, hours: 2, created_at: '2026-10-24T10:00:00.000Z' };
+const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 2400, hours: 2, created_at: '2026-10-24T10:00:00.000Z' };
 /** The member's own Offer held in trust: the member is paid. */
 const MINE_HELD = { ...HOURLY, id: 'p-mine-held', status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign, accepted_by: KOFI.pubkey, accepted_by_callsign: KOFI.callsign, pending_transaction_id: 'tx-mine' };
-const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, credits: 24, hours: 2 };
+const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, amount_c: 2400, hours: 2 };
 const DONE = { ...OFFER, id: 'p-done', status: 'completed', target_group_id: null, audience_scope: 'public', pending_transaction_id: 'tx-done', accepted_by: ME.publicKey };
 const PAUSED = { ...HOURLY, id: 'p-paused', status: 'paused', author_pubkey: ME.publicKey, author_callsign: ME.callsign };
-const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', credits: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
+const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', price_c: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
 
 /** What members and the node wrote: shown as written. */
 const OTHERS = [
@@ -284,7 +284,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     });
 
     it("another member's Need: \"I can do this\" and its sentence, the amount and the name through t(), the fee left to the deal (cold start N4)", async () => {
-        const ASKED = { ...NEED, id: 'p-need-asked', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed', credits: 20 };
+        const ASKED = { ...NEED, id: 'p-need-asked', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed', price_c: 2000 };
         await open(ASKED);
         expect(host.textContent).toContain(pseudoLocalise('✋ I can do this'));
         await press('✋ I can do this');
@@ -297,7 +297,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     });
 
     it('a lendable Offer is asked for, never taken in one step (Free and priced); then the borrower waits for the yes', async () => {
-        const LENT = { ...OFFER, id: 'p-lent', credits: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
+        const LENT = { ...OFFER, id: 'p-lent', price_c: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
         await open(LENT);
         expect(host.textContent).not.toContain(pseudoLocalise('🤝 Accept Offer'));
         await press('📦 Ask to borrow');
@@ -311,7 +311,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         act(() => root.unmount());
         root = createRoot(host);
         net.calls.length = 0;
-        await open({ ...LENT, id: 'p-lent-fee', credits: 8 });
+        await open({ ...LENT, id: 'p-lent-fee', price_c: 800 });
         await press('📦 Ask to borrow');
         expect(host.textContent).toContain(pseudoLocalise('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.').split('{owned}')[0]);
         expect(bypassing(), 'the priced ask').toEqual([]);
@@ -321,7 +321,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
 
         act(() => root.unmount());
         root = createRoot(host);
-        const ASKED = [{ id: 'tx-ask', post_id: 'p-lent', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 0, hours: 3 }];
+        const ASKED = [{ id: 'tx-ask', post_id: 'p-lent', status: 'requested', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 0, hours: 3 }];
         await open(LENT, 'xx', { all: (sql) => (sql.includes("status='requested'") ? ASKED : []) });
         expect(host.textContent).toContain(pseudoLocalise('Asked to borrow'));
         expect(host.textContent).toContain(pseudoLocalise('Nothing is held until the lender says yes.'));
@@ -330,7 +330,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     });
 
     it("the ask just made can be withdrawn at once: by the node's id for it, not one made up on the phone", async () => {
-        const LENT = { ...OFFER, id: 'p-lent', credits: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
+        const LENT = { ...OFFER, id: 'p-lent', price_c: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
         await open(LENT);
         const page = net.answer!;
         const withdrawn: unknown[][] = [];
@@ -378,7 +378,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         act(() => root.unmount());
         root = createRoot(host);
         const LENDABLE_OFFER = { ...OFFER, id: 'p-loan', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_type: 'fixed', lendable: 1 };
-        const LOAN_REQUESTS = [{ id: 'tx-loan', post_id: 'p-loan', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, credits: 0, hours: 3 }];
+        const LOAN_REQUESTS = [{ id: 'tx-loan', post_id: 'p-loan', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, amount_c: 0, hours: 3 }];
         await open(LENDABLE_OFFER, 'xx', { all: (sql) => (sql.includes("status='requested'") ? LOAN_REQUESTS : []) });
         expect(host.textContent).toContain(pseudoLocalise('for {n} days').replace('{n}', '3'));
         expect(bypassing(), 'loan requests').toEqual([]);
@@ -387,7 +387,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         act(() => root.unmount());
         root = createRoot(host);
         const WEEKLY_LENDABLE_OFFER = { ...OFFER, id: 'p-loan-wk', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_type: 'weekly', lendable: 1 };
-        const WEEKLY_LOAN_REQUESTS = [{ id: 'tx-loan-wk', post_id: 'p-loan-wk', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, credits: 0, hours: 2 }];
+        const WEEKLY_LOAN_REQUESTS = [{ id: 'tx-loan-wk', post_id: 'p-loan-wk', status: 'requested', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, amount_c: 0, hours: 2 }];
         await open(WEEKLY_LENDABLE_OFFER, 'xx', { all: (sql) => (sql.includes("status='requested'") ? WEEKLY_LOAN_REQUESTS : []) });
         expect(host.textContent).toContain(pseudoLocalise('for {n} weeks').replace('{n}', '2'));
         expect(bypassing(), 'weekly loan requests').toEqual([]);
@@ -404,7 +404,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         act(() => root.unmount());
         root = createRoot(host);
         const OTHER_FIXED_NEED = { ...NEED, id: 'p-other-fixed-need', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed' };
-        const MY_FIXED_NEED_REQUEST = [{ id: 'tx-req-fixed', post_id: 'p-other-fixed-need', status: 'requested', buyer_pubkey: KOFI.pubkey, seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, credits: 20, hours: 2 }];
+        const MY_FIXED_NEED_REQUEST = [{ id: 'tx-req-fixed', post_id: 'p-other-fixed-need', status: 'requested', buyer_pubkey: KOFI.pubkey, seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, amount_c: 2000, hours: 2 }];
         await open(OTHER_FIXED_NEED, 'xx', { all: (sql) => (sql.includes("status='requested'") ? MY_FIXED_NEED_REQUEST : []) });
         expect(host.textContent).toContain(pseudoLocalise('Deal Established'));
         expect(host.textContent).not.toContain(pseudoLocalise('{hours} hours').replace('{hours}', '2'));
@@ -455,7 +455,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     // Deals S1 deciding review: on a Need the author pays, and is never told they "took this up".
     it("a deal held in trust on the member's own Need: Release, but not \"You took this up\"", async () => {
         const NEED_HELD = { ...NEED, id: 'p-need-held', status: 'pending', pending_transaction_id: 'tx-need' };
-        const NEED_TX = { id: 'tx-need', post_id: 'p-need-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 20, hours: 1, created_at: '2026-10-24T10:00:00.000Z' };
+        const NEED_TX = { id: 'tx-need', post_id: 'p-need-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 2000, hours: 1, created_at: '2026-10-24T10:00:00.000Z' };
         await open(NEED_HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? NEED_TX : null) }, 'tx-need');
         expect(host.textContent).toContain(pseudoLocalise("Release the Beans when it's done."));
         expect(host.textContent).not.toContain(pseudoLocalise('✅ You took this up on {date} · {n} Beans held in trust').split('{')[0]);
@@ -464,7 +464,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
 
     it('a deal held in trust on a recurring Offer shows the recurring note', async () => {
         const RECURRING_HELD = { ...OFFER, id: 'p-rec-held', status: 'active', repeatable: 1, pending_transaction_id: 'tx-rec' };
-        const REC_TX = { id: 'tx-rec', post_id: 'p-rec-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 12, hours: null, created_at: iso(now - 2 * 3600_000) };
+        const REC_TX = { id: 'tx-rec', post_id: 'p-rec-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 1200, hours: null, created_at: iso(now - 2 * 3600_000) };
         await open(RECURRING_HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? REC_TX : null) }, 'tx-rec');
         expect(host.textContent).toContain(pseudoLocalise('You can take it up again once this one is done.'));
         expect(bypassing(), 'recurring held').toEqual([]);

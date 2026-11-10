@@ -37,10 +37,12 @@ describe('events: buildEventDraft', () => {
         expect(r.ok).toBe(true);
         if (!r.ok) return;
         expect(r.draft).toMatchObject({
-            type: 'event', category: 'community', credits: 0, price_type: 'fixed', reach: 'local',
+            type: 'event', category: 'community', price_c: 0, price_type: 'fixed', reach: 'local',
             title: 'Working bee at the hall', eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
             lat: -28.55, lng: 153.49, author_pubkey: 'me',
         });
+        // Never the old key: the node refuses a body that carries one (400 amount_c_required).
+        expect(r.draft).not.toHaveProperty('credits');
         expect(r.draft.eventStartAt).toBe(new Date(2026, 8, 26, 9, 0).toISOString());
         expect(r.draft).not.toHaveProperty('audienceScope');
     });

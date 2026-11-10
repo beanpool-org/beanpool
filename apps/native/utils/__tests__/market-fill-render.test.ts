@@ -160,14 +160,14 @@ function rememberProfile(profile: 'global' | 'local', features: Record<string, u
 const EMPTY: Record<string, unknown> = { getPosts: [], getBalance: { isBlockedFromTrading: false }, getMarketplaceTransactions: [], getMyPosts: [], fetchGroups: [], fetchMyEvents: [] };
 const listing = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
     id, title, type: 'offer', status: 'active', category: 'services', author_pubkey: 'ada-key', author_callsign: 'Ada', author_energy_cycled: 0,
-    credits: 0, photos: '[]', lat: -28.6, lng: 153.4, created_at: new Date().toISOString(), ...extra,
+    price_c: 0, photos: '[]', lat: -28.6, lng: 153.4, created_at: new Date().toISOString(), ...extra,
 });
 /** What the phone holds: the nearby set. */
 const nearOf = (n: number) => Array.from({ length: n }, (_, i) => listing(`near-${i}`, `Near ${i}`));
 /** What the node answers the elsewhere read: camelCase rows, newest first. */
 const farOf = (n: number) => Array.from({ length: n }, (_, i) => ({
     id: `far-${i}`, title: `Far ${i}`, type: 'offer', status: 'active', category: 'services', authorPublicKey: 'bo-key', authorCallsign: 'Bo',
-    credits: 0, photos: [], lat: 48.8, lng: 2.3, createdAt: new Date().toISOString(),
+    price_c: 0, photos: [], lat: 48.8, lng: 2.3, createdAt: new Date().toISOString(),
 }));
 /** The node's answer to the elsewhere read, and the urls it was asked. */
 // `held`, while `hold` is on: each read waits there, with the rows it was asked under, until the test lets it land.
@@ -216,17 +216,19 @@ const count = (title: string) => (text().match(new RegExp(`${title}(?!\\d)`, 'g'
 
 describe('a member\'s copy on a card where Beans are on (#2718): its price is its line, never a 0 beside it', () => {
     const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
-    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '20 fixed' });
+    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '2000 fixed' });
 
     it('in the list, the grid and the compact row; a plain listing keeps its price (the control)', async () => {
         rememberProfile('local', { beans: true });
         holds([
-            listing('copy-1', 'Sourdough loaves', { credits: 0, author_pubkey: 'hidden', author_callsign: '', shown_from: fromHome }),
-            listing('plain-1', 'Pottery course', { credits: 7 }),
+            listing('copy-1', 'Sourdough loaves', { price_c: 0, author_pubkey: 'hidden', author_callsign: '', shown_from: fromHome }),
+            listing('plain-1', 'Pottery course', { price_c: 700 }),
         ]);
         await render();
         for (const next of ['Grid view', 'Compact view', 'List view']) {
             expect(text()).toContain(LINE);
+            // The home price in whole hundredths (2000): 20 Beans, never a hundredth read as a Bean ("0.20 Beans" holds LINE too).
+            expect(text()).not.toContain('0.20 Beans');
             expect(text()).toContain('7 Beans');
             expect(text()).not.toMatch(/(^|\D)0 Beans/);
             const toggle = host.querySelector('[data-testid="market-view-mode-toggle"]') as HTMLElement;

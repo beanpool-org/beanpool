@@ -54,7 +54,8 @@ export function ProfileVoucherButton({ button, memberPubkey, callsign, anchorUrl
             </Pressable>
             {button.state === 'voucher' ? (
                 <Modal visible={cardOpen} animationType="slide" onRequestClose={() => setCardOpen(false)}>
-                    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']} testID="profile-voucher-card-modal">
+                    {/* A full-screen Modal has no doodle pattern behind it: the solid surface.app, never the transparent surface.page. */}
+                    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.app }} edges={['top', 'left', 'right', 'bottom']} testID="profile-voucher-card-modal">
                         {cardOpen && Card && identity && anchorUrl ? (
                             <Card anchorUrl={anchorUrl} identity={identity} memberPubkey={memberPubkey} onClose={() => setCardOpen(false)} />
                         ) : null}

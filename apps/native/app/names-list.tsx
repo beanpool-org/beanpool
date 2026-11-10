@@ -359,6 +359,16 @@ export default function NamesListScreen() {
         if ((params.act !== 'add' && params.act !== 'make') || !/^[0-9a-f]{64}$/.test(member)) return;
         arrived.current = arrival;
         const forCallsign = typeof params.forCallsign === 'string' ? params.forCallsign : '';
+        // The profile's button can be a step behind (the node's state moved on: this phone just added them, or another admin did).
+        // A member already holding a live confirmation is never added a second time (the node refuses the second confirmation,
+        // 409 already_confirmed, and the entry sealed for it would stay behind), and a Make that cannot open says why.
+        const mine = entries.find((x) => x.confirmation?.memberPubkey === member);
+        if (params.act === 'add' && mine?.confirmation) {
+            const who = mine.confirmation.callsign || forCallsign;
+            setNotice(mine.text?.name ? t('@{member} is confirmed against {name}.', { member: who, name: mine.text.name })
+                : t('@{member} is confirmed against the entry.', { member: who }));
+            return;
+        }
         if (params.act === 'add') {
             setName(forCallsign);
             setNote('');
@@ -366,10 +376,15 @@ export default function NamesListScreen() {
             setMode({ kind: 'edit', entry: null, addId: newEntryId(), confirmFor: { publicKey: member, callsign: forCallsign } });
             return;
         }
-        const mine = entries.find((x) => x.confirmation?.memberPubkey === member);
         if (mine?.confirmation && canMakeVoucher(mine, isCommittee, identity?.publicKey)) {
             setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
             setMode({ kind: 'make_voucher', entry: mine, memberPubkey: member, callsign: voucherCallsignFor(mine, callsignOf) || forCallsign });
+        } else if (mine?.voucher) {
+            setNotice(t('@{member} is a voucher already.', { member: forCallsign || mine.confirmation?.callsign || '' }));
+        } else if (!isCommittee) {
+            setError(t('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'));
+        } else {
+            setNotice(t('@{member} isn’t confirmed on this list yet, so there is no voucher to make.', { member: forCallsign }));
         }
     }, [opened, list, loading, entries, isCommittee, identity?.publicKey, voucherBlock, callsignOf, params.act, params.forMember, params.forCallsign]);
 

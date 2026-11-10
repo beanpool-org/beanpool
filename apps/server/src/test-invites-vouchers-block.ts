@@ -10,6 +10,7 @@
  *  3. The card's `vouchedLast30Days`: vouches that landed in the window; one from 40 days ago is in "vouched" but not in it.
  *  4. POST /api/trust/profile `voucherButton`: add (not on the list) / make (confirmed, viewer on the committee) / voucher
  *     (left, noLimit); a plain admin sees Add and the voucher card but never Make; a plain member and your own profile see none.
+ *     With Beans off the node sends none of the three (a voucher is a budget of Beans); back on, it sends them again.
  *  5. 409 `invite_out`: its maker and any owner are told "Revoke it first to make a new one."; anyone else is told "Ask @maker
  *     or an owner to revoke it first."
  *  6. No Bean moved: the ledger audit sums to zero and no transaction was written.
@@ -34,6 +35,7 @@ import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { voucherSummary } from './engine/vouchers.js';
+import { setSwitchOverride } from './config/node-profile.js';
 
 let BASE = '';
 const ADMIN_PW = 'Invites-Vouchers-Block-Pw-47!';
@@ -254,6 +256,25 @@ async function main(): Promise<void> {
     const owenButton = await buttonOf(ada, owen);
     assert(owenButton?.state === 'voucher' && owenButton.noLimit === true, `4. an owner is "Voucher · No limit ›" (${JSON.stringify(owenButton)})`);
     assert(!/balance/i.test(JSON.stringify(pamButton) + JSON.stringify(owenButton)), '4. no balance figure in the button');
+
+    // Beans off (the deciding review of #3035): a voucher is a budget of Beans, so a community without them has no voucher, no Make
+    // and no card to open, and no names-list step beside them (the web reads the trust profile only where Beans are live; the phone
+    // gates the same way). The node says nothing in any of the three states, and says it again once Beans are back on.
+    const niaEntry = confirm(nia, owen);
+    const states = async () => ({ add: await buttonOf(owen, mel), make: await buttonOf(owen, nia), voucher: await buttonOf(owen, pam) });
+    const on = await states();
+    assert(on.add?.state === 'add' && on.make?.state === 'make' && on.voucher?.state === 'voucher', `4. Beans on: add, make and voucher are each sent (${JSON.stringify(on)})`);
+    setSwitchOverride('beans', false);
+    try {
+        const off = await states();
+        assert(off.add === undefined && off.make === undefined && off.voucher === undefined,
+            `4. Beans off: the node sends no add, no make and no voucher (${JSON.stringify(off)})`);
+        assert((await buttonOf(ada, pam)) === undefined && (await buttonOf(ada, owen)) === undefined, '4. Beans off: a plain admin is sent none either');
+    } finally {
+        setSwitchOverride('beans', true);
+    }
+    assert((await buttonOf(owen, nia))?.state === 'make', '4. Beans back on: the button is sent again');
+    db.prepare('DELETE FROM confirmations WHERE entry_id = ?').run(niaEntry);
 
     // ── 5. invite_out words say what this viewer can do ───────────────────────────────────────────────────────────
     const eOut = await addEntry('Tamsin Hollow');

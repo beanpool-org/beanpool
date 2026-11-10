@@ -1050,7 +1050,10 @@ export function vouchersBlock() {
  *   voucher   a voucher now: "Voucher · 400 left ›" (an owner: no limit), opening the card
  * A plain admin (off the committee) gets Add and the voucher card but never Make; a confirmation still waiting for its
  * second admin offers nothing. Null for anyone who is not an owner or admin, for their own profile, where a community keeps
- * no names list (the worldwide one), and for an account that can't be a voucher. A left-over figure is a budget, not a balance.
+ * no names list (the worldwide one), for an account that can't be a voucher, and wherever Beans are off: a voucher is a budget of
+ * Beans (every voucher writer calls assertBeansOn), so that community has no voucher, no Make and no card to open, and its
+ * names-list step is offered no more than the web offers it (the web reads this only where Beans are live). A left-over figure
+ * is a budget, not a balance.
  */
 export type ProfileVoucherButton =
     | { state: 'add' }
@@ -1059,7 +1062,7 @@ export type ProfileVoucherButton =
 
 export function profileVoucherButton(viewer: string | null | undefined, target: string): ProfileVoucherButton | null {
     if (!viewer || viewer === target || !isNodeAdmin(viewer)) return null;
-    if (getNodeProfile() === 'global') return null;
+    if (getNodeProfile() === 'global' || !getProfileSwitches().beans) return null;
     const m = getMember(db, target);
     if (!m || m.status !== 'active' || isVisitorKey(db, target) || m.isTreasury) return null;
     if (liveVoucher(target)) return { state: 'voucher', left: budgetOf(target).left, noLimit: isNodeOwner(target) };

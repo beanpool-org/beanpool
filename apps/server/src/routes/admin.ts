@@ -2893,7 +2893,9 @@ router.get('/api/local/admin/node-roles', async (ctx) => {
 router.post('/api/local/admin/node-roles', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
-    const targetPubkey = body.pubkey || body.publicKey || body.member_pubkey;
+    // One spelling, `pubkey`, the manager's (node-client.ts grantNodeRoleApi): the `publicKey` / `member_pubkey`
+    // aliases a pre-14-Sep manager sent went in the cutover (1.4.0, audit E3).
+    const targetPubkey = body.pubkey;
     const role = body.role;
 
     // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).

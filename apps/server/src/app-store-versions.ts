@@ -47,8 +47,9 @@ const ANDROID_PACKAGE = 'org.beanpool.pillar';
 /**
  * The oldest app build this node works with, as served to clients: 1.4.0, the clean-slate cutover (design §1). Below
  * it an app is refused (426 app_too_old) and shows "Update required" once its store carries 1.4.0 (getPlatformFloorDetail:
- * never before), with no grace date. In code, not .env, so every self-hoster's node holds old apps off without
- * configuring anything; an operator can still raise it (MIN_APP_VERSION, or per platform).
+ * never before). The default brings no grace date of its own: unless the operator sets one (MIN_APP_VERSION_FROM), the
+ * block applies as soon as the store has the build. In code, not .env, so every self-hoster's node holds old apps off
+ * without configuring anything; an operator can still raise it (MIN_APP_VERSION, or per platform).
  */
 const DEFAULT_MIN_APP_VERSION = '1.4.0';
 

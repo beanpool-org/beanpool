@@ -420,15 +420,24 @@ async function main() {
         const charlieRole = rolesAfterCharlie.find(r => r.member_pubkey === 'charlie');
         assert(charlieRole?.granted_by === 'owner:password', "Charlie granted_by is recorded as 'owner:password', ignoring body actorPubkey");
 
-        // Parameter aliases: publicKey and member_pubkey
+        // One spelling: the publicKey and member_pubkey aliases went in the cutover (1.4.0, audit E3). Either alone is a
+        // request naming nobody, 400, and grants nothing; `pubkey`, the manager's, does.
         seedMember('eve', 'Eve');
-        const postAlias = await fetch(`${base}/api/local/admin/node-roles`, {
+        for (const alias of ['publicKey', 'member_pubkey']) {
+            const postAlias = await fetch(`${base}/api/local/admin/node-roles`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [alias]: 'eve', role: 'admin' }),
+            });
+            assert(postAlias.status === 400, `POST /api/local/admin/node-roles with only the old ${alias} alias: 400 (got ${postAlias.status})`);
+            assert(isNodeAdmin('eve') === false, `and Eve is not made admin by the ${alias} alias`);
+        }
+        const postPubkey = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ publicKey: 'eve', role: 'admin' }),
+            body: JSON.stringify({ pubkey: 'eve', role: 'admin' }),
         });
-        assert(postAlias.status === 200, 'POST /api/local/admin/node-roles accepts publicKey alias');
-        assert(isNodeAdmin('eve') === true, 'Eve is now admin via publicKey alias');
+        assert(postPubkey.status === 200 && isNodeAdmin('eve') === true, `with pubkey, Eve is made admin (got ${postPubkey.status})`);
 
         // Member not found returns 404
         const postNonExistent = await fetch(`${base}/api/local/admin/node-roles`, {

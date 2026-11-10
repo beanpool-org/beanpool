@@ -171,6 +171,9 @@ async function main(): Promise<void> {
     const txBefore = count('SELECT COUNT(*) AS n FROM transactions');
     const balancesBefore = sumBalances();
 
+    // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada one, no entry needed.
+    require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201, 'Owen makes Ada, an admin, a voucher');
+
     // ── 1. Owners first, with no budget words; everyone else after, by callsign ───────────────────────────────────
     const b1 = await block();
     const rows1 = (b1.body?.vouchers ?? []) as { memberPubkey: string; callsign: string; noLimit?: boolean }[];

@@ -210,9 +210,9 @@ export function floorRefusing(platform: AppPlatform, version: string, now: Date 
  * Sign Out does, which asks the same with the leave's stamp (unregisterPushToken). A phone that couldn't reach it then
  * presents the signed leave statement later (push-leave.ts). The phone sends its version on each of these while it is
  * still set to this community, so refused, the node would go on pushing the account's alerts to a phone that left it.
- * Each only ever takes away: the push token's row for the signer, or for the statement's own key. Its own route checks
- * it as for any app; and a registration (POST /api/push-tokens) is not one. Matched on the path as the router answers
- * it (one trailing slash is the path itself); any other spelling stays refused.
+ * Each only ever takes away: the push token's row for the signer, or for the statement's own key. Its route still checks
+ * it as it checks any request. A registration (POST /api/push-tokens) is no way out. Matched on the path as the router
+ * answers it (one trailing slash is the path itself); any other spelling stays refused.
  */
 const FLOOR_WAYS_OUT: ReadonlyArray<{ method: string; path: RegExp }> = [
     { method: 'DELETE', path: /^\/api\/push-tokens\/?$/ },

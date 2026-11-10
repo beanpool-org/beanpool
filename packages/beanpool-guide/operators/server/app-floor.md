@@ -12,7 +12,7 @@ Your server tells every phone app the oldest version it should run: the floor. A
 Once a floor stops apps, your server also refuses them: an app below it can't send anything or read anything private. What the member then sees depends on the app's version:
 
 - **From 1.4.0 on** (refused by a floor you raised later): it puts up **Update required** at once, even mid-use.
-- **Older, from the version with the full-screen update:** it does not know that refusal. What it tries fails, with no screen, until its next start or return puts **Update required** up.
+- **Older, from the version with the full-screen update:** it does not know that refusal. What it tries fails, without the screen, until its next start or return puts **Update required** up.
 - **Older still:** it does not say its version, so your server does not refuse it. It shows the banner only.
 
 Public reads, such as your community's name and the floor itself, still answer, so the app can say what to do, and so do the screen's ways out (below). Before the floor stops apps (its store has no version that meets it yet, or its grace date is still ahead), your server refuses nothing for an app's version.

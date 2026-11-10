@@ -52,12 +52,9 @@ import {
 import { buildSignedHeaders, buildSignedWsParams, encodeUtf8 } from '../crypto';
 import { signedGet, signedPost } from '../node-post';
 import { fetchGlobalHome } from '../community-directory';
-import { fetchNodeProfile } from '../node-profile';
 import { requestSettingsLink } from '../node-admin';
 import { buildSigninRequest } from '../settings-signin';
 import { installNodeRequestSigning, isAnchorRequest } from '../node-request-signing';
-import { addSavedNode, getSavedNodes, recordRequestSigning } from '../nodes';
-import { knownRequestSigning, rememberRequestSigning } from '../request-signing-version';
 import { signAdminChallenge, signPairing, makeOfflineTicket } from '../member-statements';
 import { UnsafeNodeAddressError, UNSAFE_NODE_ADDRESS_MESSAGE } from '../node-url';
 import type { BeanPoolIdentity } from '../identity';
@@ -105,12 +102,6 @@ beforeEach(() => {
     (globalThis as any).fetch = vi.fn(stubFetch);
 });
 
-/** What a node's GET /api/community/info answers: from #1219 on it says `requestSigning: 2`, before that nothing. */
-async function nodeSays(origin: string, requestSigning?: number) {
-    answers[`${origin}/api/community/info`] = { name: 'A community', profile: 'local', ...(requestSigning ? { requestSigning } : {}) };
-    expect(await fetchNodeProfile(origin)).not.toBeNull();
-}
-
 /** Would a node at `host` accept this request as Mia's (format 2, @beanpool/core)? */
 function boundFor(host: string, c: Call, path: string): boolean {
     const text = signedRequestText({ host, method: c.method, path, timestamp: c.headers['X-Timestamp'], nonce: c.headers['X-Nonce'], body: c.body });
@@ -143,12 +134,16 @@ describe('every request is signed for the community it goes to', () => {
     it('the global fetch wrapper signs a GET to this phone\'s community for that community\'s host', async () => {
         mem.set('beanpool_anchor_url', 'https://w.test');
         who.identity = identity;
+        answers['https://w.test/api/community/health'] = { version: '1.4.0' };
         const underlying = vi.fn(stubFetch);
         (globalThis as any).fetch = underlying;
         installNodeRequestSigning();
         await fetch('https://w.test/api/community/me?fresh=1');
-        expect(underlying).toHaveBeenCalledTimes(1);
-        const [c] = calls;
+        // Its health first, unsigned (utils/node-version-gate.ts: a community not heard from this run), then the request.
+        expect(underlying).toHaveBeenCalledTimes(2);
+        const [health, c] = calls;
+        expect(health.url).toBe('https://w.test/api/community/health');
+        expect(health.headers['X-Signature']).toBeUndefined();
         expect(c.headers['X-Signed-For']).toBe('w.test');
         expect(boundFor('w.test', c, '/api/community/me')).toBe(true);
     });
@@ -170,80 +165,6 @@ describe('every request is signed for the community it goes to', () => {
         expect(signedByMia(q.get('sig')!, signedRequestBytes(text))).toBe(true);
         const other = signedRequestText({ host: 'b.test', method: 'WS', path: '/ws', timestamp: q.get('ts')!, nonce: q.get('nonce')!, body: '' });
         expect(signedByMia(q.get('sig')!, signedRequestBytes(other))).toBe(false);
-    });
-});
-
-describe('the phone learns which format each community reads', () => {
-    it('a node that says requestSigning 2 gets format 2; one that answered without it the old format; one not asked yet format 2', async () => {
-        await nodeSays('https://new.neg.test', 2);
-        await nodeSays('https://old.neg.test');
-
-        const v2 = await buildSignedHeaders('POST', 'https://new.neg.test/api/x', '{}', identity.privateKey, PUB);
-        expect(v2['X-Signed-For']).toBe('new.neg.test');
-        expect(signedByMia(v2['X-Signature'], signedRequestBytes(signedRequestText({
-            host: 'new.neg.test', method: 'POST', path: '/api/x', timestamp: v2['X-Timestamp'], nonce: v2['X-Nonce'], body: '{}',
-        })))).toBe(true);
-
-        // A server older than #1219 can read only the old format: METHOD\nPATH\nTS\nNONCE\nBODY, no host.
-        const old = await buildSignedHeaders('POST', 'https://old.neg.test/api/x', '{}', identity.privateKey, PUB);
-        expect(old['X-Signed-For']).toBeUndefined();
-        expect(signedByMia(old['X-Signature'], utf8Bytes(unboundRequestText({
-            method: 'POST', path: '/api/x', timestamp: old['X-Timestamp'], nonce: old['X-Nonce'], body: '{}',
-        })))).toBe(true);
-
-        // Not asked yet: format 2. And one node saying it is old changes nothing for another.
-        const fresh = await buildSignedHeaders('POST', 'https://fresh.neg.test/api/x', '{}', identity.privateKey, PUB);
-        expect(fresh['X-Signed-For']).toBe('fresh.neg.test');
-        const ws = new URLSearchParams(await buildSignedWsParams('wss://old.neg.test/ws', identity.privateKey, PUB));
-        expect(ws.get('for')).toBeNull();
-        expect(new URLSearchParams(await buildSignedWsParams('wss://new.neg.test/ws', identity.privateKey, PUB)).get('v')).toBe('2');
-    });
-
-});
-
-describe('a community that has said 2 never gets the old format again (multi-community review F2)', () => {
-    // Until the switch every community still takes the old format, which names no community: a hostile node that
-    // stopped saying 2 would get a ledger transfer signed in it, and could replay it at every other community where the
-    // key is a member for five minutes. Once a host has said 2, the phone never signs the old format for it again.
-    const BODY = JSON.stringify({ from: PUB, to: 'b'.repeat(64), amount: 20, memo: 'veg box' });
-
-    it('an info answer without requestSigning after one with 2: still format 2, for requests, sockets and the saved entry', async () => {
-        await addSavedNode('https://ratchet.neg.test');
-        await nodeSays('https://ratchet.neg.test', 2);
-        await nodeSays('https://ratchet.neg.test');
-        await nodeSays('https://ratchet.neg.test', 1);
-
-        const h = await buildSignedHeaders('POST', 'https://ratchet.neg.test/api/ledger/transfer', BODY, identity.privateKey, PUB);
-        expect(h['X-Signed-For']).toBe('ratchet.neg.test');
-        const c = { url: 'https://ratchet.neg.test/api/ledger/transfer', method: 'POST', headers: h, body: BODY };
-        expect(boundFor('ratchet.neg.test', c, '/api/ledger/transfer')).toBe(true);
-        // Not good at any other community, and not the old unbound text any community would take until the switch.
-        expect(boundFor('mullum.beanpool.org', c, '/api/ledger/transfer')).toBe(false);
-        const unbound = unboundRequestText({ method: 'POST', path: '/api/ledger/transfer', timestamp: h['X-Timestamp'], nonce: h['X-Nonce'], body: BODY });
-        expect(signedByMia(h['X-Signature'], utf8Bytes(unbound))).toBe(false);
-
-        expect(new URLSearchParams(await buildSignedWsParams('wss://ratchet.neg.test/ws', identity.privateKey, PUB)).get('v')).toBe('2');
-        expect(knownRequestSigning('https://ratchet.neg.test')).toBe(2);
-        expect((await getSavedNodes()).find(n => n.url === 'https://ratchet.neg.test')?.requestSigning).toBe(2);
-    });
-
-    it('so do the Manage sign-in, pairing and the offline ticket', async () => {
-        await nodeSays('https://ratchet2.neg.test', 2);
-        await nodeSays('https://ratchet2.neg.test');
-        const ID = '9f'.repeat(32);
-        const admin = await signAdminChallenge('https://ratchet2.neg.test', { challengeId: ID, challenge: `beanpool-admin-auth:${ID}:${Date.now()}` }, identity.privateKey);
-        expect(admin).toMatchObject({ signedFor: 'ratchet2.neg.test' });
-        expect(await signPairing('https://ratchet2.neg.test', 'approve', '0123456789abcdef'.repeat(4), 'K7F3QX', identity.privateKey))
-            .toMatchObject({ signedFor: 'ratchet2.neg.test' });
-    });
-
-    it('a node that never said 2 still gets the old format: only a host that spoke 2 is held to it', async () => {
-        await nodeSays('https://never2.neg.test');
-        expect((await buildSignedHeaders('GET', 'https://never2.neg.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBeUndefined();
-        // And it moves up the moment it does.
-        await nodeSays('https://never2.neg.test', 2);
-        await nodeSays('https://never2.neg.test');
-        expect((await buildSignedHeaders('GET', 'https://never2.neg.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('never2.neg.test');
     });
 });
 
@@ -281,20 +202,8 @@ describe('the Manage button never signs text a node chose', () => {
     }
     const verifyCalls = () => calls.filter(c => c.url.endsWith('/verify-challenge'));
 
-    it('a node that sends a request-shaped "challenge" gets nothing signed, and the member is told so', async () => {
-        const OLD = 'https://hostile.manage.test';
-        await nodeSays(OLD); // it says it is old, so the phone would sign its challenge text if it were one
-        challengeAnswer(OLD, requestShaped);
-        const r = await requestSettingsLink(OLD, identity);
-        expect(r.kind).toBe('error');
-        expect(r.kind === 'error' && r.message).toMatch(/nothing was signed/);
-        expect(memberKeySign).not.toHaveBeenCalled();
-        expect(verifyCalls()).toHaveLength(0);
-    });
-
-    it('with a node that speaks format 2 it signs adminSigninText built from the id alone, and sends signedFor', async () => {
+    it('it signs adminSigninText built from the id alone, and sends signedFor: whatever text the node sends is never signed', async () => {
         const V2 = 'https://v2.manage.test';
-        await nodeSays(V2, 2);
         challengeAnswer(V2, requestShaped); // whatever text it sends is never signed
         expect(await requestSettingsLink(V2, identity)).toEqual({ kind: 'ok', token: 'tok' });
         const [v] = verifyCalls();
@@ -303,83 +212,43 @@ describe('the Manage button never signs text a node chose', () => {
         expect(signedByMia(body.signature, signedRequestBytes(adminSigninText('v2.manage.test', ID)))).toBe(true);
         expect(signedByMia(body.signature, utf8Bytes(requestShaped))).toBe(false);
 
-        // A format-2 node's id must be the 64-hex id; anything else is refused unsigned.
+        // The id must be the 64-hex id; anything else is refused unsigned, and the member is told so.
         vi.mocked(memberKeySign).mockClear();
         calls = [];
         challengeAnswer(V2, 'x', 'POST\n/api/member/purge');
-        expect((await requestSettingsLink(V2, identity)).kind).toBe('error');
+        const refused = await requestSettingsLink(V2, identity);
+        expect(refused.kind).toBe('error');
+        expect(refused.kind === 'error' && refused.message).toMatch(/nothing was signed/);
         expect(memberKeySign).not.toHaveBeenCalled();
         expect(verifyCalls()).toHaveLength(0);
     });
-
-    it('with an older node it signs main\'s exact challenge shape, and only that shape', async () => {
-        const OLD = 'https://old.manage.test';
-        await nodeSays(OLD);
-        const exact = `beanpool-admin-auth:${ID}:${Date.now()}`;
-        challengeAnswer(OLD, exact);
-        expect(await requestSettingsLink(OLD, identity)).toEqual({ kind: 'ok', token: 'tok' });
-        const body = JSON.parse(verifyCalls()[0].body);
-        expect(body.signedFor).toBeUndefined();
-        expect(signedByMia(body.signature, utf8Bytes(exact))).toBe(true);
-
-        const nearMisses = [
-            `beanpool-admin-auth:${'00'.repeat(32)}:${Date.now()}`, // another id than the one it names
-            `beanpool-admin-auth:${ID}:${Date.now() - 10 * 60_000}`, // not near now
-            `beanpool-admin-auth:${ID}:${Date.now()}\n`,
-            `beanpool-admin-auth:${ID}:${Date.now()}\nPOST\n/api/member/purge`,
-            `beanpool-admin-auth:${ID.toUpperCase()}:${Date.now()}`,
-            `beanpool-admin-auth:${ID}:${String(Date.now()).slice(1)}`,
-            ` beanpool-admin-auth:${ID}:${Date.now()}`,
-        ];
-        for (const challenge of nearMisses) {
-            vi.mocked(memberKeySign).mockClear();
-            calls = [];
-            challengeAnswer(OLD, challenge);
-            expect((await requestSettingsLink(OLD, identity)).kind, challenge).toBe('error');
-            expect(memberKeySign, challenge).not.toHaveBeenCalled();
-            expect(verifyCalls(), challenge).toHaveLength(0);
-        }
-    });
 });
 
-describe('pairing approval and offline tickets, by node version', () => {
+describe('pairing approval and offline tickets: format 2, always', () => {
     const PAIRING = '0123456789abcdef'.repeat(4);
 
-    it('pairing: format 2 with signedFor for a node that speaks it and for one not asked yet; the old text for an older node', async () => {
-        await nodeSays('https://v2.pair.test', 2);
-        await nodeSays('https://old.pair.test');
+    it('pairing: format 2 with signedFor, never the old unbound text', async () => {
         for (const [nodeUrl, host] of [['https://v2.pair.test', 'v2.pair.test'], ['https://fresh.pair.test', 'fresh.pair.test']]) {
             const { init } = await buildSigninRequest('approve', { nodeUrl, pairingId: PAIRING, shortCode: 'K7F3QX' }, identity);
             const body = JSON.parse(String(init.body));
             expect(body.signedFor).toBe(host);
             expect(signedByMia(body.signature, signedRequestBytes(settingsSigninText(host, 'approve', PAIRING, 'K7F3QX')))).toBe(true);
+            expect(signedByMia(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${PAIRING}:K7F3QX`))).toBe(false);
         }
-        const { init } = await buildSigninRequest('approve', { nodeUrl: 'https://old.pair.test', pairingId: PAIRING, shortCode: 'K7F3QX' }, identity);
-        const body = JSON.parse(String(init.body));
-        expect(body.signedFor).toBeUndefined();
-        expect(signedByMia(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${PAIRING}:K7F3QX`))).toBe(true);
     });
 
-    it('tickets: format 2 naming this community for a node that speaks it and for one not asked yet; the old {i, t, f} for an older node', async () => {
+    it('tickets: format 2 naming this community', async () => {
         const { makeOfflineTicket } = await import('../member-statements');
         const T = 1_790_000_000_000;
         const readTicket = (code: string) => {
             expect(code.startsWith('BP-')).toBe(true);
             return JSON.parse(Buffer.from(code.slice(3), 'base64').toString('utf8')) as { p: string; s: string };
         };
-        await nodeSays('https://v2.ticket.test', 2);
-        await nodeSays('https://old.ticket.test');
-
         for (const [nodeUrl, host] of [['https://v2.ticket.test', 'v2.ticket.test'], ['https://fresh.ticket.test', 'fresh.ticket.test']]) {
             const t = readTicket(await makeOfflineTicket(nodeUrl, PUB, identity.privateKey, { intendedFor: 'Robin', timestamp: T }));
             expect(t.p).toBe(inviteTicketText(host, PUB, T, 'Robin'));
             expect(signedByMia(t.s, signedRequestBytes(t.p))).toBe(true);
         }
-
-        const old = readTicket(await makeOfflineTicket('https://old.ticket.test', PUB, identity.privateKey, { intendedFor: 'Robin', timestamp: T }));
-        const payload = Buffer.from(old.p, 'base64').toString('utf8');
-        expect(JSON.parse(payload)).toEqual({ i: PUB, t: T, f: 'Robin' });
-        expect(signedByMia(old.s, utf8Bytes(payload))).toBe(true);
     });
 });
 
@@ -419,7 +288,7 @@ describe('an address that names one host and reaches another is refused, and not
         expect(memberKeySign).not.toHaveBeenCalled();
     });
 
-    it('so do the Manage sign-in, pairing and the offline ticket, whichever format the node speaks', async () => {
+    it('so do the Manage sign-in, pairing and the offline ticket', async () => {
         const ID = '9f'.repeat(32);
         for (const url of REFUSED) {
             const nodeUrl = url.replace('/api/x', '');
@@ -429,10 +298,6 @@ describe('an address that names one host and reaches another is refused, and not
                 .rejects.toBeInstanceOf(UnsafeNodeAddressError);
             await expect(makeOfflineTicket(nodeUrl, PUB, identity.privateKey), nodeUrl).rejects.toBeInstanceOf(UnsafeNodeAddressError);
         }
-        // Not even for a "node" that answered as an old one: the old forms name no host, but the address is still refused.
-        await nodeSays('https://old.refuse.test');
-        await expect(signAdminChallenge('https://old.refuse.test\\@evil.test', { challengeId: ID, challenge: `beanpool-admin-auth:${ID}:${Date.now()}` }, identity.privateKey))
-            .rejects.toBeInstanceOf(UnsafeNodeAddressError);
         expect(memberKeySign).not.toHaveBeenCalled();
     });
 
@@ -442,17 +307,6 @@ describe('an address that names one host and reaches another is refused, and not
         }
         expect(calls).toHaveLength(0);
         expect(memberKeySign).not.toHaveBeenCalled();
-    });
-
-    it('what an unplain address answers teaches the phone nothing about the host it names', async () => {
-        // Its info answer "says" it is old. Kept under mullum.neg2.test, that would move mullum to the old format.
-        await addSavedNode('https://mullum.neg2.test');
-        await recordRequestSigning('https://mullum.neg2.test\\@evil.test', { name: 'Not Mullum' });
-        expect(rememberRequestSigning('https://mullum.neg2.test\\@evil.test', 1)).toBeNull();
-        expect(knownRequestSigning('https://mullum.neg2.test/api/x')).toBeUndefined();
-        expect((await getSavedNodes()).find(n => n.url === 'https://mullum.neg2.test')?.requestSigning).toBeUndefined();
-        const h = await buildSignedHeaders('GET', 'https://mullum.neg2.test/api/x', '', identity.privateKey, PUB);
-        expect(h['X-Signed-For']).toBe('mullum.neg2.test');
     });
 
     it('an @ in the path only is path, and is signed as before', async () => {
@@ -529,68 +383,33 @@ describe('what an app can be made to sign', () => {
     });
 });
 
-// Last: it resets the module registry to play the next app start, so it must not run before a test that imports
-// a module fresh.
-describe('the phone remembers across app starts', () => {
+// Last: it resets the module registry to play a fresh app start, so it must not run before a test that imports a
+// module fresh.
+describe('the wrapper on a fresh start', () => {
     it('the wrapper sends a look-alike host neither the key nor a signature, and its own community both (F4)', async () => {
         vi.resetModules();
         const { installNodeRequestSigning: install } = await import('../node-request-signing');
         mem.set('beanpool_anchor_url', 'https://a4.test');
         who.identity = identity;
+        answers['https://a4.test/api/community/health'] = { version: '1.4.0' };
         install();
         for (const url of ['https://a4.test.evil.example/api/community/me', 'https://a4.testing.example/api/x', 'https://a4.test:8443/api/x']) {
             await fetch(url);
         }
         await fetch('https://a4.test/api/community/me');
-        expect(calls).toHaveLength(4);
-        for (const c of calls.slice(0, 3)) {
+        // The look-alikes are not the community: none of them is asked its health, nor sent the key.
+        expect(calls.map(c => c.url)).toEqual([
+            'https://a4.test.evil.example/api/community/me', 'https://a4.testing.example/api/x', 'https://a4.test:8443/api/x',
+            'https://a4.test/api/community/health', 'https://a4.test/api/community/me',
+        ]);
+        for (const c of calls.slice(0, 4)) {
             expect(c.headers['X-Public-Key'], c.url).toBeUndefined();
             expect(c.headers['X-Signature'], c.url).toBeUndefined();
         }
-        expect(calls[3].headers['X-Public-Key']).toBe(PUB);
-        expect(boundFor('a4.test', calls[3], '/api/community/me')).toBe(true);
+        expect(calls[4].headers['X-Public-Key']).toBe(PUB);
+        expect(boundFor('a4.test', calls[4], '/api/community/me')).toBe(true);
         // An address that names the community and reaches another is refused, never sent unsigned (#1224).
         await expect(fetch('https://a4.test\\@evil.test/api/x')).rejects.toBeInstanceOf((await import('../node-url')).UnsafeNodeAddressError);
-        expect(calls).toHaveLength(4);
-    });
-
-    it('a stored 2 holds on the next run, whatever the node answers first: before its stored answer loads, or after (F2)', async () => {
-        await addSavedNode('https://keep3.test');
-        await nodeSays('https://keep3.test', 2);
-        expect((await getSavedNodes()).find(n => n.url === 'https://keep3.test')?.requestSigning).toBe(2);
-
-        // The next run: an answer without the field arrives before the saved answers have loaded.
-        vi.resetModules();
-        const version = await import('../request-signing-version');
-        const nodes = await import('../nodes');
-        await nodes.recordRequestSigning('https://keep3.test', { name: 'A community', profile: 'local' });
-        await nodes.loadSavedRequestSigning();
-        const crypto = await import('../crypto');
-        expect((await crypto.buildSignedHeaders('GET', 'https://keep3.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('keep3.test');
-        // And after: the same.
-        await nodes.recordRequestSigning('https://keep3.test', { name: 'A community', profile: 'local' });
-        expect(version.knownRequestSigning('https://keep3.test')).toBe(2);
-        expect((await crypto.buildSignedHeaders('GET', 'https://keep3.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('keep3.test');
-        expect((await nodes.getSavedNodes()).find(n => n.url === 'https://keep3.test')?.requestSigning).toBe(2);
-    });
-
-    it('what a node said is kept on its saved entry, and read back on the next run', async () => {
-        await addSavedNode('https://keep.test');
-        await addSavedNode('https://keep2.test');
-        await nodeSays('https://keep.test');
-        await nodeSays('https://keep2.test', 2);
-        const saved = await getSavedNodes();
-        expect(saved.find(n => n.url === 'https://keep.test')?.requestSigning).toBe(1);
-        expect(saved.find(n => n.url === 'https://keep2.test')?.requestSigning).toBe(2);
-
-        // The next run: fresh modules, nothing in memory, only what the phone stored.
-        vi.resetModules();
-        const nodes = await import('../nodes');
-        await nodes.loadSavedRequestSigning();
-        const crypto = await import('../crypto');
-        const old = await crypto.buildSignedHeaders('GET', 'https://keep.test/api/x', '', identity.privateKey, PUB);
-        expect(old['X-Signed-For']).toBeUndefined();
-        const v2 = await crypto.buildSignedHeaders('GET', 'https://keep2.test/api/x', '', identity.privateKey, PUB);
-        expect(v2['X-Signed-For']).toBe('keep2.test');
+        expect(calls).toHaveLength(5);
     });
 });

@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 /**
  * The replica column `event_repeat_skips` in db.ts (DESIGN-map-calendar-fable.md §4, §8 S2).
  * Verifies that:
- * 1. An older phone database without `event_repeat_skips` gains the column via ALTER TABLE on open without breaking existing rows.
+ * 1. The column is in the copy's schema (utils/db.ts: a copy from before it is below COPY_SCHEMA and is read again whole).
  * 2. Syncing an event with cancelled skips (`eventRepeatSkips`) stores them as JSON in SQLite.
  * 3. `getPosts({ includeEvents: true })` and `getPosts({ type: 'event' })` read `event_repeat_skips` back.
  * 4. `persistEventView` updates `event_repeat_skips`.
@@ -50,7 +50,7 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { applyDelta, closeDB, getDb, getPosts, persistEventView } from '../db';
+import { applyDelta, getDb, getPosts, persistEventView } from '../db';
 
 const HOST = 'h'.repeat(64);
 
@@ -77,25 +77,14 @@ beforeEach(async () => {
 });
 
 describe('the replica column event_repeat_skips', () => {
-    it('an older phone database without event_repeat_skips gains it via ALTER on open, keeping existing rows intact', async () => {
-        // 1. Seed a post
-        await applyDelta({ posts: [eventPost('ev-old', { title: 'Old Event' })] });
-
-        // 2. Simulate older schema by closing DB and dropping event_repeat_skips column
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN event_repeat_skips');
-
-        // Confirm column is gone in older DB
-        const oldCols = (sql.prepare('PRAGMA table_info(posts)').all() as { name: string }[]).map(c => c.name);
-        expect(oldCols).not.toContain('event_repeat_skips');
-
-        // 3. Re-open DB (triggers ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT)
-        await getDb();
-
-        // Verify column was added
-        const newCols = (sql.prepare('PRAGMA table_info(posts)').all() as { name: string; type: string; dflt_value: unknown }[]);
-        const col = newCols.find(c => c.name === 'event_repeat_skips');
+    it('the copy\'s schema has the column, and a listing synced before any skip reads it as none', async () => {
+        // 1. The schema makes it (no ALTER on open: a copy from before it is below COPY_SCHEMA and read again whole).
+        const cols = (sql.prepare('PRAGMA table_info(posts)').all() as { name: string; type: string; dflt_value: unknown }[]);
+        const col = cols.find(c => c.name === 'event_repeat_skips');
         expect(col).toMatchObject({ type: 'TEXT', dflt_value: null });
+
+        // 2. Seed a post with no skips
+        await applyDelta({ posts: [eventPost('ev-old', { title: 'Old Event' })] });
 
         // Verify existing rows are intact
         const existing = (await getPosts({ includeEvents: true })).find((p: any) => p.id === 'ev-old');

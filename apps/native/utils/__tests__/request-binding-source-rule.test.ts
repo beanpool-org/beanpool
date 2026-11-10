@@ -91,14 +91,15 @@ function callSites(): { sites: Site[]; rawImports: string[] } {
 
 const key = (s: Site) => `${s.file} ${s.fn}`;
 
-describe('the member key signs only through core\'s builders and the listed old-form fallbacks', () => {
+describe('the member key signs only through core\'s builders', () => {
     const { sites, rawImports } = callSites();
 
     it('finds the signing code it is meant to police', () => {
         // Guards the test itself: if the scan stopped seeing these, every rule below would pass vacuously.
         expect(sites.some(s => s.callee === 'signData' && key(s) === 'utils/crypto.ts memberSigner')).toBe(true);
         expect(sites.some(s => s.callee === 'memberSigner' && key(s) === 'utils/member-statements.ts signAdminChallenge')).toBe(true);
-        expect(sites.some(s => s.callee === 'sign' && key(s) === 'utils/crypto.ts unboundRequestHeaders')).toBe(true);
+        // noble's own sign, inside signData: the scan sees a direct sign call, so "none but signData" below is not vacuous.
+        expect(sites.some(s => s.callee === 'sign' && key(s) === 'utils/crypto.ts signData')).toBe(true);
     });
 
     it('signData, the raw signer, is called only inside memberSigner (and the listed RSVP statement)', () => {
@@ -129,7 +130,7 @@ describe('the member key signs only through core\'s builders and the listed old-
         expect(fn.match(/signData\(/g)).toHaveLength(1);
     });
 
-    it('memberSigner is handed out only where a core builder or an old-form fallback takes it', () => {
+    it('memberSigner is handed out only where a core builder takes it', () => {
         const allowed = new Set([
             'utils/crypto.ts buildSignedHeaders',
             'utils/crypto.ts buildSignedWsParams',
@@ -160,15 +161,9 @@ describe('the member key signs only through core\'s builders and the listed old-
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });
 
-    it('a Signer is called directly only by the old-form fallbacks, and only on plain UTF-8 they built', () => {
-        const fallbacks = new Set([
-            'utils/crypto.ts unboundRequestHeaders',
-            'utils/crypto.ts unboundWsParams',
-            'utils/member-statements.ts oldFormSignature',
-        ]);
+    it('a Signer is never called directly: only core\'s builders call it (the old unbound forms are gone, 1.4.0)', () => {
         const direct = sites.filter(s => s.callee === 'sign' && key(s) !== 'utils/crypto.ts signData'); // signData wraps noble's sign
-        expect(direct.filter(s => !fallbacks.has(key(s))).map(key)).toEqual([]);
-        for (const s of direct) expect(s.arg, key(s)).toMatch(/^utf8Bytes\(/);
+        expect(direct.map(key)).toEqual([]);
     });
 
     it('nothing else calls an Ed25519 sign, or holds one', () => {

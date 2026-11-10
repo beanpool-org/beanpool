@@ -632,11 +632,13 @@ export async function wipeIdentity(): Promise<void> {
     // finds none.
     await forgetAllPulseTokens();
 
-    // A wiped device has no half-finished join wizard to resume, nor a claim code an older build kept at rest (#2412).
+    // A wiped device has no half-finished join wizard to resume, nor a claim code an older build kept at rest (#2412,
+    // utils/retired-keys.ts: conversion code, log row CUT3).
     try {
-        const { clearPendingOnboarding, forgetOldPendingClaim } = require('./onboarding-state');
+        const { clearPendingOnboarding } = require('./onboarding-state');
         await clearPendingOnboarding();
-        await forgetOldPendingClaim();
+        const { forgetRetiredKeys } = require('./retired-keys');
+        await forgetRetiredKeys();
     } catch {}
 
     try {

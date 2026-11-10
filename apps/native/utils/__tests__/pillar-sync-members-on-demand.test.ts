@@ -49,7 +49,6 @@ vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
     addSavedNode: vi.fn(async () => {}),
     // What an info answer says of the node's request format (node-profile.ts fetchNodeProfile).
-    recordRequestSigning: vi.fn(async () => {}),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 

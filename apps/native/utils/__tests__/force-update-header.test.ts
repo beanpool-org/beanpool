@@ -55,7 +55,11 @@ describe('X-BeanPool-App on requests to the phone\'s own community', () => {
 
     it('a write carries it too, keeping the headers it was given', async () => {
         await fetch('https://mullum.test/api/ledger/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Signature': 's' }, body: '{}' });
-        const h = sentHeaders(0);
+        // The first request of a run to the community reads its health first (utils/node-version-gate.ts): the write is the
+        // one sent to the transfer route.
+        const at = underlying.mock.calls.findIndex(([input]) => String(input) === 'https://mullum.test/api/ledger/transfer');
+        expect(at).toBeGreaterThan(-1);
+        const h = sentHeaders(at);
         expect(h[APP_VERSION_HEADER]).toBe('1.2.57 android');
         expect(h['Content-Type']).toBe('application/json');
         expect(h['X-Signature']).toBe('s');

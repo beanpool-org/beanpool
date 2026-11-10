@@ -378,19 +378,6 @@ function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): Ke
     return { ...saved, enrolledSso, enrolled: enrolledSso.map(() => 'sso' as const), available: enrolledSso.length };
 }
 
-/**
- * Where a build of 23 Oct 2026 (#2412) kept a claim for an account made elsewhere, the one-time claim code with it. That
- * detour is gone: the claim makes the account (app/claim-community.tsx). Taken off at every start (app/_layout.tsx) and
- * by a wipe, so no claim code stays at rest on a phone that had that build.
- */
-const OLD_PENDING_CLAIM_KEY = 'beanpool_pending_claim';
-
-export async function forgetOldPendingClaim(): Promise<void> {
-    try {
-        await AsyncStorage.removeItem(OLD_PENDING_CLAIM_KEY);
-    } catch {}
-}
-
 /** Subscribe to changes made through this module (used by the root gatekeeper). */
 export function subscribePendingOnboarding(fn: () => void): () => void {
     listeners.add(fn);

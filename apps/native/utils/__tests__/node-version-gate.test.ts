@@ -1,0 +1,544 @@
+/**
+ * The clean-slate cutover on the phone (DESIGN-clean-slate-cutover-fable.md §1, slice P): the app talks to servers from
+ * 1.4.0 on (utils/node-version-gate.ts MIN_NODE_VERSION, baked in). A community whose health names an older version gets
+ * one card (the full-screen block, utils/force-update.ts `node-too-old`) and no other request; and a 426 `app_too_old`
+ * from the community is the full-screen "Update required" at once.
+ *
+ * Nothing here contacts a node: every answer is the test's.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };
+});
+const mem = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => mem.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { mem.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { mem.delete(k); }),
+    },
+}));
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
+vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(async () => 3),
+    authenticateAsync: vi.fn(async () => ({ success: true })),
+}));
+const who = vi.hoisted(() => ({ identity: null as null | { publicKey: string; privateKey: string; callsign: string } }));
+vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => who.identity) }));
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import {
+    HEALTH_READ_TIMEOUT_MS, MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeTooOldText, nodeVersionBelowMinimum, noteHealthAnswer, resetNodeVersionGateForTests,
+    tooOldVersionOf,
+} from '../node-version-gate';
+import {
+    APP_TOO_OLD_CODE, checkCommunityForUpdate, createForceUpdateGate, evaluateForceUpdate, followCommunityForUpdate, onAppRefused, type ForceUpdateDecision,
+    type UpdateBlockShown,
+} from '../force-update';
+import { communitySwitched } from '../community-switch';
+import { installNodeRequestSigning } from '../node-request-signing';
+import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+
+const SEED = new Uint8Array(32).fill(5);
+const PUB = Buffer.from(ed25519.getPublicKey(SEED)).toString('hex');
+const identity = { publicKey: PUB, privateKey: Buffer.from(SEED).toString('hex'), callsign: 'Ivy' };
+
+const HOME = 'https://home.cutover.test';
+const OTHER = 'https://other.cutover.test';
+
+interface Call { url: string; method: string; headers: Record<string, string> }
+let calls: Call[] = [];
+/** Each answer by `origin + path`: a body (200) or `{ status, body }`. */
+let answers: Record<string, unknown> = {};
+/** An answer by `origin + path` that waits for this to resolve first (a slow server). */
+let held: Record<string, Promise<void>> = {};
+
+function reply(status: number, body: unknown): Response {
+    const make = (): any => ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+        clone: () => make(),
+    });
+    return make() as Response;
+}
+
+async function stubFetch(input: string, init?: RequestInit): Promise<Response> {
+    const url = String(input);
+    calls.push({ url, method: init?.method ?? 'GET', headers: { ...(init?.headers as Record<string, string> ?? {}) } });
+    const u = new URL(url);
+    await held[`${u.origin}${u.pathname}`];
+    const a = answers[`${u.origin}${u.pathname}`];
+    if (a === undefined) return reply(404, { error: 'Not Found' });
+    if (a && typeof a === 'object' && 'status' in a) {
+        const r = a as { status: number; body?: unknown };
+        return reply(r.status, r.body);
+    }
+    return reply(200, a);
+}
+
+// The wrapper is installed once per module (as at app start); the fetch under it is this stub for every test.
+(globalThis as any).fetch = vi.fn(stubFetch);
+installNodeRequestSigning({ appVersionHeader: '1.4.0 android' });
+
+beforeEach(() => {
+    calls = [];
+    answers = {};
+    held = {};
+    mem.clear();
+    mem.set('beanpool_anchor_url', HOME);
+    mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }]));
+    who.identity = identity;
+    resetNodeVersionGateForTests();
+});
+
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+describe('the minimum, baked in', () => {
+    it('is 1.4.0', () => {
+        expect(MIN_NODE_VERSION).toBe('1.4.0');
+    });
+
+    it('a health answer below it names its version; at or above it, or no version to go on, names none', () => {
+        expect(nodeVersionBelowMinimum({ version: '1.2.37' })).toBe('1.2.37');
+        expect(nodeVersionBelowMinimum({ version: '1.3.9' })).toBe('1.3.9');
+        expect(nodeVersionBelowMinimum({ version: 'v1.2.36' })).toBe('1.2.36');
+        expect(nodeVersionBelowMinimum({ version: '1.4.0' })).toBeNull();
+        expect(nodeVersionBelowMinimum({ version: '1.4.1' })).toBeNull();
+        expect(nodeVersionBelowMinimum({ version: '2.0.0' })).toBeNull();
+        // Every doubt is "not too old": no answer, no version, not a version, the server's unresolved 0.0.0.
+        for (const doubt of [null, undefined, 'up', [], {}, { version: 'nonsense' }, { version: 1.2 }, { version: '0.0.0' }]) {
+            expect(nodeVersionBelowMinimum(doubt), JSON.stringify(doubt)).toBeNull();
+        }
+    });
+
+    it('the card says the server\'s version, the minimum, and who must act; a refused request says it in the member\'s language', async () => {
+        expect(nodeTooOldText('1.2.37')).toBe("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");
+        // Shown where a refused request's message is (a join, Settings: components/settings/settings-lines.ts), worded again.
+        const { settingsLineWords } = await import('../../components/settings/settings-lines');
+        const { setLanguage } = await import('@beanpool/core');
+        expect(settingsLineWords(nodeTooOldText('1.2.37'))).toBe(nodeTooOldText('1.2.37'));
+        setLanguage('xx');
+        try {
+            const said = settingsLineWords(nodeTooOldText('1.2.37'));
+            expect(said).not.toBe(nodeTooOldText('1.2.37'));
+            expect(said).toContain('1.2.37');
+            expect(said).toContain('1.4.0');
+        } finally {
+            setLanguage('en');
+        }
+        const e = new NodeTooOldError('1.2.37');
+        expect(isNodeTooOldError(e)).toBe(true);
+        expect(e.message).toBe(nodeTooOldText('1.2.37'));
+        expect(isNodeTooOldError(new Error('x'))).toBe(false);
+    });
+});
+
+describe('a community whose server is 1.2.37: one card, and no other request', () => {
+    it('the first request of the run reads its health, and is refused before anything else leaves the phone', async () => {
+        answers[`${HOME}/api/community/health`] = { version: '1.2.37' };
+        answers[`${HOME}/api/community/me`] = { ok: true };
+        await expect(fetch(`${HOME}/api/community/me`)).rejects.toBeInstanceOf(NodeTooOldError);
+        // Its health, unsigned, and nothing else.
+        expect(calls.map(c => c.url)).toEqual([`${HOME}/api/community/health`]);
+        expect(calls[0].headers['X-Signature']).toBeUndefined();
+        expect(tooOldVersionOf(`${HOME}/anything`)).toBe('1.2.37');
+
+        // Every later request, any method, any path: refused here, nothing sent, not even the health again.
+        await expect(fetch(`${HOME}/api/posts`)).rejects.toBeInstanceOf(NodeTooOldError);
+        await expect(fetch(`${HOME}/api/ledger/transfer`, { method: 'POST', body: '{}' })).rejects.toBeInstanceOf(NodeTooOldError);
+        await expect(fetch(`${HOME}:443/api/x`)).rejects.toBeInstanceOf(NodeTooOldError);
+        expect(calls).toHaveLength(1);
+    });
+
+    it('its health read itself still goes (it is how the phone hears the server was updated), and 1.4.0 lets requests through again', async () => {
+        noteHealthAnswer(HOME, { version: '1.2.37' });
+        answers[`${HOME}/api/community/health`] = { version: '1.4.0' };
+        answers[`${HOME}/api/community/me`] = { ok: true };
+        const res = await fetch(`${HOME}/api/community/health`);
+        expect(res.status).toBe(200);
+        await settle();
+        expect(tooOldVersionOf(HOME)).toBeNull();
+        expect((await fetch(`${HOME}/api/community/me`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([`${HOME}/api/community/health`, `${HOME}/api/community/me`]);
+    });
+
+    it('a server at 1.4.0 is asked its health once a run, then every request goes', async () => {
+        answers[`${HOME}/api/community/health`] = { version: '1.4.0' };
+        answers[`${HOME}/api/community/me`] = { ok: true };
+        expect((await fetch(`${HOME}/api/community/me`)).status).toBe(200);
+        expect((await fetch(`${HOME}/api/community/me`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([`${HOME}/api/community/health`, `${HOME}/api/community/me`, `${HOME}/api/community/me`]);
+    });
+
+    it('a host that is not one of the phone\'s communities is never asked its health; one a join heard below the minimum is refused', async () => {
+        answers[`${OTHER}/api/x`] = { ok: true };
+        expect((await fetch(`${OTHER}/api/x`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([`${OTHER}/api/x`]);
+        // A join reads the new community's health first (utils/join-another-community.ts): heard old, nothing else goes.
+        answers[`${OTHER}/api/community/health`] = { version: '1.3.4' };
+        await fetch(`${OTHER}/api/community/health`);
+        await settle();
+        await expect(fetch(`${OTHER}/api/x`)).rejects.toBeInstanceOf(NodeTooOldError);
+        expect(calls).toHaveLength(2);
+    });
+
+    it('a health that cannot be read is a doubt: the request goes, and the read is not asked again for a minute', async () => {
+        answers[`${HOME}/api/community/me`] = { ok: true };
+        // No health route answered: 404, not a health answer.
+        expect((await fetch(`${HOME}/api/community/me`)).status).toBe(200);
+        expect((await fetch(`${HOME}/api/community/me`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([`${HOME}/api/community/health`, `${HOME}/api/community/me`, `${HOME}/api/community/me`]);
+    });
+
+    it('the block shows the card: the community\'s health below the minimum is node-too-old, whatever its floors say', async () => {
+        expect(evaluateForceUpdate('1.4.0', { version: '1.2.37' }, 'android')).toEqual({ kind: 'node-too-old', version: '1.2.37' });
+        expect(evaluateForceUpdate('1.4.0', {
+            version: '1.2.37', appFloors: { android: { min: '1.4.0', blocking: true } }, appVersions: { android: '1.4.0' },
+        }, 'ios')).toEqual({ kind: 'node-too-old', version: '1.2.37' });
+        // A current server is read for its floors as before.
+        expect(evaluateForceUpdate('1.4.0', { version: '1.4.0' }, 'android')).toEqual({ kind: 'clear' });
+
+        // At a safe moment the gate puts it up as the server's card, not the store's.
+        const shown: Array<UpdateBlockShown | null> = [];
+        const gate = createForceUpdateGate({
+            now: () => 0,
+            check: () => checkCommunityForUpdate({
+                anchorUrl: async () => HOME,
+                fetchJson: async () => ({ version: '1.2.37' }),
+                localVersion: '1.4.0',
+                platform: 'android',
+            }),
+            show: (b) => shown.push(b),
+        });
+        await gate.start('active');
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
+        // And the check's answer holds for every request to it, whoever asked.
+        expect(tooOldVersionOf(HOME)).toBe('1.2.37');
+    });
+});
+
+describe('a request waits for its community\'s health to answer: nothing goes to a server not yet known new enough (#3043 review)', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    /** Phone time moves on (setTimeout and Date only: settle's setImmediate stays real), and the wrapper's work runs. */
+    async function after(ms: number) {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 20; i++) await settle();
+    }
+    /** The community's health answers only when `answer()` is called: a slow server. */
+    function slowHealth(version: string) {
+        let answer: () => void = () => {};
+        held[`${HOME}/api/community/health`] = new Promise<void>((resolve) => { answer = resolve; });
+        answers[`${HOME}/api/community/health`] = { version };
+        answers[`${HOME}/api/sync/posts`] = { posts: [] };
+        answers[`${HOME}/api/push-tokens`] = { ok: true };
+        return () => answer();
+    }
+    const HEALTH = `${HOME}/api/community/health`;
+
+    it('a 1.2.37 server whose health takes 2 s gets neither the GET nor the POST sent meanwhile, and both are refused once it answers', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.2.37');
+        const outcomes = Promise.allSettled([
+            fetch(`${HOME}/api/sync/posts`),
+            fetch(`${HOME}/api/push-tokens`, { method: 'POST', body: '{}' }),
+        ]);
+        await after(2_000);
+        expect(tooOldVersionOf(HOME)).toBeUndefined();
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        answer();
+        await after(0);
+        const [get, post] = await outcomes;
+        expect(get.status === 'rejected' && get.reason).toBeInstanceOf(NodeTooOldError);
+        expect(post.status === 'rejected' && post.reason).toBeInstanceOf(NodeTooOldError);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+    });
+
+    it('a 1.4.0 server whose health takes 2 s gets both once it has answered, after the health', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.4.0');
+        const get = fetch(`${HOME}/api/sync/posts`);
+        const post = fetch(`${HOME}/api/push-tokens`, { method: 'POST', body: '{}' });
+        await after(2_000);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        answer();
+        await after(0);
+        expect((await get).status).toBe(200);
+        expect((await post).status).toBe(200);
+        // The health first; the two after it, in whichever order they finish leaving (the GET is signed first).
+        expect(calls[0].url).toBe(HEALTH);
+        expect(calls.slice(1).map(c => c.url).sort()).toEqual([`${HOME}/api/push-tokens`, `${HOME}/api/sync/posts`]);
+    });
+
+    it('a health that never answers is given up at its own limit (8 s), a doubt: the held request goes then, and one within the minute after goes at once', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        slowHealth('1.2.37');
+        const first = fetch(`${HOME}/api/sync/posts`);
+        await after(HEALTH_READ_TIMEOUT_MS - 100);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+        await after(200);
+        expect((await first).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([HEALTH, `${HOME}/api/sync/posts`]);
+        expect((await fetch(`${HOME}/api/sync/posts`)).status).toBe(200);
+        expect(calls.map(c => c.url)).toEqual([HEALTH, `${HOME}/api/sync/posts`, `${HOME}/api/sync/posts`]);
+    });
+
+    it('a held request its caller gives up on is not sent: it fails at once, as an aborted fetch does', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const answer = slowHealth('1.4.0');
+        const controller = new AbortController();
+        const outcome = fetch(`${HOME}/api/sync/posts`, { signal: controller.signal }).then(() => 'sent', (e: unknown) => e);
+        await after(1_000);
+        controller.abort();
+        await after(0);
+        expect((await outcome as { name?: unknown }).name).toBe('AbortError');
+        // Already given up when it is made: the same, with nothing sent.
+        const late = new AbortController();
+        late.abort();
+        expect(await fetch(`${HOME}/api/sync/posts`, { signal: late.signal }).then(() => 'sent', (e: unknown) => (e as { name?: unknown }).name)).toBe('AbortError');
+        answer();
+        await after(0);
+        expect(calls.map(c => c.url)).toEqual([HEALTH]);
+    });
+});
+
+describe('the card goes up as soon as any request hears the server too old, and comes down once it is updated', () => {
+    it('serverTooOld puts the server card up at once, mid-use; serverCurrent takes only that card down', async () => {
+        let release: (d: ForceUpdateDecision) => void = () => {};
+        const shown: Array<UpdateBlockShown | null> = [];
+        const gate = createForceUpdateGate({
+            now: () => 0,
+            check: () => new Promise<ForceUpdateDecision>((resolve) => { release = resolve; }),
+            show: (b) => shown.push(b),
+        });
+        // The cold start's question is slow (past the decide window, say): the request's own first read heard it first.
+        const started = gate.start('active');
+        gate.serverTooOld('1.2.37');
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
+        // The slow question answers late: asked before, so it says nothing now.
+        release({ kind: 'clear' });
+        await started;
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }]);
+        // The operator updated it: the card comes down.
+        gate.serverCurrent();
+        expect(shown).toEqual([{ version: '1.2.37', nodeTooOld: true }, null]);
+        // serverCurrent never takes down this app's own block (its floor still holds).
+        gate.refused('1.5.0');
+        gate.serverCurrent();
+        expect(shown[shown.length - 1]).toEqual({ version: '1.5.0' });
+    });
+
+    /**
+     * The block's own wiring (followCommunityForUpdate, as components/ForceUpdateBlock.tsx mounts it), the real gate, the
+     * real wrapper. `blinks`: how many of the gate's own health checks fail first (a network blink: fetchJson throws).
+     */
+    function mountBlock(blinks: { left: number }) {
+        const shown: Array<UpdateBlockShown | null> = [];
+        const anchorUrl = async () => mem.get('beanpool_anchor_url') ?? null;
+        const gate = createForceUpdateGate({
+            now: () => 0,
+            check: () => checkCommunityForUpdate({
+                anchorUrl,
+                fetchJson: async (url) => {
+                    if (blinks.left > 0) { blinks.left--; throw new Error('network blink'); }
+                    const res = await fetch(url);
+                    return res.ok ? res.json() : null;
+                },
+                localVersion: '1.4.0',
+                platform: 'android',
+            }),
+            show: (b) => shown.push(b),
+        });
+        const started = gate.start('active');
+        const stop = followCommunityForUpdate(gate, anchorUrl);
+        return { shown, started, stop };
+    }
+    /** Lets the wiring's reads of the phone's community and the gate's checks finish. */
+    const settleAll = async () => { for (let i = 0; i < 10; i++) await settle(); };
+    const CARD = { version: '1.2.37', nodeTooOld: true };
+
+    it('a community heard too old earlier in the run gets its card on the switch to it, even when the switch\'s own check fails (#3043 review)', async () => {
+        // B (HOME, the phone's community) is at 1.4.0; A (OTHER) is saved on the phone, at 1.2.37.
+        mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }, { url: OTHER }]));
+        answers[`${HOME}/api/community/health`] = { version: '1.4.0' };
+        answers[`${OTHER}/api/community/health`] = { version: '1.2.37' };
+        answers[`${OTHER}/api/posts`] = { ok: true };
+        const blinks = { left: 0 };
+        const { shown, started, stop } = mountBlock(blinks);
+        try {
+            await started;
+            // An unread round's request to A reads A's health and is refused; the community in use is B, so no card.
+            await expect(fetch(`${OTHER}/api/unread`)).rejects.toBeInstanceOf(NodeTooOldError);
+            await settleAll();
+            expect(tooOldVersionOf(OTHER)).toBe('1.2.37');
+            expect(shown).toEqual([]);
+
+            // The member switches to A while A's next health check fails once.
+            mem.set('beanpool_anchor_url', OTHER);
+            blinks.left = 1;
+            communitySwitched();
+            await settleAll();
+            expect(blinks.left).toBe(0);
+            expect(shown).toEqual([CARD]);
+
+            // A request to A is refused on the phone, and three good header pings read the same 1.2.37: the card stays.
+            await expect(fetch(`${OTHER}/api/posts`)).rejects.toBeInstanceOf(NodeTooOldError);
+            for (let i = 0; i < 3; i++) expect((await fetch(`${OTHER}/api/community/health`)).status).toBe(200);
+            await settleAll();
+            expect(shown).toEqual([CARD]);
+            expect(calls.filter(c => c.url.startsWith(OTHER)).map(c => c.url)).toEqual(Array(4).fill(`${OTHER}/api/community/health`));
+
+            // Back to B: the card was A's, so it comes down, and B is asked as usual.
+            mem.set('beanpool_anchor_url', HOME);
+            communitySwitched();
+            await settleAll();
+            expect(shown).toEqual([CARD, null]);
+        } finally {
+            stop();
+        }
+        // Stopped: a switch moves nothing.
+        mem.set('beanpool_anchor_url', OTHER);
+        communitySwitched();
+        await settleAll();
+        expect(shown).toEqual([CARD, null]);
+    });
+
+    it('a community heard too old before the block mounted gets its card at once, even when the start\'s own check fails', async () => {
+        // The app's first requests (before the block's effect ran) read the community's health: 1.2.37.
+        answers[`${HOME}/api/community/health`] = { version: '1.2.37' };
+        await expect(fetch(`${HOME}/api/community/me`)).rejects.toBeInstanceOf(NodeTooOldError);
+        const { shown, started, stop } = mountBlock({ left: 1 });
+        try {
+            await started;
+            await settleAll();
+            expect(shown).toEqual([CARD]);
+        } finally {
+            stop();
+        }
+    });
+
+    it('every health answer the phone reads tells the block, once per change', async () => {
+        const { onNodeVersionHeard } = await import('../node-version-gate');
+        let told = 0;
+        const stop = onNodeVersionHeard(() => { told++; });
+        try {
+            noteHealthAnswer(HOME, { version: '1.2.37' });
+            noteHealthAnswer(`${HOME}/api/community/health`, { version: '1.2.37' });
+            expect(told).toBe(1);
+            noteHealthAnswer(HOME, { version: '1.4.0' });
+            expect(told).toBe(2);
+            // Not a health answer: nothing changes, nobody is told.
+            noteHealthAnswer(HOME, '<html>');
+            expect(told).toBe(2);
+            expect(tooOldVersionOf(HOME)).toBeNull();
+        } finally {
+            stop();
+        }
+    });
+});
+
+/** A file of the server's source: the phone can't import the server's code (it opens the node's database). */
+const serverSource = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../../server/src', rel), 'utf8');
+
+/**
+ * The 426 the server answers an app it refuses, read from the server itself: its code and its sentence from
+ * engine/member-signature.ts (APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, the refusal `unboundRefusal` builds), in the shape its
+ * signature check answers with (https-server.ts): the sentence in `error`, the code in `code`.
+ */
+function serverAppTooOld(): { error: string; code: string } {
+    const signature = serverSource('engine/member-signature.ts');
+    const code = /export const APP_TOO_OLD_CODE = '([^']+)';/.exec(signature)?.[1];
+    const error = /export const APP_TOO_OLD_ERROR = word\('([^']+)'\);/.exec(signature)?.[1];
+    expect(code, 'the server names APP_TOO_OLD_CODE').toBeTruthy();
+    expect(error, 'the server names APP_TOO_OLD_ERROR').toBeTruthy();
+    expect(signature).toContain('{ ok: false, status: 426, error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE }');
+    expect(serverSource('https-server.ts')).toContain('ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };');
+    return { error: error!, code: code! };
+}
+
+/**
+ * The sign-in pairing route's 426 (settings-signin-pairing.ts, answered by routes/settings-signin.ts): the same code, a
+ * sentence of its own, and no minimum. It refuses only that feature, so it never puts the block up.
+ */
+function serverPairingTooOld(): Record<string, string> {
+    const pairing = serverSource('settings-signin-pairing.ts');
+    const error = /export const SIGNIN_APP_TOO_OLD = '([^']+)';/.exec(pairing)?.[1];
+    expect(error, 'the server names SIGNIN_APP_TOO_OLD').toBeTruthy();
+    expect(pairing).toContain("{ ok: false, status: 426, error: SIGNIN_APP_TOO_OLD, code: 'app_too_old', reason: 'app-too-old' }");
+    expect(serverSource('routes/settings-signin.ts')).toContain('ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}) };');
+    return { error: error!, reason: 'app-too-old', code: 'app_too_old' };
+}
+
+describe('a 426 app_too_old from the community is the full-screen Update required', () => {
+    it('the phone reads the code the server sends: one spelling on both sides', () => {
+        expect(APP_TOO_OLD_CODE).toBe(serverAppTooOld().code);
+    });
+
+    it('the wrapper hears the server\'s own answer (its sentence in error, app_too_old in code) from the phone\'s own community, names the node\'s minimum, and hands the answer back as it was', async () => {
+        noteHealthAnswer(HOME, { version: '1.5.0' });
+        // The node's floor refusal: the server's answer, with the minimum it holds this app to.
+        const body = { ...serverAppTooOld(), minAppVersion: '1.5.0' };
+        answers[`${HOME}/api/posts`] = { status: 426, body };
+        const heard: string[] = [];
+        const stop = onAppRefused((v) => heard.push(v));
+        try {
+            const res = await fetch(`${HOME}/api/posts`);
+            expect(res.status).toBe(426);
+            expect(await res.json()).toEqual(body);
+        } finally {
+            stop();
+        }
+        expect(heard).toEqual(['1.5.0']);
+    });
+
+    it('never from another host, nor for another code or status, nor without a version (the server\'s answer as it is today, the pairing route\'s), nor with the code only in error', async () => {
+        noteHealthAnswer(OTHER, { version: '1.5.0' });
+        noteHealthAnswer(HOME, { version: '1.5.0' });
+        const server = serverAppTooOld();
+        answers[`${OTHER}/api/posts`] = { status: 426, body: { ...server, minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/a`] = { status: 426, body: { ...server, code: 'something_else', minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/b`] = { status: 426, body: server };
+        answers[`${HOME}/api/c`] = { status: 426, body: serverPairingTooOld() };
+        answers[`${HOME}/api/d`] = { status: 403, body: { ...server, minAppVersion: '1.5.0' } };
+        answers[`${HOME}/api/e`] = { status: 426, body: { error: server.code, minAppVersion: '1.5.0' } };
+        const heard: string[] = [];
+        const stop = onAppRefused((v) => heard.push(v));
+        try {
+            for (const p of [`${OTHER}/api/posts`, `${HOME}/api/a`, `${HOME}/api/b`, `${HOME}/api/c`, `${HOME}/api/d`, `${HOME}/api/e`]) await fetch(p);
+        } finally {
+            stop();
+        }
+        expect(heard).toEqual([]);
+        expect(calls).toHaveLength(6);
+    });
+
+    it('the gate puts the block up at once, mid-use, and an answer already on its way cannot take it straight down', async () => {
+        let t = 0;
+        let release: (d: ForceUpdateDecision) => void = () => {};
+        const shown: Array<UpdateBlockShown | null> = [];
+        const gate = createForceUpdateGate({
+            now: () => t,
+            check: () => new Promise<ForceUpdateDecision>((resolve) => { release = resolve; }),
+            show: (b) => shown.push(b),
+        });
+        const started = gate.start('active');
+        t += 60_000;
+        gate.refused('1.5.0');
+        expect(shown).toEqual([{ version: '1.5.0' }]);
+        // The cold start's question answers "clear" late: it was asked before the refusal, so it says nothing now.
+        release({ kind: 'clear' });
+        await started;
+        expect(shown).toEqual([{ version: '1.5.0' }]);
+        // Not a version: nothing.
+        gate.refused('soon');
+        expect(shown).toEqual([{ version: '1.5.0' }]);
+    });
+});

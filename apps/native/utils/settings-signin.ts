@@ -20,7 +20,7 @@
 import { parseSettingsSigninQr, isSameNode, nodeOrigin, type SettingsSigninQr } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { requireDeviceUnlock } from './node-admin';
-import { oldPairingText, signPairing } from './member-statements';
+import { signPairing } from './member-statements';
 import { buildSignedHeaders } from './crypto';
 
 export type ScanResult =
@@ -195,11 +195,6 @@ export const DIGITS_SHOWN_MS = 30_000;
 export function digitsDone(msLeft: number): { enabled: boolean; label: string } {
     if (msLeft <= 0) return { enabled: true, label: 'Done' };
     return { enabled: false, label: `Done (0:${String(Math.ceil(msLeft / 1000)).padStart(2, '0')})` };
-}
-
-/** The old text, for a node older than request binding. Must match its pairingMessage() in settings-signin-pairing.ts. */
-export function signinMessage(action: 'approve' | 'decline', qr: SettingsSigninQr): string {
-    return oldPairingText(action, qr.pairingId, qr.shortCode);
 }
 
 /**

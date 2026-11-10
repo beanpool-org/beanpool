@@ -23,12 +23,8 @@
  * theirs is left alone for {@link NOT_THEIRS_WAIT_MS}. Each request is signed by the member's key for that community's own
  * host, carries nothing of any other community, and no community is told of another.
  *
- * A community its saved row records as from before bound signatures is not asked: it has no such route, and a signature in
- * the old format names no host, so a hostile node could replay it elsewhere (request-signing-version.ts). That goes by the
- * saved row alone. A saved community with no format on record, whose info can't be read, can answer a round
- * 403 `Invalid cryptographic signature` and get one old-format signature back (node-request-signing.ts
- * `signedAgainForOldNode`), as from any signed request to a community the phone keeps. It happens at most once for a host:
- * the old format then stands on its saved row, and the rounds stop asking it.
+ * A community whose server is older than this app talks to is not asked: the phone sends it nothing but its health read
+ * (utils/node-version-gate.ts), so its round is refused before it leaves the phone and counts as no answer.
  *
  * **What the phone does with an answer.** Its `unread` is that community's number on the BeanPool sheet (notice-counts.ts).
  * `requests` is not looked at: a message request makes no badge and no alert until it is accepted (Marty, 1 Nov).
@@ -53,7 +49,7 @@
  * its push's badge, and asks nothing, unless no push of its community can reach it: then, with the app closed, a round is all
  * that tells it.
  */
-import { PUSH_NOTICE_TITLE, REQUEST_SIGNING_VERSION, t, type UnreadAnswer } from '@beanpool/core';
+import { PUSH_NOTICE_TITLE, t, type UnreadAnswer } from '@beanpool/core';
 import { communityName } from './community-name';
 import type { BeanPoolIdentity } from './identity';
 import { dropCounts, noteServerUnread, noticeCountsSum } from './notice-counts';
@@ -155,7 +151,7 @@ function oneOfEach(communities: readonly string[]): string[] {
 }
 
 /** The phone's saved list as far as a round reads it, by address. */
-function savedRows(raw: string | null): { url?: unknown; alias?: unknown; requestSigning?: unknown }[] {
+function savedRows(raw: string | null): { url?: unknown; alias?: unknown }[] {
     try {
         const saved = JSON.parse(raw ?? '[]');
         return Array.isArray(saved) ? saved.filter((n) => n && typeof n === 'object') : [];
@@ -299,21 +295,17 @@ async function round(deps: RoundDeps): Promise<number> {
     if (now >= state.at && now - state.at < UNREAD_ROUND_GAP_MS) return 0;
 
     const saved = savedRows(await storage.getItem(SAVED_NODES_STORE_KEY));
-    const oldSigning = (c: string) => {
-        const said = saved.find((n) => sameCommunity(n.url, c))?.requestSigning;
-        return typeof said === 'number' && said < REQUEST_SIGNING_VERSION;
-    };
     const forAlerts = await communitiesForAlerts(storage);
     const inUse = deps.closed ? anchor : null;
     // Whether the community in use has a part in the badge at all: alerts off there, or an account it says isn't theirs, is
-    // none. One with a part that is on old signing can't be asked: no number, and the badge stays as it was.
+    // none.
     const inBadge = inUse !== null && forAlerts.includes(inUse) && !(inUse in state.notTheirs);
-    const asksInUse = inBadge && !oldSigning(inUse) && (others.length > 0 || !await pushLandedAt(storage, inUse, account.publicKey));
+    const asksInUse = inBadge && (others.length > 0 || !await pushLandedAt(storage, inUse, account.publicKey));
     if (others.length === 0 && !asksInUse) return 0;
 
     await dropCounts(storage, others.filter((c) => !forAlerts.includes(c)));
     const turns = nextTurns(
-        oneOfEach(forAlerts.filter((c) => !sameCommunity(c, anchor) && !oldSigning(c) && !(c in state.notTheirs))),
+        oneOfEach(forAlerts.filter((c) => !sameCommunity(c, anchor) && !(c in state.notTheirs))),
         state.after,
         asksInUse ? UNREAD_ROUND_SIZE - 1 : UNREAD_ROUND_SIZE,
     );

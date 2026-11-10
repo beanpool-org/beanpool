@@ -196,8 +196,11 @@ describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
     });
 
     it('the gate hears every switch of community', () => {
-        expect(block).toContain('onCommunitySwitched(() => { void gate.communitySwitched(); })');
-        expect(block).toContain('stopSwitches();');
+        // Through followCommunityForUpdate (utils/force-update.ts), started with the gate and stopped with it; what is
+        // known of the community switched to applies at once too (node-version-gate.test.ts runs it with the real gate).
+        expect(block).toContain("const stopFollowing = followCommunityForUpdate(gate, () => AsyncStorage.getItem('beanpool_anchor_url'));");
+        expect(block).toContain('stopFollowing();');
+        expect(code(read('utils/force-update.ts'))).toContain('onCommunitySwitched(() => { void gate.communitySwitched(); void applyKnown(); })');
     });
 
     it('mounted inside the identity and the node status, after the screens, so it shows with or without an account', () => {

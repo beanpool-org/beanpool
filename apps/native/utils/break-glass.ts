@@ -80,6 +80,9 @@ export async function forgetBreakGlassCode(nodeUrl: string, publicKey: string): 
 /**
  * At start: deletes the copy an older app may have kept for this owner on the community the phone is in now. The secure
  * store cannot list its keys, so that is the one it can name. Never throws.
+ *
+ * Conversion code, log row CUT3 (with utils/retired-keys.ts), remove in the first phone build after Play Console shows no
+ * device below 1.4.0 for 30 days. forgetBreakGlassCode stays: a new code is made with it.
  */
 export async function sweepKeptBreakGlassCode(nodeUrl: string | null | undefined, publicKey: string | null | undefined): Promise<void> {
     if (!nodeUrl || !publicKey) return;

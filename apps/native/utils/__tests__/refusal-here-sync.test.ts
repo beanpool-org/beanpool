@@ -51,7 +51,6 @@ vi.mock('../nodes', () => ({
     addSavedNode: vi.fn(async () => {}),
     // For the app's signing wrapper (utils/node-request-signing.ts), installed by the cold-start test below.
     getSavedNodes: vi.fn(async () => []),
-    loadSavedRequestSigning: vi.fn(async () => {}),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 

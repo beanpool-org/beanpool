@@ -164,6 +164,24 @@ function oldCopy(url: string): void {
     h.store.set(`pillar_sync_${fileOf(url)}_last-sync`, '1762800000000');
 }
 
+/**
+ * A copy at this build's number that its schema can't be made over: a cache table of another shape (`posts` without the
+ * columns the schema indexes), as a test build that changed a column without raising the number leaves it.
+ */
+function copyOfAnotherShape(url: string): void {
+    const sql = new DatabaseSync(path.join(h.dir, fileOf(url)));
+    sql.exec(`
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT NOT NULL);
+        PRAGMA user_version = ${COPY_SCHEMA};
+    `);
+    sql.exec(TOOL_DOCS_TABLE);
+    sql.exec(GROUP_KEY_TABLES_SQL);
+    sql.prepare("INSERT INTO posts (id, title) VALUES ('L1', 'Jam')").run();
+    sql.prepare("INSERT INTO tool_docs (owner, tool, body, updated_at) VALUES ('me', 'things', '{}', '2026-11-01T00:00:00.000Z')").run();
+    sql.close();
+}
+
 /** What `url`'s copy holds on disk, read through a connection of the test's own. */
 function onDisk(url: string) {
     const sql = new DatabaseSync(path.join(h.dir, fileOf(url)));
@@ -355,5 +373,41 @@ describe("a copy below the schema number is cleared and made again before anythi
         // LEFT's clear, done before the address changed, stays done: a whole copy at the number.
         expect(onDisk(LEFT).userVersion).toBe(COPY_SCHEMA);
         expect(onDisk(LEFT).members).toBe(0);
+    });
+});
+
+describe("a copy that can't be made is handed to no one, and the member's clears still make it", () => {
+    it("Force Resync (settings.tsx: clearDB, then initDB) never needs the copy made first: it clears and makes one that can't be made at its number", async () => {
+        const MEADOW = 'https://meadow.example.org';
+        copyOfAnotherShape(MEADOW);
+        h.anchor = MEADOW;
+        // Its schema can't be made over the posts table it holds: no copy is handed out.
+        const opened = await settled(initDB());
+        expect(opened).toMatch(/^refused: .*no such column/);
+        const resync = await settled(clearDB().then(() => initDB()));
+        const disk = onDisk(MEADOW);
+        console.log(`can't be made: open ${opened}; Force Resync ${resync}; on disk ${JSON.stringify(disk)}`);
+        expect(resync).toBe('made');
+        expect(disk.userVersion).toBe(COPY_SCHEMA);
+        expect(disk.posts).toBe(0);
+        expect(disk.postColumns).toContain('price_c');
+        // A re-sync keeps the account's own store.
+        expect(disk.toolDocs).toBe(1);
+        expect(await (await getDb()).getFirstAsync('SELECT COUNT(*) AS n FROM posts')).toEqual({ n: 0 });
+    });
+
+    it("Sign Out's clear (account-leaves-phone.ts, identityLeaves) of a copy that can't be made at its number: its tables go and Sign Out goes on", async () => {
+        const MEADOW = 'https://meadow.example.org';
+        copyOfAnotherShape(MEADOW);
+        h.anchor = MEADOW;
+        const cleared = await settled(clearDB({ identityLeaves: true }));
+        const disk = onDisk(MEADOW);
+        console.log(`Sign Out, can't be made: clearDB ${cleared}; on disk ${JSON.stringify(disk)}`);
+        expect(cleared).toBe('made');
+        expect(disk.userVersion).toBe(COPY_SCHEMA);
+        expect(disk.posts).toBe(0);
+        expect(disk.postColumns).toContain('price_c');
+        // The account's own store goes as it leaves.
+        expect(disk.toolDocs).toBe(0);
     });
 });

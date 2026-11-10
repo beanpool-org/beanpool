@@ -761,8 +761,8 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     } catch (e) {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
-    // The copy open now (getDb sets each handle's file).
-    const file = dbFileOf.get(await getDb())!;
+    // Never while the copies still move to their own names (cache-file-migration.ts), as getDb.
+    await communityCachesRenamed();
     let cleared: Promise<SQLite.SQLiteDatabase> | undefined;
     // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
@@ -772,6 +772,9 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
+        // The community's copy by its address, never opened first: one that can't be made is what this clear mends. Read
+        // under the lock, so no copy moves to another name meanwhile (whileCopyMoves).
+        const file = getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url'));
         // Closed, so no statement is open on it as its tables go ("database table is locked"); made again by openCopy.
         await closeOpenCopy();
         cleared = openCopy(file, null, {

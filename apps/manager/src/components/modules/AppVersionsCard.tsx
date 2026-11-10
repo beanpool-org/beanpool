@@ -112,7 +112,7 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
                 // Anything but the shape this card reads (a proxy's page, a build that answers something else) is said in
                 // words, never read: a missing field here took the whole Home section down.
                 if (!res || typeof res !== 'object' || !res.platforms || typeof res.platforms !== 'object') {
-                    setError("This node's build doesn't count app versions yet. Update it to see them.");
+                    setError("This node's answer was not a count of app versions.");
                     return;
                 }
                 setData(res);

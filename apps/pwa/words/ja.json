@@ -4192,7 +4192,6 @@
   "Your community's admins": "コミュニティの管理者",
   "Your community's price guide says about {beans} Beans a day for something like this. Free is fine too.": "あなたのコミュニティの価格の目安では、これに近いものは1日あたり約{beans}豆です。無料でもかまいません。",
   "Your community's price guide says about {beans} Beans a week for something like this. Free is fine too.": "あなたのコミュニティの価格の目安では、これに近いものは1週間あたり約{beans}豆です。無料でもかまいません。",
-  "Your community's server doesn't have shops yet. They come with its next update.": "コミュニティのサーバーはまだお店に対応していません。次のアップデートで使えるようになります。",
   "Your community’s server didn’t answer, so this payment may have gone through. Check your Ledger before you pay again.": "コミュニティのサーバーが応答しなかったため、この支払いは通っている可能性があります。もう一度支払う前に、台帳を確認してください。",
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "コミュニティのサーバーが応答しなかったため、この支払いは通っている可能性があります。「再試行」を押してください：同じ支払いが二重に支払われることはありません。変更した場合やこのページを離れた場合は、もう一度支払う前に台帳を確認してください。",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "コミュニティのサーバーが理由を示さずにこの支払いを拒否したため、支払いは行われませんでした。1分ほどしてからもう一度お試しください。",

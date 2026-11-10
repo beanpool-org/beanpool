@@ -795,14 +795,8 @@ export async function fetchOnboardingFunnel(
         cache: 'no-store',
     });
     if (!res.ok) {
-        // 401 and 404 need telling apart, because the fix is in a different place for
-        // each and the status code alone sent someone hunting the wrong one: 401 is this
-        // node's stored admin password, 404 is a node that predates the endpoint.
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error('This node is running a build without the funnel endpoint. Redeploy it.');
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -838,9 +832,6 @@ export async function fetchWebVisits(
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count web app visits yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -889,9 +880,6 @@ export async function fetchAppVersions(nodeUrl: string, adminPassword?: string, 
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count app versions yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -2736,7 +2724,7 @@ export async function fetchTakeoverStatus(nodeUrl: string, adminPassword?: strin
     return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, adminPassword, tfaToken) as unknown as TakeoverStatus;
 }
 
-/** Null when the node is too old to say (before #968). */
+/** Null when the answer carries no backup lock status. */
 export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<BackupLockStatus | null> {
     const json = await takeoverPost(nodeUrl, '/api/local/admin/backup-status', {}, adminPassword, tfaToken);
     const lock = json.backupLock as BackupLockStatus | undefined;
@@ -3617,8 +3605,7 @@ export async function cancelRekeyCodeApi(
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        // A node before the cancel answers 404 with no message.
-        throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

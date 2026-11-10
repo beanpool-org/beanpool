@@ -98,12 +98,12 @@ describe('AppVersionsCard', () => {
     it('an answer of another shape is said in words, never read (it took the whole Home section down)', async () => {
         vi.mocked(nodeClient.fetchAppVersions).mockResolvedValue({ ok: true } as unknown as AppVersionsResponse);
         render(<AppVersionsCard node={node} />);
-        expect(await screen.findByRole('alert')).toHaveTextContent("doesn't count app versions yet");
+        expect(await screen.findByRole('alert')).toHaveTextContent("answer was not a count of app versions");
     });
 
     it('shows a node that cannot answer, in words', async () => {
-        vi.mocked(nodeClient.fetchAppVersions).mockRejectedValue(new Error("This node's build doesn't count app versions yet. Update it to see them."));
+        vi.mocked(nodeClient.fetchAppVersions).mockRejectedValue(new Error('HTTP 404: Not Found'));
         render(<AppVersionsCard node={node} />);
-        expect(await screen.findByRole('alert')).toHaveTextContent("doesn't count app versions yet");
+        expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 404: Not Found');
     });
 });

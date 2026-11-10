@@ -4192,7 +4192,6 @@
   "Your community's admins": "你的社区管理员",
   "Your community's price guide says about {beans} Beans a day for something like this. Free is fine too.": "你社区的价格参考是：类似的东西每天约 {beans} 颗豆子。免费也可以。",
   "Your community's price guide says about {beans} Beans a week for something like this. Free is fine too.": "你社区的价格参考是：类似的东西每周约 {beans} 颗豆子。免费也可以。",
-  "Your community's server doesn't have shops yet. They come with its next update.": "你所在社区的服务器还没有店铺功能。下次更新后就会有。",
   "Your community’s server didn’t answer, so this payment may have gone through. Check your Ledger before you pay again.": "你社区的服务器没有应答，所以这笔付款可能已经成功。再次付款之前，请先查看你的账本。",
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "你社区的服务器没有应答，所以这笔付款可能已经成功。请点按“重试”：同一笔付款绝不会被支付两次。如果你修改了它或离开了这个页面，再次付款之前请先查看你的账本。",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "你社区的服务器拒绝了此笔付款且未说明原因，因此未扣付任何款项。请稍后再试。",

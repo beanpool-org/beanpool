@@ -75,8 +75,6 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
             const json = await res.json().catch(() => ({}));
             if (res.ok && Array.isArray(json.suggestions)) {
                 setItems(json.suggestions as SuggestionCard[]);
-            } else if (res.status === 404) {
-                setItems([]);
             } else {
                 setMessage(`The assistants' suggestions could not be listed: ${json.error || `HTTP ${res.status}`}`);
             }

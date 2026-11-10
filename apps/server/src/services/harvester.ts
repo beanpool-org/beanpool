@@ -49,11 +49,9 @@ export interface FleetNodeConfig {
     id: string;
     name: string;
     url: string;
-    /** An owner's automation token with the backups scope (bp_<id>_<secret>, made in the node's Settings). Sent as
-     *  `Authorization: Bearer`, and then nothing else is: the admin password below is the legacy credential. */
+    /** An owner's automation token with the backups scope (bp_<id>_<secret>, made in the node's Settings), sent as
+     *  `Authorization: Bearer`: the one credential a node's backup route takes from the fleet (it has no admin password). */
     automationToken?: string;
-    adminPassword?: string;
-    replicationToken?: string;
     /** The node's PeerId (its libp2p key), set by the operator. The seal-old pass trusts only a header it signed. */
     peerId?: string;
 }
@@ -582,31 +580,21 @@ export function listPlainHistory(target: string | FleetNodeConfig): { file: stri
  * backup it can by default and labels it, so the retry has nothing left to ask for.
  */
 export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResult> {
-    if (!node.automationToken && !node.adminPassword && !node.replicationToken) {
-        throw new Error('No admin credentials (automationToken / adminPassword / replicationToken) configured');
+    if (!node.automationToken) {
+        throw new Error("No automationToken configured: make one with the backups scope in the node's Settings (Automation tokens)");
     }
     // The whole shape, as the node checks it, before any header is built. The messages never repeat the value: fetch's
     // own error for a header with a control character in it does, and the error is kept in harvester-state.json.
-    if (node.automationToken && !isAutomationTokenShape(node.automationToken)) {
+    if (!isAutomationTokenShape(node.automationToken)) {
         throw new Error('automationToken is not an automation token (bp_ + 12 hex + _ + 64 hex, nothing before or after): make one with the backups scope in the node\'s Settings and copy it whole');
     }
 
     const baseUrl = normalizeUrl(node.url);
-    const headers: Record<string, string> = {};
-    if (node.automationToken) {
-        // An owner's token with the backups scope: the node decides on it alone, so the password is never sent beside it.
-        headers['Authorization'] = `Bearer ${node.automationToken}`;
-    } else {
-        for (const [field, value] of [['adminPassword', node.adminPassword], ['replicationToken', node.replicationToken]] as const) {
-            // eslint-disable-next-line no-control-regex -- control characters are what this looks for
-            if (value && /[\x00-\x1f\x7f]/.test(value)) throw new Error(`${field} has a control character in it (a line break from a paste?): it cannot be sent`);
-        }
-        if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-        if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
-    }
+    // An owner's token with the backups scope: the node decides on it alone.
+    const headers: Record<string, string> = { Authorization: `Bearer ${node.automationToken}` };
 
     const url = `${baseUrl}/api/local/admin/backup`;
-    // Never followed: a redirect would carry the password and the replication token to wherever it points, and that
+    // Never followed: a redirect would carry the token to wherever it points, and that
     // origin's answer would be kept as this node's backup (credential-redirect.ts).
     const res = await fetch(url, {
         method: 'POST',

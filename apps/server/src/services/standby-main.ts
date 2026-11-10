@@ -343,7 +343,7 @@ export async function answerPairRequest(req: PairRequest, dir = dataDir()): Prom
         } else {
             writeStandbyMain({ v: 1, peerId: code.peerId, communityId: code.communityId, url: code.url, pairedAt: Date.now(), how: 'shell' }, dir);
         }
-        updateLocalConfig({ backupPrimaryUrl: code.url, backupReplicationToken: code.token, backupAdminPassword: null });
+        updateLocalConfig({ backupPrimaryUrl: code.url, backupReplicationToken: code.token });
         if (outcome === 'replaced') {
             // A whole copy of the old main server being built now stops (#2037 NB2): its pages verify against the pin the
             // stager took when it started, so it could still be made ready and swapped in at the next restart.

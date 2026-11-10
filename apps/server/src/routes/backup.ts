@@ -20,7 +20,7 @@ import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../ser
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
-    clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
+    clearReplicationToken, hasReplicationToken,
     updateBackupCadence, backupCadenceRefusal,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
@@ -1025,15 +1025,12 @@ router.post('/api/local/admin/replication-config/get', async (ctx) => {
     const credential = getStandbyCredentialState();
     ctx.body = {
         primaryUrl: config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL || '',
-        hasPassword: credential.passwordStored || credential.passwordInEnv,
         hasToken: !!(config.backupReplicationToken || process.env.BACKUP_REPLICATION_TOKEN),
         credential,
     };
 });
 
-// A standby copies with a replication token only. The main server's admin password is
-// refused: a standby that kept it held it in plain text, so anyone with the standby's disk,
-// or a backup of it, had the main server's admin password.
+// A standby copies with a replication token only.
 // Which server it copies from is a fresh proof's (design case 18 S2b, D2): the copy source feeds the standby's database, and
 // its restore trusts what that database holds. Which KEY it trusts is the shell's (design case 19 D1): a pairing code pasted
 // here is taken only when it names the key this standby is pinned to (its main server moved, or a promoted standby's
@@ -1100,8 +1097,6 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
             config.backupReplicationToken = (typeof primaryToken === 'string' && primaryToken.trim()) ? primaryToken.trim() : null;
         }
     }
-    // A saved token supersedes a legacy stored admin password: wipe it.
-    if (config.backupReplicationToken) config.backupAdminPassword = null;
     saveLocalConfig(config);
     if (config.backupPrimaryUrl !== copiedFrom) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.copyFromChanged, ...actingAs(ctx.state) });
     // The standby's own token cleared: copying stops (#2033 N5, design §2 A8).
@@ -1126,16 +1121,15 @@ function pairingAddress(requestOrigin: string): string {
 }
 
 // ---------- Replication token (primary side) ----------
-// A dedicated, scoped credential for the snapshot-pull endpoint, distinct from the
-// admin password: least-privilege (read-only replication only) and independently
-// rotatable. Stored hashed; the plaintext is shown to the operator exactly once.
+// A dedicated, scoped credential for the snapshot-pull endpoint, the one a standby copies with: least-privilege
+// (read-only replication only) and independently rotatable. Stored hashed; the plaintext is shown to the operator
+// exactly once.
 // Its holder copies the whole ledger, so making, changing or removing it is an owner's.
 router.post('/api/local/admin/replication-token/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const config = getLocalConfig();
     ctx.body = {
         hasToken: hasReplicationToken(),
-        tokenOnly: !!config.replicationTokenOnly,
         createdAt: config.replicationTokenCreatedAt || null,
     };
 });
@@ -1160,20 +1154,6 @@ router.post('/api/local/admin/replication-token/generate', async (ctx) => {
     ctx.body = { success: true, token, pairingCode, peerId: me.peerId, keyEnd: keyEnd(me.peerId) };
 });
 
-router.post('/api/local/admin/replication-token/mode', async (ctx) => {
-    if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
-    const { tokenOnly } = (ctx as any).requestBody || {};
-    const config = getLocalConfig();
-    if (tokenOnly && !hasReplicationToken()) {
-        ctx.status = 400;
-        ctx.body = { error: 'Generate a replication token before enabling token-only mode.' };
-        return;
-    }
-    config.replicationTokenOnly = !!tokenOnly;
-    saveLocalConfig(config);
-    ctx.body = { success: true, tokenOnly: config.replicationTokenOnly };
-});
-
 router.post('/api/local/admin/replication-token/clear', async (ctx) => {
     if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     const had = hasReplicationToken();
@@ -1189,7 +1169,6 @@ router.post('/api/local/admin/replication-access', async (ctx) => {
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
     ctx.body = {
         ...getReplicationAccessLog(),
-        tokenOnly: !!getLocalConfig().replicationTokenOnly,
         hasToken: hasReplicationToken(),
         // Which standby last fetched which take-over envelope.
         envelopeHolders: getEnvelopeHolders(),
@@ -1402,9 +1381,8 @@ router.post('/api/local/admin/backup-config', async (ctx) => {
 // It is a pure EXPORT: it returns the same signed `SyncPayload` the P2P sync
 // path produces (exportSyncState already signs with the node's libp2p key),
 // and calls NOTHING that mutates state — serving it adds zero inbound trust.
-// Gated by the admin password (shared operator secret, sent in the
-// X-Admin-Password header like /restore, never in the URL); routes under
-// /api/local/* bypass the member-signature middleware. The backup verifies
+// Gated by the replication token (sent in the X-Replication-Token header, never in
+// the URL); routes under /api/local/* bypass the member-signature middleware. The backup verifies
 // the signature against its single configured `mirror` connector (the
 // primary) inside importRemoteState, so a forged snapshot is rejected there.
 // The last full snapshot this primary exported: its signed generatedAt stamp and
@@ -1413,16 +1391,12 @@ router.post('/api/local/admin/backup-config', async (ctx) => {
 
 
 /**
- * Who asks for a copy of this server: its standby, with the replication token, or an owner with the admin password, until
- * the operator makes the token the only way (every copy route: the whole ledger, DMs and recovery data included). A
- * dedicated, scoped token: least privilege, independently rotatable. Every rejected attempt is logged for the primary's
- * Replication Access panel, and answered here (401, or checkAdminAuth's own answer and its brute-force tarpit delay):
- * null then.
+ * Who asks for a copy of this server: its standby, with the replication token, the one credential every copy route takes
+ * (the whole ledger, DMs and recovery data included). A dedicated, scoped token: least privilege, independently rotatable.
+ * Every rejected attempt is logged for the primary's Replication Access panel, and answered here (401): null then.
  */
-async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-pw' | null> {
+async function replicationAuth(ctx: any, ip: string): Promise<'token' | null> {
     const token = ctx.request.header['x-replication-token'];
-    const headerPassword = ctx.request.header['x-admin-password'];
-    const cfg = getLocalConfig();
     if (token) {
         if (await verifyReplicationToken(String(token))) return 'token';
         recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
@@ -1430,40 +1404,15 @@ async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-p
         ctx.body = { error: 'Invalid replication token' };
         return null;
     }
-    if (headerPassword && !cfg.replicationTokenOnly) {
-        // The admin password that verified for a copy in the last few minutes, the same string: taken without its scrypt,
-        // as the token is (config/local-config.ts rememberCopyPassword). Any other goes through checkAdminAuth in full.
-        const password = String(headerPassword).trim();
-        if (copyPasswordRemembered(password)) return 'admin-pw';
-        const { adminHash, salt } = cfg;
-        (ctx as any).requestBody = { password: headerPassword };
-        // legacyCopy: a copy route takes the password while token-only is off, 2FA or not (admin-auth.ts step 7c), as
-        // before: a legacy standby keeps copying until its owner makes a replication token.
-        if (await checkAdminAuth(ctx as any, { legacyCopy: true })) {
-            // A key session wins over the header in checkAdminAuth, so an admin's session with any X-Admin-Password
-            // got here too: only an owner's copies the whole ledger (the password is owner level).
-            if (!requireAdminRole(ctx, ['owner'], COPY_OWNER_ONLY)) {
-                recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'not an owner' });
-                return null;
-            }
-            // Only the admin password itself, checked against its hash (not a break-glass code, nor a session), is
-            // remembered: so the shortcut above admits only someone who sent the owner-level password.
-            if (ctx.state?.verifiedAdminPassword === password && adminHash && salt) rememberCopyPassword(password, adminHash, salt);
-            return 'admin-pw';
-        }
-        // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
-        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
-        return null;
-    }
-    recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+    recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'replication token required' });
     ctx.status = 401;
-    ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
+    ctx.body = { error: 'Replication token required' };
     return null;
 }
 
 router.get('/api/local/admin/sync-snapshot', async (ctx) => {
-    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data), to its standby's replication token or the admin
-    // password (replicationAuth). Every pull (and every rejected attempt) is logged for the primary's Replication Access
+    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data), to its standby's replication token
+    // (replicationAuth). Every pull (and every rejected attempt) is logged for the primary's Replication Access
     // panel.
     const ip = replicationClientIp(ctx);
     const authMode = await replicationAuth(ctx, ip);

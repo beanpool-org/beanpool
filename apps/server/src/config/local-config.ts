@@ -72,8 +72,6 @@ export interface LocalConfig {
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
-    // LEFT for its readers in Settings: the copy routes take the replication token only, whatever this says.
-    replicationTokenOnly?: boolean;
     // Owner automation tokens (automation-tokens.ts): each one's public id, name, scope, who made it and when, and a
     // SHA-256 of its secret, never the secret. This server's own: never in a backup file, the stager's copy or the bundle.
     automationTokens?: AutomationTokenRecord[];

@@ -93,7 +93,6 @@ import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { requireAdminRole, type AdminRole } from '../admin-auth.js';
-import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
 import { isPausedMember, revokeInvite, InviteRevokeError } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';

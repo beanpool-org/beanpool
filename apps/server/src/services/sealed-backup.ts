@@ -98,7 +98,7 @@ import {
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
-    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, bundledLocalConfigUpdates,
+    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES,
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
@@ -963,8 +963,6 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     // copy) stops the restore with nothing written, never half applied. A broken file is read from its last good
     // copy, never as empty: that would drop this server's address and settings.
     const config = readLocalConfigFileIn(dir);
-    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
-    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
     if (bundle.recoveryCode) {
         config.recoveryCode = bundle.recoveryCode;
         config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);

@@ -190,7 +190,6 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     await useFakeCloudflared(`${dataDir}.cloudflared`);
     const Koa = (await import('koa')).default;
     const { ensureGenesis } = await import('./genesis.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initStateEngine, getNodeRole } = await import('./state-engine.js');
     const takeover: { settleTakeoverBeforeDatabaseBoot?: () => void } & typeof import('./services/takeover.js') = await import('./services/takeover.js');
     const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = takeover;
@@ -215,7 +214,6 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
-    initAdminPassword();
     // index.ts step 2.4: a take-over stopped after `role` decided before the database's boot reads the role. Optional: a tree
     // from before it still starts.
     takeover.settleTakeoverBeforeDatabaseBoot?.();
@@ -253,8 +251,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
 
     const deps: any = {
-        // The options too, as https-server.ts passes checkAdminAuth itself: a copy route's `legacyCopy` (step 7c) is one.
-        checkAdminAuth: async (ctx: any, opts?: Parameters<typeof checkAdminAuth>[1]) => checkAdminAuth(ctx, opts),
+        checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
         rateLimit: () => true, clampLimit: (_v: unknown, d = 20) => d, clampOffset: () => 0,
         activeConnections: new Map(), calculateAnalytics: () => ({}), enforceReadAuth: false, broadcast: () => {},
     };
@@ -431,11 +428,6 @@ export const adminCredentialCommands: Record<string, (args: any) => Promise<unkn
     'owner-phone-session': async (a: { owner?: string }) => {
         const { ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
         return ownerPhoneSessionHeaders(a.owner ?? await firstOwner());
-    },
-    /** 2FA on, and the password with a fresh code: for a suite whose check is the password itself. */
-    'password-and-code': async (a: { password: string }) => {
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        return turnOn2faForTests(a.password).headers();
     },
 };
 

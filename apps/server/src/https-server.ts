@@ -28,9 +28,8 @@ import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     updateBackupCadence,
-    validatePasswordStrength,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
-    getGatewayConfig, isBreakGlassMode,
+    getGatewayConfig,
 } from './config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
@@ -188,7 +187,6 @@ import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
     gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,

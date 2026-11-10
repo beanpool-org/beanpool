@@ -24,7 +24,7 @@ In a community with Beans you need a name and a profile photo. Where there are n
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.
 - **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
-- **Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. A post priced **/ Wk** or **/ Mo** makes a standing deal when someone takes it up: each week or month is paid when it starts. See "Standing deals".
+- **Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. A post priced above 0 **/ Wk** or **/ Mo** makes a standing deal when someone takes it up: each week or month is paid when it starts. A free post, or a thing you lend with a weekly fee, does not. See "Standing deals".
 - Tap **Post Offer** or **Post Need**.
 
 Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**.

@@ -41,7 +41,7 @@ If you do not have the room to pay the first period, **Agree** is greyed out and
 
 ## What each of you sees
 
-The post shows the deal, so you never have to look for it, in the phone app and the web app alike. Your deals marks it **🔁 STANDING** and says **Standing deal · runs by itself**.
+The post shows the deal, so you never have to look for it, in the phone app and the web app alike. Your deals marks it **🔁 STANDING** and shows the same line as the post.
 
 - **The payer sees:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then **This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec**. If you chose a number, it also says **Month 3 of 6**.
 - **The provider sees:** **Marty's standing deal · 50 Beans a month · paid for this month on 9 Nov · next on 9 Dec**.
@@ -64,7 +64,7 @@ Either of you can stop a standing deal at any time. Tap **Stop…** and the app 
 
 - **The payer** sees **Stop after this month?** and **You've paid for this month; Rob keeps it; nothing more is paid.**
 - **The provider** sees **Stop after this month?** and **Nothing more will be paid to you after 9 Dec.**
-- Tap **Stop it** to go ahead, or **Keep it** to leave it running. (On a weekly deal it says **week**.)
+- Tap **Stop it** to go ahead, or **Keep it** to leave it running. In the web app the buttons are **OK** and **Cancel**. (On a weekly deal it says **week**.)
 
 The period that is paid stays paid, and the deal ends when it ends. The card says **Stops on 9 Dec · this month is paid**, and the other person is told. A post that is not Repeatable goes back on the market when the deal ends. Pausing a post does not stop its standing deals.
 
@@ -100,6 +100,7 @@ On a short deal the button on both cards becomes **Stop now**, for the payer as 
 - **The provider** sees **Stop it now?** and **It ends now. This month's 50 Beans won't come; nothing is owed through the app for the days since 9 Dec.**
 - **Stop it** ends the deal at once. Nothing is paid for that period, now or later, and the Ledger shows nothing for it. The other person is told in words like **Marty stopped Vehicle Storage. This month's 50 Beans weren't paid; nothing is owed through the app for the days since 9 Dec.**
 - **Keep it** leaves it running.
+- In the web app the buttons are **OK** and **Cancel**.
 
 **"Nothing is owed through the app"** means BeanPool keeps no tab for the unpaid days. If Rob stored the car for two weeks of that month and the two of you think something is owed, settle it between you. The app will not count it, and nothing in it can collect it.
 

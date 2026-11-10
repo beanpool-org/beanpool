@@ -13,7 +13,7 @@ Most problems are a misunderstanding. Tap **Message** on the post and talk it th
 
 - **Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message. A request nobody answers ends by itself after 7 days.
 - **While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told.
-- **A standing deal:** nothing is held, so there is no hold to cancel. Either of you can tap **Stop…** at any time, then **Stop it**. The week or month already paid stays paid, and nothing more is taken. If the next one could not be paid, the button says **Stop now**, and it ends at once with nothing owed through the app. See "Standing deals".
+- **A standing deal:** nothing is held, so there is no hold to cancel. Either of you can tap **Stop…** at any time, then **Stop it** (**OK** in the web app). The week or month already paid stays paid, and nothing more is taken. If the next one could not be paid, the button says **Stop now**, and it ends at once with nothing owed through the app. See "Standing deals".
 
 In the web app, **Withdraw Request** is **Cancel Offer**, and **Deny** declines at once, with no message. To call off a held deal there, tap **Cancel Hold**, then **OK**.
 

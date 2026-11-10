@@ -746,6 +746,15 @@ export async function getMyInvites(publicKey: string): Promise<{ invites: Invite
     return request('GET', `/api/invite/mine/${encodeURIComponent(publicKey)}`);
 }
 
+/**
+ * Revoke one of this member's unused invites (invites-vouching I2: DELETE /api/invite/:code, signed; the maker, or an owner
+ * for anyone's). A vouch it held comes back to the budget. Refusals throw with the node's sentence and code: 409
+ * `invite_used`, 404 `no_invite` (the community holds no such unused code of theirs).
+ */
+export async function revokeInvite(code: string): Promise<{ revoked: number; returned: number; promiseEnded: boolean }> {
+    return request('DELETE', `/api/invite/${encodeURIComponent(code)}`);
+}
+
 // ===================== WANTS TO JOIN (front doors S2: the phone's utils/knock-inbox.ts) =====================
 
 /**

@@ -608,6 +608,7 @@ export const SUITES = [
     'test-invite-bound-name',
     'test-invite-mine-fields',
     'test-invite-adds-voucher',
+    'test-invite-revoke',
     'test-owner-vouch',
     'test-vouch-reset',
     'test-vouchers',

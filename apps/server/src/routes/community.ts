@@ -98,7 +98,7 @@ import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signa
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
-import { isPausedMember } from '../engine/invites.js';
+import { isPausedMember, revokeInvite, InviteRevokeError } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
@@ -1595,6 +1595,30 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     ctx.body = { invites: getInvitesByMember(publicKey) };
+});
+
+// Revoke an unused invite (invites-vouching I2; Marty, 10 Nov): its maker, or an owner for anyone's, signed. One transaction:
+// the vouch its code holds back in the budget, a promised voucher budget ended, the row gone (engine/invites.ts revokeInvite).
+// A used code is 409 `invite_used` and nothing moves; anyone else, about a code that exists or not, 404 `no_invite`.
+router.delete('/api/invite/:code', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor || (ctx.state as any).authSig?.signer !== actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = { success: true, ...revokeInvite(actor, ctx.params.code) };
+    } catch (e) {
+        if (e instanceof InviteRevokeError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        if (respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
 });
 
 // ===================== PROFILE API (PUBLIC) =====================

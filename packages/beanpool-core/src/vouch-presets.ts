@@ -148,6 +148,7 @@ export const VOUCH_PRESET_WORDS = {
     heldForInvite: word('−{amount} held for an invite'),
     backInviteExpired: word('+{amount} back, invite expired'),
     backBudgetStopped: word('+{amount} back, budget stopped'),
+    backInviteRevoked: word('+{amount} back, invite revoked'),
     backNotLanded: word('+{amount} back, invite not landed'),
     backToBudget: word('+{amount} back to budget'),
     stopBy: word('−{amount} budget stopped by @{name}'),
@@ -222,7 +223,7 @@ export interface HistoryLineLike {
     actorCallsign?: string | null;
     at?: string;
     for?: 'invite' | 'profile';
-    why?: 'expired' | 'stopped' | 'not_landed';
+    why?: 'expired' | 'stopped' | 'not_landed' | 'revoked';
     outcome?: 'held' | 'vouched' | 'back';
     person?: { memberPubkey: string; callsign: string } | null;
 }
@@ -259,6 +260,9 @@ export function formatHistoryLine(h: HistoryLineLike): string {
             }
             if (h.why === 'stopped') {
                 return t(VOUCH_PRESET_WORDS.backBudgetStopped, { amount: absAmount });
+            }
+            if (h.why === 'revoked') {
+                return t(VOUCH_PRESET_WORDS.backInviteRevoked, { amount: absAmount });
             }
             if (h.why === 'not_landed') {
                 return t(VOUCH_PRESET_WORDS.backNotLanded, { amount: absAmount });

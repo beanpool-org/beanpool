@@ -13,6 +13,13 @@
  * Everything is invented: no real member, node or place. The address is a made-up .beanpool.org name.
  */
 
+import { mockResponse } from './fixtures.mjs';
+
+/** The fixture members, as their page (/admin/data/members) answers them. */
+function manualMembers() {
+    return mockResponse('POST', '/api/local/admin/data/members', new URLSearchParams(), '{}').json.members;
+}
+
 export const MANUAL_HOST = 'riverbend.beanpool.org';
 /** The address Settings believes it is served from (`openSettings` `publicOrigin`): no 127.0.0.1, no random port. */
 export const MANUAL_ORIGIN = `https://${MANUAL_HOST}`;
@@ -93,17 +100,22 @@ export const MANUAL_OVERRIDES = {
         lightsOut: { on: false, since: null, address: null, recordAsOf: null, home: null, epoch: 0, hallWrites: false, standDown: null, standby: false },
     }),
 
-    // The members: when each joined and when each was last seen (the detail card says "N/A" and "Unknown" without them). And
-    // the author of each reported post, which the node sends with it (Triage says "Target: Unknown" without it).
+    // The members (their page, /admin/data/members): when each joined and when each was last seen (the detail card says
+    // "N/A" and "Unknown" without them).
+    '/api/local/admin/data/members': (d) => ({
+        ...d,
+        members: d.members.map((m, i) => ({
+            ...m,
+            joinedAt: `${JOINED[i % JOINED.length]}T09:00:00.000Z`,
+            lastActiveAt: new Date(Date.now() - LAST_SEEN_MS[i % LAST_SEEN_MS.length]).toISOString(),
+        })),
+    }),
+    // The author of each reported post, which the node sends with it (Triage says "Target: Unknown" without it). The summary
+    // carries no member, so the key is the fixture members' own.
     '/api/local/admin/data': (d) => {
-        const keyOf = new Map(d.members.map((m) => [m.callsign, m.publicKey]));
+        const keyOf = new Map(manualMembers().map((m) => [m.callsign, m.publicKey]));
         return {
             ...d,
-            members: d.members.map((m, i) => ({
-                ...m,
-                joinedAt: `${JOINED[i % JOINED.length]}T09:00:00.000Z`,
-                lastActiveAt: new Date(Date.now() - LAST_SEEN_MS[i % LAST_SEEN_MS.length]).toISOString(),
-            })),
             reports: d.reports.map((r) => (r.postId && !r.postAuthorPubkey && keyOf.has(r.postAuthorCallsign)
                 ? { ...r, postAuthorPubkey: keyOf.get(r.postAuthorCallsign) }
                 : r)),

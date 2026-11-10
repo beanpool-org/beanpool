@@ -8,20 +8,27 @@
  *           One key for the two of them in that conversation, the same in both directions. Static keys, so no forward
  *           secrecy.
  *   Cipher: XChaCha20-Poly1305, a fresh random 24-byte nonce for every line.
- *   Wire:   nonce column 'x25519-xc20p-v2:' + base64(nonce), ciphertext base64(AEAD output). Kept exactly as it was: a
- *           node of any version stores a new line (it refuses every other form as unencrypted, engine/messaging.ts), and
- *           an app from before this change shows one as a message it can't decrypt, never as a run of base64.
  *
- * What a line is bound to (crypto review M F2, 2026-10-02):
- *   Format 2, every line written before this change: the associated data is the conversation id alone. With one key both
- *     ways, the node could show A's line as B's, store it again as a new message, or move it, and every one opened.
- *     Still read, and every one is marked (checkDmThread): nothing in it proves who wrote it.
- *   Format 3: the associated data names the conversation, the SENDER's key, the message id, which part of the message
- *     it is (the words or the photo) and, for a reply, the id of the message it answers. Shown as someone else's, under
- *     another id, in another conversation, as an answer to another message, or a caption in a photo's place, it doesn't
- *     open. The sealed bytes start with a header: the format byte, then the id of the newest line the sender had from
- *     the node when they wrote it ("after"). A line shown before the line it was written after has been moved, and
+ * Line format 4, the only one written and the only one opened (the 1.4.0 clean-slate cutover: Marty, 10 Nov 2026, old chat
+ * is wiped at the deploy, so no reader of an older format is kept anywhere; scratch/fable-design/DESIGN-clean-slate-cutover-
+ * fable.md §6 item 5).
+ *   The seal: the associated data names the conversation, the SENDER's key, the message id, which part of the message it is
+ *     (the words, the photo, or the listing it is about) and, for a reply, the id of the message it answers. Shown as
+ *     someone else's, under another id, in another conversation, as an answer to another message, or one part in another's
+ *     place, it doesn't open. The sealed bytes start with the format byte, then the id of the newest line the sender had
+ *     from the node when they wrote it ("after"): a line shown before the line it was written after has been moved, and
  *     checkDmThread marks it.
+ *   The signature: the two people share one key, so either could seal a line naming the other as its sender. So the sender
+ *     also signs the sealed bytes with their member key: who wrote them, to whom, in which conversation, under which id,
+ *     which part, when by their clock, the nonce and a hash of the sealed bytes (dmLineSigDigest). It sits BESIDE the seal,
+ *     not under it, so the node and a moderator can check who wrote a line without opening it, and nobody can tell what
+ *     it says (a report stands on it: dm-line-report.ts). Every part is signed, the photo and the listing too, by
+ *     sealDmLine itself, and openDmLine opens nothing whose signature isn't its named sender's: a line not signed by its
+ *     claimed sender is never shown as theirs, nor are its words shown.
+ *   Wire: nonce column 'x25519-xc20p-v2:' + base64(nonce), as before; ciphertext column base64 of
+ *     [4][the signature, 64 bytes][when it was signed, 24 bytes of ISO 8601][the AEAD output]. The node can't open a line
+ *     but it can check that form, and refuses every other one into a DM (engine/messaging.ts), an older format's line
+ *     first among them: a format-2 or format-3 line is the AEAD output alone.
  *
  * A DM row that isn't an encrypted line (readable `plaintext-v1`, `00000`, any other nonce) is never shown as anyone's
  * words: the node could have written it (dmLineKind). Only three kinds are the node's own by design, and each is shown
@@ -29,33 +36,35 @@
  * never the row's words), and the message the admin page sends (metadata DM_FROM_ADMINS_KEY), shown marked as from the
  * community's admins and readable by the server.
  *
- * Which format a line is in is found by opening it, format 3 first: the associated data differs, so a line opens under
- * exactly one of them, and the node can't turn one into the other. Nothing on the wire says which, so nothing the node
- * controls decides it.
- *
- * Not covered by the seal, by design: the two people share one secret, so either of them could seal a line naming the other
- * as sender. A signature per line proves authorship between the two, and the apps send one beside the line for a report to
- * stand on (dm-line-report.ts), which no app checks when it opens a line yet (S2.3's format 4). The node alone can do none of
- * this. The node can still withhold or delay a line, put an edit's earlier words back (an edit keeps its line's id, and both
- * versions are the sender's own), and show an old format-2 line (marked as such).
+ * Not covered, by design: the node can still withhold or delay a line, and put an edit's earlier words back (an edit keeps
+ * its line's id, and both versions are the sender's own, each signed).
  */
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
 
-/** The nonce column's prefix for every encrypted line, format 2 and 3 alike. */
+/** The nonce column's prefix for every encrypted line. */
 export const DM_NONCE_PREFIX = 'x25519-xc20p-v2:';
-/** The line format this code writes. */
-export const DM_LINE_FORMAT = 3;
-/** First word of format 3's associated data: the format's own name, so no other use of the key can be taken for it. */
-export const DM_LINE_AAD_TAG = 'beanpool-dm-line/3';
+/** The line format this code writes, and the only one it opens. */
+export const DM_LINE_FORMAT = 4;
+/** First word of format 4's associated data: the format's own name, so no other use of the key can be taken for it. */
+export const DM_LINE_AAD_TAG = 'beanpool-dm-line/4';
+/** First word of what a sender signs: this use's own name, so no other signature by the key can be taken for it. */
+export const DM_LINE_SIG_TAG = 'beanpool-dm-line-sig/2';
 
 const HKDF_INFO = utf8ToBytes('beanpool-dm-v2');
 const NONCE_LEN = 24;
+const SIG_LEN = 64;
+/** When a line was signed, as the column carries it: Date.toISOString(), always 24 characters. */
+const AT_LEN = 24;
+const AT_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const AEAD_TAG_LEN = 16;
+/** The smallest ciphertext column: the format byte, the signature, when, and an AEAD tag around no bytes. */
+const MIN_COLUMN_BYTES = 1 + SIG_LEN + AT_LEN + AEAD_TAG_LEN;
 const MAX_AFTER_BYTES = 255;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -73,32 +82,32 @@ export interface DmKeyContext {
 export type DmKeys = Pick<DmKeyContext, 'myEdPrivHex' | 'peerEdPubHex'>;
 
 /**
- * The words of a message, its photo, or the listing it is about (chat-about.ts). Each part is sealed on its own, bound to
- * its message id and to its part name, so one can never be shown in another's place.
+ * The words of a message, its photo, or the listing it is about (chat-about.ts). Each part is sealed and signed on its own,
+ * bound to its message id and to its part name, so one can never be shown in another's place.
  */
 export type DmPart = 'body' | 'attachment' | 'about';
 
-/** What a format-3 line is bound to besides its conversation. */
+/** What a line is bound to besides its conversation. */
 export interface DmLineBinding {
     /** The sender's public key, hex, exactly as the node stores it as the line's author. */
     senderPubHex: string;
     /** The message id, exactly as the node stores it: the client's own UUID v4, lower case (the node lowers it). */
     messageId: string;
-    /** The words (default) or the photo. */
+    /** The words (default), the photo, or the listing it is about. */
     part?: DmPart;
 }
 
-/** A line as it goes to the node. */
+/** A line as it goes to the node: the ciphertext column carries the sender's signature beside the sealed bytes. */
 export interface DmPayload {
     ciphertext: string;
     nonce: string;
 }
 
-/** A line that opened. */
+/** A line that opened, its sender's signature verified. */
 export interface OpenedDmLine {
     text: string;
-    format: 2 | 3;
-    /** Format 3: the newest line the sender had from the node when they wrote this one; null if none, or format 2. */
+    format: 4;
+    /** The newest line the sender had from the node when they wrote this one; null if none. */
     after: string | null;
     /** The conversation id it opened under. */
     conversationId: string;
@@ -106,7 +115,7 @@ export interface OpenedDmLine {
     moved: boolean;
 }
 
-/** Thrown when a line doesn't open: it was changed, or moved, or isn't the sender's or this pair's. */
+/** Thrown when a line doesn't open: it was changed, or moved, or isn't the sender's or this pair's, or they didn't sign it. */
 export class DmLineNotVerifiedError extends Error {
     constructor(message = "This message couldn't be verified.") {
         super(message);
@@ -114,7 +123,7 @@ export class DmLineNotVerifiedError extends Error {
     }
 }
 
-/** True if a stored nonce is an encrypted line's (format 2 or 3; they share the wire form). */
+/** True if a stored nonce is an encrypted line's. */
 export function isDmEncryptedNonce(nonce: string | null | undefined): boolean {
     return typeof nonce === 'string' && nonce.startsWith(DM_NONCE_PREFIX);
 }
@@ -134,6 +143,12 @@ function b64(bytes: Uint8Array): string {
 function unb64(s: string): Uint8Array {
     if (typeof s !== 'string') throw new DmLineNotVerifiedError();
     return new Uint8Array(Buffer.from(s, 'base64'));
+}
+/** Standard padded base64 in its one spelling (as both apps write it), decoded; null for anything else. */
+function strictUnb64(s: unknown): Uint8Array | null {
+    if (typeof s !== 'string' || s.length === 0 || s.length % 4 !== 0) return null;
+    const bytes = Buffer.from(s, 'base64');
+    return bytes.toString('base64') === s ? new Uint8Array(bytes) : null;
 }
 function utf8(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString('utf8');
@@ -158,7 +173,7 @@ export function identityX25519Public(edPubHex: string): Uint8Array {
     return ed25519.utils.toMontgomery(hexToBytes(edPubHex));
 }
 
-/** The conversation's key. The same for format 2 and 3, and for both people. */
+/** The conversation's key, the same for both people. */
 export function deriveDmKey(ctx: DmKeyContext): Uint8Array {
     try {
         const myXPriv = identityX25519Secret(ctx.myEdPrivHex);
@@ -171,7 +186,7 @@ export function deriveDmKey(ctx: DmKeyContext): Uint8Array {
 }
 
 /**
- * Format 3's associated data: the UTF-8 of a JSON array of strings, [tag, conversation, sender, message id, part], and for
+ * Format 4's associated data: the UTF-8 of a JSON array of strings, [tag, conversation, sender, message id, part], and for
  * a reply a sixth, the id of the message it answers. A JSON array of strings has one spelling for one list of values, so
  * no two different bindings share bytes, and a reply's never equals a line's that answers nothing.
  */
@@ -189,9 +204,9 @@ function parsedMetadata(metadata: unknown): any {
 }
 
 /**
- * The message a line answers, as its metadata names it (`replyToId`, which the node stores and can read): bound into a
- * format-3 line, so the node can't point an answer at another message. undefined when the metadata names one that no
- * app writes (not a non-empty string): no format-3 line opens then.
+ * The message a line answers, as its metadata names it (`replyToId`, which the node stores and can read): bound into the
+ * line, so the node can't point an answer at another message. undefined when the metadata names one that no app writes
+ * (not a non-empty string): no line opens then.
  */
 export function dmReplyToOf(metadata: unknown): string | null | undefined {
     const meta = parsedMetadata(metadata);
@@ -199,7 +214,7 @@ export function dmReplyToOf(metadata: unknown): string | null | undefined {
     return typeof meta.replyToId === 'string' && meta.replyToId ? meta.replyToId : undefined;
 }
 
-/** Format 3's sealed bytes: [3][length of after][after, UTF-8][the words, UTF-8]. */
+/** The sealed plaintext: [4][length of after][after, UTF-8][the words, UTF-8]. */
 function frame(text: string, after: string | null | undefined): Uint8Array {
     let a = typeof after === 'string' && after ? utf8ToBytes(after) : new Uint8Array(0);
     if (a.length > MAX_AFTER_BYTES) a = new Uint8Array(0);
@@ -218,15 +233,124 @@ function unframe(pt: Uint8Array): { text: string; after: string | null } {
     return { after: len ? utf8(pt.subarray(2, 2 + len)) : null, text: utf8(pt.subarray(2 + len)) };
 }
 
+// ─── The signature beside the seal ──────────────────────────────────────────────────────────
+
+/** A line's signature as its ciphertext column carries it. */
+export interface DmLineSig {
+    /** Ed25519 over dmLineSigDigest, base64. */
+    sig: string;
+    /** When, by the sender's own clock (ISO 8601). */
+    at: string;
+}
+
+/** What a sender signs besides the sealed bytes and the nonce. */
+export interface DmLineSigBinding {
+    conversationId: string;
+    senderPubHex: string;
+    /** Who it was written to: the other person's key the line is sealed to. */
+    recipientPubHex: string;
+    messageId: string;
+    part: DmPart;
+    /** When, by the sender's own clock: Date.toISOString(). */
+    at: string;
+}
+
+/** A ciphertext column taken apart: the signature, when it was signed, and the sealed bytes (the AEAD output). */
+interface SignedColumn {
+    sig: Uint8Array;
+    at: string;
+    sealed: Uint8Array;
+}
+
+/** The parts of a format-4 ciphertext column, or null when it isn't one (an older format's line is the AEAD output alone). */
+function columnParts(ciphertext: unknown): SignedColumn | null {
+    const bytes = strictUnb64(ciphertext);
+    if (!bytes || bytes.length < MIN_COLUMN_BYTES || bytes[0] !== DM_LINE_FORMAT) return null;
+    const atBytes = bytes.subarray(1 + SIG_LEN, 1 + SIG_LEN + AT_LEN);
+    for (const c of atBytes) if (c < 0x20 || c > 0x7e) return null;
+    const at = utf8(atBytes);
+    if (!AT_ISO.test(at)) return null;
+    return { sig: bytes.subarray(1, 1 + SIG_LEN), at, sealed: bytes.subarray(1 + SIG_LEN + AT_LEN) };
+}
+
 /**
- * Seal a line (its words, or its photo as a data URI) in format 3. `after` is the id of the newest line this person had
- * from the node when they wrote it (an edit keeps its line's own). Refuses to seal a line naming anyone but me as
- * sender, or an id the node would store differently.
+ * True when a line is in format 4's form: an encrypted line's nonce (24 bytes) and a ciphertext column holding a signature
+ * slot, the time it was signed and an AEAD output. What the node can check without a key (engine/messaging.ts): it says
+ * nothing about who signed it, which only a reader with the binding checks (openDmLine, dm-line-report.ts).
+ */
+export function isDmLineForm(ciphertext: unknown, nonce: unknown): boolean {
+    if (typeof nonce !== 'string' || !isDmEncryptedNonce(nonce)) return false;
+    const nb = strictUnb64(nonce.slice(DM_NONCE_PREFIX.length));
+    return !!nb && nb.length === NONCE_LEN && columnParts(ciphertext) !== null;
+}
+
+/** The signature a line's ciphertext column carries, or null when it isn't a format-4 line. */
+export function dmLineSigOf(ciphertext: unknown): DmLineSig | null {
+    const parts = columnParts(ciphertext);
+    return parts ? { sig: b64(parts.sig), at: parts.at } : null;
+}
+
+/**
+ * The digest a sender signs: SHA-256 of the UTF-8 of a JSON array of strings, one spelling for one list of values, as the
+ * associated data is (dmLineAad): [tag, conversation, sender, recipient, message id, part, when, nonce column, hex SHA-256
+ * of the sealed bytes].
+ */
+export function dmLineSigDigest(nonce: string, sealed: Uint8Array, b: DmLineSigBinding): Uint8Array {
+    return sha256(utf8ToBytes(JSON.stringify([
+        DM_LINE_SIG_TAG, b.conversationId, b.senderPubHex, b.recipientPubHex, b.messageId, b.part, b.at, nonce, bytesToHex(sha256(sealed)),
+    ])));
+}
+
+/**
+ * Signatures that verified, remembered (as group lines' are: group-crypto.ts GroupLineVerifyMemo, "verify once, store the
+ * verdict"; ~50 ms an Ed25519 verify on an API-26 phone, and both apps judge a whole thread on every load). Keyed by a hash
+ * of the signature, the exact digest it signs and the key it verified under: a strict verify is a pure function of those
+ * three, so a hit is the same answer, not a shortcut. A changed byte anywhere, another sender or another binding is another
+ * key and is verified afresh. Only signatures that verified are kept, the oldest dropped past the cap. Nothing in it is secret.
+ */
+const VERIFIED_MAX = 4096;
+const verified = new Set<string>();
+
+function verifiedBy(sig: Uint8Array, digest: Uint8Array, signerPubHex: string): boolean {
+    let key: string;
+    let signer: Uint8Array;
+    try {
+        signer = hexToBytes(signerPubHex);
+        key = bytesToHex(sha256(concatBytes(utf8ToBytes('beanpool-dm-line-verdict/1'), sig, digest, signer)));
+    } catch {
+        return false;
+    }
+    if (verified.has(key)) return true;
+    let ok: boolean;
+    // Strict RFC 8032, as every verifier here: one signature for one key and message.
+    try { ok = ed25519.verify(sig, digest, signer, { zip215: false }); } catch { ok = false; }
+    if (ok) {
+        verified.add(key);
+        if (verified.size > VERIFIED_MAX) verified.delete(verified.values().next().value as string);
+    }
+    return ok;
+}
+
+/**
+ * Whether a line's ciphertext column carries `binding.senderPubHex`'s signature over its sealed bytes, to this person, under
+ * this conversation and id, as this part. For a reader who doesn't open the line (the node, a moderator: dm-line-report.ts).
+ */
+export function dmLineSigVerifies(line: DmPayload, binding: Omit<DmLineSigBinding, 'at'>): boolean {
+    const parts = columnParts(line?.ciphertext);
+    if (!parts || typeof line.nonce !== 'string') return false;
+    return verifiedBy(parts.sig, dmLineSigDigest(line.nonce, parts.sealed, { ...binding, at: parts.at }), binding.senderPubHex);
+}
+
+/**
+ * Seal a line (its words, its photo as a data URI, or the listing it is about) in format 4, and sign it as me, to the other
+ * person. `after` is the id of the newest line this person had from the node when they wrote it (an edit keeps its line's
+ * own). Refuses to seal a line naming anyone but me as sender, or an id the node would store differently. `nonceForVectors`
+ * and `at` pin the bytes for the vectors (dm-line-vectors.ts); the apps give neither.
  */
 export function sealDmLine(
     text: string,
     ctx: DmKeyContext,
-    line: DmLineBinding & { after?: string | null; replyToId?: string | null },
+    line: DmLineBinding & { after?: string | null; replyToId?: string | null; at?: string },
     nonceForVectors?: Uint8Array,
 ): DmPayload {
     if (!UUID_V4.test(line.messageId)) throw new Error('A line is sealed under its own lower-case UUID v4.');
@@ -234,22 +358,19 @@ export function sealDmLine(
     if (line.replyToId !== undefined && line.replyToId !== null && (typeof line.replyToId !== 'string' || !line.replyToId)) {
         throw new Error('A reply is sealed to the id of the message it answers.');
     }
+    const at = line.at ?? new Date().toISOString();
+    if (!AT_ISO.test(at)) throw new Error('A line is signed with the time as Date.toISOString() writes it.');
     const key = deriveDmKey(ctx);
     const nonce = nonceForVectors ?? randomBytes(NONCE_LEN);
     if (nonce.length !== NONCE_LEN) throw new Error('A line nonce is 24 bytes.');
-    const ct = xchacha20poly1305(key, nonce, dmLineAad(ctx.conversationId, line, line.replyToId)).encrypt(frame(text, line.after));
-    return { ciphertext: b64(ct), nonce: DM_NONCE_PREFIX + b64(nonce) };
-}
-
-/**
- * Format 2, as every line before this change was written. The apps never send it: it is here to write the history the
- * tests read, and the vectors.
- */
-export function encryptDmFormat2(text: string, ctx: DmKeyContext, nonceForVectors?: Uint8Array): DmPayload {
-    const key = deriveDmKey(ctx);
-    const nonce = nonceForVectors ?? randomBytes(NONCE_LEN);
-    const ct = xchacha20poly1305(key, nonce, utf8ToBytes(ctx.conversationId)).encrypt(utf8ToBytes(text));
-    return { ciphertext: b64(ct), nonce: DM_NONCE_PREFIX + b64(nonce) };
+    const nonceColumn = DM_NONCE_PREFIX + b64(nonce);
+    const part = line.part ?? 'body';
+    const sealed = xchacha20poly1305(key, nonce, dmLineAad(ctx.conversationId, line, line.replyToId)).encrypt(frame(text, line.after));
+    const digest = dmLineSigDigest(nonceColumn, sealed, {
+        conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, part, at,
+    });
+    const sig = ed25519.sign(digest, toEd25519Seed(hexToBytes(ctx.myEdPrivHex)));
+    return { ciphertext: b64(concatBytes(new Uint8Array([DM_LINE_FORMAT]), sig, utf8ToBytes(at), sealed)), nonce: nonceColumn };
 }
 
 function nonceBytes(nonce: string): Uint8Array {
@@ -259,17 +380,11 @@ function nonceBytes(nonce: string): Uint8Array {
     return nb;
 }
 
-/** Open a format-2 line under one conversation id. Throws if it isn't one, or the tag fails. */
-export function decryptDmFormat2(ciphertext: string, nonce: string, ctx: DmKeyContext): string {
-    const pt = xchacha20poly1305(deriveDmKey(ctx), nonceBytes(nonce), utf8ToBytes(ctx.conversationId)).decrypt(unb64(ciphertext));
-    return utf8(pt);
-}
-
 /**
  * The most conversation ids a line is tried under, the one it is stored in among them. Its sender writes its metadata and
  * only the length is limited (64 KB, about 11,000 short ids), and each id costs the reader's device a key derivation and a
- * decrypt per format, on its one thread: 0.7 ms an id on a Mac (measured), so one such line held a chat for 7.5 s, and for
- * far longer on an old phone.
+ * decrypt, on its one thread: 0.7 ms an id on a Mac (measured), so one such line held a chat for 7.5 s, and for far longer on
+ * an old phone. The signature is checked once, under the id the line opened under, never once an id.
  *
  * 64, from what the node writes. Each fold names one id, `originalConversationId`. The one list, `originalConversationIds`,
  * is repairConsolidatedMessagesMetadata's: one id for each per-post thread a pair had, and those ended before the first
@@ -302,7 +417,7 @@ export interface DmLineRef extends DmLineBinding {
     conversationId: string;
     /**
      * Its metadata as stored (a JSON string or the parsed object): older conversation ids are read from it, and the
-     * message a reply answers (`replyToId`), which a format-3 line is bound to.
+     * message a reply answers (`replyToId`), which a line is bound to.
      */
     metadata?: unknown;
 }
@@ -318,43 +433,39 @@ function keyFor(keys: DmKeys, conversationId: string, cache?: KeyCache): Uint8Ar
     return key;
 }
 
-function openWith(
-    payload: DmPayload,
-    keys: DmKeys,
-    line: DmLineRef,
-    formats: ReadonlyArray<2 | 3>,
-    myPubHex: string,
-    cache?: KeyCache,
-): OpenedDmLine {
+function openWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache): OpenedDmLine {
     // Only the two of them share this key; a line the node names as anyone else's is no line of theirs.
     if (line.senderPubHex !== myPubHex && line.senderPubHex !== keys.peerEdPubHex) throw new DmLineNotVerifiedError();
+    const recipientPubHex = line.senderPubHex === myPubHex ? keys.peerEdPubHex : myPubHex;
     const nonce = nonceBytes(payload.nonce);
-    const ct = unb64(payload.ciphertext);
-    const ids = dmConversationIdsToTry(line.conversationId, line.metadata);
+    const column = columnParts(payload.ciphertext);
+    if (!column) throw new DmLineNotVerifiedError();
     const replyToId = dmReplyToOf(line.metadata);
-    for (const format of formats) {
-        // A reply id no app writes: no format-3 line was sealed to it.
-        if (format === 3 && replyToId === undefined) continue;
-        for (const conversationId of ids) {
-            let key: Uint8Array;
-            try { key = keyFor(keys, conversationId, cache); } catch { throw new DmLineNotVerifiedError(); }
-            const aad = format === 3 ? dmLineAad(conversationId, line, replyToId) : utf8ToBytes(conversationId);
-            let pt: Uint8Array;
-            try { pt = xchacha20poly1305(key, nonce, aad).decrypt(ct); } catch { continue; }
-            const moved = conversationId !== line.conversationId;
-            if (format === 2) return { text: utf8(pt), format, after: null, conversationId, moved };
-            return { ...unframe(pt), format, conversationId, moved };
-        }
+    // A reply id no app writes: no line was sealed to it.
+    if (replyToId === undefined) throw new DmLineNotVerifiedError();
+    const part = line.part ?? 'body';
+    for (const conversationId of dmConversationIdsToTry(line.conversationId, line.metadata)) {
+        let key: Uint8Array;
+        try { key = keyFor(keys, conversationId, cache); } catch { throw new DmLineNotVerifiedError(); }
+        let pt: Uint8Array;
+        try { pt = xchacha20poly1305(key, nonce, dmLineAad(conversationId, line, replyToId)).decrypt(column.sealed); } catch { continue; }
+        // It opened under this id, so it was sealed under it, and only under it: either of the two could have sealed it
+        // naming the other, so it is the named sender's only if they signed it, here, to the other one.
+        const digest = dmLineSigDigest(payload.nonce, column.sealed, {
+            conversationId, senderPubHex: line.senderPubHex, recipientPubHex, messageId: line.messageId, part, at: column.at,
+        });
+        if (!verifiedBy(column.sig, digest, line.senderPubHex)) throw new DmLineNotVerifiedError();
+        return { ...unframe(pt), format: DM_LINE_FORMAT, conversationId, moved: conversationId !== line.conversationId };
     }
     throw new DmLineNotVerifiedError();
 }
 
 /**
- * Open one line: format 3 under each conversation id it may have been written under, then format 2. Throws
- * DmLineNotVerifiedError when none opens. `formats` narrows it: a photo opens only in its message's own format.
+ * Open one part of a line under each conversation id it may have been written under, its sender's signature verified.
+ * Throws DmLineNotVerifiedError when it doesn't open, or opens but its named sender didn't sign it.
  */
-export function openDmLine(payload: DmPayload, keys: DmKeys, line: DmLineRef, formats: ReadonlyArray<2 | 3> = [3, 2]): OpenedDmLine {
-    return openWith(payload, keys, line, formats, dmPublicKeyOf(keys.myEdPrivHex));
+export function openDmLine(payload: DmPayload, keys: DmKeys, line: DmLineRef): OpenedDmLine {
+    return openWith(payload, keys, line, dmPublicKeyOf(keys.myEdPrivHex));
 }
 
 /**
@@ -366,7 +477,7 @@ export const DM_FROM_ADMINS_KEY = 'fromCommunityAdmins';
 
 /** What a DM row is, before anything is opened. */
 export type DmLineKind =
-    /** An encrypted line (format 2 or 3): opened, and checked against the thread. */
+    /** An encrypted line: opened, its signature verified, and checked against the thread. */
     | 'encrypted'
     /** A deleted line: shown with fixed text (DM_LINE_DELETED_TEXT), never the row's words. */
     | 'tombstone'
@@ -397,13 +508,14 @@ export function dmLineKind(l: DmRowShape): DmLineKind {
 
 /** Why a line is marked. */
 export type DmLineMark =
-    /** Format 2: nothing in it proves who wrote it, wherever it sits in the thread. */
-    | 'old-app'
-    /** Format 3, shown before the line it was written after. */
+    /** Shown before the line it was written after. */
     | 'out-of-order'
-    /** Format 3, opened only under an older conversation id its metadata names. */
+    /** Opened only under an older conversation id its metadata names. */
     | 'moved'
-    /** An encrypted line that didn't open: shown as DM_LINE_NOT_VERIFIED_TEXT, as nobody's words. */
+    /**
+     * An encrypted line that didn't open, or opened but wasn't signed by its named sender: shown as
+     * DM_LINE_NOT_VERIFIED_TEXT, as nobody's words.
+     */
     | 'not-verified'
     /** Not an encrypted line, in a member's name: shown as DM_LINE_NOT_ENCRYPTED_TEXT, as nobody's words. */
     | 'not-encrypted'
@@ -426,7 +538,8 @@ export interface DmLineView {
      * are none to show: show dmLineShownText(view), never the row as anyone's words.
      */
     text: string | null;
-    format: 2 | 3 | null;
+    /** 4 when the line's words opened and its sender signed it; null otherwise. */
+    format: 4 | null;
     after: string | null;
     mark: DmLineMark;
 }
@@ -434,7 +547,7 @@ export interface DmLineView {
 function decodeReadable(ciphertext: string): string | null {
     try {
         const text = Buffer.from(ciphertext, 'base64').toString('utf8');
-        return text.includes('\uFFFD') ? null : text;
+        return text.includes('�') ? null : text;
     } catch {
         return null;
     }
@@ -443,13 +556,13 @@ function decodeReadable(ciphertext: string): string | null {
 /**
  * Check every line of one DM thread. `lines` is the thread in the order it is shown, oldest first (dmThreadInShownOrder):
  * the node's own notices are passed over; every other line gets a view, by id. An encrypted line is opened bound to its
- * named sender and id, and its "after" is checked against the lines shown before it. The key is derived once per
- * conversation id. `keys` null (the other person isn't known yet): no encrypted line opens.
+ * named sender and id, its sender's signature verified, and its "after" is checked against the lines shown before it. The
+ * key is derived once per conversation id. `keys` null (the other person isn't known yet): no encrypted line opens.
  *
  * `formerPeers`: keys this phone sealed the thread to before the one in `keys` (the member continued past a key change).
- * A line that doesn't open under `keys` is tried under each: one of mine as sealed to it, and one the row names as the
- * current peer's or as that former key's, as that key's own (a re-key moves the old lines' author to the new key). Never a
- * line the row names as anyone else's. The key is derived once per key and conversation id.
+ * A line that doesn't open under `keys` is tried under each: one of mine as sealed and signed to it, and one the row names
+ * as the current peer's or as that former key's, as that key's own (a re-key moves the old lines' author to the new key).
+ * Never a line the row names as anyone else's. The key is derived once per key and conversation id.
  */
 export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | null, conversationId: string, formerPeers: readonly string[] = []): Map<string, DmLineView> {
     const views = new Map<string, DmLineView>();
@@ -486,7 +599,7 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
         if (keys && myPubHex) {
             try {
                 opened = openWith({ ciphertext: l.ciphertext, nonce: l.nonce as string }, keys,
-                    { conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }, [3, 2], myPubHex, cache);
+                    { conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }, myPubHex, cache);
             } catch { opened = null; }
             for (const peer of opened ? [] : former) {
                 const mine = l.authorPubkey === myPubHex;
@@ -495,7 +608,7 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
                 if (!c) formerCaches.set(peer, c = new Map());
                 try {
                     opened = openWith({ ciphertext: l.ciphertext, nonce: l.nonce as string }, { myEdPrivHex: keys.myEdPrivHex, peerEdPubHex: peer },
-                        { conversationId, senderPubHex: mine ? myPubHex : peer, messageId: l.id, part: 'body', metadata: l.metadata }, [3, 2], myPubHex, c);
+                        { conversationId, senderPubHex: mine ? myPubHex : peer, messageId: l.id, part: 'body', metadata: l.metadata }, myPubHex, c);
                     break;
                 } catch { opened = null; }
             }
@@ -505,13 +618,9 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             return;
         }
         let mark: DmLineMark = null;
-        if (opened.format === 3) {
-            const afterAt = opened.after ? position.get(opened.after) : undefined;
-            if (opened.moved) mark = 'moved';
-            else if (afterAt !== undefined && afterAt > i) mark = 'out-of-order';
-        } else {
-            mark = 'old-app';
-        }
+        const afterAt = opened.after ? position.get(opened.after) : undefined;
+        if (opened.moved) mark = 'moved';
+        else if (afterAt !== undefined && afterAt > i) mark = 'out-of-order';
         views.set(l.id, { text: opened.text, format: opened.format, after: opened.after, mark });
     });
     return views;
@@ -542,7 +651,7 @@ export function dmAfterReference(linesOldestFirst: ReadonlyArray<{ id: string; n
     return null;
 }
 
-/** What both apps show in place of a line that didn't open. */
+/** What both apps show in place of a line that didn't open, or opened but wasn't signed by its named sender. */
 export const DM_LINE_NOT_VERIFIED_TEXT = "🔒 This message couldn't be verified, so it isn't shown.";
 /** What both apps show in place of a row in a member's name that isn't an encrypted line. */
 export const DM_LINE_NOT_ENCRYPTED_TEXT = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
@@ -557,7 +666,7 @@ export function dmLineShownText(view: DmLineView | undefined | null): string {
 
 /**
  * True when a line is shown as nobody's: a neutral line in the middle of the chat, not in its named author's bubble. A
- * line that didn't open, one that isn't encrypted, and the admin page's message.
+ * line that didn't open or wasn't signed by its named sender, one that isn't encrypted, and the admin page's message.
  */
 export function dmLineIsUnattributed(view: DmLineView | undefined | null): boolean {
     return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins';
@@ -593,7 +702,6 @@ export function dmQuoteLabel(from: Exclude<DmQuoteFrom, 'author'>): string {
 /** The one line under a marked message, in both apps' words. */
 export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
     switch (mark) {
-        case 'old-app': return "Sent from an older version of the app: BeanPool can't confirm who wrote it.";
         case 'out-of-order': return 'Shown out of the order it was written in.';
         case 'moved': return 'Moved here from another conversation.';
         case 'from-admins': return "From your community's admins. Not a private message: the community's server can read it.";

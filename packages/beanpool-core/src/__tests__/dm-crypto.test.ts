@@ -3,19 +3,20 @@ import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import * as dm from '../dm-crypto.js';
 import {
-    checkDmThread, dmAfterReference, dmConversationIdsToTry, dmLineMarkText, encryptDmFormat2, newDmMessageId, openDmLine, sealDmLine,
+    checkDmThread, dmAfterReference, dmConversationIdsToTry, dmLineMarkText, newDmMessageId, openDmLine, sealDmLine,
     dmLineKind, dmLineShownText, dmLineIsUnattributed, dmThreadInShownOrder, dmReplyToOf, dmQuoteFrom, dmQuoteLabel,
+    isDmLineForm, dmLineSigOf, dmLineSigVerifies,
     DM_CONVERSATION_IDS_MAX, DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT, DM_FROM_ADMINS_KEY, type DmThreadLine,
 } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
-import { checkDmLineVectors, DM_LINE_VECTORS, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '../dm-line-vectors.js';
+import { checkDmLineVectors, DM_LINE_VECTORS, DM_REFUSED_LINES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '../dm-line-vectors.js';
 
-// A direct message is bound to who sent it, which message it is and where (crypto review M F2, 2026-10-02). Until now its
-// associated data was the conversation id alone, under one key both ways, so the node could show Ana's line as Ben's,
-// store it again as a new message, or reorder it, and the other phone showed every one as genuine.
+// A direct message is bound to who sent it, which message it is and where (crypto review M F2, 2026-10-02), and since
+// format 4 (the 1.4.0 cutover) signed by its sender beside the seal: the two people share one key, so either could seal a
+// line naming the other, and only the sender's signature says which of them wrote it.
 
 function person(name: string) {
     const seed = sha256(utf8ToBytes(`dm-crypto.test ${name}`));
@@ -29,37 +30,74 @@ const ctxOf = (me: { seedHex: string }, peer: { publicKey: string }, conversatio
     ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey, conversationId });
 const keysOf = (me: { seedHex: string }, peer: { publicKey: string }) => ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey });
 
+/** A thread's line that has an encrypted line's nonce, so it is also a payload openDmLine takes. */
+type SealedLine = DmThreadLine & { nonce: string };
+
 /** A line as the sender's app writes it and the node stores it; a reply carries what it answers in its metadata. */
-function line(from: typeof ana, to: typeof ana, text: string, after: string | null = null, conversationId = CONV, replyToId?: string): DmThreadLine {
+function line(from: typeof ana, to: typeof ana, text: string, after: string | null = null, conversationId = CONV, replyToId?: string): SealedLine {
     const id = newDmMessageId();
     const sealed = sealDmLine(text, ctxOf(from, to, conversationId), { senderPubHex: from.publicKey, messageId: id, after, replyToId });
     return { id, authorPubkey: from.publicKey, ...sealed, ...(replyToId ? { metadata: JSON.stringify({ replyToId }) } : {}) };
 }
 const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
-/** A line written before this change, in format 2. */
-function oldLine(from: typeof ana, to: typeof ana, text: string, id = newDmMessageId()): DmThreadLine {
-    return { id, authorPubkey: from.publicKey, ...encryptDmFormat2(text, ctxOf(from, to)) };
-}
+const b64b = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
 const benReads = (lines: DmThreadLine[]) => checkDmThread(lines, keysOf(ben, ana), CONV);
+
+/**
+ * A line `sealer` seals in `named`'s name, built from the primitives as dm-crypto.ts would (sealDmLine refuses it): both of
+ * them hold the conversation's key, so the seal opens for both. It carries a signature by `signer`'s key, over the digest as
+ * `named` would sign it. With `signer` = `named` it is that person's genuine line, which is how the tests show that only the
+ * signature makes the difference.
+ */
+function sealedInNameOf(sealer: typeof ana, named: typeof ana, text: string, signer: typeof ana = sealer): SealedLine {
+    const id = newDmMessageId();
+    const nonce = randomBytes(24);
+    const nonceColumn = dm.DM_NONCE_PREFIX + b64b(nonce);
+    const at = '2026-11-10T09:00:00.000Z';
+    const sealed = xchacha20poly1305(dm.deriveDmKey(ctxOf(sealer, named)), nonce, dm.dmLineAad(CONV, { senderPubHex: named.publicKey, messageId: id }))
+        .encrypt(new Uint8Array([4, 0, ...utf8ToBytes(text)]));
+    const digest = dm.dmLineSigDigest(nonceColumn, sealed, { conversationId: CONV, senderPubHex: named.publicKey, recipientPubHex: sealer.publicKey, messageId: id, part: 'body', at });
+    const sig = ed25519.sign(digest, hexToBytes(signer.seedHex));
+    return { id, authorPubkey: named.publicKey, nonce: nonceColumn, ciphertext: b64b(new Uint8Array([4, ...sig, ...utf8ToBytes(at), ...sealed])) };
+}
+
+/** A line as an app before 1.4.0 sealed it: format 3 (associated data '/3', no signature in the column), or format 2. */
+function olderFormatLine(format: 2 | 3, from: typeof ana, to: typeof ana, text: string): SealedLine {
+    const id = newDmMessageId();
+    const nonce = randomBytes(24);
+    const aad = format === 3 ? utf8ToBytes(JSON.stringify(['beanpool-dm-line/3', CONV, from.publicKey, id, 'body'])) : utf8ToBytes(CONV);
+    const plain = format === 3 ? new Uint8Array([3, 0, ...utf8ToBytes(text)]) : utf8ToBytes(text);
+    const ct = xchacha20poly1305(dm.deriveDmKey(ctxOf(from, to)), nonce, aad).encrypt(plain);
+    return { id, authorPubkey: from.publicKey, nonce: dm.DM_NONCE_PREFIX + b64b(nonce), ciphertext: b64b(ct) };
+}
 
 describe('the frozen vectors', () => {
     it('seal and open the same bytes, and refuse every changed binding', () => {
         checkDmLineVectors(dm);
     });
 
-    it('format 3 is what the comment says it is, re-derived from the primitives without dm-crypto.ts', () => {
+    it('format 4 is what the comment says it is, re-derived from the primitives without dm-crypto.ts', () => {
         const v = DM_LINE_VECTORS[0];
         const a = DM_VECTOR_PEOPLE.ana;
         const b = DM_VECTOR_PEOPLE.ben;
         const shared = x25519.getSharedSecret(ed25519.utils.toMontgomerySecret(hexToBytes(a.seedHex)), ed25519.utils.toMontgomery(hexToBytes(b.publicKey)));
         const key = hkdf(sha256, shared, utf8ToBytes(DM_VECTOR_CONVERSATION), utf8ToBytes('beanpool-dm-v2'), 32);
-        const aad = utf8ToBytes(`["beanpool-dm-line/3","${DM_VECTOR_CONVERSATION}","${a.publicKey}","${v.messageId}","body"]`);
+        const aad = utf8ToBytes(`["beanpool-dm-line/4","${DM_VECTOR_CONVERSATION}","${a.publicKey}","${v.messageId}","body"]`);
         const after = utf8ToBytes(v.after!);
         const words = utf8ToBytes(v.text);
-        const plain = new Uint8Array([3, after.length, ...after, ...words]);
-        const ct = xchacha20poly1305(key, v.nonce, aad).encrypt(plain);
-        expect(Buffer.from(ct).toString('base64')).toBe(v.payload.ciphertext);
-        expect(v.payload.nonce).toBe('x25519-xc20p-v2:' + Buffer.from(v.nonce).toString('base64'));
+        const plain = new Uint8Array([4, after.length, ...after, ...words]);
+        const sealed = xchacha20poly1305(key, v.nonce, aad).encrypt(plain);
+        const nonceColumn = 'x25519-xc20p-v2:' + Buffer.from(v.nonce).toString('base64');
+        // Ana's signature, beside the seal: [tag, conversation, sender, recipient, id, part, when, nonce, sha256 of the sealed bytes].
+        const digest = sha256(utf8ToBytes(JSON.stringify([
+            'beanpool-dm-line-sig/2', DM_VECTOR_CONVERSATION, a.publicKey, b.publicKey, v.messageId, 'body', v.at, nonceColumn, bytesToHex(sha256(sealed)),
+        ])));
+        const sig = ed25519.sign(digest, hexToBytes(a.seedHex));
+        expect(b64b(new Uint8Array([4, ...sig, ...utf8ToBytes(v.at), ...sealed]))).toBe(v.payload.ciphertext);
+        expect(v.payload.nonce).toBe(nonceColumn);
+        // What the node and a moderator read off the column without opening it.
+        expect(dmLineSigOf(v.payload.ciphertext)).toEqual({ sig: b64b(sig), at: v.at });
+        expect(isDmLineForm(v.payload.ciphertext, v.payload.nonce)).toBe(true);
     });
 });
 
@@ -76,8 +114,10 @@ describe('sealing', () => {
         const id = newDmMessageId();
         const nonce = new Uint8Array(24).fill(7);
         const pkcs8 = bytesToHex(toEd25519Pkcs8(hexToBytes(ana.seedHex)));
-        const fromSeed = sealDmLine('hi', ctxOf(ana, ben), { senderPubHex: ana.publicKey, messageId: id }, nonce);
-        const fromPkcs8 = sealDmLine('hi', { ...ctxOf(ana, ben), myEdPrivHex: pkcs8 }, { senderPubHex: ana.publicKey, messageId: id }, nonce);
+        // The signing time is in the bytes, so both are sealed at the same one.
+        const at = '2026-11-10T09:00:00.000Z';
+        const fromSeed = sealDmLine('hi', ctxOf(ana, ben), { senderPubHex: ana.publicKey, messageId: id, at }, nonce);
+        const fromPkcs8 = sealDmLine('hi', { ...ctxOf(ana, ben), myEdPrivHex: pkcs8 }, { senderPubHex: ana.publicKey, messageId: id, at }, nonce);
         expect(fromPkcs8).toEqual(fromSeed);
     });
 
@@ -98,7 +138,7 @@ describe('what the node can do to a line now', () => {
         // And as a third person's: no line of this pair names anyone else.
         expect(benReads([{ ...l, authorPubkey: cat.publicKey }]).get(l.id)?.text).toBeNull();
         // The line as it was opens, for both of them.
-        expect(benReads([l]).get(l.id)).toMatchObject({ text: 'I will pay you 50 Beans', format: 3, mark: null });
+        expect(benReads([l]).get(l.id)).toMatchObject({ text: 'I will pay you 50 Beans', format: 4, mark: null });
         expect(checkDmThread([l], keysOf(ana, ben), CONV).get(l.id)?.text).toBe('I will pay you 50 Beans');
     });
 
@@ -152,43 +192,96 @@ describe('what the node can do to a line now', () => {
         const ref = { conversationId: CONV, senderPubHex: ana.publicKey, messageId: id };
         expect(() => openDmLine(photo, keysOf(ben, ana), { ...ref, part: 'body' })).toThrow(dm.DmLineNotVerifiedError);
         expect(openDmLine(photo, keysOf(ben, ana), { ...ref, part: 'attachment' }).text).toBe('data:image/jpeg;base64,AAAA');
-        // A photo opens only in its message's format: an old format-2 picture is not a new line's photo.
-        const oldPhoto = encryptDmFormat2('data:image/jpeg;base64,BBBB', ctx);
-        expect(() => openDmLine(oldPhoto, keysOf(ben, ana), { ...ref, part: 'attachment' }, [3])).toThrow(dm.DmLineNotVerifiedError);
     });
 });
 
-describe('old lines (format 2)', () => {
-    it('still open, so nobody loses their history, folded threads included; each one marked, as nothing in it proves who wrote it', () => {
-        const h1 = oldLine(ana, ben, 'hello from before');
-        const h2 = oldLine(ben, ana, 'hi!');
-        const views = benReads([h1, h2]);
-        expect(views.get(h1.id)).toEqual({ text: 'hello from before', format: 2, after: null, mark: 'old-app' });
-        expect(views.get(h2.id)).toEqual({ text: 'hi!', format: 2, after: null, mark: 'old-app' });
-        // A line folded in from an old per-listing thread opens under the id its metadata names, marked the same way.
-        const OLD = 'post-thread-1';
-        const folded = {
-            id: newDmMessageId(), authorPubkey: ana.publicKey, metadata: JSON.stringify({ originalConversationIds: ['x', OLD] }),
-            ...encryptDmFormat2('about the bike', ctxOf(ana, ben, OLD)),
-        };
-        expect(benReads([folded]).get(folded.id)).toMatchObject({ text: 'about the bike', format: 2, mark: 'old-app' });
-        expect(dmLineMarkText('old-app')).toBe("Sent from an older version of the app: BeanPool can't confirm who wrote it.");
+describe('the sender\'s signature (format 4)', () => {
+    const NOT_SHOWN = { text: null, format: null, after: null, mark: 'not-verified' };
+
+    it('a forged sender, a valid seal with a signature not theirs, is never shown as theirs, on either phone', () => {
+        // Ana seals a line in Ben's name: she holds the key, so the seal opens for both of them; she can only sign it herself.
+        const forged = sealedInNameOf(ana, ben, 'I owe Ana 500 Beans');
+        expect(benReads([forged]).get(forged.id)).toEqual(NOT_SHOWN);
+        // On Ana's own phone too: it would show her own words as Ben's.
+        expect(checkDmThread([forged], keysOf(ana, ben), CONV).get(forged.id)).toEqual(NOT_SHOWN);
+        // Shown as nobody's, in the neutral line, and none of its words.
+        const view = benReads([forged]).get(forged.id);
+        expect(dmLineIsUnattributed(view)).toBe(true);
+        expect(dmLineShownText(view)).toBe(DM_LINE_NOT_VERIFIED_TEXT);
+        expect(() => openDmLine(forged, keysOf(ben, ana), { conversationId: CONV, senderPubHex: ben.publicKey, messageId: forged.id })).toThrow(dm.DmLineNotVerifiedError);
+        // The same construction with Ben's own signature is his genuine line, and opens: only the signature differs.
+        const genuine = sealedInNameOf(ana, ben, 'I owe Ana 500 Beans', ben);
+        expect(benReads([genuine]).get(genuine.id)).toMatchObject({ text: 'I owe Ana 500 Beans', format: 4, mark: null });
+        // A third person's signature is no better than Ana's.
+        expect(benReads([sealedInNameOf(ana, ben, 'hi', cat)]).values().next().value).toEqual(NOT_SHOWN);
     });
 
-    it('marked wherever it sits and whoever it names: before or after any new line, as either person, past any window', () => {
-        const before = oldLine(ana, ben, 'see you at 6');
-        const now = line(ana, ben, 'I\'m here', before.id);
-        const replayed = oldLine(ana, ben, 'see you at 6');   // the node storing an old line of hers again
-        // Ana's old line shown as Ben's newest (format 2 can't prove its sender, so this is the same line re-attributed).
-        const asBens = { ...oldLine(ana, ben, 'I will pay you 50 Beans'), authorPubkey: ben.publicKey };
-        const views = benReads([before, now, replayed, asBens]);
-        expect(views.get(before.id)?.mark).toBe('old-app');
-        expect(views.get(now.id)?.mark).toBeNull();
-        expect(views.get(replayed.id)).toMatchObject({ text: 'see you at 6', mark: 'old-app' });
-        expect(views.get(asBens.id)).toMatchObject({ text: 'I will pay you 50 Beans', mark: 'old-app' });
-        // The window the apps pass in holds no new line of anyone's: still marked.
-        const window = [replayed, ...Array.from({ length: 50 }, (_, i) => line(ben, ana, `line ${i}`))];
-        expect(benReads(window.slice(-50).concat(asBens)).get(asBens.id)?.mark).toBe('old-app');
+    it('a line of an older format, format 3 or 2, doesn\'t open: format 4 is the only one read', () => {
+        const three = olderFormatLine(3, ana, ben, 'from a 1.3 app');
+        const two = olderFormatLine(2, ana, ben, 'from before October');
+        const views = benReads([three, two]);
+        expect(views.get(three.id)).toEqual(NOT_SHOWN);
+        expect(views.get(two.id)).toEqual(NOT_SHOWN);
+        expect(isDmLineForm(three.ciphertext, three.nonce)).toBe(false);
+        expect(isDmLineForm(two.ciphertext, two.nonce)).toBe(false);
+        // The frozen format-3 line, with the signature a 1.3.x app sent beside it, as both people.
+        const old = DM_REFUSED_LINES[0];
+        const row = { id: old.messageId, authorPubkey: DM_VECTOR_PEOPLE.ana.publicKey, ...old.payload, metadata: old.metadata };
+        const p = DM_VECTOR_PEOPLE;
+        expect(checkDmThread([row], { myEdPrivHex: p.ben.seedHex, peerEdPubHex: p.ana.publicKey }, DM_VECTOR_CONVERSATION).get(row.id)).toEqual(NOT_SHOWN);
+        expect(checkDmThread([row], { myEdPrivHex: p.ana.seedHex, peerEdPubHex: p.ben.publicKey }, DM_VECTOR_CONVERSATION).get(row.id)).toEqual(NOT_SHOWN);
+        expect(isDmLineForm(old.payload.ciphertext, old.payload.nonce)).toBe(false);
+    });
+
+    it('a signature moved from one of the sender\'s lines to another doesn\'t carry over', () => {
+        const one = line(ana, ben, 'Yes, take the ladder');
+        const two = line(ana, ben, 'No, keep away from my shed');
+        const column = (l: DmThreadLine) => Buffer.from(l.ciphertext, 'base64');
+        const swapped = Buffer.concat([column(one).subarray(0, 1 + 64 + 24), column(two).subarray(1 + 64 + 24)]);
+        const moved = { ...two, ciphertext: swapped.toString('base64') };
+        expect(benReads([moved]).get(two.id)).toEqual(NOT_SHOWN);
+        expect(benReads([two]).get(two.id)?.text).toBe('No, keep away from my shed');
+    });
+
+    it('every part is signed: a photo or a listing sealed in the sender\'s name by the other person doesn\'t open', () => {
+        const id = newDmMessageId();
+        const ref = { conversationId: CONV, senderPubHex: ana.publicKey, messageId: id };
+        const photo = sealDmLine('data:image/jpeg;base64,AAAA', ctxOf(ana, ben), { senderPubHex: ana.publicKey, messageId: id, part: 'attachment' });
+        expect(openDmLine(photo, keysOf(ben, ana), { ...ref, part: 'attachment' }).text).toBe('data:image/jpeg;base64,AAAA');
+        // Ben puts his own picture on Ana's message: the seal names her and opens, but the signature is his.
+        const nonce = randomBytes(24);
+        const nonceColumn = dm.DM_NONCE_PREFIX + b64b(nonce);
+        const at = '2026-11-10T09:00:00.000Z';
+        const sealed = xchacha20poly1305(dm.deriveDmKey(ctxOf(ben, ana)), nonce, dm.dmLineAad(CONV, { senderPubHex: ana.publicKey, messageId: id, part: 'attachment' }))
+            .encrypt(new Uint8Array([4, 0, ...utf8ToBytes('data:image/jpeg;base64,BBBB')]));
+        const sig = ed25519.sign(dm.dmLineSigDigest(nonceColumn, sealed, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: ben.publicKey, messageId: id, part: 'attachment', at }), hexToBytes(ben.seedHex));
+        const swapped = { ciphertext: b64b(new Uint8Array([4, ...sig, ...utf8ToBytes(at), ...sealed])), nonce: nonceColumn };
+        expect(() => openDmLine(swapped, keysOf(ana, ben), { ...ref, part: 'attachment' })).toThrow(dm.DmLineNotVerifiedError);
+        expect(() => openDmLine(swapped, keysOf(ben, ana), { ...ref, part: 'attachment' })).toThrow(dm.DmLineNotVerifiedError);
+        // A signature names its part: the words' signature never stands for the photo's.
+        expect(dmLineSigVerifies(photo, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: ben.publicKey, messageId: id, part: 'attachment' })).toBe(true);
+        expect(dmLineSigVerifies(photo, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: ben.publicKey, messageId: id, part: 'body' })).toBe(false);
+    });
+
+    it('the node can check the form without a key; only the binding checks who signed it', () => {
+        const l = line(ana, ben, 'hi');
+        expect(isDmLineForm(l.ciphertext, l.nonce)).toBe(true);
+        const at = dmLineSigOf(l.ciphertext)!.at;
+        expect(at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        // Who it was to is part of what is signed: to Cat it isn't Ana's signature.
+        expect(dmLineSigVerifies(l, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: ben.publicKey, messageId: l.id, part: 'body' })).toBe(true);
+        expect(dmLineSigVerifies(l, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: cat.publicKey, messageId: l.id, part: 'body' })).toBe(false);
+        // A column cut short, an unpadded or second spelling of its base64, a bad time, or the wrong nonce length: not the form.
+        const bytes = Buffer.from(l.ciphertext, 'base64');
+        expect(isDmLineForm(bytes.subarray(0, 1 + 64 + 24 + 15).toString('base64'), l.nonce)).toBe(false);
+        // 'hi' with nothing before it seals to 1 + 64 + 24 + 20 = 109 bytes, so its base64 always ends in padding.
+        expect(l.ciphertext.endsWith('==')).toBe(true);
+        expect(isDmLineForm(l.ciphertext.replace(/=+$/, ''), l.nonce)).toBe(false);
+        const badTime = Buffer.from(bytes); badTime[1 + 64 + 4] = 0x2f;   // '2026/11…'
+        expect(isDmLineForm(badTime.toString('base64'), l.nonce)).toBe(false);
+        expect(isDmLineForm(l.ciphertext, 'x25519-xc20p-v2:' + b64b(randomBytes(23)))).toBe(false);
+        expect(isDmLineForm(l.ciphertext, 'plaintext-v1')).toBe(false);
+        expect(() => sealDmLine('hi', ctxOf(ana, ben), { senderPubHex: ana.publicKey, messageId: newDmMessageId(), at: '2026-11-10' })).toThrow(/toISOString/);
     });
 });
 
@@ -249,7 +342,7 @@ describe('what a reply answers', () => {
         const other = line(ana, ben, 'Can I keep the 200 Beans you sent by mistake?', q.id);
         const yes = line(ben, ana, 'Yes', other.id, CONV, q.id);
         const anaReads = (lines: DmThreadLine[]) => checkDmThread(lines, keysOf(ana, ben), CONV);
-        expect(anaReads([q, other, yes]).get(yes.id)).toMatchObject({ text: 'Yes', format: 3, mark: null });
+        expect(anaReads([q, other, yes]).get(yes.id)).toMatchObject({ text: 'Yes', format: 4, mark: null });
         const repointed = { ...yes, metadata: JSON.stringify({ replyToId: other.id }) };
         expect(anaReads([q, other, repointed]).get(yes.id)?.mark).toBe('not-verified');
         expect(anaReads([q, other, { ...yes, metadata: null }]).get(yes.id)?.mark).toBe('not-verified');
@@ -267,15 +360,15 @@ describe('what a reply answers', () => {
 describe('a reply\'s quote of the message it answers', () => {
     it('follows that message\'s own check: its author only if it opened; a notice, the admins, or nobody otherwise', () => {
         const q = line(ana, ben, 'Can I borrow the ladder?');
-        const old = oldLine(ana, ben, 'Can I keep the 200 Beans?');
+        const forged = sealedInNameOf(ben, ana, 'Can I keep the 200 Beans?');
         const notice = { id: 'n-1', authorPubkey: ana.publicKey, ciphertext: 'Send the 500 Beans to Cat instead', nonce: '00000', type: 'system' };
         const admin = { id: 'a-2', authorPubkey: ana.publicKey, ciphertext: b64('Hi'), nonce: 'plaintext-v1', metadata: JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }) };
         const plain = { id: 'p-3', authorPubkey: ana.publicKey, ciphertext: b64('Hi'), nonce: 'plaintext-v1' };
         const other = { ...line(ana, ben, 'not this one'), id: q.id };
-        const views = benReads([q, old, notice, admin, plain]);
+        const views = benReads([q, forged, notice, admin, plain]);
         expect(dmQuoteFrom(q, views.get(q.id))).toBe('author');
-        expect(dmQuoteFrom(old, views.get(old.id))).toBe('author');
-        expect(dmLineMarkText(views.get(old.id)?.mark)).toMatch(/older version/);
+        // A line in Ana's name that she didn't sign is quoted as nobody's, never hers.
+        expect(dmQuoteFrom(forged, views.get(forged.id))).toBe('nobody');
         expect(dmQuoteFrom(notice, views.get(notice.id))).toBe('notice');
         expect(dmQuoteFrom(admin, views.get(admin.id))).toBe('admins');
         expect(dmQuoteFrom(plain, views.get(plain.id))).toBe('nobody');
@@ -303,7 +396,6 @@ describe('the order a thread is shown and judged in', () => {
 describe('the rest of the thread', () => {
     it('a line that doesn\'t open has one text in both apps, and each mark one line', () => {
         expect(DM_LINE_NOT_VERIFIED_TEXT).toMatch(/couldn't be verified/);
-        expect(dmLineMarkText('old-app')).toMatch(/older version of the app/);
         expect(dmLineMarkText('out-of-order')).toMatch(/out of the order/);
         expect(dmLineMarkText('moved')).toMatch(/another conversation/);
         expect(dmLineMarkText(null)).toBeNull();
@@ -337,12 +429,12 @@ describe('the rest of the thread', () => {
         const folded = (position: number) => {
             const ids = [...fill];
             ids[position] = 'the-thread-it-was-sealed-in';
-            return { id: newDmMessageId(), authorPubkey: ana.publicKey, metadata: JSON.stringify({ originalConversationIds: ids }), ...encryptDmFormat2('about the bike', ctxOf(ana, ben, 'the-thread-it-was-sealed-in')) };
+            return { ...line(ana, ben, 'about the bike', null, 'the-thread-it-was-sealed-in'), metadata: JSON.stringify({ originalConversationIds: ids }) };
         };
         // The line's own id takes the first place, so a list's last within the cap is at MAX - 2.
         const within = folded(DM_CONVERSATION_IDS_MAX - 2);
         const past = folded(DM_CONVERSATION_IDS_MAX - 1);
-        expect(benReads([within]).get(within.id)).toMatchObject({ text: 'about the bike', format: 2 });
+        expect(benReads([within]).get(within.id)).toMatchObject({ text: 'about the bike', format: 4, mark: 'moved' });
         expect(benReads([past]).get(past.id)).toMatchObject({ text: null, mark: 'not-verified' });
     });
 });

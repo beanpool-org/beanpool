@@ -38,7 +38,7 @@
 // The same attribution gives an unfunded project's backers their Beans back a week after its end date
 // (engine/unfunded-pledges.ts): who is owed what from an escrow is worked out one way, here.
 
-import { DUST_THRESHOLD, isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -88,7 +88,8 @@ export interface StrandedPledgeLedger {
     conservingTransaction: <T>(fn: () => T) => T;
 }
 
-const near = (a: number, b: number) => Math.abs(a - b) <= DUST_THRESHOLD;
+/** Whole hundredths: the same figure, exactly. */
+const near = (a: number, b: number) => a === b;
 
 /** Every project that isn't ACTIVE and whose escrow holds more than dust, with who is owed what or why nobody can be. Reads only. */
 export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
@@ -96,9 +97,9 @@ export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
         SELECT p.id, p.title, p.status, a.balance_c
         FROM projects p
         JOIN accounts a ON a.public_key = 'escrow_' || p.id
-        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance_c > ?
+        WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance_c > 0
         ORDER BY p.id
-    `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance_c: number }[];
+    `).all() as { id: string; title: string | null; status: string | null; balance_c: number }[];
     return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance_c)));
 }
 
@@ -170,8 +171,8 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
     let running = 0;
     let lastZero = -1;
     rows.forEach((r, i) => {
-        if (r.to_pubkey === escrow) running += Number(r.amount) - Number(r.fee_c || 0);
-        if (r.from_pubkey === escrow) running -= Number(r.amount);
+        if (r.to_pubkey === escrow) running += Number(r.amount_c) - Number(r.fee_c || 0);
+        if (r.from_pubkey === escrow) running -= Number(r.amount_c);
         if (near(running, 0)) lastZero = i;
     });
     if (!near(running, held)) {
@@ -185,20 +186,20 @@ export function owedFromProjectEscrow(projectId: string, title: string, status: 
                 return stop(`transaction ${r.id} put Beans into it that are not a member's pledge to this project`);
             }
             const o = owed.get(r.from_pubkey) ?? { backer: r.from_pubkey, amount: 0, pledgeIds: [] };
-            o.amount += Number(r.amount) - Number(r.fee_c || 0);
+            o.amount += Number(r.amount_c) - Number(r.fee_c || 0);
             o.pledgeIds.push(r.id);
             owed.set(r.from_pubkey, o);
         } else {
             const o = owed.get(r.to_pubkey);
             if (!o) return stop(`transaction ${r.id} paid Beans out of it to someone who had not pledged since it last stood at 0`);
-            o.amount -= Number(r.amount);
+            o.amount -= Number(r.amount_c);
         }
     }
 
     const returns: StrandedPledgeReturn[] = [];
     for (const o of owed.values()) {
-        if (o.amount < -DUST_THRESHOLD) return stop(`more went back to ${o.backer} than they pledged`);
-        if (o.amount > DUST_THRESHOLD) returns.push(o);
+        if (o.amount < 0) return stop(`more went back to ${o.backer} than they pledged`);
+        if (o.amount > 0) returns.push(o);
     }
     const total = returns.reduce((s, o) => s + o.amount, 0);
     if (returns.length === 0 || !near(total, held)) {

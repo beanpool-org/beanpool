@@ -1233,7 +1233,7 @@ function startStanding(cb: EscrowCallbacks, v: CheckedStandingStart, d: {
     const row = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(d.txId) as any;
     const payerName = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(v.payer) as { callsign?: string } | undefined)?.callsign || 'A member';
     return afterRelease(cb, row, d.post, paid!, d.actor, {
-        title: standingLines.noticeTitle(), body: standingLines.paidIn(v.auth.unit, v.auth.beansPerPeriod, title, payerName, 1),
+        title: standingLines.noticeTitle(), body: standingLines.paidIn(v.auth.unit, v.auth.beansPerPeriod_c, title, payerName, 1),
     });
 }
 

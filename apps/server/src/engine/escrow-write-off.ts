@@ -24,7 +24,7 @@
 // inside it is treated as a possible conservation breach (rollback plus a full resync of memory to rows). All of
 // this is synchronous, so nothing can run between the guards and the payment on Node's one thread.
 
-import { DUST_THRESHOLD, ESCROW_FLOOR, isEscrowAccount, ESCROW_ACCOUNT_PREFIX } from '@beanpool/core';
+import { ESCROW_FLOOR, formatHundredths, isEscrowAccount, ESCROW_ACCOUNT_PREFIX } from '@beanpool/core';
 import { escrowNotHeldOpenSql } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
@@ -44,27 +44,26 @@ export const WRITE_OFF_REASON_MAX = 300;
 /** Trade statuses whose escrow is legitimately holding (or about to hold) Beans. Same set as the audit. */
 const OPEN_TRADE_STATUSES = ['pending', 'requested'];
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 export interface StrandedEscrow {
     /** The account id, `escrow_<trade id>`. */
     escrowId: string;
     balance_c: number;
     tradeId: string;
     /** The trade row, or null when the node has none (a legacy escrow can outlive its trade row). */
-    trade: { status: string; credits: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
+    trade: { status: string; amount_c: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
     transactionCount: number;
     /** The newest ledger row touching this escrow — for a legacy hole, the refund that dug it. */
-    lastTransaction: { memo: string; amount: number; timestamp: string } | null;
+    lastTransaction: { memo: string; amount_c: number; timestamp: string } | null;
     /** Whether the Commons may cover this one, and what the Commons would read if only this one were written off. */
-    writeOff: { eligible: boolean; refusal: string | null; commonsAfter: number | null; wouldDeficit: boolean };
+    writeOff: { eligible: boolean; refusal: string | null; commonsAfter_c: number | null; wouldDeficit: boolean };
 }
 
+/** Every money figure whole hundredths (`*_c`, @beanpool/core hundredths.ts). */
 export interface StrandedEscrowList {
-    commonsBalance: number;
+    commonsBalance_c: number;
     escrows: StrandedEscrow[];
     /** What the Commons would read after every eligible escrow is written off. */
-    commonsAfterAll: number;
+    commonsAfterAll_c: number;
     eligibleCount: number;
 }
 
@@ -77,12 +76,12 @@ export type WriteOffResult =
         ok: true;
         escrowId: string;
         tradeId: string;
-        amount: number;
+        amount_c: number;
         transactionId: string;
         memo: string;
-        commonsBefore: number;
-        commonsAfter: number;
-        escrowBalanceAfter: number;
+        commonsBefore_c: number;
+        commonsAfter_c: number;
+        escrowBalanceAfter_c: number;
     }
     | {
         ok: false;
@@ -90,8 +89,8 @@ export type WriteOffResult =
         code: WriteOffCode;
         error: string;
         /** Present on `deficit_unconfirmed`: the two figures the admin must see before confirming. */
-        commonsBalance?: number;
-        commonsAfter?: number;
+        commonsBalance_c?: number;
+        commonsAfter_c?: number;
         /** Present on `already_written_off`. */
         writtenOffAt?: string;
     };
@@ -116,21 +115,20 @@ function balanceRefusal(balance: number, tradeStatus: string | null): { code: Wr
     if (tradeStatus && OPEN_TRADE_STATUSES.includes(tradeStatus)) {
         return { code: 'trade_open', error: `This escrow belongs to a trade that is still ${tradeStatus} — it is not stranded` };
     }
-    if (balance > DUST_THRESHOLD) {
+    if (balance > 0) {
         return {
             code: 'positive_balance',
-            error: `This escrow holds ${balance} Beans that a member paid in. Those never go to the Commons — settle the trade instead`,
+            error: `This escrow holds ${formatHundredths(balance, 'en')} Beans that a member paid in. Those never go to the Commons — settle the trade instead`,
         };
     }
     if (balance >= ESCROW_FLOOR) {
-        return { code: 'nothing_to_write_off', error: 'This escrow is at zero (or within rounding dust of it) — there is nothing to write off' };
+        return { code: 'nothing_to_write_off', error: 'This escrow is at zero — there is nothing to write off' };
     }
     return null;
 }
 
 /**
- * Every escrow the audit would call stranded, plus any negative one too small for the audit's 0.01 cut but still
- * a real hole. Positive ones are listed so the count the admin sees in the audit matches this list, and are marked
+ * Every escrow the audit would call stranded: any that holds anything, whole hundredths, exactly. Positive ones are listed so the count the admin sees in the audit matches this list, and are marked
  * ineligible. The audit's own clause leaves out what an open deal or an open project holds (escrowNotHeldOpenSql).
  */
 export function listStrandedEscrows(): StrandedEscrowList {
@@ -140,10 +138,10 @@ export function listStrandedEscrows(): StrandedEscrowList {
                mt.id AS tradeRowId
         FROM accounts a
         LEFT JOIN marketplace_transactions mt ON mt.id = SUBSTR(a.public_key, 8)
-        WHERE a.public_key LIKE 'escrow_%' AND ABS(a.balance_c) > ?
+        WHERE a.public_key LIKE 'escrow_%' AND a.balance_c != 0
           AND ${escrowNotHeldOpenSql(db, 'a.public_key')}
         ORDER BY a.balance_c ASC, a.public_key ASC
-    `).all(DUST_THRESHOLD) as any[];
+    `).all() as any[];
 
     const commons = getCommonsBalanceExact();
     const countStmt = db.prepare(`SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?`);
@@ -160,22 +158,22 @@ export function listStrandedEscrows(): StrandedEscrowList {
             refusal = { code: 'already_written_off', error: 'The Commons has already covered this escrow once' };
         }
         const eligible = refusal === null;
-        const commonsAfter = eligible ? round2(commons + balance) : null;
+        const commonsAfter = eligible ? commons + balance : null;
         if (eligible) { totalEligible += -balance; eligibleCount++; }
         return {
             escrowId: r.escrowId,
-            balance,
+            balance_c: balance,
             tradeId: tradeIdOf(r.escrowId),
             trade: r.tradeRowId
-                ? { status: r.status, credits: Number(r.credits), postId: r.postId, createdAt: r.createdAt ?? null, completedAt: r.completedAt ?? null }
+                ? { status: r.status, amount_c: Number(r.amount_c), postId: r.postId, createdAt: r.createdAt ?? null, completedAt: r.completedAt ?? null }
                 : null,
             transactionCount: Number((countStmt.get(r.escrowId, r.escrowId) as any)?.c ?? 0),
-            lastTransaction: last ? { memo: last.memo ?? '', amount: Number(last.amount), timestamp: last.timestamp } : null,
-            writeOff: { eligible, refusal: refusal?.error ?? null, commonsAfter, wouldDeficit: eligible && commons < -balance },
+            lastTransaction: last ? { memo: last.memo ?? '', amount_c: Number(last.amount_c), timestamp: last.timestamp } : null,
+            writeOff: { eligible, refusal: refusal?.error ?? null, commonsAfter_c: commonsAfter, wouldDeficit: eligible && commons < -balance },
         };
     });
 
-    return { commonsBalance: round2(commons), escrows, commonsAfterAll: round2(commons - totalEligible), eligibleCount };
+    return { commonsBalance_c: commons, escrows, commonsAfterAll_c: commons - totalEligible, eligibleCount };
 }
 
 /**
@@ -232,7 +230,7 @@ export function writeOffStrandedEscrow(
 
     // Memory and row must agree, or paying |memory| lands the row somewhere other than 0 and the audit drifts.
     // Before the shape check, so a disagreement is never reported as something else.
-    if (Math.abs(Number(row.balance_c) - balance) > DUST_THRESHOLD) {
+    if (Number(row.balance_c) !== balance) {
         return refuse(409, 'ledger_mismatch',
             `This escrow reads ${balance} in memory but ${row.balance_c} on disk. Restart the node so it reloads the ledger, then try again`);
     }
@@ -245,11 +243,11 @@ export function writeOffStrandedEscrow(
     // The same comparison `deductFromCommons` makes, so this can never disagree with what the payment does.
     const deficit = commonsBefore < amount;
     if (deficit && opts?.confirmDeficit !== true) {
-        const before = round2(commonsBefore);
-        const after = round2(commonsBefore - amount);
+        const before = commonsBefore;
+        const after = commonsBefore - amount;
         return refuse(409, 'deficit_unconfirmed',
-            `The Commons holds ${before} Beans; writing off ${round2(amount)} Beans would leave it at ${after}. Confirm to let the Commons go into deficit`,
-            { commonsBalance: before, commonsAfter: after });
+            `The Commons holds ${formatHundredths(before, 'en')} Beans; writing off ${formatHundredths(amount, 'en')} Beans would leave it at ${formatHundredths(after, 'en')}. Confirm to let the Commons go into deficit`,
+            { commonsBalance_c: before, commonsAfter_c: after });
     }
 
     const memo = `Stranded escrow written off from the Commons by ${adminActorName(actor)} — trade ${tradeId}: ${why}`;
@@ -265,11 +263,11 @@ export function writeOffStrandedEscrow(
         ok: true,
         escrowId,
         tradeId,
-        amount,
+        amount_c: amount,
         transactionId: txn.id,
         memo,
-        commonsBefore: round2(commonsBefore),
-        commonsAfter: round2(getCommonsBalanceExact()),
-        escrowBalanceAfter: ledger.getAccount(escrowId).balance_c,
+        commonsBefore_c: commonsBefore,
+        commonsAfter_c: getCommonsBalanceExact(),
+        escrowBalanceAfter_c: ledger.getAccount(escrowId).balance_c,
     };
 }

@@ -902,7 +902,7 @@ export function initStateEngine(): void {
     } else if (restoredPot !== null) {
         setCommonsBalance(restoredPot);
         const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
+        console.log(`🏛️ Restored Commons Pool balance: ${String(restoredPot)} hundredths${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -956,9 +956,9 @@ export function initStateEngine(): void {
             console.error('╔════════════════════════════════════════════════════════╗');
             console.error('║ ⚠️  LEDGER CONSERVATION WARNING — NODE STARTED WITH DRIFT ║');
             console.error('╠════════════════════════════════════════════════════════╣');
-            console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
-            console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
-            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
+            console.error(`║  sum(balances) = ${String(auditResult.sumBalances).padEnd(10)} baseline = ${String(auditResult.baseline).padEnd(10)}    ║`);
+            console.error(`║  drift         = ${String(auditResult.drift).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  (whole hundredths)  balances not whole hundredths = ${String(auditResult.badBalances).padEnd(4)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -3332,7 +3332,7 @@ export function conservingTransaction<T>(fn: () => T): T {
  * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
  */
 function commonsPotFromRow(balance: unknown): number {
-    return typeof balance === 'number' ? balance : NaN;
+    return isHundredths(balance) ? balance : NaN;
 }
 
 /** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
@@ -7167,7 +7167,7 @@ function communityInfoWith(counts: CommunityCounts, publicKey?: string): Communi
     const { memberCount, postCount } = counts;
     // profile + features are additive: the apps read them to know what this node does; older apps ignore them.
     return {
-        memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        memberCount, postCount, transactionCount: txCount, commonsBalance_c: COMMONS_BALANCE,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         // `door` (config/door.ts) last, so older apps ignore it: who may invite here.
         profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor() },
@@ -8210,7 +8210,7 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
             last30Days: counts.last30Days,
             activeMemberCount: counts.activeMemberCount,
             inactiveMemberCount: counts.inactiveMemberCount,
-            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
+            commonsBalance_c: COMMONS_BALANCE
         },
         reportCount,
         watchdog
@@ -9973,16 +9973,12 @@ export function getAllProjects(): CommunityProject[] {
     return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
+/** The Commons pot, whole hundredths (exact: there is nothing to round). */
 export function getCommonsBalance(): number {
-    return Math.round(COMMONS_BALANCE * 100) / 100;
+    return COMMONS_BALANCE;
 }
 
-/**
- * The Commons pot UNROUNDED. For snapshot/restore, not for display.
- *
- * `getCommonsBalance()` rounds to 2dp for presentation, so restoring a snapshot taken through it would
- * itself lose up to half a cent — the pot must be put back exactly as it was found.
- */
+/** The Commons pot, whole hundredths, for snapshot and restore: the same figure as getCommonsBalance. */
 export function getCommonsBalanceExact(): number {
     return COMMONS_BALANCE;
 }

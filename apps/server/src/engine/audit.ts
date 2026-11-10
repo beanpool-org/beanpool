@@ -8,7 +8,7 @@
 import { db } from '../db/db.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { COMMONS_BALANCE } from '@beanpool/core';
+import { COMMONS_BALANCE, hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
     runConservationCheck,
@@ -96,7 +96,8 @@ export function answerPotPaused(ctx: { status: number; body: unknown }, e: unkno
 let potRefusalLoggedAt = 0;
 
 function assertCommonsPotFinite(): void {
-    if (!Number.isFinite(COMMONS_BALANCE)) {
+    // Whole hundredths or it is not a pot: NaN, ±Infinity and a fraction are all refused, never written.
+    if (!isHundredths(COMMONS_BALANCE)) {
         if (Date.now() - potRefusalLoggedAt >= 60_000) {
             potRefusalLoggedAt = Date.now();
             console.error(`🛑 [Ledger] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written, `
@@ -121,7 +122,8 @@ export function persistDecayEvents(): void {
     db.transaction(() => {
         for (const ev of events) {
             const id = `demurrage_${ev.accountId.slice(0, 16)}_${ev.toEpoch - ev.epochsPassed}_${ev.toEpoch}`;
-            insertTxn.run(id, ev.accountId, Math.round(ev.amount * 10000) / 10000, `Circulation fee (demurrage, ${ev.epochsPassed}d)`, ev.timestamp);
+            // The charge the ledger truncated once (whole hundredths): written as it is, never rounded again.
+            insertTxn.run(id, ev.accountId, ev.amount, `Circulation fee (demurrage, ${ev.epochsPassed}d)`, ev.timestamp);
             const acc = ledger.getAccount(ev.accountId);
             updateAcc.run(acc.balance_c, acc.lastDemurrageEpoch, new Date().toISOString(), ev.accountId);
         }
@@ -178,7 +180,7 @@ export function persistDecayAndCommons(): void {
  * that is not a number (its row already is, by BROKEN_BALANCE_SQL, when the row itself is broken). Never throws for it.
  */
 export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
-    if (!Number.isFinite(COMMONS_BALANCE)) {
+    if (!isHundredths(COMMONS_BALANCE)) {
         console.error(`⚠️ [LedgerAudit] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}): nothing was written, `
             + 'and the pot is counted as a balance that is not a number.');
         const r = runConservationCheck(db);
@@ -220,7 +222,7 @@ export function listBrokenBalances(limit = 50): { total: number; accounts: Broke
         callsign: r.callsign ?? (r.account === 'COMMONS_POOL' ? 'the Commons pot' : null),
         holds: r.t === 'null' ? 'NULL' : r.t === 'text' ? `text ${JSON.stringify(String(r.balance_c)).replace(/^"|"$/g, "'")}` : String(r.balance_c),
     }));
-    if (!Number.isFinite(COMMONS_BALANCE) && !rows.some((r) => r.account === 'COMMONS_POOL')) {
+    if (!isHundredths(COMMONS_BALANCE) && !rows.some((r) => r.account === 'COMMONS_POOL')) {
         accounts.unshift({ account: 'COMMONS_POOL', callsign: 'the Commons pot', holds: `in memory: ${String(COMMONS_BALANCE)}` });
     }
     return { total: accounts.length, accounts: accounts.slice(0, limit) };
@@ -287,7 +289,7 @@ function saveWashSybilMetrics(metrics: WashSybilMetrics): WashSybilMetrics {
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', metrics.accountsNearFloor);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('delinquent_accounts', metrics.delinquentCount);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('cohort_anomalies', metrics.cohortAnomalies);
-        console.log(`✅ [MetricsAudit] Metrics saved: negative_bal=${metrics.totalNegative.toFixed(2)}, near_floor=${metrics.accountsNearFloor}, delinquent=${metrics.delinquentCount}, cohort_anomalies=${metrics.cohortAnomalies}`);
+        console.log(`✅ [MetricsAudit] Metrics saved: negative_bal=${String(metrics.totalNegative)} hundredths, near_floor=${metrics.accountsNearFloor}, delinquent=${metrics.delinquentCount}, cohort_anomalies=${metrics.cohortAnomalies}`);
     } catch (e) {
         console.error('[MetricsAudit] Failed to persist system metrics:', e);
     }
@@ -318,7 +320,7 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
         console.log('✅ PROMOTION OK — replicated ledger is conservation-consistent. Safe to take live writes.');
     } else {
         console.error('🛑 PROMOTION WARNING — ledger conservation check FAILED on the replica:');
-        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows} balances that are not a finite number=${result.badBalances}`);
+        console.error(`   sum(balances)=${String(result.sumBalances)} drift=${String(result.drift)} (whole hundredths) stranded escrows=${result.strandedEscrows} balances that are not whole hundredths=${result.badBalances}`);
         console.error('   Investigate before this node accepts transactions — the last snapshot may be incomplete/corrupt.');
     }
     return result;
@@ -355,7 +357,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     }
     const projects = allProjects.filter((p: any) => p?.status !== 'rejected');
 
-    const commonsBalance = Math.round(COMMONS_BALANCE * 100) / 100;
+    const commonsBalance = hundredthsAsDecimalText(COMMONS_BALANCE);
     const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));
 
     const accountRows = db.prepare("SELECT public_key, balance_c FROM accounts").all() as { public_key: string; balance_c: number }[];
@@ -365,8 +367,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     balancesCsv += `commons,Community Pool,System,${commonsBalance}\n`;
     
     for (const m of members) {
-        const rawBal = balanceMap.get(m.publicKey) ?? 0;
-        const bal = Math.round(rawBal * 100) / 100;
+        const bal = hundredthsAsDecimalText(balanceMap.get(m.publicKey) ?? 0);
         balancesCsv += `${m.publicKey},${m.callsign},Member,${bal}\n`;
     }
     
@@ -379,14 +380,14 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     const pendingTxs = db.prepare("SELECT * FROM marketplace_transactions WHERE status='pending'").all() as any[];
     for (const tx of pendingTxs) {
         const buyer = membersByPubKey.get(tx.buyer_pubkey);
-        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${buyer?.callsign || 'Unknown'}),Pending_Trade,${tx.credits}\n`;
+        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${buyer?.callsign || 'Unknown'}),Pending_Trade,${hundredthsAsDecimalText(Number(tx.amount_c) || 0)}\n`;
     }
     
     let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
     const txHistory = db.prepare("SELECT * FROM transactions ORDER BY timestamp ASC").all() as any[];
     for (const tx of txHistory) {
          const memoSafe = (tx.memo || '').replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
-         transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
+         transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${hundredthsAsDecimalText(Number(tx.amount_c) || 0)},${memoSafe}\n`;
     }
     
     return { balancesCsv, transactionsCsv };
@@ -404,11 +405,11 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
     const account = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(publicKey) as { balance_c: number } | undefined;
 
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
-    balancesCsv += `commons,Community Pool,System,${Math.round(COMMONS_BALANCE * 100) / 100}\n`;
-    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${Math.round((account?.balance_c ?? 0) * 100) / 100}\n`;
-    const pendingTxs = db.prepare("SELECT id, amount_c FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; credits: number }[];
+    balancesCsv += `commons,Community Pool,System,${hundredthsAsDecimalText(COMMONS_BALANCE)}\n`;
+    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${hundredthsAsDecimalText(account?.balance_c ?? 0)}\n`;
+    const pendingTxs = db.prepare("SELECT id, amount_c FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; amount_c: number }[];
     for (const tx of pendingTxs) {
-        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${(member?.callsign || 'you').replace(/,/g, '')}),Pending_Trade,${tx.credits}\n`;
+        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${(member?.callsign || 'you').replace(/,/g, '')}),Pending_Trade,${hundredthsAsDecimalText(tx.amount_c)}\n`;
     }
 
     let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
@@ -418,7 +419,7 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
                                   WHERE t.from_pubkey = ? OR t.to_pubkey = ? ORDER BY t.timestamp ASC`).all(publicKey, publicKey) as any[];
     for (const tx of txHistory) {
         const memoSafe = noteAsReadBy(tx, publicKey).replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
-        transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
+        transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${hundredthsAsDecimalText(Number(tx.amount_c) || 0)},${memoSafe}\n`;
     }
 
     return { balancesCsv, transactionsCsv };

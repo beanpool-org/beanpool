@@ -51,7 +51,7 @@
 // name the project; the leader's counts the backers and the Beans and names nobody. The leader's end date moved in that week
 // (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved), each once a day at most.
 
-import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -118,7 +118,7 @@ function readsFunded(p: ProjectRow): boolean {
  * or why nobody can be paid. Reads only.
  */
 export function findUnfundedProjectsDue(now: number = Date.now()): UnfundedProjectDue[] {
-    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance_c > ? ORDER BY p.id`).all(DUST_THRESHOLD) as ProjectRow[];
+    const rows = db.prepare(`${PROJECT_SQL} WHERE p.status = 'ACTIVE' AND a.balance_c > 0 ORDER BY p.id`).all() as ProjectRow[];
     return rows.filter((p) => isPledgeReturnDue(p.deadline, now)).map((p) => {
         const extra = { deadline: p.deadline as string, leader: leaderOf(p.id, p.creator_pubkey) };
         if (readsFunded(p)) {
@@ -320,7 +320,7 @@ export function noticeEndDateMoved(
         if (getNodeRole() === 'backup') return 0;
         const p = db.prepare(`${PROJECT_SQL} WHERE p.id = ?`).get(projectId) as ProjectRow | undefined;
         if (!p || p.status !== 'ACTIVE' || (p.deadline ?? null) === (before ?? null)) return 0;
-        if (!isPastDeadline(before, now) || !(Number(p.balance_c) > DUST_THRESHOLD)) return 0;
+        if (!isPastDeadline(before, now) || !(Number(p.balance_c) > 0)) return 0;
         const owed = owedFromProjectEscrow(p.id, p.title ?? '', p.status, Number(p.balance_c));
         if (!owed.ok) {
             console.warn(`[Pledges] The end date of project ${projectId} moved, but who holds its pledges can't be worked out, so nobody was told: ${owed.reason}.`);

@@ -143,8 +143,9 @@ export function checkStandingStart(
     if (auth.listingId !== deal.postId) throw authRefused('it names another listing');
     if (auth.payee !== deal.payee) throw authRefused('it names another payee');
     if (auth.unit !== unit) throw authRefused(`it is per ${auth.unit}, the listing per ${unit}`);
-    if (Math.round(deal.price * 100) !== Math.round(auth.beansPerPeriod * 100) || Math.abs(deal.price - auth.beansPerPeriod) > 1e-9) {
-        throw authRefused(`it is ${auth.beansPerPeriod} Beans a period, the listing ${deal.price}`);
+    // Whole hundredths, exactly: the integer the payer signed is the listing's price per period.
+    if (deal.price !== auth.beansPerPeriod_c) {
+        throw authRefused(`it is ${auth.beansPerPeriod_c} hundredths a period, the listing ${deal.price}`);
     }
     if (s.untilStopped === true && auth.maxPeriods !== null) throw authRefused('the app said until stopped, the text a count');
     if (s.periods !== undefined && s.periods !== auth.maxPeriods) throw authRefused('the app\'s count is not the text\'s');
@@ -163,7 +164,7 @@ export function insertStandingDeal(v: CheckedStandingStart, txId: string): void 
     db.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period_c, period_unit, starts_at, max_periods, phase,
                     periods_done, current_tx_id, next_due_at, auth_signer, auth_signature, auth_payload)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', 1, ?, ?, ?, ?, ?)`)
-        .run(v.auth.standingId, v.auth.listingId, v.payer, v.payee, v.auth.beansPerPeriod, v.auth.unit, v.auth.startsAt, v.auth.maxPeriods,
+        .run(v.auth.standingId, v.auth.listingId, v.payer, v.payee, v.auth.beansPerPeriod_c, v.auth.unit, v.auth.startsAt, v.auth.maxPeriods,
             txId, periodEnd(v.auth.startsAt, v.auth.unit, 1), v.signer, v.signature, v.payload);
 }
 
@@ -171,7 +172,7 @@ export function insertStandingDeal(v: CheckedStandingStart, txId: string): void 
 export function firstPeriodOf(v: CheckedStandingStart, title: string): { periodNo: number; amount: number; memo: string; auth: { signer: string; payload: string } } {
     return {
         periodNo: 1,
-        amount: v.auth.beansPerPeriod,
+        amount: v.auth.beansPerPeriod_c,
         memo: standingLines.memo(v.auth.unit, title, 1),
         auth: { signer: v.signer, payload: standingPaymentPayload(v.auth.standingId, 1) },
     };
@@ -315,7 +316,7 @@ const sameMember = (signed: string, now: string): boolean => signed === now || c
 function boundsRow(sd: StandingRow): boolean {
     const a = parseStandingAuthorisation(sd.auth_payload);
     return !!a && a.standingId === sd.id && a.listingId === sd.post_id && sameMember(a.payee, sd.payee_pubkey) && a.unit === sd.period_unit
-        && a.startsAt === sd.starts_at && a.maxPeriods === sd.max_periods && Math.abs(a.beansPerPeriod - sd.beans_per_period_c) < 1e-9
+        && a.startsAt === sd.starts_at && a.maxPeriods === sd.max_periods && a.beansPerPeriod_c === sd.beans_per_period_c
         && standingAuthorisationText(a) === sd.auth_payload;
 }
 
@@ -435,7 +436,7 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
         const p = offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period_c, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
         return { ...p, oneAtATime: !raw.repeatable };
     }
-    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, credits: sd.beans_per_period_c };
+    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, amount_c: sd.beans_per_period_c };
     const p = requestHoldChecks(hooks, deal, raw, sd.payer_pubkey, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
     if (!p) throw new Error('its payer is no longer the listing\'s author');
     return p;
@@ -681,9 +682,9 @@ function warnAhead(hooks: StandingHooks, now: number): void {
         if (countReached(sd, sd.periods_done)) continue;
         const period = sd.periods_done + 1;
         if (toldBefore(sd, 'standing_short_ahead', period)) continue;
-        const { balance, usableFloor } = hooks.getBalance(sd.payer_pubkey);
+        const { balance_c: balance, usableFloor_c: usableFloor } = hooks.getBalance(sd.payer_pubkey);
         const shortBy = usableFloor - (balance - sd.beans_per_period_c);
-        if (!(shortBy > 1e-9)) continue;
+        if (!(shortBy > 0)) continue;
         const title = titleOf(sd.post_id);
         let told: StandingNotice[] = [];
         db.transaction(() => {
@@ -719,7 +720,7 @@ export function standingDealView(id: string): Record<string, unknown> | null {
     const sd = readStanding(id);
     if (!sd) return null;
     return {
-        id: sd.id, postId: sd.post_id, payerPublicKey: sd.payer_pubkey, payeePublicKey: sd.payee_pubkey, beansPerPeriod: sd.beans_per_period_c,
+        id: sd.id, postId: sd.post_id, payerPublicKey: sd.payer_pubkey, payeePublicKey: sd.payee_pubkey, beansPerPeriod_c: sd.beans_per_period_c,
         unit: sd.period_unit, startsAt: sd.starts_at, maxPeriods: sd.max_periods, phase: sd.phase, periodsDone: sd.periods_done,
         currentTransactionId: sd.current_tx_id, nextDueAt: sd.next_due_at, shortSince: sd.short_since,
         stopped: !!sd.stopped_at, endedAt: sd.ended_at, endedReason: sd.ended_reason,
@@ -782,7 +783,7 @@ export function extendStandingDeal(hooks: EscrowCallbacks, id: string, actor: st
     if (!signsFor(hooks, actor, sd.payer_pubkey) || !signedBy(payload as string, signature, actor)) throw authRefused('the extension is not signed by the payer');
     if (!hostIsOurs(auth.host, actor, s.requestHost)) throw authRefused(`the extension was signed for ${auth.host}`);
     const same = auth.standingId === sd.id && auth.listingId === sd.post_id && sameMember(auth.payee, sd.payee_pubkey) && auth.unit === sd.period_unit
-        && auth.startsAt === sd.starts_at && Math.abs(auth.beansPerPeriod - sd.beans_per_period_c) < 1e-9;
+        && auth.startsAt === sd.starts_at && auth.beansPerPeriod_c === sd.beans_per_period_c;
     if (!same) throw authRefused('the extension changes more than the count');
     const longer = auth.maxPeriods === null ? sd.max_periods !== null : sd.max_periods !== null && auth.maxPeriods > sd.max_periods;
     if (!longer) throw authRefused('the extension is not longer');

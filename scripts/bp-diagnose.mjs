@@ -237,6 +237,12 @@ function decryptTransferCode(uri, pin) {
 
 // ===================== HELPERS =====================
 
+/** Whole hundredths of a Bean (the node's *_c figures) written as Beans, exactly: 1250 is 12.50. */
+function beansText(c) {
+    const a = Math.abs(c);
+    return `${c < 0 ? '-' : ''}${Math.floor(a / 100)}.${String(a % 100).padStart(2, '0')}`;
+}
+
 function daysAgo(dateStr) {
     const d = new Date(dateStr);
     return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
@@ -287,7 +293,8 @@ async function probeIdentityOnNode(nodeUrl, pubkey) {
 
     try {
         const bal = await fetchJSON(`${nodeUrl}/api/ledger/balance/${pubkey}`);
-        result.balance = typeof bal.balance === 'number' ? `${bal.balance}B` : '—';
+        // The node answers whole hundredths of a Bean as balance_c (1.4.0): written here as Beans, exactly.
+        result.balance = Number.isSafeInteger(bal.balance_c) ? `${beansText(bal.balance_c)}B` : '—';
     } catch {}
 
     try {
@@ -652,7 +659,7 @@ async function runMarketplaceAudit(nodeUrl) {
 
     const zombies = posts.filter(p => !p.active && p.status === 'active').map(p => ({ title: p.title || '?', author: p.authorPublicKey }));
 
-    const zeroPrice = activePosts.filter(p => p.credits === 0).map(p => ({ title: p.title || '?', author: p.authorPublicKey }));
+    const zeroPrice = activePosts.filter(p => p.price_c === 0).map(p => ({ title: p.title || '?', author: p.authorPublicKey }));
 
     return {
         nodeUrl,
@@ -901,7 +908,7 @@ async function handleMarketplace(flags) {
             log.ok('No zero-price active posts');
             pass++;
         } else {
-            log.warn(`${audit.zeroPrice.length} active posts with 0 credits`);
+            log.warn(`${audit.zeroPrice.length} active posts priced at 0 Beans`);
             audit.zeroPrice.slice(0, 5).forEach(p => log.line(`      "${p.title}" by ${shortKey(p.author)}`));
             warn++;
         }

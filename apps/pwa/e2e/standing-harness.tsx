@@ -6,6 +6,7 @@
  *   ?view=take-up        Take this up? on a monthly Offer, as it opens (until one of them stops it, from today)
  *   ?view=panels         the panel for: paid (payer), paid (payee)
  *   ?view=short          short (payer: the banner with the grace's end), short (payee), stopped (payer)
+ *   ?view=no-room        Take this up? with 30 Beans of room for 50: Agree disabled, the plain line above it (U2)
  *   &lang=es             Spanish (the app's own ?lang= choice); &dark=1 the dark theme
  */
 import { createRoot } from 'react-dom/client';
@@ -38,6 +39,8 @@ createRoot(document.getElementById('root')!).render(
     <div data-testid="shot" style={{ padding: 16 }}>
         {view === 'take-up'
             ? <StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} />
+            : view === 'no-room'
+            ? <StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={noop} onAgree={noop} now={NOW} room={30} />
             : view === 'panels' ? <>
                 <StandingPanel tx={row('paid-payer')} actingAs={PAYER} busy={false} onStop={noop} onMessage={noop} messageLabel="Message Rob" />
                 <StandingPanel tx={row('paid-payee')} actingAs={PAYEE} busy={false} onStop={noop} onMessage={noop} messageLabel="Message Marty" />

@@ -173,7 +173,7 @@ async function main(): Promise<void> {
     // ── P2: no photo whose decode is a pixel bomb ──
     {
         const dan = member('FfDan');
-        const post = (photo: string) => req('POST', '/api/marketplace/posts', dan, { type: 'offer', category: 'food', title: 'Px', description: 'px', credits: 0, priceType: 'fixed', authorPublicKey: dan.pk, lat: -28.55, lng: 153.5, photos: [photo] });
+        const post = (photo: string) => req('POST', '/api/marketplace/posts', dan, { type: 'offer', category: 'food', title: 'Px', description: 'px', price_c: 0, priceType: 'fixed', authorPublicKey: dan.pk, lat: -28.55, lng: 153.5, photos: [photo] });
         const bomb = await post(du('image/png', bombPng(20000, 20000)));
         check('P2', bomb.status === 400, `a 20000x20000 PNG listing photo → 400 (got ${bomb.status})`);
         const wbomb = await post(du('image/webp', await webpLossless(16383, 16383)));
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
         const gid = okGroup.body?.id ?? okGroup.body?.group?.id;
         const gp = await req('PATCH', `/api/groups/${gid}`, dan, { avatarUrl: bomb20k });
         check('B5', !!gid && gp.status === 400 && errorOf(gp) === tooBig(20000, 20000), `a group's new picture → 400 with the pixel sentence (made ${okGroup.status}, got ${gp.status} ${JSON.stringify(errorOf(gp))})`);
-        const cf = await req('POST', '/api/crowdfund/projects', dan, { creatorPubkey: dan.pk, title: 'Ff fund', description: 'd', goalAmount: 100, photos: [bomb20k] });
+        const cf = await req('POST', '/api/crowdfund/projects', dan, { creatorPubkey: dan.pk, title: 'Ff fund', description: 'd', goalAmount_c: 10000 /* 100 Beans */, photos: [bomb20k] });
         check('B5', cf.status === 400 && errorOf(cf) === tooBig(20000, 20000), `a crowdfund photo → 400 with the pixel sentence (got ${cf.status} ${JSON.stringify(errorOf(cf))})`);
         const ent = await req('POST', '/api/enterprise', dan, { name: 'Ff Enterprise', avatar: bomb20k, purpose: 'p' });
         check('B5', ent.status === 400 && errorOf(ent) === tooBig(20000, 20000), `an enterprise's photo → 400 with the pixel sentence (got ${ent.status} ${JSON.stringify(errorOf(ent))})`);

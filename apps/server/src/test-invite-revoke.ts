@@ -89,6 +89,11 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
     return { status: res.status, body: parsed, text };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), the voucher budget's fields and the
+ * vouchAmount / voucherLevel / level bodies included (they keep their names): `hc` turns a Beans figure into hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 const generate = (id: Id, extra: Record<string, unknown> = {}) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...extra });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
@@ -126,8 +131,8 @@ class Phone {
 
 const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
 const codeRow = (code: string) => db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(code) as Record<string, any> | undefined;
-const linesFor = (ref: string) => db.prepare('SELECT member_pubkey, kind, amount, actor, ref FROM voucher_allocations WHERE ref = ? ORDER BY rowid').all(ref) as
-    { member_pubkey: string; kind: string; amount: number; actor: string; ref: string }[];
+const linesFor = (ref: string) => db.prepare('SELECT member_pubkey, kind, amount_c, actor, ref FROM voucher_allocations WHERE ref = ? ORDER BY rowid').all(ref) as
+    { member_pubkey: string; kind: string; amount_c: number; actor: string; ref: string }[];
 const returnsFor = (ref: string) => linesFor(ref).filter((l) => l.kind === 'return');
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
 const allInvites = () => count('SELECT COUNT(*) AS n FROM invite_codes');
@@ -135,7 +140,7 @@ const allLog = () => count('SELECT COUNT(*) AS n FROM known_floor_log');
 const floorLog = (action: string) => db.prepare('SELECT * FROM known_floor_log WHERE action = ? ORDER BY rowid').all(action) as Record<string, any>[];
 const tombstoned = (code: string) => count("SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'invite_codes' AND row_key = ?", code) === 1;
 const liveOn = (entryId: string) => db.prepare('SELECT code, created_by FROM invite_codes WHERE names_entry_id = ? AND used_by IS NULL').all(entryId) as { code: string; created_by: string }[];
-const sumBalances = () => count('SELECT COALESCE(SUM(balance), 0) AS n FROM accounts');
+const sumBalances = () => count('SELECT COALESCE(SUM(balance_c), 0) AS n FROM accounts');
 const DAY = 24 * 60 * 60 * 1000;
 
 async function main(): Promise<void> {
@@ -174,51 +179,51 @@ async function main(): Promise<void> {
         return id;
     };
     const bind = (id: Id, entryId: string, body: Record<string, unknown> = {}) => call(id, 'POST', `/api/names/entries/${entryId}/invite`, body);
-    require_(budgetOf(ada.pk).left === 1000, `Ada holds 1,000 by role (${budgetOf(ada.pk).left})`);
+    require_(budgetOf(ada.pk).left === hc(1000), `Ada holds 1,000 by role (${budgetOf(ada.pk).left})`);
     const txBefore = count('SELECT COUNT(*) AS n FROM transactions');
     const balancesBefore = sumBalances();
 
     // ── 1. The maker revokes: the hold comes back, one return line, the row gone ─────────────────────────────────
-    const a1 = await generate(ada, { vouchAmount: 100 });
+    const a1 = await generate(ada, { vouchAmount: hc(100) });
     const c1 = a1.body?.invite?.code as string;
-    require_(a1.status === 200 && budgetOf(ada.pk).left === 900 && budgetOf(ada.pk).held === 100, `Ada makes an invite with a 100 vouch: 900 left, 100 held (${show(a1)})`);
+    require_(a1.status === 200 && budgetOf(ada.pk).left === hc(900) && budgetOf(ada.pk).held === hc(100), `Ada makes an invite with a 100 vouch: 900 left, 100 held (${show(a1)})`);
     const sentBefore = voucherSummary(ada.pk).invitesWithVouch;
     const r1 = await revoke(ada, c1);
-    assert(r1.status === 200 && r1.body?.revoked === 1 && r1.body?.returned === 100 && r1.body?.promiseEnded === false && !r1.text.includes(c1),
+    assert(r1.status === 200 && r1.body?.revoked === 1 && r1.body?.returned === hc(100) && r1.body?.promiseEnded === false && !r1.text.includes(c1),
         `1. Ada revokes it: 200, 100 back, and the answer never repeats the code (${show(r1)})`);
     const b1 = budgetOf(ada.pk);
-    assert(b1.left === 1000 && b1.held === 0, `1. budget left rises by the preset: 900 → ${b1.left}, held ${b1.held}`);
+    assert(b1.left === hc(1000) && b1.held === 0, `1. budget left rises by the preset: 900 → ${b1.left} hundredths, held ${b1.held}`);
     const ret1 = returnsFor(c1);
-    assert(ret1.length === 1 && ret1[0].amount === 100 && ret1[0].actor === ada.pk && ret1[0].member_pubkey === ada.pk,
+    assert(ret1.length === 1 && ret1[0].amount_c === hc(100) && ret1[0].actor === ada.pk && ret1[0].member_pubkey === ada.pk,
         `1. exactly one return line, +100, actor the revoker, ref the code (${JSON.stringify(ret1)})`);
     assert(!codeRow(c1) && tombstoned(c1), '1. the row is deleted, with a tombstone so a standby drops it too');
     assert(voucherSummary(ada.pk).invitesWithVouch === sentBefore - 1, `1. "Invites sent with a vouch" leaves the revoked one out (${sentBefore} → ${voucherSummary(ada.pk).invitesWithVouch})`);
     const revokedLog = floorLog('invite_revoked');
-    assert(revokedLog.length === 1 && revokedLog[0].actor_pubkey === ada.pk && revokedLog[0].member_pubkey === ada.pk && revokedLog[0].new_value === '100'
+    assert(revokedLog.length === 1 && revokedLog[0].actor_pubkey === ada.pk && revokedLog[0].member_pubkey === ada.pk && revokedLog[0].new_value === String(hc(100))
         && !JSON.stringify(revokedLog).includes(c1), `1. one invite_revoked line in the log, never the code (${JSON.stringify(revokedLog.map((l) => [l.action, l.new_value]))})`);
     const me1 = await call(ada, 'GET', '/api/vouchers/me');
-    const hist = (me1.body?.history ?? []) as { kind: string; amount: number; why?: string }[];
-    assert(hist.some((h) => h.kind === 'return' && h.amount === 100 && h.why === 'revoked'), `1. Ada's budget history says the 100 came back because the invite was revoked (${JSON.stringify(hist.slice(0, 3))})`);
+    const hist = (me1.body?.history ?? []) as { kind: string; amount_c: number; why?: string }[];
+    assert(hist.some((h) => h.kind === 'return' && h.amount_c === hc(100) && h.why === 'revoked'), `1. Ada's budget history says the 100 came back because the invite was revoked (${JSON.stringify(hist.slice(0, 3))})`);
     const again = await revoke(ada, c1);
     assert(again.status === 404 && again.body?.code === 'no_invite' && returnsFor(c1).length === 1, `1. revoking it again: 404, still one return line (${show(again)})`);
 
     // ── 2. A bound invite promising a voucher budget: the promise ends; an owner's hold closes, no budget moves ───
     const e2 = await addEntry('Wren Calloway');
     const owenBefore = budgetOf(owen.pk);
-    const b2 = await bind(owen, e2, { vouchAmount: 25, voucherLevel: 1000 });
+    const b2 = await bind(owen, e2, { vouchAmount: hc(25), voucherLevel: hc(1000) });
     const c2 = b2.body?.invite?.code as string;
     require_(b2.status === 201 && c2, `Owen binds an invite to Wren's entry with a 25 vouch and a 1,000 voucher budget (${show(b2)})`);
     const r2 = await revoke(owen, c2);
     const ended = floorLog('voucher_promise_ended');
-    assert(r2.status === 200 && r2.body?.returned === 25 && r2.body?.promiseEnded === true, `2. Owen revokes it: 200, the 25 back, the promise ended (${show(r2)})`);
-    assert(ended.length === 1 && ended[0].actor_pubkey === owen.pk && ended[0].old_value === e2 && ended[0].new_value === '1000' && !JSON.stringify(ended).includes(c2),
+    assert(r2.status === 200 && r2.body?.returned === hc(25) && r2.body?.promiseEnded === true, `2. Owen revokes it: 200, the 25 back, the promise ended (${show(r2)})`);
+    assert(ended.length === 1 && ended[0].actor_pubkey === owen.pk && ended[0].old_value === e2 && ended[0].new_value === String(hc(1000)) && !JSON.stringify(ended).includes(c2),
         `2. one voucher_promise_ended line: who, which entry, what level, never the code (${JSON.stringify(ended.map((l) => [l.old_value, l.new_value]))})`);
     const owenAfter = budgetOf(owen.pk);
     assert(returnsFor(c2).length === 1 && returnsFor(c2)[0].actor === owen.pk && owenAfter.left === owenBefore.left && owenAfter.held === owenBefore.held && !codeRow(c2),
         `2. the owner's hold is closed by one return line, his budget untouched (left ${owenBefore.left} → ${owenAfter.left}), the row gone`);
 
     // ── 3. A used code: refused, nothing moves ───────────────────────────────────────────────────────────────────
-    const a3 = await generate(ada, { vouchAmount: 50 });
+    const a3 = await generate(ada, { vouchAmount: hc(50) });
     const c3 = a3.body?.invite?.code as string;
     const joiner = newId('Joss');
     require_(a3.status === 200 && (await redeem(joiner, c3)).status === 200, 'Joss joins with Ada\'s invite carrying 50');
@@ -252,11 +257,11 @@ async function main(): Promise<void> {
 
     // ── 5. One live invite per entry ─────────────────────────────────────────────────────────────────────────────
     const e5 = await addEntry('Tamsin Hollow');
-    const first = await bind(owen, e5, { vouchAmount: 25 });
+    const first = await bind(owen, e5, { vouchAmount: hc(25) });
     const c5 = first.body?.invite?.code as string;
     require_(first.status === 201 && c5, `Owen binds an invite to Tamsin's entry (${show(first)})`);
     linesBefore = allLines(); invitesBefore = allInvites(); logBefore = allLog();
-    const second = await bind(owen, e5, { vouchAmount: 25 });
+    const second = await bind(owen, e5, { vouchAmount: hc(25) });
     assert(second.status === 409 && second.body?.code === 'invite_out' && second.body?.madeByCallsign === 'Owen' && second.body?.madeBy === owen.pk && second.body?.daysLeft === 30
         && /@Owen/.test(second.body?.error ?? '') && !second.text.includes(c5),
         `5. a second bind on the entry: 409 invite_out with the maker's callsign and 30 days left, never the code (${show(second)})`);
@@ -265,10 +270,10 @@ async function main(): Promise<void> {
     const notTrue = await bind(owen, e5, { replace: 'yes' });
     assert(notTrue.status === 409 && notTrue.body?.code === 'invite_out', `5. replace must be true itself, not any truthy value (${show(notTrue)})`);
     assert(allLines() === linesBefore && allInvites() === invitesBefore && allLog() === logBefore && liveOn(e5).length === 1, '5. none of those wrote anything; one invite still out');
-    const replaced = await bind(owen, e5, { vouchAmount: 50, replace: true });
+    const replaced = await bind(owen, e5, { vouchAmount: hc(50), replace: true });
     const c5b = replaced.body?.invite?.code as string;
     const live5 = liveOn(e5);
-    assert(replaced.status === 201 && c5b && c5b !== c5 && !codeRow(c5) && live5.length === 1 && live5[0].code === c5b && codeRow(c5b)?.vouch_amount === 50,
+    assert(replaced.status === 201 && c5b && c5b !== c5 && !codeRow(c5) && live5.length === 1 && live5[0].code === c5b && codeRow(c5b)?.vouch_amount_c === hc(50),
         `5. Owen replaces it: 201, the old row gone, the new one bound with its 50 (${show(replaced)})`);
     assert(returnsFor(c5).length === 1 && returnsFor(c5)[0].actor === owen.pk && linesFor(c5b).filter((l) => l.kind === 'hold').length === 1 && tombstoned(c5),
         '5. the old hold came back (one return line) and the new one is held, in the same request');
@@ -276,8 +281,8 @@ async function main(): Promise<void> {
     // An owner replaces an admin's.
     const e5c = await addEntry('Ivo Marchetti');
     const adaLeftBefore = budgetOf(ada.pk).left;
-    const adaBound = await bind(ada, e5c, { vouchAmount: 100 });
-    require_(adaBound.status === 201 && budgetOf(ada.pk).left === adaLeftBefore - 100, `Ada binds one to Ivo's entry holding 100 (${show(adaBound)})`);
+    const adaBound = await bind(ada, e5c, { vouchAmount: hc(100) });
+    require_(adaBound.status === 201 && budgetOf(ada.pk).left === adaLeftBefore - hc(100), `Ada binds one to Ivo's entry holding 100 (${show(adaBound)})`);
     const owenOver = await bind(owen, e5c, { replace: true });
     assert(owenOver.status === 201 && !codeRow(adaBound.body?.invite?.code) && liveOn(e5c).length === 1 && liveOn(e5c)[0].created_by === owen.pk && budgetOf(ada.pk).left === adaLeftBefore,
         `5. an owner replaces an admin's: Ada's invite gone and her 100 back (${adaLeftBefore} → ${budgetOf(ada.pk).left}), Owen's bound (${show(owenOver)})`);
@@ -285,30 +290,30 @@ async function main(): Promise<void> {
         "5. the return is on Ada's budget, by Owen, the one who revoked it");
 
     // A voucher replaces a 100 with a 100 from a budget of 100: the old hold comes back before the new one is checked.
-    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 100 })).status === 200 && budgetOf(ada.pk).left === 100, "Owen sets Ada's budget to 100");
+    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: hc(100) })).status === 200 && budgetOf(ada.pk).left === hc(100), "Owen sets Ada's budget to 100");
     const e5d = await addEntry('Pell Ashworth');
-    const tight = await bind(ada, e5d, { vouchAmount: 100 });
+    const tight = await bind(ada, e5d, { vouchAmount: hc(100) });
     require_(tight.status === 201 && budgetOf(ada.pk).left === 0, `Ada binds one to Pell's entry with all 100 (${show(tight)})`);
-    const tightAgain = await bind(ada, e5d, { vouchAmount: 100, replace: true });
-    assert(tightAgain.status === 201 && !codeRow(tight.body?.invite?.code) && budgetOf(ada.pk).left === 0 && budgetOf(ada.pk).held === 100,
+    const tightAgain = await bind(ada, e5d, { vouchAmount: hc(100), replace: true });
+    assert(tightAgain.status === 201 && !codeRow(tight.body?.invite?.code) && budgetOf(ada.pk).left === 0 && budgetOf(ada.pk).held === hc(100),
         `5. Ada replaces her own 100 with a new 100: 201, still 0 left and 100 held (${show(tightAgain)})`);
 
     // A replace that fails leaves both as they were.
     const cTight = tightAgain.body?.invite?.code as string;
     linesBefore = allLines(); invitesBefore = allInvites(); logBefore = allLog();
-    const badPreset = await bind(ada, e5d, { vouchAmount: 60, replace: true });
-    const overBudget = await bind(ada, e5d, { vouchAmount: 25, replace: true, voucherLevel: 500 });
+    const badPreset = await bind(ada, e5d, { vouchAmount: hc(60), replace: true });
+    const overBudget = await bind(ada, e5d, { vouchAmount: hc(25), replace: true, voucherLevel: hc(500) });
     assert(badPreset.status === 400 && badPreset.body?.code === 'bad_amount', `5. a replace whose vouch is refused (60): 400 bad_amount (${show(badPreset)})`);
     assert(overBudget.status === 403, `5. a replace with a voucher budget from an admin off the credit committee: refused (${show(overBudget)})`);
     assert(allLines() === linesBefore && allInvites() === invitesBefore && allLog() === logBefore && !!codeRow(cTight) && liveOn(e5d).length === 1
-        && returnsFor(cTight).length === 0 && budgetOf(ada.pk).held === 100,
+        && returnsFor(cTight).length === 0 && budgetOf(ada.pk).held === hc(100),
         '5. both failed replaces left the old invite, its hold and the log exactly as they were');
 
     // ── 6. The prune and a revoke on the same code never return twice ──────────────────────────────────────────
-    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 1000 })).status === 200, "Owen sets Ada's budget back to 1,000");
+    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: hc(1000) })).status === 200, "Owen sets Ada's budget back to 1,000");
     const age = (code: string) => db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(new Date(Date.now() - 31 * DAY).toISOString(), code);
     // (a) the prune's return first (a budget writer's returnLapsedHolds), then the revoke.
-    const p1 = (await generate(ada, { vouchAmount: 25 })).body?.invite?.code as string;
+    const p1 = (await generate(ada, { vouchAmount: hc(25) })).body?.invite?.code as string;
     age(p1);
     returnLapsedHolds(ada.pk);
     require_(returnsFor(p1).length === 1 && returnsFor(p1)[0].actor === 'node', 'the lapsed hold is returned by the node first');
@@ -317,29 +322,29 @@ async function main(): Promise<void> {
     assert(rA.status === 200 && rA.body?.returned === 0 && returnsFor(p1).length === 1 && budgetOf(ada.pk).left === leftA && !codeRow(p1),
         `6. returned by the node, then revoked: 0 back, still one return line, left unchanged (${show(rA)})`);
     // (b) the revoke first, then the prune.
-    const p2 = (await generate(ada, { vouchAmount: 25 })).body?.invite?.code as string;
+    const p2 = (await generate(ada, { vouchAmount: hc(25) })).body?.invite?.code as string;
     age(p2);
     const rB = await revoke(ada, p2);
     const leftB = budgetOf(ada.pk).left;
     pruneUnusedInvites();
     returnLapsedHolds();
-    assert(rB.status === 200 && rB.body?.returned === 25 && returnsFor(p2).length === 1 && returnsFor(p2)[0].actor === ada.pk && budgetOf(ada.pk).left === leftB,
+    assert(rB.status === 200 && rB.body?.returned === hc(25) && returnsFor(p2).length === 1 && returnsFor(p2)[0].actor === ada.pk && budgetOf(ada.pk).left === leftB,
         `6. revoked, then the prune: one return line (the revoker's), left unchanged by the prune (${show(rB)})`);
 
     // ── 7. The entry's line: DELETE /api/names/entries/:id/invite ─────────────────────────────────────────────
     const e7 = await addEntry('Oona Feld');
-    const o7 = await bind(owen, e7, { vouchAmount: 25 });
+    const o7 = await bind(owen, e7, { vouchAmount: hc(25) });
     require_(o7.status === 201, 'Owen binds one to Oona\'s entry');
     const melTries = await call(mel, 'DELETE', `/api/names/entries/${e7}/invite`);
     const adaTries = await call(ada, 'DELETE', `/api/names/entries/${e7}/invite`);
     assert(melTries.status === 403 && adaTries.status === 403 && adaTries.body?.code === 'not_yours' && liveOn(e7).length === 1,
         `7. a plain member never reaches it, and an admin who didn't make it gets 403 not_yours (${show(melTries)} | ${show(adaTries)})`);
     const owenRevokes = await call(owen, 'DELETE', `/api/names/entries/${e7}/invite`);
-    assert(owenRevokes.status === 200 && owenRevokes.body?.revoked === 1 && owenRevokes.body?.returned === 25 && liveOn(e7).length === 0 && !owenRevokes.text.includes(o7.body?.invite?.code),
+    assert(owenRevokes.status === 200 && owenRevokes.body?.revoked === 1 && owenRevokes.body?.returned === hc(25) && liveOn(e7).length === 0 && !owenRevokes.text.includes(o7.body?.invite?.code),
         `7. its maker revokes it from the entry: 200, gone, never the code (${show(owenRevokes)})`);
     const none = await call(owen, 'DELETE', `/api/names/entries/${e7}/invite`);
     assert(none.status === 404 && none.body?.code === 'no_invite', `7. nothing out: 404 no_invite (${show(none)})`);
-    const a7 = await bind(ada, e7, { vouchAmount: 25 });
+    const a7 = await bind(ada, e7, { vouchAmount: hc(25) });
     const ownerRevokes = await call(owen, 'DELETE', `/api/names/entries/${e7}/invite`);
     assert(a7.status === 201 && ownerRevokes.status === 200 && returnsFor(a7.body?.invite?.code)[0]?.member_pubkey === ada.pk && liveOn(e7).length === 0,
         `7. an owner revokes an admin's from the entry; the 25 goes back to Ada (${show(ownerRevokes)})`);
@@ -357,7 +362,7 @@ async function main(): Promise<void> {
 
     // ── 9. No Bean moved ───────────────────────────────────────────────────────────────────────────────────────
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.sumBalances) < 0.01 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
+    assert(audit.ok && audit.sumBalances === 0 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
         `9. the ledger audit sums to zero (${audit.sumBalances}), no balance moved and no transaction was written`);
 
     console.log(`\n${passed}/${run} passed`);

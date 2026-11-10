@@ -60,30 +60,31 @@ async function run() {
         pinMainServerForTests(trustedAddr);
 
         // Seed >1 account (COMMONS_POOL + A + B) so the conservation guard is armed
-        // (bootstrapping nodes with ≤1 account are exempt).
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintA', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintB', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
+        // (bootstrapping nodes with ≤1 account are exempt). 50 Beans each, in whole hundredths.
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintA', 5000, '2026-01-01T00:00:00.000Z', 0)`).run();
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintB', 5000, '2026-01-01T00:00:00.000Z', 0)`).run();
 
         // A zero-delta re-export of current state imports cleanly (sanity).
         const clean = await exportSyncState(nodeId);
         await importRemoteState(clean);
         assert(true, 'A2-8: a zero-sum (re-exported) snapshot imports without tripping conservation');
 
-        // A2-8 — a validly-signed, value-CREATING snapshot (mintA: 50 → 9999, newer
-        // timestamp so LWW imports it) must be REJECTED by the conservation guard
-        // even though ENFORCE_LEDGER_AUTH is unset, because nodeRole === 'backup'.
+        // A2-8 — a validly-signed, value-CREATING snapshot (mintA: 50 → 9999 Beans, whole
+        // hundredths as a copy carries them, newer timestamp so LWW imports it) must be
+        // REJECTED by the conservation guard even though ENFORCE_LEDGER_AUTH is unset,
+        // because nodeRole === 'backup'.
         const forged: SyncPayload = await signSyncPayload({
             nodeId,
             generatedAt: new Date().toISOString(),
-            accounts: [{ publicKey: 'mintA', balance: 9999, lastUpdatedAt: '2030-01-01T00:00:00.000Z', lastDemurrageEpoch: 0 } as any],
+            accounts: [{ publicKey: 'mintA', balance_c: 999900, lastUpdatedAt: '2030-01-01T00:00:00.000Z', lastDemurrageEpoch: 0 } as any],
         });
         const err = await assertRejects(() => importRemoteState(forged),
             'A2-8: value-creating snapshot REJECTED on a backup with ENFORCE_LEDGER_AUTH unset');
         assert(/conservation/i.test(err), 'A2-8: rejection cites the conservation guard');
 
         // And the rollback held — the forged balance did not land.
-        const bal = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key='mintA'`).get() as { balance: number }).balance;
-        assert(bal === 50, 'A2-8: forged balance rolled back (mintA still 50, not 9999)');
+        const bal = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key='mintA'`).get() as { balance_c: number }).balance_c;
+        assert(bal === 5000, `A2-8: forged balance rolled back (mintA still 50 Beans, not 9999) (${bal} hundredths)`);
 
         unpinMainServerForTests();
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);

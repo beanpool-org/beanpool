@@ -40,6 +40,11 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Pot-Unknown-Pw-6620!';
 const POT = 100;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns a Beans figure into hundredths
+ * for a call, a row or a check.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 const PAUSED = 'Payments are paused on this community while its admins fix a problem with its accounts. Nothing has moved.';
 const WAITING = /^Waiting: payments are paused on this community while its admins fix a problem with its accounts\./;
 const REOPENED = /^Payments were paused when the grace window ended, so it was reopened for 24 hours after they worked again\./;
@@ -64,7 +69,7 @@ async function child(): Promise<void> {
             const epoch = ledger.getCurrentEpoch();
             for (const name of NAMES.slice(1)) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c, invited_by, invite_code)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 500, ?, 'TEST')`).run(k[name], name, k.anna);
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', ?, ?, 'TEST')`).run(k[name], name, hc(500), k.anna);
                 setMemberPhoto(db, k[name], AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(k[name], epoch);
             }
@@ -74,27 +79,27 @@ async function child(): Promise<void> {
             const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
             db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(daysAgo(60), k.fay);
             db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
-                        VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k.fay, k.cara, daysAgo(40), daysAgo(40));
-            se.transfer('genesis', k.ben, 30, 'seed Ben', 'direct', true);
-            se.transfer('genesis', k.dan, 3, 'seed Dan', 'direct', true);
+                        VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k.fay, k.cara, hc(5), daysAgo(40), daysAgo(40));
+            se.transfer('genesis', k.ben, hc(30), 'seed Ben', 'direct', true);
+            se.transfer('genesis', k.dan, hc(3), 'seed Dan', 'direct', true);
             const { TEST_PHOTOS } = await import('./post-test-helper.js');
             // Ben buys from Cara twice: one deal completed, one held in escrow.
-            for (const pk of [k.ben, k.cara]) se.createPost('offer', 'general', 'Odd jobs', 'Help around the place', 5, 'fixed', pk, undefined, undefined, TEST_PHOTOS, true);
-            const kale = se.createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
+            for (const pk of [k.ben, k.cara]) se.createPost('offer', 'general', 'Odd jobs', 'Help around the place', hc(5), 'fixed', pk, undefined, undefined, TEST_PHOTOS, true);
+            const kale = se.createPost('offer', 'food', 'Kale', 'Kale', hc(6), 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
             const done = se.acceptPost(kale.id, k.ben);
             se.completePostTransaction(done.id, k.ben);
-            const chard = se.createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
+            const chard = se.createPost('offer', 'food', 'Chard', 'Chard', hc(3), 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
             const held = se.acceptPost(chard.id, k.ben);
             // Three listings with no deal on them, one of them reported.
-            const posts = ['Eggs', 'Plums', 'Honey'].map((t) => se.createPost('offer', 'food', t, t, 2, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!.id);
+            const posts = ['Eggs', 'Plums', 'Honey'].map((t) => se.createPost('offer', 'food', t, t, hc(2), 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!.id);
             const report = crypto.randomUUID();
             db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status) VALUES (?, ?, ?, ?, 'spam', 'pending')")
                 .run(report, k.ben, k.cara, posts[2]);
             // An enterprise Ivy keeps, holding 20.
             const treasury = se.createTreasury('Seed Library', AVATAR, 0, { leadKeeperPubkey: k.ivy }).publicKey;
-            se.transfer('genesis', treasury, 20, 'seed the library', 'direct', true);
+            se.transfer('genesis', treasury, hc(20), 'seed the library', 'direct', true);
             // A pot of 100, and the audit's baseline taken with it.
-            core.setCommonsBalance(POT);
+            core.setCommonsBalance(hc(POT));
             se.persistCommonsBalance();
             db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
             const audit = se.runLedgerAudit();
@@ -105,8 +110,8 @@ async function child(): Promise<void> {
                                 opens_at, closes_at, grace_period_ends_at, created_at, updated_at)
                             VALUES (?, ?, ?, 'Set up by the test', ?, ?, ?, ?, '1m1v', ?, ?, ?, ?, ?, ?)`)
                     .run(id, k.anna, `${effect} (${id})`, touches, effect, subject, params, status, at(-8), closes, graceEnds, at(-8), at(-8));
-            add('G', 'pool', 'grant_hardship', k.ben, JSON.stringify({ amount: 5 }), 'passed', at(-1), null);
-            add('Q', 'pool', 'grant_hardship', k.ben, JSON.stringify({ amount: 50 }), 'passed_queued_for_funds', at(-95), null);
+            add('G', 'pool', 'grant_hardship', k.ben, JSON.stringify({ amount_c: hc(5) }), 'passed', at(-1), null);
+            add('Q', 'pool', 'grant_hardship', k.ben, JSON.stringify({ amount_c: hc(50) }), 'passed_queued_for_funds', at(-95), null);
             add('F', 'member', 'freeze_credit', k.cara, null, 'passed', at(-1), null);
             add('S', 'member', 'remove_member', k.eve, null, 'passed', at(-1), null);
             add('R1', 'member', 'remove_member', k.dan, null, 'execution_pending_grace', at(-8), at(-1));
@@ -136,15 +141,15 @@ async function child(): Promise<void> {
                 .map((r) => [r.id, { status: r.status, error: r.execution_error, reason: r.execution_reason, graceEnds: r.grace_period_ends_at }]));
             const members = Object.fromEntries(NAMES.map((n) => [n, db.prepare('SELECT status, credit_frozen AS frozen FROM members WHERE public_key = ?').get(k[n])]));
             const balances = Object.fromEntries([...NAMES.map((n) => [n, k[n]]), ...(a.setup ? [['treasury', a.setup.treasury]] : [])].map(([n, pk]) => [n,
-                String((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: unknown } | undefined)?.balance ?? 'none')]));
+                String((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: unknown } | undefined)?.balance_c ?? 'none')]));
             const posts = a.setup ? Object.fromEntries([...a.setup.posts, a.setup.heldPost].map((id) => [id,
                 (db.prepare('SELECT active, status FROM posts WHERE id = ?').get(id) as any)])) : {};
             const report = a.setup ? (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(a.setup.report) as any)?.status : null;
-            const row = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
+            const row = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown; t: string };
             const audit = se.runLedgerAudit();
             return {
                 decisions, members, balances, posts, report,
-                potRow: { balance: String(row.balance), t: row.t }, memory: String(core.COMMONS_BALANCE),
+                potRow: { balance_c: String(row.balance_c), t: row.t }, memory: String(core.COMMONS_BALANCE),
                 txCount: (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c,
                 decisionCount: (db.prepare('SELECT COUNT(*) AS c FROM decisions').get() as { c: number }).c,
                 audit: JSON.parse(JSON.stringify(audit)),
@@ -217,7 +222,7 @@ async function main(): Promise<void> {
         nodes.push(node);
         const setup: Setup = await node.send('setup', k);
         admin = await node.send('owner-token', { scope: 'admin' });
-        assert(setup.audit?.ok === true && setup.pot === POT, `the ledger adds up with a pot of ${POT} (${JSON.stringify(setup.audit)})`);
+        assert(setup.audit?.ok === true && setup.pot === hc(POT), `the ledger adds up with a pot of ${POT} (${JSON.stringify(setup.audit)})`);
         const before = await node.send('state', { k, setup });
 
         console.log("\n— 2. it stops, the pot's row becomes 'abc', and it starts again —");
@@ -243,7 +248,7 @@ async function main(): Promise<void> {
         }
         assert(paused.balances.ben === before.balances.ben && paused.balances.dan === before.balances.dan && paused.txCount === before.txCount,
             `no Beans moved (Ben ${paused.balances.ben}, Dan ${paused.balances.dan}, ${paused.txCount} transactions)`);
-        assert(paused.potRow.balance === 'abc' && paused.memory === 'NaN' && paused.audit.badBalances === 1,
+        assert(paused.potRow.balance_c === 'abc' && paused.memory === 'NaN' && paused.audit.badBalances === 1,
             `the pot's row still holds 'abc', the pot is unknown, the audit counts it (${JSON.stringify(paused.potRow)}, ${paused.memory})`);
         await node.send('tick', {});
         const again = await node.send('state', { k, setup });
@@ -261,7 +266,7 @@ async function main(): Promise<void> {
         // Re-review NB-1: a grant can't be proposed while there is no cap to measure it against.
         const propose = await signed(base, '/api/commons/decisions', ids.fay, {
             title: 'A big grant', description: 'A grant far bigger than the Commons could ever pay', touches: 'pool', effect: 'grant_hardship',
-            subject: k.ben, params: { amount: 1_000_000 },
+            subject: k.ben, params: { amount_c: hc(1_000_000) },
         });
         const afterPropose = await node.send('state', { k, setup });
         assert(propose.status === 503 && propose.body?.error === PAUSED && afterPropose.decisionCount === afterHalts.decisionCount,
@@ -298,7 +303,7 @@ async function main(): Promise<void> {
         await node.send('votes', { on: true });
         const settle = await post(base, `/api/local/admin/members/${k.dan}/offboard`, { resolution: 'donate_to_commons' }, owner);
         const accel = await post(base, '/api/local/admin/decisions/R1/accelerate', {}, admin);
-        const sweep = await signed(base, `/api/treasury/${setup.treasury}/sweep`, ids.ivy, { amount: 5 });
+        const sweep = await signed(base, `/api/treasury/${setup.treasury}/sweep`, ids.ivy, { amount_c: hc(5) });
         assert(confirm.status >= 400 && confirm.body?.error === PAUSED, `a buyer confirming a held deal: refused in the pause words (${brief(confirm)})`);
         assert(purge.status >= 400 && purge.body?.error === PAUSED, `a member deleting their account: refused in the pause words (${brief(purge)})`);
         assert(prune.status >= 400 && prune.body?.error === PAUSED, `an admin's prune, with community votes off: refused in the pause words (${brief(prune)})`);
@@ -314,7 +319,7 @@ async function main(): Promise<void> {
 
         console.log('\n— 5. the row is mended; the first tick pays what waited, and reopens the removals\' brake —');
         await node.kill('SIGTERM');
-        setPotRow(dir, String(POT));
+        setPotRow(dir, String(hc(POT)));
         node = await spawnNode(SCRIPT, dir, env);
         nodes.push(node);
         assert(!/🛑 The Commons pot's row/.test(node.output()), 'the boot after the mend has no 🛑 line');
@@ -324,7 +329,7 @@ async function main(): Promise<void> {
         assert(mended.decisions.G.status === 'executed', `G is carried out (${JSON.stringify(mended.decisions.G)})`);
         assert(mended.decisions.Q.status === 'executed',
             `Q, past 90 days, is paid by the mended pot, not failed as "expired without sufficient pool funds" (${JSON.stringify(mended.decisions.Q)})`);
-        assert(Number(mended.balances.ben) === Number(before.balances.ben) + 55, `Ben has 5 + 50 more (${mended.balances.ben})`);
+        assert(Number(mended.balances.ben) === Number(before.balances.ben) + hc(55), `Ben has 5 + 50 more (${mended.balances.ben} hundredths)`);
         for (const [id, who] of [['R1', 'dan'], ['R2', 'hal']] as const) {
             const r = mended.decisions[id];
             const ends = Date.parse(r.graceEnds);
@@ -343,7 +348,7 @@ async function main(): Promise<void> {
         assert(later.decisions.R2.status === 'admin_halted', 'R2 stays halted');
         const carried = node.output().match(/\[Decisions\] (G|R1) \(\w+\) carried out now that the Commons pot is a number again/g) ?? [];
         assert(carried.length === 2, `the log says G and R1 were carried out after waiting (${carried.length} lines)`);
-        assert(later.audit.ok === true && later.audit.badBalances === 0 && Math.abs(later.audit.drift) < 1e-9,
+        assert(later.audit.ok === true && later.audit.badBalances === 0 && later.audit.drift === 0,
             `the ledger adds up (${JSON.stringify(later.audit)})`);
 
         console.log('\n— 6. mended, but 30 days of inflow that is not a number: the grant refusal says so plainly —');
@@ -357,7 +362,7 @@ async function main(): Promise<void> {
         const base6 = `https://localhost:${await node.send('serve')}`;
         const inf = await signed(base6, '/api/commons/decisions', ids.fay, {
             title: 'A small grant', description: 'A grant the Commons could pay if its figures were sound', touches: 'pool', effect: 'grant_hardship',
-            subject: k.ben, params: { amount: 5 },
+            subject: k.ben, params: { amount_c: hc(5) },
         });
         assert(inf.status >= 400 && /can't be proposed until the Commons figures are fixed/.test(String(inf.body?.error)) && !/Infinity|NaN/.test(String(inf.body?.error)),
             `with infinite inflow a grant is refused in plain words, with no "Infinity Beans" (${brief(inf)})`);

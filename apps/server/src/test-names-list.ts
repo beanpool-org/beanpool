@@ -291,7 +291,8 @@ async function main(): Promise<void> {
         && fresh.body.settings.twoAdminsToConfirm === false && fresh.body.settings.namesShownToMembers === false && fresh.body.communityId === COMMUNITY,
         `2. as it ships: no key history, one admin confirms, real names to members off (${show(fresh)})`);
     // What a confirmation gives a member, for the Confirm screen's words: the known floor, the dial on by default.
-    assert(fresh.body.settings.knownFloor === 1000, `2. a confirmation here gives the known floor, 1,000 Beans (${JSON.stringify(fresh.body.settings)})`);
+    // The known floor keeps its name and carries whole hundredths, as every known-floor read does: 1,000 Beans is 100000.
+    assert(fresh.body.settings.knownFloor === 100_000, `2. a confirmation here gives the known floor, 1,000 Beans (${JSON.stringify(fresh.body.settings)})`);
     db.prepare("INSERT INTO node_config (key, value) VALUES ('confirmation', 'off')").run();
     const dialOff = await state(owen);
     assert(dialOff.status === 200 && dialOff.body.settings.knownFloor === null, `2. and nothing with the owner's dial off (${JSON.stringify(dialOff.body?.settings)})`);

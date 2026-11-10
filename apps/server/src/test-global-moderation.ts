@@ -92,6 +92,8 @@ function attempt<T>(fn: () => T): T | undefined {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const HOUR = 60 * 60 * 1000, DAY = 24 * HOUR;
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns one into the other. */
+const hc = (beans: number) => Math.round(beans * 100);
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 let BASE = '';
@@ -164,7 +166,7 @@ const photo = (seed: string) => {
 };
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** A post written straight into the engine, as it would be by a member long before the test, out of any window. */
 function oldPost(id: Id, title: string, extra: { lat?: number; lng?: number; photos?: string[] } = {}): string {
     const p = createPost('offer', 'other', title, `${title} description`, 0, 'fixed', id.pk, extra.lat, extra.lng, extra.photos)!;
@@ -805,11 +807,14 @@ async function main(): Promise<void> {
     const [bob, cat, dan] = ['Bob', 'Cat', 'Dan'].map(name => member(name, 40));
     for (const m of [bob, cat, dan]) {
         oldPost(m, `${m.name} listing`); // a listed offer: the contribution rule
-        payFromCommons(m.pk, 100, 'Test: Beans to trade with', { allowDeficit: true });
+        payFromCommons(m.pk, hc(100), 'Test: Beans to trade with', { allowDeficit: true });
     }
-    const offer = (title: string) => createPost('offer', 'other', title, `${title}, for Beans`, 10, 'fixed', ava.pk)!.id;
-    const balanceOf = async (id: Id) => Number((await call('GET', id, `/api/ledger/balance/${id.pk}`)).body?.balance);
-    const near = (a: number, b: number) => Math.abs(a - b) < 0.01; // demurrage moves a balance by a hair between reads
+    const offer = (title: string) => createPost('offer', 'other', title, `${title}, for Beans`, hc(10), 'fixed', ava.pk)!.id;
+    /** A member's balance as their own Ledger reads it: whole hundredths (`balance_c`). */
+    const balanceOf = async (id: Id) => Number((await call('GET', id, `/api/ledger/balance/${id.pk}`)).body?.balance_c);
+    // Exact: money is whole hundredths, and a balance under 200 Beans (the circulation's free first bracket) pays no
+    // circulation however many days pass between two reads, so nothing moves it by a hair any more.
+    const same = (a: number, b: number) => Number.isSafeInteger(a) && a === b;
     const trades = (postId: string) => db.prepare('SELECT id, buyer_pubkey, status FROM marketplace_transactions WHERE post_id = ?').all(postId) as { id: string; buyer_pubkey: string; status: string }[];
     const tradeStatus = (txId: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(txId) as any)?.status;
 
@@ -838,7 +843,7 @@ async function main(): Promise<void> {
     assert(bobTakesKettle.status === nobodyTakes.status && JSON.stringify(bobTakesKettle.body) === JSON.stringify(nobodyTakes.body)
         && !JSON.stringify(bobTakesKettle.body ?? '').includes('Kettle'),
         `accepting a hidden offer: the same answer as for an id nobody has (got ${bobTakesKettle.status} ${JSON.stringify(bobTakesKettle.body)?.slice(0, 160)})`);
-    assert(trades(kettle).length === 0 && near(await balanceOf(bob), bobBefore), 'no escrow opens, and Bob\'s Beans stay where they were');
+    assert(trades(kettle).length === 0 && same(await balanceOf(bob), bobBefore), 'no escrow opens, and Bob\'s Beans stay where they were');
     const avaAsksOwn = await call('POST', ava, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: ava.pk });
     assert(avaAsksOwn.status === 400 && /your own post/.test(avaAsksOwn.body?.error ?? ''),
         `its author is not told "not found": they get the answers they always did (${avaAsksOwn.body?.error})`);
@@ -846,7 +851,7 @@ async function main(): Promise<void> {
     const catBefore = await balanceOf(cat);
     const approveHidden = await call('POST', ava, '/api/marketplace/transactions/approve', { transactionId: catTx, authorPublicKey: ava.pk });
     assert(approveHidden.status === 409 && /hidden while a moderator/.test(approveHidden.body?.error ?? '') && tradeStatus(catTx) === 'requested'
-        && near(await balanceOf(cat), catBefore),
+        && same(await balanceOf(cat), catBefore),
         `its author can't approve a request into a new escrow while it is hidden: 409, the request waits, Cat's Beans stay put (got ${approveHidden.status} ${approveHidden.body?.error})`);
     const declined = await call('POST', ava, '/api/marketplace/transactions/reject', { transactionId: danTx, authorPublicKey: ava.pk });
     assert(declined.status === 200 && tradeStatus(danTx) === 'rejected', `but can decline one made before the hide (${declined.status} ${declined.body?.error ?? ''})`);
@@ -856,7 +861,7 @@ async function main(): Promise<void> {
         `an escrow opened before the hide can still finish: Bob confirms, and Ava is paid (${chairDone.status} ${chairDone.body?.error ?? ''})`);
     const catBeforeCancel = await balanceOf(cat);
     const tableOff = await call('POST', cat, '/api/marketplace/transactions/cancel', { transactionId: catTakesTable.body?.transaction?.id, cancellerPublicKey: cat.pk });
-    assert(tableOff.status === 200 && near(await balanceOf(cat), catBeforeCancel + 10),
+    assert(tableOff.status === 200 && same(await balanceOf(cat), catBeforeCancel + hc(10)),
         `or be called off: Cat cancels and has her 10 Beans back (${tableOff.status} ${tableOff.body?.error ?? ''})`);
 
     // An enterprise's Need, approved through its own route: the same refusal.
@@ -868,8 +873,8 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', ?)`).run(hub.pk, keeper.pk, owner.pk);
     }
     oldPost(hub, 'Hub eggs'); // the offer covenant: an enterprise's Need needs a live Offer
-    payFromCommons(hub.pk, 100, 'Test: Beans for the Need', { allowDeficit: true }); // on a Need the author pays
-    const hubNeed = createPost('need', 'other', 'Tend the hens', 'Mornings', 10, 'fixed', hub.pk)!.id;
+    payFromCommons(hub.pk, hc(100), 'Test: Beans for the Need', { allowDeficit: true }); // on a Need the author pays
+    const hubNeed = createPost('need', 'other', 'Tend the hens', 'Mornings', hc(10), 'fixed', hub.pk)!.id;
     const danHelps = await call('POST', dan, '/api/marketplace/posts/request', { postId: hubNeed, buyerPublicKey: dan.pk });
     await hide(hubNeed, hub);
     const kimApproves = await call('POST', kim, `/api/treasury/${hub.pk}/approve`, { transactionId: danHelps.body?.transaction?.id });
@@ -891,7 +896,7 @@ async function main(): Promise<void> {
         `after the restore, Bob's request goes through (${bobAsksAgain.status} ${bobAsksAgain.body?.error ?? ''})`);
     const catBeforeApprove = await balanceOf(cat);
     const approveBack = await call('POST', ava, '/api/marketplace/transactions/approve', { transactionId: catTx, authorPublicKey: ava.pk });
-    assert(approveBack.status === 200 && tradeStatus(catTx) === 'pending' && near(await balanceOf(cat), catBeforeApprove - 10),
+    assert(approveBack.status === 200 && tradeStatus(catTx) === 'pending' && same(await balanceOf(cat), catBeforeApprove - hc(10)),
         `Ava approves Cat's request, and 10 of Cat's Beans go into escrow (${approveBack.status} ${approveBack.body?.error ?? ''})`);
     const bobTakesKettleAgain = await call('POST', bob, '/api/marketplace/posts/accept', { postId: kettle, buyerPublicKey: bob.pk });
     assert(bobTakesKettleAgain.status === 200 && trades(kettle).some(t => t.buyer_pubkey === bob.pk && t.status === 'pending'),
@@ -902,7 +907,7 @@ async function main(): Promise<void> {
     // doesn't let them write to the seller freely either: their first line there counts, as it always has.
     const tess = member('Tess', 0);
     oldPost(tess, 'Tess listing'); // a listed offer: the contribution rule
-    payFromCommons(tess.pk, 100, 'Test: Beans to trade with', { allowDeficit: true });
+    payFromCommons(tess.pk, hc(100), 'Test: Beans to trade with', { allowDeficit: true });
     const tessTakes = await call('POST', tess, '/api/marketplace/posts/accept', { postId: offer('Vase for Beans'), buyerPublicKey: tess.pk });
     const tradeChat = (db.prepare(`SELECT c.id, c.created_by FROM conversations c
         JOIN conversation_participants x ON x.conversation_id = c.id AND x.public_key = ?
@@ -943,17 +948,17 @@ async function main(): Promise<void> {
         ['new words on his group\'s card', await call('PATCH', max, `/api/groups/${maxClub.id}`, { description: 'Buy now' })],
         ['inviting someone to his group', await call('POST', max, `/api/groups/${maxClub.id}/members`, { targetPubkey: viewer.pk })],
         ['proposing a Decision', await call('POST', max, '/api/commons/decisions', { title: 'Buy now', description: 'Buy now at spam.example', touches: 'member', effect: 'freeze_credit', subject: viewer.pk })],
-        ['proposing a Commons project', await call('POST', max, '/api/commons/projects', { title: 'Buy now', description: 'spam.example', requestedAmount: 10 })],
-        ['starting a crowdfund', await call('POST', max, '/api/crowdfund/projects', { title: 'Buy now', description: 'spam.example', goalAmount: 50 })],
-        ['editing a crowdfund', await call('POST', max, '/api/crowdfund/projects/update', { id: crypto.randomUUID(), title: 'Buy now', goalAmount: 50 })],
+        ['proposing a Commons project', await call('POST', max, '/api/commons/projects', { title: 'Buy now', description: 'spam.example', requestedAmount_c: hc(10) })],
+        ['starting a crowdfund', await call('POST', max, '/api/crowdfund/projects', { title: 'Buy now', description: 'spam.example', goalAmount_c: hc(50) })],
+        ['editing a crowdfund', await call('POST', max, '/api/crowdfund/projects/update', { id: crypto.randomUUID(), title: 'Buy now', goalAmount_c: hc(50) })],
         ['starting an enterprise', await call('POST', max, '/api/enterprise', { name: 'Max Co', purpose: 'Buy now' })],
         ['posting as an enterprise he keeps', await call('POST', max, `/api/treasury/${hub.pk}/offer`, { title: 'Buy now', category: 'other', photos: TEST_PHOTOS })],
         ['posting for a muted enterprise, as a keeper who isn\'t muted', await call('POST', kit, `/api/treasury/${shop.pk}/offer`, { title: 'Buy now', category: 'other', photos: TEST_PHOTOS })],
         ['a rating', await call('POST', max, '/api/ratings', { targetPubkey: zed.pk, stars: 5, comment: 'Buy now', transactionId: crypto.randomUUID() })],
         ['putting a paused post back up', await call('POST', max, '/api/marketplace/posts/resume', { postId: maxPost, authorPublicKey: max.pk })],
-        ['a note with Beans', await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: 'Buy now' })],
-        ['a note with a crowdfund pledge', await call('POST', max, `/api/crowdfund/projects/${crypto.randomUUID()}/pledge`, { amount: 1, memo: 'Buy now' })],
-        ['a note with an enterprise pledge', await call('POST', max, `/api/enterprise/${hub.pk}/pledge`, { amount: 1, memo: 'Buy now' })],
+        ['a note with Beans', await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount_c: hc(1), memo: 'Buy now' })],
+        ['a note with a crowdfund pledge', await call('POST', max, `/api/crowdfund/projects/${crypto.randomUUID()}/pledge`, { amount_c: hc(1), memo: 'Buy now' })],
+        ['a note with an enterprise pledge', await call('POST', max, `/api/enterprise/${hub.pk}/pledge`, { amount_c: hc(1), memo: 'Buy now' })],
         ['submitting to the Pulse', await call('POST', max, '/api/member/pulse/submit', { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })],
         ['adding a Pulse channel', await call('POST', max, '/api/member/channels', { platform: 'youtube', url: 'https://www.youtube.com/@maxspam' })],
         ['changing a Pulse channel', await call('POST', max, `/api/member/channels/${crypto.randomUUID()}`, { category: 'music' })],
@@ -978,20 +983,20 @@ async function main(): Promise<void> {
         pulse: one('SELECT COUNT(*) AS c FROM pulse_items WHERE owner_pubkey = ?', max.pk) + one('SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?', max.pk),
     };
     assert(Object.values(stored).every(v => v === 0), `and none of it is stored (${JSON.stringify(stored)})`);
-    const unnoted = await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1 });
+    const unnoted = await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount_c: hc(1) });
     assert(unnoted.body?.code !== 'moderation_muted', `a send without a note is not refused for the mute (${unnoted.status} ${unnoted.body?.error})`);
     // A note that is a number is words too (a phone number), on all three routes. Bob has Beans and a finished trade,
     // so a route that let the note through would store it for the other side to read.
     const hens = crypto.randomUUID();
-    createCrowdfundProject(hens, kim.pk, 'Hen house', 'Wire and timber', [], 50, null);
+    createCrowdfundProject(hens, kim.pk, 'Hen house', 'Wire and timber', [], hc(50), null);
     const barn = member('Barn', 60); // a bounded enterprise raising Beans, which takes pledges (Hub doesn't)
-    db.prepare(`UPDATE members SET is_treasury = 1, lifecycle = 'bounded', purpose = 'A new barn', goal_amount_c = 50 WHERE public_key = ?`).run(barn.pk);
+    db.prepare(`UPDATE members SET is_treasury = 1, lifecycle = 'bounded', purpose = 'A new barn', goal_amount_c = ? WHERE public_key = ?`).run(hc(50), barn.pk);
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', bob.pk);
     const digits = 412345678;
     const numeric: [string, Res][] = [
-        ['with Beans', await call('POST', bob, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: digits })],
-        ['with a crowdfund pledge', await call('POST', bob, `/api/crowdfund/projects/${hens}/pledge`, { amount: 1, memo: digits })],
-        ['with an enterprise pledge', await call('POST', bob, `/api/enterprise/${barn.pk}/pledge`, { amount: 1, memo: digits })],
+        ['with Beans', await call('POST', bob, '/api/ledger/transfer', { to: zed.pk, amount_c: hc(1), memo: digits })],
+        ['with a crowdfund pledge', await call('POST', bob, `/api/crowdfund/projects/${hens}/pledge`, { amount_c: hc(1), memo: digits })],
+        ['with an enterprise pledge', await call('POST', bob, `/api/enterprise/${barn.pk}/pledge`, { amount_c: hc(1), memo: digits })],
     ];
     for (const [what, r] of numeric) assert(refused(r), `muted: a note that is a number, ${what} → 403 moderation_muted (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 140)})`);
     const digitNotes = one(`SELECT COUNT(*) AS c FROM transactions WHERE CAST(memo AS TEXT) LIKE '${digits}%'`);

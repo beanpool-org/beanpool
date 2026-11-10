@@ -175,8 +175,9 @@ async function main(): Promise<void> {
 
         // ── 2. update_post ───────────────────────────────────────────────────────────────────────────
         const upd = await a.callTool({ name: 'update_post', arguments: { post_id: madeA[0], title: 'Meyer lemons from the tree', beans: 4 } });
-        const credits = (db.prepare('SELECT price_c FROM posts WHERE id = ?').get(madeA[0]) as any)?.credits;
-        assert(!upd.isError && structured(upd)?.postId === madeA[0] && titleOf(madeA[0]) === 'Meyer lemons from the tree' && credits === 4 && structured(upd)?.editsToday === 1,
+        // The tool speaks Beans (beans: 4); the row holds whole hundredths.
+        const priceC = (db.prepare('SELECT price_c FROM posts WHERE id = ?').get(madeA[0]) as any)?.price_c;
+        assert(!upd.isError && structured(upd)?.postId === madeA[0] && titleOf(madeA[0]) === 'Meyer lemons from the tree' && priceC === 400 && structured(upd)?.editsToday === 1,
             `update_post changes A's own post through the app's edit (${errorText(upd) || JSON.stringify(structured(upd))})`);
         const notMine = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
         for (const [label, id, before] of [['B\'s', madeB, 'Helper-made marmalade'], ['the owner\'s own from the app', ownApp, 'Olive\'s own jam, from the app'], ['Mia\'s', miaPost, 'Mia\'s kombucha']] as const) {

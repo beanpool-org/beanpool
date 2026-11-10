@@ -79,7 +79,8 @@ async function main(): Promise<void> {
     initStateEngine();
     // The disk is freed: the node runs on with its move stopped, until a restart.
     db.exec('DROP TRIGGER injected_failure');
-    for (const m of [ann, bea, cal, dee]) db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 100, 0)').run(m.pk);
+    // 100 Beans each, in whole hundredths.
+    for (const m of [ann, bea, cal, dee]) db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 10000, 0)').run(m.pk);
     const totalSum = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
     db.prepare(`UPDATE node_config SET value = ? WHERE key = 'ledger_audit_baseline'`).run(String(totalSum));
     reconcileLedgerFromDb();
@@ -101,7 +102,7 @@ async function main(): Promise<void> {
         return { status: res.status, body: await res.json().catch(() => null) as any };
     };
     const offer = (who: Who, title: string) => signed(who, '/api/marketplace/posts', {
-        type: 'offer', category: 'general', title, description: `${title}, fresh`, credits: 5, priceType: 'fixed', authorPublicKey: who.pk, photos: TEST_PHOTOS,
+        type: 'offer', category: 'general', title, description: `${title}, fresh`, price_c: 500 /* 5 Beans */, priceType: 'fixed', authorPublicKey: who.pk, photos: TEST_PHOTOS,
     });
 
     try {

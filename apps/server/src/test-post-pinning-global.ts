@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, place: { lat: number; lng: number }, body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', credits: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place, ...body,
+            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', price_c: 0, authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...place, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
         if (!id) throw new Error(`could not post: ${r.status} ${r.error}`);

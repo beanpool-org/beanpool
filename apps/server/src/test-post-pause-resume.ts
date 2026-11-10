@@ -70,7 +70,7 @@ async function main() {
     // Create a post as author
     const createRes = await signedFetch('POST', '/api/marketplace/posts', author, {
         type: 'offer', category: 'general', title: 'Garden Tools', description: 'Rake and shovel',
-        credits: 10, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
+        price_c: 1000 /* 10 Beans, in whole hundredths */, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(createRes.status === 200, 'author created a post successfully');
     const postId = createRes.body?.post?.id;

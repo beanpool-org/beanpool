@@ -61,7 +61,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 
 const post = (title: string, extra: Record<string, unknown> = {}) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
+    price_c: 2000 /* 20 Beans */, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
 });
 
 async function main() {

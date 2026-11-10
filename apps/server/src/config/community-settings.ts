@@ -147,8 +147,13 @@ const text = (max: number): Check<string> => (v) => (typeof v === 'string' ? v.s
 const label = (max: number): Check<string> => (v) => (typeof v === 'string' ? (cleanLabel(v, max) ?? '') : BAD);
 const oneOf = <T extends string>(...allowed: T[]): Check<T> => (v) => (allowed.includes(v as T) ? v as T : BAD);
 const bool: Check<boolean> = (v) => (typeof v === 'boolean' ? v : BAD);
-/** A whole number of Beans written as text, at most 6 digits (a node_config value). */
+/** A whole number written as text, at most 6 digits (a node_config value). */
 const wholeBeans: Check<string> = (v) => (typeof v === 'string' && /^\d{1,6}$/.test(v) ? v : BAD);
+/**
+ * Whole hundredths of a Bean written as text, as a money setting is stored (`String(hundredths)`): digits only, at most 6
+ * (the largest a setting may be, the cap's most, is 500000).
+ */
+const hundredthsText = (v: unknown): v is string => typeof v === 'string' && /^\d{1,6}$/.test(v);
 
 const place: Check<{ lat: number; lng: number }> = (v) =>
     isObject(v) && finite(v.lat) && finite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180 ? { lat: v.lat, lng: v.lng } : BAD;
@@ -187,8 +192,11 @@ const gateway: Check<NonNullable<SyncCommunitySettings['localConfig']['gateway']
     return out;
 };
 
-/** A number, as the row stores it. */
-const baseline: Check<string> = (v) => (typeof v === 'string' && v.length <= 40 && v.trim() !== '' && Number.isFinite(Number(v)) ? v : BAD);
+/**
+ * Whole hundredths, signed, as the row stores it and the ledger audit reads it (@beanpool/engine audit.ts: integer text
+ * only). A figure in another form ('-9.82', from before whole hundredths) is one the audit can't hold the ledger to.
+ */
+const baseline: Check<string> = (v) => (typeof v === 'string' && /^-?\d{1,16}$/.test(v) ? v : BAD);
 
 /**
  * The snapshot schedule as snapshot-scheduler.ts updateAutoSnapshotConfig writes it: whole hours the scheduler's timer
@@ -232,14 +240,15 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     // Only `true` is stored: one admin confirms, the default, is no row (engine/names-list.ts).
     names_two_admins: orNull(oneOf('true')),
     // The known floor (config/known-floor.ts): the dial is on with no row, `off` once the owner switches it off (an `on`
-    // row from before that default reads on); the two numbers are whole Beans.
+    // row from before that default reads on); the two numbers are whole hundredths of a Bean as text ('100000' is 1,000).
     confirmation: orNull(oneOf('on', 'off')),
-    known_floor: orNull(wholeBeans),
-    credit_cap: orNull(wholeBeans),
-    // Vouchers (engine/vouchers.ts): an appointment's prefilled budget, 100 to 2,000 in 100s, and a member's credit-line
-    // gift, 0 (off) to 100; whole Beans as text, no row the default.
-    voucher_budget: orNull((v) => (typeof v === 'string' && /^\d{3,4}$/.test(v) && isBudgetLevel(Number(v)) ? v : BAD)),
-    member_gift: orNull((v) => (typeof v === 'string' && /^\d{1,3}$/.test(v) && isMemberGiftSetting(Number(v)) ? v : BAD)),
+    known_floor: orNull((v) => (hundredthsText(v) ? v : BAD)),
+    credit_cap: orNull((v) => (hundredthsText(v) ? v : BAD)),
+    // Vouchers (engine/vouchers.ts, which writes String(hundredths)): an appointment's prefilled budget, 100 to 2,000
+    // Beans in 100s ('10000' to '200000'), and a member's credit-line gift, 0 (off) to 100 whole Beans ('0' to '10000');
+    // no row is the default. Core's checks decide, in hundredths.
+    voucher_budget: orNull((v) => (hundredthsText(v) && isBudgetLevel(Number(v)) ? v : BAD)),
+    member_gift: orNull((v) => (hundredthsText(v) && isMemberGiftSetting(Number(v)) ? v : BAD)),
     // The Community health panel's two lines (engine/community-health.ts): whole numbers as text.
     health_debt_line_pct: orNull(wholeBeans),
     health_quiet_days: orNull(wholeBeans),

@@ -485,6 +485,11 @@ async function main(): Promise<void> {
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
         built('only its admins invite (the owner, under How this community works)', await A('/api/local/admin/community-shape', { changes: { join: 'admins' } }));
         built("its owner switches the known floor's confirmations off", await A('/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }));
+        // The vouchers' two settings, in whole hundredths: a budget of 1,500 Beans for each new voucher, and a member's
+        // credit-line gift of up to 20 Beans (the deciding review of #3033: a standby's checks still wanted whole Beans,
+        // so a take-over installed the defaults, 1,000 and 100, the most generous gift).
+        built("its owner sets each new voucher's budget to 1,500 Beans and a member's gift to up to 20", await A('/api/local/admin/community-shape', {
+            changes: { voucherBudget: 150000, memberGift: 2000 } }));
         // Core settings (config/core-settings.ts, slice C1): confirmed and locked, which its place, set above, allows.
         built('its owner confirms and locks the core settings', await A('/api/local/admin/community-shape', { lock: true }));
         // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
@@ -501,6 +506,8 @@ async function main(): Promise<void> {
             `M: its core settings are confirmed and locked (${j(mSettings.rows.core_settings_lock)})`);
         require_(mSettings.rows.ledger_audit_baseline === '10',
             `M: its accepted baseline is 0.1 Beans, the integer text 10 (${mSettings.rows.ledger_audit_baseline})`);
+        require_(mSettings.rows.voucher_budget === '150000' && mSettings.rows.member_gift === '2000',
+            `M: the voucher budget and the member gift are stored as hundredths (${j({ budget: mSettings.rows.voucher_budget, gift: mSettings.rows.member_gift })})`);
 
         // ── 2. S, with settings of its own, and its first copy ──
         console.log('\n— 2. a standby with settings of its own takes its first copy —');
@@ -535,6 +542,9 @@ async function main(): Promise<void> {
             `the record S keeps says only admins invite, and S's own door is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.door, own: sNow.rows.door ?? null })})`);
         assert(kept1?.record?.nodeConfig?.confirmation === 'off' && sNow.rows.confirmation === undefined,
             `the record S keeps has M's 'off' row for the dial, and S's own dial is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.confirmation, own: sNow.rows.confirmation ?? null })})`);
+        assert(kept1?.record?.nodeConfig?.voucher_budget === '150000' && kept1?.record?.nodeConfig?.member_gift === '2000'
+            && sNow.rows.voucher_budget === undefined && sNow.rows.member_gift === undefined,
+            `the record S keeps has M's voucher budget and member gift, in hundredths, and S's own are its own until it is promoted (${j({ kept: { budget: kept1?.record?.nodeConfig?.voucher_budget ?? null, gift: kept1?.record?.nodeConfig?.member_gift ?? null }, own: { budget: sNow.rows.voucher_budget ?? null, gift: sNow.rows.member_gift ?? null } })})`);
 
         // ── 3. M changes its settings; a delta brings them ──
         console.log('\n— 3. the main server changes its settings; a delta brings them —');
@@ -719,6 +729,8 @@ async function main(): Promise<void> {
         const expected = { ...mCommunity, 'node_config.pricing_show_seasonality': sOwnCommunity['node_config.pricing_show_seasonality'] };
         assert(differing(expected, communitySettings(sAfter)).length === 0,
             `every community setting is M's; the one the record carried a value S couldn't take is S's own (differing: ${first(differing(expected, communitySettings(sAfter)))})`);
+        assert(sAfter.rows.voucher_budget === '150000' && sAfter.rows.member_gift === '2000',
+            `taken over, S keeps the community's voucher budget (1,500 Beans) and member gift (up to 20), not the defaults (${j({ budget: sAfter.rows.voucher_budget ?? null, gift: sAfter.rows.member_gift ?? null })})`);
         const sDoor = await standby.send('door-now', { pubkey: ann.pk });
         assert(sAfter.rows.door === 'admins' && sDoor.door === 'admins' && sDoor.may === false,
             `taken over, S keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: sAfter.rows.door, now: sDoor })})`);

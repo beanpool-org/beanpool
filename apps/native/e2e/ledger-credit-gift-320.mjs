@@ -6,8 +6,9 @@
  * scheme: the app's own Ledger (app/(tabs)/ledger.tsx) and its own utils/credit-gift.ts, through react-native-web in
  * headless Chromium, as e2e/ledger-doors-320.mjs draws the Wallet (its stand-ins, copied).
  *
- * What is drawn: Send open on the Credit line tab with Mia picked and 50 typed (the node offers up to 100; every figure it sends is hundredths); the same with
- * the node's refusal shown; and a member holding no Beans, whose Send opens on the Credit line tab.
+ * What is drawn: Send open on the Credit line tab with Mia picked and 50 typed (the node offers up to 100, and sends every
+ * figure in whole hundredths); the same with the node's refusal shown; and a member holding no Beans, whose Send opens on
+ * the Credit line tab.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a tab under 44dp
  * tall or without its tab role; text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).

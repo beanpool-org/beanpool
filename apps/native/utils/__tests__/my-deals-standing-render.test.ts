@@ -62,8 +62,8 @@ const PAYEE = 'b'.repeat(64);
 const short = {
     id: 'tx-short', postId: 'post-1', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: PAYER, buyerCallsign: 'Marty',
     sellerPublicKey: PAYEE, sellerCallsign: 'Rob', credits: 50, createdAt: '2026-11-09T08:00:00.000Z', ratedByBuyer: false, ratedBySeller: false,
-    standingId: 'sd-1', periodNo: 2, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
-    standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-12-09T08:00:00.000Z',
+    standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
+    standingNextDueAt: '2026-11-09T09:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z',
     standingStopped: false,
 };
 vi.mock('../db', () => ({ getPosts: async () => [], getMyPosts: async () => [], getMarketplaceTransactions: async () => [short] }));
@@ -82,7 +82,7 @@ const render = async (me: string) => {
 
 describe('Your deals, In progress: a short standing deal (the period last settled) at 320 dp, light and dark', () => {
     for (const dark of [false, true]) {
-        for (const [me, line] of [[PAYER, "⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends"], [PAYEE, "Next month isn't covered yet · we'll keep trying until 16 Dec"]] as const) {
+        for (const [me, line] of [[PAYER, "⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends"], [PAYEE, "This month isn't paid yet · we'll keep trying until 24 Nov"]] as const) {
             it(`${dark ? 'dark' : 'light'}, ${me === PAYER ? 'payer' : 'payee'}: 🔁 STANDING and its line; no Completed badge, no Edit or Review; it opens the listing`, async () => {
                 theme.dark = dark;
                 await render(me);

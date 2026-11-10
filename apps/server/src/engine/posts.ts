@@ -31,7 +31,7 @@ import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
-import { endStandingDealsOnRemovedListing, standingPeriodSettled, stopStandingDealsOnListing, tellStanding, type StandingNotice } from './standing-deals.js';
+import { endStandingDealsOnRemovedListing, stopStandingDealsOnListing, tellStanding, type StandingNotice } from './standing-deals.js';
 import type { KeptNoticePushOptions } from './kept-notices.js';
 import {
     canonicalZone,
@@ -2392,10 +2392,6 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                     });
                 }
                 db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(tx.id);
-                // A standing deal's period refunded ends the standing deal with it, in this transaction, as a Cancel hold does
-                // (engine/standing-deals.ts standingPeriodSettled). Left alone, the tick found its period's row cancelled at
-                // the period's end and held it back for a person to settle, which nobody could (the deciding review of #2980).
-                if (tx.standing_id) standingTold.push(...standingPeriodSettled(tx, 'refunded', at));
             }
         }
         db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'").run(postId);
@@ -2404,7 +2400,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
             deleted = true;
             db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
             if (eventRow) db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(postId);
-            // Every standing deal still running on it ends now: between its periods, short, or with nothing held here.
+            // Every standing deal still running on it ends now (nothing of one is held: each period was paid at its start).
             standingTold.push(...endStandingDealsOnRemovedListing(postId, at));
         }
     });

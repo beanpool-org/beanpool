@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 /**
- * Standing deals S2 on the phone (components/StandingDeal.tsx; DESIGN-standing-deals-fable §2.2, §3; with the web's
+ * Standing deals on the phone, paid at the start of each period (components/StandingDeal.tsx; DESIGN-standing-deals-upfront-fable
+ * §3 and its amendment §1; with the web's
  * src/components/StandingDeal.test.tsx), rendered for real at the floor's window (320 x 569 dp, text at 1.3x): react-dom in
  * jsdom, React Native's host components as plain tags carrying their accessibility props and styles, as
  * address-follow-card-render.test.ts does. Checked: the take-up screen's lines and the choice Agree hands on, the panel for
- * each phase and each side, Stop asked first, Hold back the payer's only, light and dark both drawn from the central tokens,
+ * each phase and each side, Stop asked first in each side's words, no Hold back, light and dark both drawn from the central tokens,
  * and nothing fixed-width or cut to a line count, so the words wrap at 320 dp.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,13 +67,13 @@ beforeEach(() => { theme.dark = false; vi.mocked(Alert.alert).mockClear(); });
 afterEach(() => { host?.remove(); });
 
 describe('Take this up? (§2.2)', () => {
-    it('what is held now and for which month; Agree hands on until-stopped from today', async () => {
+    it('what is paid now and for which month; Agree hands on until-stopped from today', async () => {
         const onAgree = vi.fn();
         await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
         expect(host.textContent).toContain('Take this up?');
         expect(host.textContent).toContain('Vehicle Storage · 50 Beans a month · from Rob');
-        expect(byId('standing-held-now')!.textContent).toBe('50 Beans are held now for the first month (9 Nov – 9 Dec).');
-        expect(byId('standing-agree')!.textContent).toBe('Agree and hold 50 Beans');
+        expect(byId('standing-held-now')!.textContent).toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
+        expect(byId('standing-agree')!.textContent).toBe('Agree and pay 50 Beans');
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: null, startsAt: NOW });
     });
@@ -85,7 +86,7 @@ describe('Take this up? (§2.2)', () => {
         await tap(byId('standing-start-on'));
         await tap(button('A day later'));
         expect(byId('standing-start-on')!.textContent).toBe('On 11 Nov');
-        expect(byId('standing-held-now')!.textContent).toBe('12.5 Beans are held now for the first week (11 Nov – 18 Nov).');
+        expect(byId('standing-held-now')!.textContent).toBe('12.5 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.5 at the start of each week, until one of you stops it.');
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: 5, startsAt: NOW + 2 * 86_400_000 });
     });
@@ -109,59 +110,61 @@ describe('Take this up? (§2.2)', () => {
     });
 });
 
+// Month 2 of a deal started 9 Oct, paid on 9 Nov; month 3 due 9 Dec. Every row of a standing deal is a finished deal.
 const row = (o: Record<string, unknown> = {}) => ({
-    id: 'tx-3', postTitle: 'Vehicle Storage', status: 'pending', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    standingId: 'sd-1', periodNo: 3, standingPhase: 'held', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    id: 'tx-3', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
+    createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 }) as any;
-const SHORT = { status: 'completed', standingPhase: 'short', standingShortSince: '2026-12-09T08:00:00.000Z' };
+// Month 2 (9 Nov – 9 Dec, 30 days) unpaid: its grace is 15 days, to 24 Nov (the same day in every time zone at 08:00 UTC).
+const SHORT = { periodNo: 1, standingPhase: 'short', standingShortSince: '2026-11-09T08:00:00.000Z', standingNextDueAt: '2026-11-09T09:00:00.000Z' };
 
 describe('the panel, each phase and each side', () => {
-    const matrix: Array<[string, Record<string, unknown>, string, string, boolean, string]> = [
-        ['held', {}, PAYER, "This month's 50 Beans are held · they go to Rob 9 Dec", true, 'Stop…'],
-        ['held', {}, PAYEE, "Marty's standing deal · 50 Beans a month · this month held for you · paid 9 Dec", false, 'Stop…'],
-        ['short', SHORT, PAYER, "⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends", false, 'Stop…'],
-        ['short', SHORT, PAYEE, "Next month isn't covered yet · we'll keep trying until 16 Dec", false, 'Stop now'],
-        ['held back', { standingPhase: 'held_back' }, PAYER, 'Held back · the schedule is paused', false, 'Stop…'],
-        ['held back', { standingPhase: 'held_back' }, PAYEE, 'Held back · the schedule is paused', false, 'Stop…'],
+    // [phase, over, side, the status line, Stop's words, the payer's warning]
+    const matrix: Array<[string, Record<string, unknown>, string, string, string, boolean]> = [
+        ['paid', {}, PAYER, "This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec", 'Stop…', false],
+        ['paid', {}, PAYEE, "Marty's standing deal · 50 Beans a month · paid for this month on 9 Nov · next on 9 Dec", 'Stop…', false],
+        ['short', SHORT, PAYER, "⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends", 'Stop now', true],
+        ['short', SHORT, PAYEE, "This month isn't paid yet · we'll keep trying until 24 Nov", 'Stop now', false],
     ];
-    for (const [phase, over, side, status, holdBack, stopWords] of matrix) {
+    for (const [phase, over, side, status, stopWords, warning] of matrix) {
         it(`${phase}, ${side === PAYER ? 'payer' : 'payee'}`, async () => {
-            await show(createElement(StandingPanel, { tx: row(over), actingAs: side, busy: false, onStop: vi.fn(), onHoldBack: vi.fn() }));
+            await show(createElement(StandingPanel, { tx: row(over), actingAs: side, busy: false, onStop: vi.fn() }));
             expect(byId('standing-status')!.textContent).toBe(status);
-            expect(!!byId('standing-hold-back')).toBe(holdBack);
+            expect(byId('standing-hold-back')).toBeNull();
             expect(byId('standing-stop')!.textContent).toBe(stopWords);
             expect(host.textContent).toContain('🔁 Standing deal since 9 Oct · 50 Beans a month');
-            // The short-funds banner is the warning tone from the tokens; every other phase the calm one.
+            expect(host.textContent).not.toMatch(/Release|Cancel|Hold back/);
+            // The payer's short-funds banner is the warning tone from the tokens; the payee's, and every other phase, the calm one.
             const panel = byId('standing-panel-tx-3')!;
-            expect(style(panel).backgroundColor).toBe(phase === 'short' ? lightColors.feedback.warning.bg : lightColors.feedback.success.bg);
-            expect(byId('standing-status')!.getAttribute('data-role')).toBe(phase === 'short' ? 'alert' : null);
+            expect(style(panel).backgroundColor).toBe(warning ? lightColors.feedback.warning.bg : lightColors.feedback.success.bg);
+            expect(byId('standing-status')!.getAttribute('data-role')).toBe(warning ? 'alert' : null);
         });
     }
-    it('Stop asks first (Keep it / Stop it), and stops only from the alert; Hold back is a tap', async () => {
+    it('Stop asks first (Keep it / Stop it), in the payer\'s words, and stops only from the alert', async () => {
         const onStop = vi.fn();
-        const onHoldBack = vi.fn();
-        await show(createElement(StandingPanel, { tx: row(), actingAs: PAYER, busy: false, onStop, onHoldBack }));
+        await show(createElement(StandingPanel, { tx: row(), actingAs: PAYER, busy: false, onStop }));
         await tap(byId('standing-stop'));
         expect(onStop).not.toHaveBeenCalled();
         const [title, body, buttons] = vi.mocked(Alert.alert).mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
-        expect([title, body]).toEqual(['Stop after this month?', 'The month under way is still paid. Nothing more is held after it.']);
+        expect([title, body]).toEqual(['Stop after this month?', "You've paid for this month; Rob keeps it; nothing more is paid."]);
         expect(buttons.map(b => b.text)).toEqual(['Keep it', 'Stop it']);
         buttons[1].onPress!();
         expect(onStop).toHaveBeenCalledTimes(1);
-        await tap(byId('standing-hold-back'));
-        expect(onHoldBack).toHaveBeenCalledTimes(1);
     });
-    // Round 2 of #3000 (non-blocking note): short, nothing is held and Stop ends it at once (the node's endStanding), as the
-    // payee's "Stop now" says; the question says so too, to either side.
-    it('short: the Stop question says it stops now, to the payer and to the payee', async () => {
-        for (const side of [PAYER, PAYEE]) {
+    it('short: the Stop question says it ends now, in each side\'s words (amendment §1)', async () => {
+        const words: Array<[string, string]> = [
+            [PAYER, "It ends now. This month's 50 Beans aren't paid and won't be; nothing is owed through the app for the days since 9 Nov. Talk to Rob about it."],
+            [PAYEE, "It ends now. This month's 50 Beans won't come; nothing is owed through the app for the days since 9 Nov."],
+        ];
+        for (const [side, said] of words) {
             vi.mocked(Alert.alert).mockClear();
-            await show(createElement(StandingPanel, { tx: row(SHORT), actingAs: side, busy: false, onStop: vi.fn(), onHoldBack: vi.fn() }));
+            await show(createElement(StandingPanel, { tx: row(SHORT), actingAs: side, busy: false, onStop: vi.fn() }));
             await tap(byId('standing-stop'));
             const [title, body] = vi.mocked(Alert.alert).mock.calls[0] as [string, string];
-            expect([title, body]).toEqual(['Stop it now?', 'It ends now. Nothing is held for it, and nothing more will be.']);
+            expect([title, body]).toEqual(['Stop it now?', said]);
             host.remove();
         }
     });
@@ -174,7 +177,7 @@ describe('at 320 dp with the text at 1.3x, light and dark from the tokens', () =
             const colors = dark ? darkColors : lightColors;
             await show(createElement('div', null,
                 createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'A very long listing title for a garden plot down by the creek', payeeName: 'Bartholomew', busy: false, onCancel: vi.fn(), onAgree: vi.fn(), now: NOW }),
-                createElement(StandingPanel, { tx: row(SHORT), actingAs: PAYER, busy: false, onStop: vi.fn(), onHoldBack: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Rob' })));
+                createElement(StandingPanel, { tx: row(SHORT), actingAs: PAYER, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Rob' })));
             const tokens = new Set<string>();
             const walk = (o: unknown) => { if (o && typeof o === 'object') Object.values(o).forEach(walk); else if (typeof o === 'string') tokens.add(o); };
             walk(colors);

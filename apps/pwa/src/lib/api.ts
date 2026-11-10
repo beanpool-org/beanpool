@@ -2297,11 +2297,6 @@ export async function stopStandingDeal(standingId: string): Promise<{ success: b
     return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
 }
 
-/** Hold back the period under way (the payer, §1.2): it becomes a plain held deal, settled by Release or Cancel hold. */
-export async function holdBackStandingDeal(standingId: string): Promise<{ success: boolean }> {
-    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/hold-back`, {});
-}
-
 export async function requestMarketplacePost(
     postId: string, buyerPublicKey: string, hours?: number
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {

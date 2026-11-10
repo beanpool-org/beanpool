@@ -1,20 +1,23 @@
 /**
- * Standing deals: paying for something by the week or by the month (scratch/fable-design/DESIGN-standing-deals-fable.md;
- * Marty's decisions, 9 Nov 2026). Pure and universal: imported by both apps and the server.
+ * Standing deals: paying for something by the week or by the month (scratch/fable-design/DESIGN-standing-deals-upfront-fable.md
+ * and its amendment; Marty's decisions, 10 Nov 2026). Pure and universal: imported by both apps and the server.
  *
  * THE MODEL. A listing priced per week or per month makes a standing deal when it is taken up (hourly, daily and fixed prices
- * stay one-off deals). One period's Beans are in trust at a time: at the start the first period is held, as any deal holds its
- * Beans; at each period's end the node releases them to the payee (less the 1.5% to the Commons, as every release) and holds
- * the next period's, unless the payer tapped Hold back or either side tapped Stop. Each period is an ordinary deal row.
+ * stay one-off deals). Each period is PAID AT ITS START, and nothing is ever held in trust: at Agree (an Offer) or Approve (a
+ * Need) the first period's Beans go to the payee at once, less the 1.5% to the Commons; at each period's end the node pays the
+ * next the same way, until the count is reached or one of them stops it. Each period is one finished deal row and one
+ * ledger row. A period that can't be paid when it is due makes the standing deal short: the node tries again for half that
+ * period (the grace), either side may stop it at once, Beans that reach the payer pay the whole period at once, and when the
+ * grace is over it ends with nothing owed through the app.
  *
- * THE CALENDAR (§5 "Clock"). Period n runs [start + (n-1) units, start + n units), worked out from the start every time, in
- * UTC, never from the previous period's end, so it never drifts: weeks are exact (7 × 24 h); a month keeps the start's day
- * and time of day, and a day the month doesn't have (the 31st in April, the 29th–31st in February) is clamped to its last
- * day. A start on 31 January ends its periods on 28 (or 29) February, 31 March, 30 April, 31 May, …
+ * THE CALENDAR. Period n runs [start + (n-1) units, start + n units), worked out from the start every time, in UTC, never
+ * from the previous period's end, so it never drifts: weeks are exact (7 × 24 h); a month keeps the start's day and time of
+ * day, and a day the month doesn't have (the 31st in April, the 29th–31st in February) is clamped to its last day. A start
+ * on 31 January ends its periods on 28 (or 29) February, 31 March, 30 April, 31 May, …
  *
- * THE AUTHORISATION (§6). The payer signs one text with their key when it starts: the community's host, the standing deal's
- * id, the listing, the payee, the Beans per period, the period, how many periods (or open) and the start. The node keeps it,
- * and every period it holds must match it: never more, more often, past the count, or for anyone else.
+ * THE AUTHORISATION. The payer signs one text with their key when it starts: the community's host, the standing deal's id,
+ * the listing, the payee, the Beans per period, the period, how many periods (or open) and the start. The node keeps it, and
+ * every period it pays must match it: never more, more often, past the count, or to anyone else.
  */
 
 import { randomBytes } from '@noble/hashes/utils.js';
@@ -26,34 +29,23 @@ export type StandingPeriodUnit = 'week' | 'month';
 
 /**
  * Where a standing deal is (the node's `standing_deals.phase`):
- *  - held: this period's Beans are held, released by the node at its end;
- *  - due: the period was settled and the next isn't held yet (the node is between its two steps, or waits for the next
- *    period's start after an early release);
- *  - short: the next period's Beans couldn't be held; the node tries again for 7 days, then it ends;
- *  - held_back: the payer held this period back (or the node did, when it couldn't carry on): a plain held deal, settled
- *    by a person;
- *  - ended: nothing more is held.
+ *  - paid: every period due so far is paid; the next is paid at its start;
+ *  - short: the period now due couldn't be paid; the node tries again until its grace ends (half the period), then it ends;
+ *  - ended: nothing more is paid.
  */
-export type StandingPhase = 'held' | 'due' | 'short' | 'held_back' | 'ended';
-export const STANDING_PHASES: readonly StandingPhase[] = Object.freeze(['held', 'due', 'short', 'held_back', 'ended']);
+export type StandingPhase = 'paid' | 'short' | 'ended';
+export const STANDING_PHASES: readonly StandingPhase[] = Object.freeze(['paid', 'short', 'ended']);
 
 /** Why a standing deal ended (`standing_deals.ended_reason`). */
-export type StandingEndReason = 'stopped' | 'count_reached' | 'short' | 'cancelled' | 'listing_gone' | 'account_closed' | 'node_held' | 'cant_run';
+export type StandingEndReason = 'stopped' | 'count_reached' | 'short' | 'listing_gone' | 'account_closed' | 'server_away' | 'cant_run';
 
-/** Why a period is held back (`standing_deals.held_back_reason`): the payer's tap, or what stopped the node carrying on. */
-export type StandingHeldBackReason = 'payer' | 'node_held' | 'listing_hidden' | 'cant_run';
-
-/** How long the node keeps trying to hold a period that couldn't be held, before the standing deal ends (§1.4, decision 2). */
-export const STANDING_GRACE_MS = 7 * 86_400_000;
-/** How often it tries again in that week (§1.4). */
+/** How often the node tries again to pay a period that is short (amendment §3). */
 export const STANDING_RETRY_MS = 60 * 60 * 1000;
-/** How long before a period is due the payer is told they are short (§3): 3 days for a month, 1 day for a week. */
+/** How long before a period is due the payer is told they will be short: 3 days for a month, 1 day for a week. */
 export function standingWarnAheadMs(unit: StandingPeriodUnit): number {
     return (unit === 'month' ? 3 : 1) * 86_400_000;
 }
-/** On which day of the week of grace the payer is reminded once (§3 "Day 3 of grace"). */
-export const STANDING_REMINDER_AFTER_MS = 3 * 86_400_000;
-/** How far ahead a standing deal may start (§2.2 "up to 30 days ahead"). */
+/** How far ahead a standing deal may start ("up to 30 days ahead"). */
 export const STANDING_START_AHEAD_MS = 30 * 86_400_000;
 
 /** The listing's price unit that makes a standing deal (decision 1), or null for one that makes a one-off deal. */
@@ -128,6 +120,19 @@ export function periodNo(startsAt: string | number, unit: StandingPeriodUnit, at
     while (n > 1 && addUnits(startMs, unit, n - 1) > atMs) n--;
     while (addUnits(startMs, unit, n) <= atMs) n++;
     return n;
+}
+
+/**
+ * The grace of period `n` (amendment §2, Marty 10 Nov): half that period on the calendar, from its start (when it is due).
+ * 15 days for a 30-day month, 14 for February, 3½ days for a week.
+ */
+export function standingGraceMs(startsAt: string | number, unit: StandingPeriodUnit, n: number): number {
+    return (Date.parse(periodEnd(startsAt, unit, n)) - Date.parse(periodStart(startsAt, unit, n))) / 2;
+}
+
+/** When the grace of period `n` ends: its start plus half of it. ISO, UTC. */
+export function standingGraceEndsAt(startsAt: string | number, unit: StandingPeriodUnit, n: number): string {
+    return new Date(Date.parse(periodStart(startsAt, unit, n)) + standingGraceMs(startsAt, unit, n)).toISOString();
 }
 
 // ── The authorisation (§6) ─────────────────────────────────────────────────────────────────────────────────────────
@@ -232,22 +237,22 @@ export function parseStandingAuthorisation(text: unknown): StandingAuthorisation
     return standingAuthorisationText(a) === text ? a : null;
 }
 
-/** The ledger rows' `auth_payload` of a period the node holds under a standing authorisation (§6). */
-export function standingHoldPayload(standingId: string, periodNo: number): string {
+/** The ledger row's `auth_payload` of a period the node pays under a standing authorisation: `standing:<id>:<n>`. */
+export function standingPaymentPayload(standingId: string, periodNo: number): string {
     return `standing:${standingId}:${periodNo}`;
 }
 
-// ── The words (§1–§3), one set for both apps and the node's notices ──────────────────────────────────────────────────
+// ── The words, one set for both apps and the node's notices ─────────────────────────────────────────────────────────
 
 const n2 = (n: number) => formatNumber(Math.round(n * 100) / 100);
 
 /**
  * Every sentence a member reads about a standing deal. Amounts are numbers (formatted here); names, titles and dates come
  * formatted. Each sentence is written once per period, so a translation never has to fit "week" or "month" into another
- * sentence.
+ * sentence. The payee's sentences never carry the payer's balance or how short they are (amendment §2).
  */
 export const standingLines = {
-    // §2.2 Taking it up
+    // Taking it up (design §3)
     takeUpTitle: () => t('Take this up?'),
     takeUpSummary: (unit: StandingPeriodUnit, title: string, beans: number, name: string) => (unit === 'month'
         ? t('{title} · {n} Beans a month · from {name}', { title, n: n2(beans), name })
@@ -261,110 +266,132 @@ export const standingLines = {
     startToday: () => t('Today'),
     startOn: (date: string) => t('On {date}', { date }),
     startAhead: () => t('Up to 30 days ahead'),
-    heldNow: (unit: StandingPeriodUnit, beans: number, from: string, to: string) => (unit === 'month'
-        ? t('{n} Beans are held now for the first month ({from} – {to}).', { n: n2(beans), from, to })
-        : t('{n} Beans are held now for the first week ({from} – {to}).', { n: n2(beans), from, to })),
-    howItRuns: (unit: StandingPeriodUnit, beans: number, name: string) => (unit === 'month'
-        ? t("At the end of each month they go to {name}, and the next month's {n} are held, until one of you stops it. You can stop any time; the month under way is still paid.", { n: n2(beans), name })
-        : t("At the end of each week they go to {name}, and the next week's {n} are held, until one of you stops it. You can stop any time; the week under way is still paid.", { n: n2(beans), name })),
+    paidNow: (unit: StandingPeriodUnit, beans: number, name: string, from: string, to: string) => (unit === 'month'
+        ? t('{n} Beans go to {name} now for the first month ({from} – {to}), then {n} at the start of each month, until one of you stops it.', { n: n2(beans), name, from, to })
+        : t('{n} Beans go to {name} now for the first week ({from} – {to}), then {n} at the start of each week, until one of you stops it.', { n: n2(beans), name, from, to })),
+    howItRuns: (unit: StandingPeriodUnit) => (unit === 'month'
+        ? t('You can stop it any time. A month already paid stays paid.')
+        : t('You can stop it any time. A week already paid stays paid.')),
     shortAhead: (unit: StandingPeriodUnit) => (unit === 'month'
         ? t("If you're short when a month is due, you'll be told a few days before.")
         : t("If you're short when a week is due, you'll be told the day before.")),
-    agree: (beans: number) => t('Agree and hold {n} Beans', { n: n2(beans) }),
+    agree: (beans: number) => t('Agree and pay {n} Beans', { n: n2(beans) }),
 
-    // §2.2 The listing's panel while it runs
+    // The deal card while it runs (design §3)
     since: (unit: StandingPeriodUnit, date: string, beans: number) => (unit === 'month'
         ? t('🔁 Standing deal since {date} · {n} Beans a month', { date, n: n2(beans) })
         : t('🔁 Standing deal since {date} · {n} Beans a week', { date, n: n2(beans) })),
-    heldGoesTo: (unit: StandingPeriodUnit, beans: number, name: string, date: string) => (unit === 'month'
-        ? t("This month's {n} Beans are held · they go to {name} {date}", { n: n2(beans), name, date })
-        : t("This week's {n} Beans are held · they go to {name} {date}", { n: n2(beans), name, date })),
-    holdBack: (unit: StandingPeriodUnit) => (unit === 'month' ? t('Hold back this month') : t('Hold back this week')),
+    paidPayer: (unit: StandingPeriodUnit, beans: number, name: string, paidOn: string, nextOn: string) => (unit === 'month'
+        ? t("This month's {n} went to {name} on {paid} · the next {n} go on {next}", { n: n2(beans), name, paid: paidOn, next: nextOn })
+        : t("This week's {n} went to {name} on {paid} · the next {n} go on {next}", { n: n2(beans), name, paid: paidOn, next: nextOn })),
+    paidPayee: (unit: StandingPeriodUnit, name: string, beans: number, paidOn: string, nextOn: string) => (unit === 'month'
+        ? t("{name}'s standing deal · {n} Beans a month · paid for this month on {paid} · next on {next}", { name, n: n2(beans), paid: paidOn, next: nextOn })
+        : t("{name}'s standing deal · {n} Beans a week · paid for this week on {paid} · next on {next}", { name, n: n2(beans), paid: paidOn, next: nextOn })),
+    shortPayer: (unit: StandingPeriodUnit, beans: number, date: string) => (unit === 'month'
+        ? t("⚠️ This month's {n} Beans couldn't be paid · {n} needed by {date} or it ends", { n: n2(beans), date })
+        : t("⚠️ This week's {n} Beans couldn't be paid · {n} needed by {date} or it ends", { n: n2(beans), date })),
+    shortPayee: (unit: StandingPeriodUnit, date: string) => (unit === 'month'
+        ? t("This month isn't paid yet · we'll keep trying until {date}", { date })
+        : t("This week isn't paid yet · we'll keep trying until {date}", { date })),
+    stopsOn: (unit: StandingPeriodUnit, date: string) => (unit === 'month'
+        ? t('Stops on {date} · this month is paid', { date })
+        : t('Stops on {date} · this week is paid', { date })),
     stop: () => t('Stop…'),
     stopNow: () => t('Stop now'),
-    stopConfirm: (unit: StandingPeriodUnit) => (unit === 'month' ? t('Stop after this month?') : t('Stop after this week?')),
-    stopConfirmBody: (unit: StandingPeriodUnit) => (unit === 'month'
-        ? t('The month under way is still paid. Nothing more is held after it.')
-        : t('The week under way is still paid. Nothing more is held after it.')),
-    /** Short, or between its periods: nothing is held, and Stop ends it at once (the node's endStanding). */
-    stopNowConfirm: () => t('Stop it now?'),
-    stopNowConfirmBody: () => t('It ends now. Nothing is held for it, and nothing more will be.'),
     periodOf: (unit: StandingPeriodUnit, n: number, k: number) => (unit === 'month'
         ? t('Month {n} of {k}', { n, k })
         : t('Week {n} of {k}', { n, k })),
-    payeePanel: (unit: StandingPeriodUnit, name: string, beans: number, date: string) => (unit === 'month'
-        ? t("{name}'s standing deal · {n} Beans a month · this month held for you · paid {date}", { name, n: n2(beans), date })
-        : t("{name}'s standing deal · {n} Beans a week · this week held for you · paid {date}", { name, n: n2(beans), date })),
-    shortPayer: (unit: StandingPeriodUnit, beans: number, date: string) => (unit === 'month'
-        ? t("⚠️ Next month isn't covered · {n} Beans needed by {date} or this ends", { n: n2(beans), date })
-        : t("⚠️ Next week isn't covered · {n} Beans needed by {date} or this ends", { n: n2(beans), date })),
-    shortPayee: (unit: StandingPeriodUnit, date: string) => (unit === 'month'
-        ? t("Next month isn't covered yet · we'll keep trying until {date}", { date })
-        : t("Next week isn't covered yet · we'll keep trying until {date}", { date })),
-    heldBack: () => t('Held back · the schedule is paused'),
     chip: () => t('🔁 STANDING'),
     memo: (unit: StandingPeriodUnit, title: string, n: number) => (unit === 'month'
         ? t('Standing deal · {title} · month {n}', { title, n })
         : t('Standing deal · {title} · week {n}', { title, n })),
 
-    // §1.5 and §2.5 Refusals
+    // Stop, asked first (design §3; amendment §1 in the grace)
+    stopConfirm: (unit: StandingPeriodUnit) => (unit === 'month' ? t('Stop after this month?') : t('Stop after this week?')),
+    stopConfirmPayer: (unit: StandingPeriodUnit, name: string) => (unit === 'month'
+        ? t("You've paid for this month; {name} keeps it; nothing more is paid.", { name })
+        : t("You've paid for this week; {name} keeps it; nothing more is paid.", { name })),
+    stopConfirmPayee: (date: string) => t('Nothing more will be paid to you after {date}.', { date }),
+    stopNowConfirm: () => t('Stop it now?'),
+    stopNowConfirmPayer: (unit: StandingPeriodUnit, beans: number, name: string, date: string) => (unit === 'month'
+        ? t("It ends now. This month's {n} Beans aren't paid and won't be; nothing is owed through the app for the days since {date}. Talk to {name} about it.", { n: n2(beans), name, date })
+        : t("It ends now. This week's {n} Beans aren't paid and won't be; nothing is owed through the app for the days since {date}. Talk to {name} about it.", { n: n2(beans), name, date })),
+    stopNowConfirmPayee: (unit: StandingPeriodUnit, beans: number, date: string) => (unit === 'month'
+        ? t("It ends now. This month's {n} Beans won't come; nothing is owed through the app for the days since {date}.", { n: n2(beans), date })
+        : t("It ends now. This week's {n} Beans won't come; nothing is owed through the app for the days since {date}.", { n: n2(beans), date })),
+
+    // Refusals
     keeperPayee: () => t("A standing deal can't pay a keeper of the enterprise that pays it. Pay each job as a deal."),
     holidayPayer: (title: string) => t('Stop your standing deal for {title} first.', { title }),
     removeStops: (unit: StandingPeriodUnit, count: number) => (unit === 'month'
         ? tn(count, 'This stops {n} standing deal after its current month.', 'This stops {n} standing deals after their current month.')
         : tn(count, 'This stops {n} standing deal after its current week.', 'This stops {n} standing deals after their current week.')),
     authMismatch: () => t("The standing deal's agreement doesn't match this listing. Close it and try again."),
-    releaseByItself: (unit: StandingPeriodUnit) => (unit === 'month'
-        ? t("This month's Beans go to them by themselves at the month's end. Hold it back first to settle it yourself.")
-        : t("This week's Beans go to them by themselves at the week's end. Hold it back first to settle it yourself.")),
     payerOnly: () => t('Only the one who pays can do this.'),
-    notRunning: () => t("This standing deal isn't running by itself just now, so there is nothing to hold back."),
-    alreadyStanding: () => t('You already have a standing deal on this. Stop it first.'),
 
-    // §3 Short funds
-    shortAheadNotice: (unit: StandingPeriodUnit, title: string, beans: number, date: string, short: number) => (unit === 'month'
-        ? t("{title}: {n} Beans are due on {date} and you're {short} short. Earn or receive Beans by then, or stop the standing deal; the month under way is still paid.", { title, n: n2(beans), date, short: n2(short) })
-        : t("{title}: {n} Beans are due on {date} and you're {short} short. Earn or receive Beans by then, or stop the standing deal; the week under way is still paid.", { title, n: n2(beans), date, short: n2(short) })),
-    notHeldPayer: (unit: StandingPeriodUnit, title: string, beans: number, date: string) => (unit === 'month'
-        ? t("{title}: this month's {n} Beans couldn't be held. We'll try again until {date}. Then it ends.", { title, n: n2(beans), date })
-        : t("{title}: this week's {n} Beans couldn't be held. We'll try again until {date}. Then it ends.", { title, n: n2(beans), date })),
-    notHeldPayee: (unit: StandingPeriodUnit, name: string, title: string, date: string) => (unit === 'month'
-        ? t("{name}'s next month of {title} isn't covered yet. We'll keep trying until {date}. You can stop it now.", { name, title, date })
-        : t("{name}'s next week of {title} isn't covered yet. We'll keep trying until {date}. You can stop it now.", { name, title, date })),
-    stillShort: (title: string, beans: number, date: string) => t('Still short for {title}: {n} Beans by {date} or it ends.', { title, n: n2(beans), date }),
-    coveredPayer: (unit: StandingPeriodUnit, title: string, beans: number) => (unit === 'month'
-        ? t("{title} is covered again. This month's {n} Beans are held.", { title, n: n2(beans) })
-        : t("{title} is covered again. This week's {n} Beans are held.", { title, n: n2(beans) })),
-    coveredPayee: (unit: StandingPeriodUnit, title: string, beans: number) => (unit === 'month'
-        ? t("{title} is covered again. This month's {n} Beans are held for you.", { title, n: n2(beans) })
-        : t("{title} is covered again. This week's {n} Beans are held for you.", { title, n: n2(beans) })),
-    endedShortPayer: (unit: StandingPeriodUnit, title: string, name: string) => (unit === 'month'
-        ? t("{title} ended: the Beans for this month couldn't be held. Nothing more will be taken. Talk to {name} about it.", { title, name })
-        : t("{title} ended: the Beans for this week couldn't be held. Nothing more will be taken. Talk to {name} about it.", { title, name })),
-    endedShortPayee: (unit: StandingPeriodUnit, name: string, title: string, date: string) => (unit === 'month'
-        ? t("{name}'s {title} ended: this month's Beans couldn't be held. Nothing is owed through the app for the days since {date}.", { name, title, date })
-        : t("{name}'s {title} ended: this week's Beans couldn't be held. Nothing is owed through the app for the days since {date}.", { name, title, date })),
-
-    // §1.2–§1.4 and §5 What happened, as a notice
+    // What happened, as a notice (a push and a bell row; amendment §2)
     noticeTitle: () => t('🔁 Standing deal'),
-    paid: (unit: StandingPeriodUnit, title: string, n: number, net: number) => (unit === 'month'
-        ? t('{title}: month {n} is paid. {net} Beans came to you.', { title, n, net: n2(net) })
-        : t('{title}: week {n} is paid. {net} Beans came to you.', { title, n, net: n2(net) })),
-    stoppedBy: (unit: StandingPeriodUnit, name: string, title: string) => (unit === 'month'
-        ? t('{name} stopped the standing deal for {title}. The month under way is still paid; nothing more will be held.', { name, title })
-        : t('{name} stopped the standing deal for {title}. The week under way is still paid; nothing more will be held.', { name, title })),
-    heldBackBy: (unit: StandingPeriodUnit, name: string, title: string) => (unit === 'month'
-        ? t("{name} held back this month's Beans for {title}. The schedule is paused until it is settled.", { name, title })
-        : t("{name} held back this week's Beans for {title}. The schedule is paused until it is settled.", { name, title })),
+    shortAheadNotice: (title: string, beans: number, name: string, date: string, short: number) =>
+        t("{title}: {n} Beans go to {name} on {date} and you're {short} short. Earn or receive Beans by then, or stop the standing deal.", { title, n: n2(beans), name, date, short: n2(short) }),
+    duePayer: (unit: StandingPeriodUnit, title: string, beans: number, name: string, until: string) => (unit === 'month'
+        ? t("{title}: this month's {n} Beans couldn't be paid to {name} today. Earn or receive Beans by {date}, or it ends. {name} has been told.", { title, n: n2(beans), name, date: until })
+        : t("{title}: this week's {n} Beans couldn't be paid to {name} today. Earn or receive Beans by {date}, or it ends. {name} has been told.", { title, n: n2(beans), name, date: until })),
+    duePayee: (unit: StandingPeriodUnit, name: string, beans: number, title: string, until: string) => (unit === 'month'
+        ? t("{name}'s {n} Beans for this month of {title} couldn't be paid today. We'll keep trying until {date}. You can stop it now.", { name, n: n2(beans), title, date: until })
+        : t("{name}'s {n} Beans for this week of {title} couldn't be paid today. We'll keep trying until {date}. You can stop it now.", { name, n: n2(beans), title, date: until })),
+    halfwayPayer: (title: string, beans: number, days: number, until: string) =>
+        tn(days, '{title}: {beans} Beans {n} day overdue. Earn or receive Beans by {date}, or it ends.', '{title}: {beans} Beans {n} days overdue. Earn or receive Beans by {date}, or it ends.', { title, beans: n2(beans), date: until }),
+    halfwayPayee: (name: string, beans: number, title: string, days: number, until: string) =>
+        tn(days, "{name}'s {beans} Beans for {title} are {n} day overdue. We keep trying until {date}; you can stop it now.", "{name}'s {beans} Beans for {title} are {n} days overdue. We keep trying until {date}; you can stop it now.", { name, beans: n2(beans), title, date: until }),
+    dayBeforePayer: (title: string, beans: number, name: string, until: string) =>
+        t('{title} ends on {date} unless {n} Beans reach {name} by then.', { title, n: n2(beans), name, date: until }),
+    dayBeforePayee: (unit: StandingPeriodUnit, name: string, title: string, beans: number, until: string) => (unit === 'month'
+        ? t("{name}'s {title} ends on {date} unless this month's {n} Beans arrive by then.", { name, title, n: n2(beans), date: until })
+        : t("{name}'s {title} ends on {date} unless this week's {n} Beans arrive by then.", { name, title, n: n2(beans), date: until })),
+    coveredPayer: (unit: StandingPeriodUnit, title: string, beans: number, name: string) => (unit === 'month'
+        ? t("{title}: this month's {n} Beans have gone to {name}.", { title, n: n2(beans), name })
+        : t("{title}: this week's {n} Beans have gone to {name}.", { title, n: n2(beans), name })),
+    coveredPayee: (unit: StandingPeriodUnit, name: string, beans: number, title: string) => (unit === 'month'
+        ? t("{name}'s {n} Beans for this month of {title} came in.", { name, n: n2(beans), title })
+        : t("{name}'s {n} Beans for this week of {title} came in.", { name, n: n2(beans), title })),
+    endedShortPayer: (unit: StandingPeriodUnit, title: string, name: string) => (unit === 'month'
+        ? t("{title} ended: this month's Beans couldn't be paid. Nothing more will be taken. Talk to {name} about it.", { title, name })
+        : t("{title} ended: this week's Beans couldn't be paid. Nothing more will be taken. Talk to {name} about it.", { title, name })),
+    endedShortPayee: (unit: StandingPeriodUnit, name: string, title: string, date: string) => (unit === 'month'
+        ? t("{name}'s {title} ended: this month's Beans couldn't be paid. Nothing is owed through the app for the days since {date}.", { name, title, date })
+        : t("{name}'s {title} ended: this week's Beans couldn't be paid. Nothing is owed through the app for the days since {date}.", { name, title, date })),
+    stoppedInGraceByPayer: (unit: StandingPeriodUnit, name: string, title: string, beans: number, date: string) => (unit === 'month'
+        ? t("{name} stopped {title}. This month's {n} Beans weren't paid; nothing is owed through the app for the days since {date}.", { name, title, n: n2(beans), date })
+        : t("{name} stopped {title}. This week's {n} Beans weren't paid; nothing is owed through the app for the days since {date}.", { name, title, n: n2(beans), date })),
+    stoppedInGraceByPayee: (unit: StandingPeriodUnit, name: string, title: string, beans: number) => (unit === 'month'
+        ? t("{name} stopped {title}. This month's {n} Beans aren't taken; nothing is owed through the app. Talk to {name} about it.", { name, title, n: n2(beans) })
+        : t("{name} stopped {title}. This week's {n} Beans aren't taken; nothing is owed through the app. Talk to {name} about it.", { name, title, n: n2(beans) })),
+    paidIn: (unit: StandingPeriodUnit, beans: number, title: string, name: string, n: number) => (unit === 'month'
+        ? t('{beans} Beans for {title} came in from {name} · month {n}', { beans: n2(beans), title, name, n })
+        : t('{beans} Beans for {title} came in from {name} · week {n}', { beans: n2(beans), title, name, n })),
+    stoppedBy: (unit: StandingPeriodUnit, name: string, title: string, date: string) => (unit === 'month'
+        ? t('{name} stopped the standing deal for {title}. This month is paid; it ends on {date} and nothing more is paid.', { name, title, date })
+        : t('{name} stopped the standing deal for {title}. This week is paid; it ends on {date} and nothing more is paid.', { name, title, date })),
     lastPeriod: (unit: StandingPeriodUnit, title: string, date: string) => (unit === 'month'
-        ? t('{title}: the last month of this standing deal is under way. It ends on {date}.', { title, date })
-        : t('{title}: the last week of this standing deal is under way. It ends on {date}.', { title, date })),
-    ended: (title: string) => t('The standing deal for {title} has ended. Nothing more will be held.', { title }),
-    nodeHeld: (title: string, name: string) => t("This community's server was away, so {title} wasn't settled on time. Check with {name} and release this period's Beans, then it carries on.", { title, name }),
-    nodeHeldEnded: (title: string) => t("This community's server was away for too long, so the standing deal for {title} has ended. Nothing more will be held.", { title }),
-    listingHidden: (title: string) => t("{title} is hidden while a moderator looks at it, so this period's Beans wait for one of you to release or cancel them. Nothing more will be held.", { title }),
-    cantRun: (title: string) => t("The standing deal for {title} can't carry on, so it has ended. Nothing more will be held.", { title }),
-    cantRunHeld: (title: string) => t("The standing deal for {title} can't carry on. This period's Beans wait for one of you to release or cancel them; nothing more will be held.", { title }),
+        ? t('{title}: the last month of this standing deal is paid. It ends on {date}.', { title, date })
+        : t('{title}: the last week of this standing deal is paid. It ends on {date}.', { title, date })),
+    ended: (title: string) => t('The standing deal for {title} has ended. Nothing more will be paid.', { title }),
+    serverAway: (title: string) => t("This community's server was away for longer than a whole period, so the standing deal for {title} has ended and nothing was paid for it. Talk to each other, and take it up again if you both want to.", { title }),
+    cantRun: (title: string) => t("The standing deal for {title} can't carry on, so it has ended. Nothing more will be paid.", { title }),
+
+    // The record in the deal's chat: one SYSTEM line both sides read, so said of both by name (amendment §2)
+    chatDue: (unit: StandingPeriodUnit, payer: string, beans: number, title: string, until: string) => (unit === 'month'
+        ? t("{name}'s {n} Beans for this month of {title} couldn't be paid when due. We keep trying until {date}, then it ends.", { name: payer, n: n2(beans), title, date: until })
+        : t("{name}'s {n} Beans for this week of {title} couldn't be paid when due. We keep trying until {date}, then it ends.", { name: payer, n: n2(beans), title, date: until })),
+    chatCovered: (unit: StandingPeriodUnit, payer: string, beans: number, title: string, payee: string) => (unit === 'month'
+        ? t("{name}'s {n} Beans for this month of {title} have gone to {payee}.", { name: payer, n: n2(beans), title, payee })
+        : t("{name}'s {n} Beans for this week of {title} have gone to {payee}.", { name: payer, n: n2(beans), title, payee })),
+    chatEndedShort: (unit: StandingPeriodUnit, title: string, date: string) => (unit === 'month'
+        ? t("{title} ended: this month's Beans couldn't be paid. Nothing is owed through the app for the days since {date}.", { title, date })
+        : t("{title} ended: this week's Beans couldn't be paid. Nothing is owed through the app for the days since {date}.", { title, date })),
+    /** Either side's Stop in the grace, as the record says it: the payee is told the same words when the payer stops. */
+    chatStoppedInGrace: (unit: StandingPeriodUnit, name: string, title: string, beans: number, date: string): string =>
+        standingLines.stoppedInGraceByPayer(unit, name, title, beans, date),
 };
 
 // ── Taking it up, signed (§2.2, §6; slice S2: both apps) ──────────────────────────────────────────────────────────────
@@ -443,7 +470,7 @@ export function standingStartAt(now: number, daysAhead: number): number {
     return now + d * 86_400_000;
 }
 
-/** Every line of the take-up screen (§2.2), one set for both apps. `day` writes a date as the app does ("9 Nov"). */
+/** Every line of the take-up screen (design §3), one set for both apps. `day` writes a date as the app does ("9 Nov"). */
 export function standingTakeUpLines(
     input: { unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; startsAt: number; periods: number },
     day: (iso: string) => string,
@@ -460,8 +487,8 @@ export function standingTakeUpLines(
         startToday: standingLines.startToday(),
         startOn: standingLines.startOn(day(from)),
         startAhead: standingLines.startAhead(),
-        heldNow: standingLines.heldNow(unit, beans, day(from), day(periodEnd(from, unit, 1))),
-        howItRuns: standingLines.howItRuns(unit, beans, input.payeeName),
+        paidNow: standingLines.paidNow(unit, beans, input.payeeName, day(from), day(periodEnd(from, unit, 1))),
+        howItRuns: standingLines.howItRuns(unit),
         shortAhead: standingLines.shortAhead(unit),
         agree: standingLines.agree(beans),
         fewer: t('One fewer'),
@@ -474,12 +501,15 @@ export function standingTakeUpLines(
 /** A deal row as the standing panel reads it: the node's transactions read (@beanpool/engine escrow.ts standingFields). */
 export interface StandingDealRow {
     id?: string;
+    postId?: string;
     postTitle?: string | null;
     status: string;
     buyerPublicKey: string;
     buyerCallsign?: string | null;
     sellerPublicKey: string;
     sellerCallsign?: string | null;
+    createdAt?: string | null;
+    completedAt?: string | null;
     standingId?: string | null;
     periodNo?: number | null;
     standingPhase?: StandingPhase | null;
@@ -492,6 +522,20 @@ export interface StandingDealRow {
     standingStopped?: boolean;
 }
 
+/**
+ * The current row of a standing deal that is short, read for its unpaid period: which period is due (the one after the
+ * last paid, the row's own), since when (its start, or the node's short_since), and when its grace ends. Null for any row
+ * that is not the current row of a short standing deal.
+ */
+function shortPeriodOf(tx: StandingDealRow): { n: number; dueAt: string; graceEndsAt: string } | null {
+    const unit = tx.standingUnit;
+    if (!tx.standingId || tx.standingPhase !== 'short' || (unit !== 'week' && unit !== 'month') || !tx.standingStartsAt) return null;
+    if (!Number.isFinite(Date.parse(tx.standingStartsAt))) return null;
+    const n = Math.max(1, (Number(tx.periodNo) || 0) + 1);
+    const dueAt = tx.standingShortSince && Number.isFinite(Date.parse(tx.standingShortSince)) ? tx.standingShortSince : periodStart(tx.standingStartsAt, unit, n);
+    return { n, dueAt, graceEndsAt: standingGraceEndsAt(tx.standingStartsAt, unit, n) };
+}
+
 /** What a listing's page (and a Your deals card) shows of one standing deal still running, for one of its sides. */
 export interface StandingPanel {
     role: 'payer' | 'payee';
@@ -501,76 +545,131 @@ export interface StandingPanel {
     title: string;
     /** Where it is, for this side. */
     status: string;
-    /** The next period isn't covered: shown as a warning (the payer's short-funds banner, with the week's end). */
+    /** The payer's step: the period now due isn't paid (shown as a warning, with the day the grace ends). */
     warning: boolean;
-    /** The period under way is its last (stopped, or the count reached): when it ends. Null otherwise. */
+    /** The last period is paid (stopped, or the count reached): when it ends. Null otherwise. */
     lastLine: string | null;
-    /** "Month 3 of 6", or null until stopped. */
+    /** "Month 3 of 6", or null for one that runs until stopped. */
     periodOf: string | null;
-    /** Hold back: the payer, while this period runs by itself. */
-    holdBack: boolean;
-    /** Stop: either side, until one of them has. */
+    /** Stop: either side, until one of them has; in the grace it ends at once ("Stop now"). */
     stop: boolean;
-    holdBackLabel: string;
     stopLabel: string;
-    /** When the week of grace ends, for a short one (ISO), else null. */
+    /** When the grace ends, for a short one (ISO), else null. */
     graceEndsAt: string | null;
 }
 
 /**
  * The standing panel for `actingAs` (the member, or the enterprise they keep), or null for a row that is no standing deal
- * still running, or for a stranger to it. `day` writes a date as the app does. The one rule for both apps (§2.2): a healthy
- * standing deal says when its Beans go; short warns with the day the week of grace ends; held back says the schedule waits.
+ * still running, or for a stranger to it. `day` writes a date as the app does. The one rule for both apps (design §3): paid
+ * says when this period went and when the next goes; short warns the payer with the day the grace ends and tells the
+ * payee it isn't paid yet; stopped says when it stops.
  */
 export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: string) => string, now: number = Date.now()): StandingPanel | null {
     const phase = tx.standingPhase;
     const unit = tx.standingUnit;
-    if (!tx.standingId || !phase || phase === 'ended' || (unit !== 'week' && unit !== 'month')) return null;
+    if (!tx.standingId || (phase !== 'paid' && phase !== 'short') || (unit !== 'week' && unit !== 'month')) return null;
     const payer = tx.buyerPublicKey === actingAs;
     if (!payer && tx.sellerPublicKey !== actingAs) return null;
     const beans = Number(tx.standingBeans ?? 0);
     const payeeName = tx.sellerCallsign || t('A member');
     const payerName = tx.buyerCallsign || t('A member');
-    const due = tx.standingNextDueAt || new Date(now).toISOString();
-    const shortFrom = tx.standingShortSince ? Date.parse(tx.standingShortSince) : NaN;
-    const graceEndsAt = phase === 'short'
-        ? new Date((Number.isFinite(shortFrom) ? shortFrom : Date.parse(due)) + STANDING_GRACE_MS).toISOString()
-        : null;
-    let status: string;
-    if (phase === 'held') status = payer ? standingLines.heldGoesTo(unit, beans, payeeName, day(due)) : standingLines.payeePanel(unit, payerName, beans, day(due));
-    else if (phase === 'short') status = payer ? standingLines.shortPayer(unit, beans, day(graceEndsAt!)) : standingLines.shortPayee(unit, day(graceEndsAt!));
-    else if (phase === 'held_back') status = standingLines.heldBack();
-    else status = t('Standing deal · runs by itself');
+    const next = tx.standingNextDueAt || new Date(now).toISOString();
+    const paidOn = tx.completedAt || tx.createdAt || tx.standingStartsAt || next;
+    const short = shortPeriodOf(tx);
     const n = Number(tx.periodNo) || 0;
     const max = tx.standingMaxPeriods ?? null;
-    const last = phase === 'held' && (!!tx.standingStopped || (max !== null && n >= max));
+    const last = phase === 'paid' && (!!tx.standingStopped || (max !== null && n >= max));
+    let status: string;
+    if (short) status = payer ? standingLines.shortPayer(unit, beans, day(short.graceEndsAt)) : standingLines.shortPayee(unit, day(short.graceEndsAt));
+    else if (last) status = standingLines.stopsOn(unit, day(next));
+    else status = payer ? standingLines.paidPayer(unit, beans, payeeName, day(paidOn), day(next)) : standingLines.paidPayee(unit, payerName, beans, day(paidOn), day(next));
     return {
         role: payer ? 'payer' : 'payee',
         phase,
         unit,
-        title: standingLines.since(unit, day(tx.standingStartsAt || due), beans),
+        title: standingLines.since(unit, day(tx.standingStartsAt || paidOn), beans),
         status,
-        warning: phase === 'short',
-        lastLine: last ? standingLines.lastPeriod(unit, tx.postTitle || '', day(due)) : null,
+        warning: payer && phase === 'short',
+        lastLine: last && !tx.standingStopped ? standingLines.lastPeriod(unit, tx.postTitle || '', day(next)) : null,
         periodOf: max !== null && n > 0 ? standingLines.periodOf(unit, Math.min(n, max), max) : null,
-        holdBack: payer && tx.status === 'pending' && phase === 'held',
         stop: !tx.standingStopped,
-        holdBackLabel: standingLines.holdBack(unit),
-        stopLabel: !payer && phase === 'short' ? standingLines.stopNow() : standingLines.stop(),
-        graceEndsAt,
+        stopLabel: phase === 'short' ? standingLines.stopNow() : standingLines.stop(),
+        graceEndsAt: short?.graceEndsAt ?? null,
     };
 }
 
 /**
- * The Stop confirm's words (§1.3), both apps. Held (or held back), the period under way is still paid; short, or between its
- * periods (due), nothing is held and the node ends it at once (stopStandingDeal), as the payee's "Stop now" says.
+ * The Stop confirm's words, both apps (design §3, amendment §1), for the side that taps it. Paid: it stops after the period
+ * already paid, which the payee keeps. Short (in the grace): it ends at once, nothing is paid for the unpaid period, and
+ * nothing is owed through the app for the days since it was due. `otherName` is the other side's name; `day` writes a date.
  */
-export function standingStopConfirm(unit: StandingPeriodUnit, phase?: StandingPhase | null) {
-    const now = phase === 'short' || phase === 'due';
+export function standingStopConfirm(tx: StandingDealRow, actingAs: string, day: (iso: string) => string) {
+    const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
+    const payer = tx.buyerPublicKey === actingAs;
+    const beans = Number(tx.standingBeans ?? 0);
+    const short = shortPeriodOf(tx);
+    const next = tx.standingNextDueAt || new Date().toISOString();
     return {
-        title: now ? standingLines.stopNowConfirm() : standingLines.stopConfirm(unit),
-        body: now ? standingLines.stopNowConfirmBody() : standingLines.stopConfirmBody(unit),
+        title: short ? standingLines.stopNowConfirm() : standingLines.stopConfirm(unit),
+        body: short
+            ? (payer ? standingLines.stopNowConfirmPayer(unit, beans, tx.sellerCallsign || t('A member'), day(short.dueAt)) : standingLines.stopNowConfirmPayee(unit, beans, day(short.dueAt)))
+            : (payer ? standingLines.stopConfirmPayer(unit, tx.sellerCallsign || t('A member')) : standingLines.stopConfirmPayee(day(next))),
         yes: t('Stop it'),
         no: t('Keep it'),
     };
+}
+
+/** One live "Needs you" line for a short standing deal (amendment §2): the payer's step (amber, counted) or the payee's (calm). */
+export interface StandingNeedsLine {
+    role: 'payer' | 'payee';
+    /** "Vehicle Storage: 50 Beans 3 days overdue · until 24 Dec" */
+    label: string;
+    /** The payer's: it is their step, so it is amber and counts. The payee's is listed, not counted. */
+    accent: boolean;
+    standingId: string;
+    txId: string | null;
+    postId: string | null;
+}
+
+/**
+ * The live "Needs you" line of one short standing deal for `me`, written fresh from the row on every draw, so "3 days
+ * overdue" becomes "4 days overdue" with the clock and no row is ever kept (amendment §2). Whole days since the period was
+ * due; under a day, "due today". Null for any row that is not the current row of a short standing deal `me` is a side of.
+ * The payee's line never carries the payer's balance or shortfall.
+ */
+export function standingNeedsLine(tx: StandingDealRow, me: string, now: number, day: (iso: string) => string): StandingNeedsLine | null {
+    const short = shortPeriodOf(tx);
+    if (!short || !me) return null;
+    const payer = tx.buyerPublicKey === me;
+    if (!payer && tx.sellerPublicKey !== me) return null;
+    const title = tx.postTitle || t('A standing deal');
+    const beans = n2(Number(tx.standingBeans ?? 0));
+    const until = day(short.graceEndsAt);
+    const days = Math.max(0, Math.floor((now - Date.parse(short.dueAt)) / 86_400_000));
+    let label: string;
+    if (payer) {
+        label = days < 1
+            ? t('{title}: {beans} Beans due today · until {date}', { title, beans, date: until })
+            : tn(days, '{title}: {beans} Beans {n} day overdue · until {date}', '{title}: {beans} Beans {n} days overdue · until {date}', { title, beans, date: until });
+    } else {
+        const name = tx.buyerCallsign || t('A member');
+        label = days < 1
+            ? t("{name}'s {beans} Beans for {title}: due today · we try until {date} · you can stop it now", { name, beans, title, date: until })
+            : tn(days, "{name}'s {beans} Beans for {title}: {n} day overdue · we try until {date} · you can stop it now",
+                "{name}'s {beans} Beans for {title}: {n} days overdue · we try until {date} · you can stop it now", { name, beans, title, date: until });
+    }
+    return { role: payer ? 'payer' : 'payee', label, accent: payer, standingId: tx.standingId!, txId: tx.id ?? null, postId: tx.postId ?? null };
+}
+
+/** The live lines for every short standing deal among `txs` that `me` is a side of: one per standing deal, oldest due first. */
+export function standingNeedsLines(txs: readonly StandingDealRow[], me: string, now: number, day: (iso: string) => string): StandingNeedsLine[] {
+    const seen = new Set<string>();
+    const out: Array<StandingNeedsLine & { due: number }> = [];
+    for (const tx of txs) {
+        const line = standingNeedsLine(tx, me, now, day);
+        if (!line || seen.has(line.standingId)) continue;
+        seen.add(line.standingId);
+        out.push({ ...line, due: Date.parse(shortPeriodOf(tx)!.dueAt) });
+    }
+    return out.sort((a, b) => a.due - b.due).map(({ due: _due, ...line }) => line);
 }

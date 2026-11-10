@@ -19,7 +19,9 @@ export enum SystemMessageType {
     COMMONS_GRANT = 'COMMONS_GRANT',
     VOUCH_GRANTED = 'VOUCH_GRANTED',
     VOUCH_REVOKED = 'VOUCH_REVOKED',
-    ESCROW_DISPUTE_RESOLVED = 'ESCROW_DISPUTE_RESOLVED'
+    ESCROW_DISPUTE_RESOLVED = 'ESCROW_DISPUTE_RESOLVED',
+    /** A standing deal's record in its chat (apps/server engine/standing-deals.ts): the node's own words, in `text`. */
+    STANDING_DEAL = 'STANDING_DEAL'
 }
 
 export type SystemMessageTypeVal = SystemMessageType | string;
@@ -40,6 +42,8 @@ export interface TypedMessagePayload {
     resolvedByName?: string;
     reason?: string;
     transactionId?: string;
+    /** A standing deal's record line (STANDING_DEAL): what it says, as the node wrote it. */
+    text?: string;
 }
 
 export interface Message {

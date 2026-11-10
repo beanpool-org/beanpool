@@ -1,8 +1,9 @@
 /**
- * Standing deals S2 on the web (DESIGN-standing-deals-fable §2.2, §3; with the phone's utils/__tests__/standing-deal-render
- * .test.ts): the take-up screen (how long, when it starts, what is held now, the choice Agree hands on), the panel for each
- * phase and each side (held, short with the end of its week, held back), Stop asked first, Hold back the payer's only, the
- * Your deals card (🔁 STANDING and the panel's line, a short one still open), and the 320 px / 130 % / dark classes.
+ * Standing deals on the web, paid at the start of each period (DESIGN-standing-deals-upfront-fable §3 and its amendment §1;
+ * with the phone's utils/__tests__/standing-deal-render.test.ts): the take-up screen (how long, when it starts, what is paid
+ * now, the choice Agree hands on), the panel for each phase and each side (paid, short with the day its grace ends, stopped),
+ * Stop asked first in each side's words, no Hold back, the Your deals card (🔁 STANDING and the panel's line, a short one
+ * still open), and the 320 px / 130 % / dark classes. U2 redraws these surfaces; this pins what core says through them.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -16,21 +17,21 @@ const PAYER = 'a'.repeat(64);
 const PAYEE = 'b'.repeat(64);
 const NOW = Date.parse('2026-11-09T08:00:00.000Z');
 
-describe('Take this up? (§2.2)', () => {
+describe('Take this up? (design §3)', () => {
     const show = (onAgree = vi.fn()) => {
         render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} />);
         return onAgree;
     };
-    it('says what is held now, for which month, and how it runs; Agree hands on until-stopped from today', () => {
+    it('says what is paid now, for which month, and how it runs; Agree hands on until-stopped from today', () => {
         const onAgree = show();
         const box = screen.getByTestId('standing-take-up');
         expect(within(box).getByText('Take this up?')).toBeTruthy();
         expect(within(box).getByText('Vehicle Storage · 50 Beans a month · from Rob')).toBeTruthy();
-        expect(screen.getByTestId('standing-held-now').textContent).toBe('50 Beans are held now for the first month (9 Nov – 9 Dec).');
-        expect(within(box).getByText(/At the end of each month they go to Rob/)).toBeTruthy();
+        expect(screen.getByTestId('standing-held-now').textContent).toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
+        expect(within(box).getByText('You can stop it any time. A month already paid stays paid.')).toBeTruthy();
         fireEvent.click(screen.getByTestId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: null, startsAt: NOW });
-        expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and hold 50 Beans');
+        expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and pay 50 Beans');
     });
     it('for a count of months, one more each tap; a later start moves the dates', () => {
         const onAgree = show();
@@ -40,7 +41,7 @@ describe('Take this up? (§2.2)', () => {
         fireEvent.click(screen.getByLabelText('Up to 30 days ahead'));
         fireEvent.click(screen.getByRole('button', { name: 'A day later' }));
         expect(screen.getByTestId('standing-start-on').textContent).toBe('On 11 Nov');
-        expect(screen.getByTestId('standing-held-now').textContent).toBe('50 Beans are held now for the first month (11 Nov – 11 Dec).');
+        expect(screen.getByTestId('standing-held-now').textContent).toBe('50 Beans go to Rob now for the first month (11 Nov – 11 Dec), then 50 at the start of each month, until one of you stops it.');
         fireEvent.click(screen.getByTestId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: 7, startsAt: NOW + 2 * 86_400_000 });
     });
@@ -60,70 +61,69 @@ describe('Take this up? (§2.2)', () => {
     });
 });
 
+// Month 2 of a deal started 9 Oct, paid on 9 Nov; month 3 due 9 Dec. Every row of a standing deal is a finished deal.
 const row = (o: Partial<MarketplaceTransaction> = {}): MarketplaceTransaction => ({
     id: 'tx-3', postId: 'post-1', postTitle: 'Vehicle Storage', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    credits: 50, status: 'pending', createdAt: '2026-11-09T08:00:00.000Z',
-    standingId: 'sd-1', periodNo: 3, standingPhase: 'held', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    credits: 50, status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 });
-const SHORT = { status: 'completed' as const, standingPhase: 'short' as const, standingShortSince: '2026-12-09T08:00:00.000Z' };
+// Month 2 (9 Nov – 9 Dec, 30 days) unpaid: its grace is 15 days, to 24 Nov (the same day in every time zone at 08:00 UTC).
+const SHORT = { periodNo: 1, standingPhase: 'short' as const, standingShortSince: '2026-11-09T08:00:00.000Z', standingNextDueAt: '2026-11-09T09:00:00.000Z' };
 
 describe('the panel, each phase and each side', () => {
-    // [phase, side, the status line, Hold back shown, Stop's words, a warning]
-    const matrix: Array<[string, Partial<MarketplaceTransaction>, string, string, boolean, string, boolean]> = [
-        ['held', {}, PAYER, "This month's 50 Beans are held · they go to Rob 9 Dec", true, 'Stop…', false],
-        ['held', {}, PAYEE, "Marty's standing deal · 50 Beans a month · this month held for you · paid 9 Dec", false, 'Stop…', false],
-        ['short', SHORT, PAYER, "⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends", false, 'Stop…', true],
-        ['short', SHORT, PAYEE, "Next month isn't covered yet · we'll keep trying until 16 Dec", false, 'Stop now', true],
-        ['held back', { standingPhase: 'held_back' }, PAYER, 'Held back · the schedule is paused', false, 'Stop…', false],
-        ['held back', { standingPhase: 'held_back' }, PAYEE, 'Held back · the schedule is paused', false, 'Stop…', false],
+    // [phase, over, side, the status line, Stop's words, a warning]
+    const matrix: Array<[string, Partial<MarketplaceTransaction>, string, string, string, boolean]> = [
+        ['paid', {}, PAYER, "This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec", 'Stop…', false],
+        ['paid', {}, PAYEE, "Marty's standing deal · 50 Beans a month · paid for this month on 9 Nov · next on 9 Dec", 'Stop…', false],
+        ['short', SHORT, PAYER, "⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends", 'Stop now', true],
+        ['short', SHORT, PAYEE, "This month isn't paid yet · we'll keep trying until 24 Nov", 'Stop now', false],
     ];
-    for (const [phase, over, side, status, holdBack, stopWords, warning] of matrix) {
+    for (const [phase, over, side, status, stopWords, warning] of matrix) {
         it(`${phase}, ${side === PAYER ? 'payer' : 'payee'}`, () => {
-            render(<StandingPanel tx={row(over)} actingAs={side} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
+            render(<StandingPanel tx={row(over)} actingAs={side} busy={false} onStop={vi.fn()} />);
             const panel = screen.getByTestId('standing-panel-tx-3');
             expect(panel.getAttribute('data-role')).toBe(side === PAYER ? 'payer' : 'payee');
             expect(screen.getByTestId('standing-status').textContent).toBe(status);
-            expect(!!screen.queryByTestId('standing-hold-back')).toBe(holdBack);
+            expect(screen.queryByTestId('standing-hold-back')).toBeNull();
             expect(screen.getByTestId('standing-stop').textContent).toBe(stopWords);
             expect(screen.getByTestId('standing-status').getAttribute('role')).toBe(warning ? 'alert' : null);
             expect(within(panel).getByText('🔁 Standing deal since 9 Oct · 50 Beans a month')).toBeTruthy();
+            expect(within(panel).queryByRole('button', { name: /release|cancel|hold/i })).toBeNull();
         });
     }
-    it('Stop asks first, and stops only on yes; Hold back is the payer\'s tap', () => {
+    it('Stop asks first, in the payer\'s words, and stops only on yes', () => {
         const onStop = vi.fn();
-        const onHoldBack = vi.fn();
         const ask = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-        render(<StandingPanel tx={row()} actingAs={PAYER} busy={false} onStop={onStop} onHoldBack={onHoldBack} />);
+        render(<StandingPanel tx={row()} actingAs={PAYER} busy={false} onStop={onStop} />);
         fireEvent.click(screen.getByTestId('standing-stop'));
-        expect(ask.mock.calls[0][0]).toContain('Stop after this month?');
-        expect(ask.mock.calls[0][0]).toContain('The month under way is still paid.');
+        expect(ask.mock.calls[0][0]).toBe("Stop after this month?\n\nYou've paid for this month; Rob keeps it; nothing more is paid.");
         expect(onStop).not.toHaveBeenCalled();
         fireEvent.click(screen.getByTestId('standing-stop'));
         expect(onStop).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByTestId('standing-hold-back'));
-        expect(onHoldBack).toHaveBeenCalledTimes(1);
     });
-    // Round 2 of #3000 (non-blocking note): short, nothing is held and Stop ends it at once (the node's endStanding), as the
-    // payee's "Stop now" says; the question says so too, to either side.
-    it('short: the Stop question says it stops now, to the payer and to the payee', () => {
-        for (const side of [PAYER, PAYEE]) {
+    it('short: the Stop question says it ends now, in each side\'s words (amendment §1)', () => {
+        const words: Array<[string, string]> = [
+            [PAYER, "Stop it now?\n\nIt ends now. This month's 50 Beans aren't paid and won't be; nothing is owed through the app for the days since 9 Nov. Talk to Rob about it."],
+            [PAYEE, "Stop it now?\n\nIt ends now. This month's 50 Beans won't come; nothing is owed through the app for the days since 9 Nov."],
+        ];
+        for (const [side, question] of words) {
             const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
-            const { unmount } = render(<StandingPanel tx={row(SHORT)} actingAs={side} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
+            const { unmount } = render(<StandingPanel tx={row(SHORT)} actingAs={side} busy={false} onStop={vi.fn()} />);
             fireEvent.click(screen.getByTestId('standing-stop'));
-            expect(ask.mock.calls[0][0]).toBe('Stop it now?\n\nIt ends now. Nothing is held for it, and nothing more will be.');
+            expect(ask.mock.calls[0][0]).toBe(question);
             ask.mockRestore();
             unmount();
         }
     });
-    it('stopped: no Stop again, and the last month says when it ends', () => {
-        render(<StandingPanel tx={row({ standingStopped: true })} actingAs={PAYEE} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
+    it('stopped: no Stop again, and it says when it stops', () => {
+        render(<StandingPanel tx={row({ standingStopped: true })} actingAs={PAYEE} busy={false} onStop={vi.fn()} />);
         expect(screen.queryByTestId('standing-stop')).toBeNull();
-        expect(screen.getByText('Vehicle Storage: the last month of this standing deal is under way. It ends on 9 Dec.')).toBeTruthy();
+        expect(screen.getByTestId('standing-status').textContent).toBe('Stops on 9 Dec · this month is paid');
     });
     it('ended, or a one-off deal: no panel', () => {
-        const { container } = render(<StandingPanel tx={row({ standingPhase: 'ended' })} actingAs={PAYER} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} />);
+        const { container } = render(<StandingPanel tx={row({ standingPhase: 'ended' })} actingAs={PAYER} busy={false} onStop={vi.fn()} />);
         expect(container.innerHTML).toBe('');
     });
 });
@@ -132,17 +132,17 @@ describe('Your deals: one card per standing deal', () => {
     it('🔁 STANDING and the panel\'s line; a short one is in progress and still opens its listing', () => {
         const onNavigateToPost = vi.fn();
         render(<MyDealsModal visible identity={{ publicKey: PAYER }} onClose={vi.fn()} posts={[]} initialTab="pending"
-            transactions={[row({ id: 'tx-held' }), row({ id: 'tx-short', ...SHORT, standingId: 'sd-2' })]} onNavigateToPost={onNavigateToPost} />);
-        expect(screen.getByTestId('standing-chip-tx-held').textContent).toBe('🔁 STANDING');
-        expect(screen.getByTestId('deal-state-tx-held').textContent).toBe("This month's 50 Beans are held · they go to Rob 9 Dec");
-        expect(screen.getByTestId('deal-state-tx-short').textContent).toBe("⚠️ Next month isn't covered · 50 Beans needed by 16 Dec or this ends");
+            transactions={[row({ id: 'tx-paid' }), row({ id: 'tx-short', ...SHORT, standingId: 'sd-2' })]} onNavigateToPost={onNavigateToPost} />);
+        expect(screen.getByTestId('standing-chip-tx-paid').textContent).toBe('🔁 STANDING');
+        expect(screen.getByTestId('deal-state-tx-paid').textContent).toBe("This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec");
+        expect(screen.getByTestId('deal-state-tx-short').textContent).toBe("⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends");
         expect(screen.getByTestId('deal-state-tx-short').getAttribute('role')).toBe('alert');
         fireEvent.click(screen.getByTestId('deal-card-tx-short'));
         expect(onNavigateToPost).toHaveBeenCalledWith('post-1', 'tx-short');
     });
-    // Round 2 of #3000 (non-blocking note): a short deal's row is the period last settled; its card is the standing deal,
-    // still running, so it never says "completed", and offers no review.
-    it("a short one's card says 🔁 STANDING, never completed, and offers no review", () => {
+    // Every row of a standing deal is a finished deal; its card is the standing deal, still running, so it never says
+    // "completed", and offers no review.
+    it("a running one's card says 🔁 STANDING, never completed, and offers no review", () => {
         render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[]} initialTab="pending"
             transactions={[row({ id: 'tx-short', ...SHORT })]} onNavigateToPost={vi.fn()} />);
         const card = screen.getByTestId('deal-card-tx-short');
@@ -158,7 +158,7 @@ describe('at 320 px with the text at 130 %, in light and in dark', () => {
     it('every colour has its dark partner, the words wrap, and every target is 44 px', () => {
         render(<>
             <StandingTakeUp unit="week" beans={12.5} title="A very long listing title for a garden plot by the creek" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={vi.fn()} now={NOW} />
-            <StandingPanel tx={row(SHORT)} actingAs={PAYER} busy={false} onStop={vi.fn()} onHoldBack={vi.fn()} onMessage={vi.fn()} messageLabel="Message Rob" />
+            <StandingPanel tx={row(SHORT)} actingAs={PAYER} busy={false} onStop={vi.fn()} onMessage={vi.fn()} messageLabel="Message Rob" />
         </>);
         const all = [screen.getByTestId('standing-take-up'), screen.getByTestId('standing-panel-tx-3')]
             .flatMap(root => [root, ...Array.from(root.querySelectorAll('*'))]);

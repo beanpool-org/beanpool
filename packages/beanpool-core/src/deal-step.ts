@@ -18,11 +18,10 @@ export type DealState =
     | 'done'
     | 'cancelled'
     | 'declined'
-    // A standing deal's current period (DESIGN-standing-deals-fable §1.2, §1.4): running by itself, short of the next
-    // period's Beans, or held back by the payer (or by the node, when it couldn't carry on).
+    // A standing deal's current row (DESIGN-standing-deals-upfront-fable §1, amendment §2): every period due paid, so it
+    // runs by itself; or short, the period now due unpaid while its grace runs.
     | 'standing'
-    | 'short'
-    | 'held-back';
+    | 'short';
 
 export interface DealStep {
     role: DealRole;
@@ -58,7 +57,7 @@ export interface DealRow {
      * a finished deal like any other, and carries none.
      */
     standingPhase?: StandingPhase | null;
-    /** Either side has tapped Stop: the period under way settles and nothing more is held. */
+    /** Either side has tapped Stop: the period already paid runs to its end and nothing more is paid. */
     standingStopped?: boolean;
 }
 
@@ -89,9 +88,9 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
     let state: DealState;
 
     if (isLiveStanding(tx)) {
-        // A standing deal running by itself badges nobody (decision 3: no monthly tap); short and held back are the
-        // payer's step (§2.2 Home "Needs you" only for those, payer).
-        state = tx.standingPhase === 'short' ? 'short' : tx.standingPhase === 'held_back' ? 'held-back' : 'standing';
+        // A standing deal running by itself badges nobody (no monthly tap); short is the payer's step (amendment §2: the
+        // payer's live row counts, the payee's is listed, not counted).
+        state = tx.standingPhase === 'short' ? 'short' : 'standing';
     } else if (tx.status === 'requested') {
         state = isAuthor ? 'to-answer' : 'asked';
     } else if (tx.status === 'pending') {
@@ -107,14 +106,13 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
         state = 'cancelled';
     }
 
-    const needsMe = isParty && (state === 'to-answer' || state === 'to-release'
-        || (isPayer && (state === 'short' || state === 'held-back')));
+    const needsMe = isParty && (state === 'to-answer' || state === 'to-release' || (isPayer && state === 'short'));
 
     let pressing = false;
     if (needsMe) {
         if (state === 'to-answer' || state === 'short') {
             pressing = true;
-        } else if (state === 'to-release' || state === 'held-back') {
+        } else if (state === 'to-release') {
             const createdMs = tx.createdAt ? Date.parse(tx.createdAt) : NaN;
             pressing = !Number.isNaN(createdMs) && (now - createdMs >= SEVEN_DAYS_MS);
         }
@@ -175,9 +173,7 @@ export function dealStateWords(step: DealStep, otherName: string | null, until?:
         case 'standing':
             return t('Standing deal · runs by itself');
         case 'short':
-            return step.role === 'payer' ? t("Waiting on you: the next period isn't covered") : t("The next period isn't covered yet");
-        case 'held-back':
-            return step.role === 'payer' ? t('Held back · waiting on you: release or cancel') : t('Held back · the schedule is paused');
+            return step.role === 'payer' ? t("Waiting on you: this period isn't paid yet") : t("This period isn't paid yet");
     }
 }
 
@@ -216,10 +212,11 @@ export interface DealMoves<T extends DealRow = DealRow> {
     answer: boolean;
     /** Withdraw a request: the one who asked (cancelPostRequest). */
     withdraw: boolean;
-    /** Stop a standing deal after the period under way: either side, or a keeper of either (POST /api/marketplace/standing/:id/stop). */
+    /**
+     * Stop a standing deal: either side, or a keeper of either, in every live phase (POST /api/marketplace/standing/:id/stop).
+     * Paid, it ends when the period already paid does; short, it ends at once.
+     */
     stop: boolean;
-    /** Hold back the period under way: the payer, while it runs by itself (POST /api/marketplace/standing/:id/hold-back). */
-    holdBack: boolean;
 }
 
 /**
@@ -237,22 +234,20 @@ export function dealMoves<T extends DealRow>(tx: T, me: string, keeperOf: readon
     const actingAs = dealSideOf(tx, me, keeperOf);
     if (!actingAs) return null;
     const step = dealStep(tx, actingAs, now);
-    const held = tx.status === 'pending';
+    // Nothing of a standing deal is ever held in trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable
+    // §1), so no row of one, current or older, has anything to release or cancel, whatever its status says.
+    const held = tx.status === 'pending' && !tx.standingId;
     const asKeeper = actingAs !== me;
-    const live = isLiveStanding(tx);
-    const payer = tx.buyerPublicKey === actingAs;
     return {
         tx,
         actingAs,
         asKeeper,
         step,
-        // A period running by itself is released by the node at its end; the payer settles it only once held back.
-        release: held && payer && (!live || tx.standingPhase === 'held_back'),
+        release: held && tx.buyerPublicKey === actingAs,
         cancelHold: held && !asKeeper,
         answer: step.state === 'to-answer',
         withdraw: step.state === 'asked' && !asKeeper,
-        stop: live && !tx.standingStopped,
-        holdBack: live && held && payer && tx.standingPhase === 'held',
+        stop: isLiveStanding(tx) && !tx.standingStopped,
     };
 }
 
@@ -272,7 +267,7 @@ export interface ListingDeals<T extends DealRow = DealRow> {
     requests: DealMoves<T>[];
     /**
      * Deals held in trust the member stands on: for its own people every deal on it (a recurring listing can have several).
-     * Not a standing deal's period while it runs by itself (that is `standing`); one held back is here.
+     * Never a standing deal's row: nothing of one is held (that is `standing`).
      */
     held: DealMoves<T>[];
     /** The member's own request, still waiting. */
@@ -323,9 +318,7 @@ export function listingDeals<T extends DealRow>(
     return {
         own,
         requests: own ? mine.filter(m => m.answer) : [],
-        // A standing period running by itself shows in `standing`, not as a deal to release; one held back is a plain held
-        // deal again (§1.2), so it shows here too.
-        held: mine.filter(m => m.tx.status === 'pending' && !(isLiveStanding(m.tx) && m.tx.standingPhase !== 'held_back')),
+        held: mine.filter(m => m.tx.status === 'pending' && !m.tx.standingId),
         asked: mine.find(m => m.withdraw) ?? null,
         lastDone: done[0] ?? null,
         standing: mine.filter(m => isLiveStanding(m.tx)),
@@ -383,8 +376,7 @@ export const listingDealLines = {
     /**
      * A deal a door named that is over (an alert for a request declined, a deal cancelled, released or settled): what
      * became of it, from its status, above the listing as it stands for the reader now. Null while it is open, and for the
-     * current period of a standing deal still running: a short one's row is the period last settled (`completed`), but the
-     * deal runs on (round 2 of #3000).
+     * current row of a standing deal still running: that row is the period last paid (`completed`), but the deal runs on.
      */
     finished: (row: string | Pick<DealRow, 'status' | 'standingId' | 'standingPhase'>): string | null => {
         if (typeof row !== 'string' && isLiveStanding(row)) return null;

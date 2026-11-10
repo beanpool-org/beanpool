@@ -169,7 +169,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server and its standby; the main server dies ──
         console.log('\n— 1. a main server, a standby that copies it, and the main server dies —');
-        const mainNode = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const mainNode = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(mainNode);
         const setup = await mainNode.send('setup-primary', { ownerSeedHex, benSeedHex, replicationToken, tunnelToken: TUNNEL_TOKEN });
         const mainPeerId = mainNode.ready.peerId;
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
 
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: mainNode.base, replicationToken, primaryPeerId: mainPeerId });
         const pulled = await standby.send('pull');
@@ -261,7 +261,7 @@ async function main(): Promise<void> {
         const exitCode = await standby.exited;
         standbyOutputs.push(standby.output());
         assert(exitCode === 0, 'the standby restarts itself');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         assert(standby.ready.role === 'primary' && standby.ready.peerId === mainPeerId,
             `it is the main server, with the SAME PeerId as the dead one (${standby.ready.peerId})`);
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
                 recipients: { owners: [{ pubkey: setup.anna, callsign: 'Anna' }] },
             });
             fs.writeFileSync(path.join(heldDir, `${String(Date.now()).padStart(13, '0')}-${core.readSealedHeader(other).envelopeId}.bpseal`), other, { mode: 0o600 });
-            const probe = await spawnNode(SCRIPT, dirs.probe, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            const probe = await spawnNode(SCRIPT, dirs.probe, { NODE_ROLE: 'backup' });
             nodes.push(probe);
             const refused = await post(probe.base, '/api/local/admin/takeover/phone/start', { serverUrl: probe.base }, await probe.send('owner-session'));
             assert(refused.status === 409 && refused.body.wrongCommunity === true, `no session: the keys are another community's (${refused.status} ${refused.body.error})`);
@@ -373,7 +373,7 @@ async function main(): Promise<void> {
             });
             const oldId = core.readSealedHeader(oldEnvelope).envelopeId;
             fs.writeFileSync(path.join(dirs.probeOld, 'held-takeover-envelopes', `${String(Date.now() + 2_000_000).padStart(13, '0')}-${oldId}.bpseal`), oldEnvelope, { mode: 0o600 });
-            let old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            let old = await spawnNode(SCRIPT, dirs.probeOld, { NODE_ROLE: 'backup' });
             nodes.push(old);
             const oldOwner: Record<string, string> = await old.send('owner-session'); // step 7c, as above
             const oStart = await post(old.base, '/api/local/admin/takeover/phone/start', { serverUrl: old.base }, oldOwner);
@@ -390,7 +390,7 @@ async function main(): Promise<void> {
             await old.exited;
             const NO_KEY_LINE = "No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
             assert(old.output().includes(`[Takeover] ${NO_KEY_LINE}`), 'the take-over logs the missing-key line');
-            old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            old = await spawnNode(SCRIPT, dirs.probeOld, { NODE_ROLE: 'backup' });
             nodes.push(old);
             assert(old.ready.role === 'primary' && old.ready.peerId === mainPeerId, 'it is the main server, with the community\'s PeerId');
             assert(/1 of them were locked with another recovery-seal key and cannot be opened here/.test(old.output()), 'its boot names the copy it cannot open');
@@ -404,7 +404,7 @@ async function main(): Promise<void> {
         const dl = await fetch(standby.base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await standby.send('owner-session')) }, body: '{}' });
         const backupBytes = new Uint8Array(await dl.arrayBuffer());
         assert(dl.ok && core.readSealedHeader(backupBytes).kind === 'backup', `a sealed backup from the promoted server (${dl.status}, ${backupBytes.length} bytes)`);
-        let fresh = await spawnNode(SCRIPT, dirs.fresh, { ADMIN_PASSWORD: PW_FRESH, NODE_ROLE: 'primary' });
+        let fresh = await spawnNode(SCRIPT, dirs.fresh, { NODE_ROLE: 'primary' });
         nodes.push(fresh);
         assert(fresh.ready.peerId !== mainPeerId, 'a fresh server, with its own PeerId');
         // Step 7c: the operator restores with the fresh server's password and a code (2FA on), not the password alone.
@@ -434,7 +434,7 @@ async function main(): Promise<void> {
         assert(wrongToken.status === 401, 'another token does not');
         assert(!fs.readdirSync(dirs.fresh).some((n) => n.startsWith('uploaded-backup.pending-')), 'the kept file is gone');
         await fresh.exited;
-        fresh = await spawnNode(SCRIPT, dirs.fresh, { ADMIN_PASSWORD: PW_FRESH, NODE_ROLE: 'primary' });
+        fresh = await spawnNode(SCRIPT, dirs.fresh, { NODE_ROLE: 'primary' });
         nodes.push(fresh);
         const restoredState = await fresh.send('inspect', { ownerSeedHex });
         assert(fresh.ready.peerId === mainPeerId, `after its restart it is the community's server: the same PeerId (${fresh.ready.peerId})`);

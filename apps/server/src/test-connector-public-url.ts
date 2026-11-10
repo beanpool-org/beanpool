@@ -23,14 +23,12 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -63,7 +61,6 @@ async function main() {
 
     // State engine first: the connector-manager load path reaches the db, so the schema has to exist before
     // initConnectorManager runs.
-    initAdminPassword();
     await initTls();
     initStateEngine();
 

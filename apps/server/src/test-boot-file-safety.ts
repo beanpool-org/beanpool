@@ -50,8 +50,7 @@ async function bootChild(): Promise<void> {
     if (secure) secure(dir);
     const { ensureGenesis } = await import('./genesis.js');
     await ensureGenesis();
-    const { initAdminPassword, saveLocalConfig, getLocalConfig } = await import('./config/local-config.js');
-    initAdminPassword();
+    const { saveLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     // A setting saved, as an owner's first change does, so a new install has local-config.json and its copy.
     saveLocalConfig({ ...getLocalConfig(), contactPhone: 'saved at start' });
     const { initTls } = await import('./services/tls.js');
@@ -131,7 +130,7 @@ async function bakFailChild(): Promise<void> {
 function run(dir: string, args: string[], own = false): Promise<{ code: number | null; signal: NodeJS.Signals | null; out: string; result: any }> {
     return new Promise((resolve) => {
         const env: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', DISABLE_UPDATE_CHECK: 'true' };
-        for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD', 'CF_API_TOKEN', 'CF_ZONE_ID', 'LE_DOMAIN', 'DOMAIN']) delete env[k];
+        for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'CF_API_TOKEN', 'CF_ZONE_ID', 'LE_DOMAIN', 'DOMAIN']) delete env[k];
         const p = spawn(process.execPath, [...process.execArgv, SCRIPT, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: own });
         let out = '';
         p.stdout.on('data', (d) => { out += d; });

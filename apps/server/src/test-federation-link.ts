@@ -19,7 +19,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +28,6 @@ import { initStateEngine, createTreasury, seedGenesisMember } from './state-engi
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
@@ -171,7 +169,6 @@ async function main() {
     console.log('Running federation link enterprise tests (#143 step 3)...\n');
     // Written BEFORE any init, so the boot path sees it exactly as a real node would.
     writeConnectorsJson();
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);

@@ -54,14 +54,12 @@ const FILE_NAME = 'claim-code.txt';
 async function runChild(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     const { ensureGenesis } = await import('./genesis.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { initClaimCode, setClaimLogClockForTests } = await import('./claim-code.js');
     const { startHttpsServer } = await import('./https-server.js');
 
     await ensureGenesis();
-    initAdminPassword();
     await initTls();
     initStateEngine();
     initClaimCode();
@@ -413,7 +411,6 @@ async function main(): Promise<void> {
     const dirG = path.join(root, 'g');
     fs.mkdirSync(path.join(dirG, FILE_NAME, 'in-the-way'), { recursive: true });
     const pwG = 'Claim-Suite-Node-G-61!';
-    const g = await boot(dirG, { ...env, ADMIN_PASSWORD: pwG, BEANPOOL_SUITE_ENV_PASSWORD: '1' });
     const getG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(getG.status === 200 && getG.json.unclaimed === true && getG.json.codeId === null, `G1. the node serves, with no code (${JSON.stringify(getG.json)})`);
     assert(/No claim code this start/.test(g.output()), 'G2. the log says why');
@@ -522,7 +519,6 @@ async function main(): Promise<void> {
     console.log('\nI. The password\'s first invite, then the claim');
     const dirI = path.join(root, 'i');
     const pwI = 'Claim-Suite-Node-I-61!';
-    const envI = { ...env, ADMIN_PASSWORD: pwI, BEANPOOL_SUITE_ENV_PASSWORD: '1' };
     let iNode = await boot(dirI, envI);
     const infoI = await claimInfo(iNode);
     const codeI = readCode(dirI);

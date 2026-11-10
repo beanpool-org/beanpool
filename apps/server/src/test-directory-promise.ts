@@ -48,7 +48,6 @@ delete process.env.DIRECTORY_UNLISTED;
 delete process.env.NODE_PROFILE;
 for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_')) delete process.env[k];
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
-process.env.ADMIN_PASSWORD = 'PromiseAdmin123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -130,7 +129,7 @@ const day = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).t
 async function main() {
     console.log('The listing promise: made by owners, measured at every push, kept by a mirror only as it is...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, setNodeRole, updateNodeConfig } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -148,7 +147,6 @@ async function main() {
     const { ensureGenesis } = await import('./genesis.js');
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     // A community's genesis.json: what a backup is locked with, besides the recovery code (services/takeover-envelope.ts).
     await ensureGenesis();

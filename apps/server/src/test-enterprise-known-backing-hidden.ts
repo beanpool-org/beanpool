@@ -33,7 +33,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'KnownBacking123!';
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -43,7 +42,6 @@ import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -266,7 +264,6 @@ function asMainReleases(enterprise: string, keeper: Id, amount: number): Figures
 
 async function main(): Promise<void> {
     console.log('An enterprise\'s backing never names which keepers the admins confirmed\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

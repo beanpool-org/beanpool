@@ -38,8 +38,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
-process.env.ADMIN_PASSWORD = 'CoreSettingsLock123!';
-process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -68,7 +66,7 @@ async function main(): Promise<void> {
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { db } = await import('./db/db.js');
@@ -85,7 +83,6 @@ async function main(): Promise<void> {
     /** The switches as set (the profile's defaults and the overrides). */
     const np = () => getConfiguredSwitches();
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const BASE = `https://localhost:${await startHttpsServer(0)}`;

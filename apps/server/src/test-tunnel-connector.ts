@@ -71,7 +71,7 @@ if (!DATA) { console.error('Set BEANPOOL_DATA_DIR to a throwaway directory'); pr
 
 // Secrets the server's environment holds: none may reach the child.
 const SENTINELS: Record<string, string> = {
-    ADMIN_PASSWORD: 'SENTINEL-admin-pw-7c1f93',
+    
     CF_API_TOKEN: 'SENTINEL-cf-api-4d2a18',
     IMAGE_S3_SECRET_ACCESS_KEY: 'SENTINEL-s3-9e0b44',
     IMAGE_S3_ACCESS_KEY_ID: 'SENTINEL-s3-id-51c2',

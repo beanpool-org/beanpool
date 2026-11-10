@@ -38,7 +38,6 @@
  *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
  *      holds none, and the boot keeps it as a restored copy.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-lights-out.ts
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -56,7 +55,6 @@ for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'P
 const OWN = 'beans.example.org';
 process.env.BEANPOOL_ADDRESSES = OWN;
 const PASSWORD = 'Lights-Out-Suite-Pw-5521!';
-process.env.ADMIN_PASSWORD ??= PASSWORD;
 // The APK on the node (H3, services/apk-mirror.ts): the image's folder, empty until section 3 puts one there.
 const apkImageDir = `${dataDir}-image-apk`;
 process.env.APK_IMAGE_DIR = apkImageDir;
@@ -67,7 +65,7 @@ function check(name: string, ok: boolean, detail = '') {
     if (ok) { passed++; console.log(`  ✅ ${name}`); } else { failed++; console.log(`  ❌ ${name}${detail ? ` — ${detail}` : ''}`); }
 }
 
-const { initAdminPassword, getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
+const { getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { db } = await import('./db/db.js');
@@ -88,7 +86,6 @@ const { APK_SIGNING_CERT_SHA256 } = await import('./services/apk-release.js');
 const { wordsIn } = await import('./member-words.js');
 const { escapeHtml } = await import('./routes/community-card.js');
 
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 // The community's genesis and the node's key: the identity statement is signed with the key, and a backup is locked only

@@ -21,7 +21,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'InvitedByWhom123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -31,7 +30,6 @@ import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -97,7 +95,6 @@ function keySessionHeaders(pk: string, role: 'owner' | 'admin'): Record<string, 
 
 async function main(): Promise<void> {
     console.log('Who invited whom: every member inviter named, with the role word, and the member\'s own switch\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

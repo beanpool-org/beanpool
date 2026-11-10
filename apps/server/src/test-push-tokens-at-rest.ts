@@ -277,7 +277,7 @@ async function main(): Promise<void> {
     const held: { kill: () => Promise<void> }[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const gwen = member('Gwen');
     const [ann, bo, cy] = ['Ann', 'Bo', 'Cy'].map(member);
     const phone = { annPhone: newToken(), annTablet: newToken(), annOld: newToken(), bo: newToken(), boLeft: newToken(), cy: newToken(), gwen: newToken() };

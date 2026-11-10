@@ -46,14 +46,12 @@ const HOST = 'standby-claim.example';
 async function runChild(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     const { ensureGenesis } = await import('./genesis.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { initClaimCode } = await import('./claim-code.js');
     const { startHttpsServer } = await import('./https-server.js');
 
     await ensureGenesis();
-    initAdminPassword();
     await initTls();
     initStateEngine();
     initClaimCode();

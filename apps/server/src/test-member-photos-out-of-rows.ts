@@ -79,10 +79,8 @@ async function seedPhotos(a: { n: number; reader: string }): Promise<void> {
 /** The real server, on port 0, reporting its heap's peak (sampled every 5 ms) when asked on stdin. */
 async function serve(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);

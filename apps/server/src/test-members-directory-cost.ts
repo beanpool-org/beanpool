@@ -65,14 +65,12 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine, getMembers, listNodeRoles } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { withAreaDistances } = await import('./engine/member-area.js');
     const { isSelfAvatarUrl } = await import('@beanpool/core');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const { withAvatarKey } = await import('./avatar-test-url.js');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

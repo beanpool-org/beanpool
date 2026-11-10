@@ -19,14 +19,12 @@
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { addLogClient } from './logger.js';
 import { generateInvite } from './engine/invites.js';
@@ -84,7 +82,6 @@ const logText = () => logRows().map((r) => `${r.message ?? ''} ${r.metadata ?? '
 async function main() {
     console.log('--- TEST: re-key and invite codes stay out of the logs ---');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
 

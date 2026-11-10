@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server that never took over ──
         console.log('\n— 1. a main server that never took over: its sync reads say epoch 0 —');
-        const old = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const old = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(old);
         const setup = await old.send('setup-primary', { ownerSeedHex, replicationToken });
         const mainPeerId = old.ready.peerId;
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. the standby takes over: the same reads say epoch 1 —');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: old.base, replicationToken, primaryPeerId: mainPeerId });
         const pulled = await standby.send('pull');
@@ -167,7 +167,7 @@ async function main(): Promise<void> {
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status})`);
         assert((await standby.exited) === 0, 'the standby restarts itself');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         assert(standby.ready.role === 'primary' && standby.ready.peerId === mainPeerId, 'it is the main server, with the same PeerId');
 

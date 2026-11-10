@@ -38,11 +38,9 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'Lendable-Offers-Pw-5521!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
@@ -190,7 +188,6 @@ async function settle(): Promise<void> { await new Promise(r => setTimeout(r, 15
 
 async function main(): Promise<void> {
     console.log('Lendable Offers (S3)\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     ADMIN = ownerTokenHeaders('admin');

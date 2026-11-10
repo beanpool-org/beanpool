@@ -79,7 +79,6 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { withAreaDistances } = await import('./engine/member-area.js');
     const { grantNodeRole, revokeNodeRole, listNodeRoles } = await import('./engine/node-roles.js');
@@ -88,7 +87,6 @@ async function main() {
     const snapshot = await import('./members-snapshot.js');
     const { bumpMembersVersion } = await import('./engine/versions.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     PORT = await startHttpsServer(0);

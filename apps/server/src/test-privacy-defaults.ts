@@ -54,7 +54,6 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.NODE_PROFILE;
 const ADMIN_PW = 'PrivAdminPass123!';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -415,9 +414,8 @@ async function main() {
         // An admin is neither of its two people: the manager's data (/admin/data) lists it spoken for, and not by whom or
         // in which deal. An admin's look at a trade is the logged one (/admin/disputes, queue item 29, Marty 4 Oct).
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
         const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         resetAdminAuthTarpit();
         const twoFa = turnOn2faForTests(ADMIN_PW);
         beforeCall();
@@ -674,8 +672,6 @@ async function main() {
     {
         const { createCrowdfundProject } = await import('./db/db.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword } = await import('./config/local-config.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         // Bob backs the bakery, which is placed on the map; Bob runs a crowdfund; Alice proposes a Commons project; Alice's
         // Pulse channel lists a video on her own page elsewhere.
         db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-priv', ?, ?, ?)").run(bob.pk, enterprise, hc(5));

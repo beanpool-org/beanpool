@@ -48,7 +48,6 @@ import Database from 'better-sqlite3';
 import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 const ADMIN_PW = 'Standby-Main-Pw-7731!xq';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 delete process.env.BACKUP_ADMIN_PASSWORD;
 delete process.env.BACKUP_REPLICATION_TOKEN;
 delete process.env.BACKUP_PRIMARY_URL;
@@ -72,7 +71,7 @@ const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } =
 const { startP2P } = await import('./p2p.js');
 const { addConnector, removeConnector } = await import('./connector-manager.js');
 const {
-    initAdminPassword, getLocalConfig, updateLocalConfig, setReplicationToken, clearReplicationToken,
+    getLocalConfig, updateLocalConfig, setReplicationToken, clearReplicationToken,
     verifyReplicationToken,
 } = await import('./config/local-config.js');
 const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js');
@@ -168,10 +167,8 @@ function resetBrakes() {
 
 async function main() {
     // ---------- 1. Primary default ----------
-    initAdminPassword();
     assert(getLocalConfig().replicationTokenOnly === true, '1. a fresh install starts token-only');
     updateLocalConfig({ replicationTokenOnly: undefined });
-    initAdminPassword(); // locked now: an existing install is left alone
     assert(getLocalConfig().replicationTokenOnly === undefined, '1. an existing install (locked) keeps its unset token-only flag (reads as off)');
 
     initStateEngine();

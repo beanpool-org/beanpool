@@ -310,7 +310,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A global main server, two joins through the door ──
         console.log('\n— 1. a global main server; Ada and Ben join through the door —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...GLOBAL, ...VAULT_ENV });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', ...GLOBAL, ...VAULT_ENV });
         nodes.push(main);
         const { code } = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         const mainHttps = (await main.send('serve', { jwk: googleJwk })).port as number;
@@ -344,7 +344,7 @@ async function main(): Promise<void> {
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
         // The standby has the same line in its own .env as the main server: nothing carries it across.
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull', {});
@@ -375,7 +375,7 @@ async function main(): Promise<void> {
         console.log('\n— 3. a copy of the standby promoted by hand —');
         await standby.send('checkpoint');
         copyDir(dirs.standby, dirs.probe);
-        const probe = await spawnNode(SCRIPT, dirs.probe, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'primary', ...GLOBAL });
+        const probe = await spawnNode(SCRIPT, dirs.probe, { NODE_ROLE: 'primary', ...GLOBAL });
         nodes.push(probe);
         require_(probe.ready.role === 'primary', 'it starts as a main server');
         const probeBefore = await probe.send('door');
@@ -445,7 +445,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
 

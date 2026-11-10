@@ -32,7 +32,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopBannerPass123!';
 
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
@@ -42,7 +41,6 @@ import {
     adminAssignTreasuryOperator, purgeMemberSelf,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -168,7 +166,6 @@ const shopPath = (id: string) => `/api/shops/${id}`;
 
 async function main(): Promise<void> {
     console.log('\n=== A shop\'s banner: its one photo, its keepers\' to choose ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

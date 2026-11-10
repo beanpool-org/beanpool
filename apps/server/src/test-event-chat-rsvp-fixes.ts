@@ -8,7 +8,6 @@
  * 3. E5: A repeating series is rolled if due before an edit and before an RSVP in the window between end and minute roll.
  * 4. M5: Event times are bounded to year <= 9999; parseEventTime refuses year 10000+.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-event-chat-rsvp-fixes.ts
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';

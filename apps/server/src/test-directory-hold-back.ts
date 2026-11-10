@@ -39,7 +39,6 @@ delete process.env.PUBLIC_ADDRESS_AUTO;
 delete process.env.DIRECTORY_UNLISTED;
 delete process.env.NODE_PROFILE;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
-process.env.ADMIN_PASSWORD = 'HoldBackAdmin123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -92,14 +91,13 @@ const rename = (communityName: string) => call('POST', '/api/local/update-identi
 async function main() {
     console.log('The directory holds back only an unnamed community or a DIRECTORY_UNLISTED server, and says so...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, getLocalConfig } = await import('./config/local-config.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, setNodeRole, getNodeConfig } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { initDirectoryPublisher } = await import('./services/directory-publisher.js');
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     setNodeRole('primary');
     ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();

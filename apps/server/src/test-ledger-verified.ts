@@ -20,7 +20,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'VerifyLedger123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -36,7 +35,6 @@ import { createDecision, executeDecision, tickDecisions, GRANT_AMOUNT_ERROR } fr
 import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { runLedgerAudit } from './engine/audit.js';
@@ -123,7 +121,6 @@ const debtById = (id: string) => debtView(db.prepare('SELECT * FROM names_debts 
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
 
 async function main(): Promise<void> {
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

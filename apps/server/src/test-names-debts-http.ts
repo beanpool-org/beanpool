@@ -44,7 +44,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'NamesDebts123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -58,7 +57,6 @@ import { removalProposedFromBefore } from './decisions-from-before-test-fixture.
 import { grantNodeRole } from './engine/node-roles.js';
 import { sweepExpiredDebts, DEBT_RECORD_KEPT_MS, debtRecord as debtRecordOf } from './engine/names-debts.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -170,7 +168,6 @@ const debtsOf = (entryId: string) => (db.prepare('SELECT * FROM names_debts WHER
 
 async function main(): Promise<void> {
     console.log('Debts and a second chance over HTTPS\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

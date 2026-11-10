@@ -16,7 +16,6 @@
  * The registrar is a local stub; Cloudflare's edge probe is refused in-process; cloudflared is the test fake.
  */
 const ADMIN_PASSWORD = 'Tunnel-Token-Owner-Only-1!';
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.PUBLIC_ADDRESS_NAME;
@@ -92,7 +91,7 @@ async function keySession(who: Identity): Promise<{ sid: string; role: string }>
 async function main() {
     console.log('Only an owner reads the tunnel token (real HTTPS, real admin auth)...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, getNodeConfig, grantNodeRole } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -103,7 +102,6 @@ async function main() {
 
     refuseEdge();
     await initTls();
-    initAdminPassword();
     initStateEngine();
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');

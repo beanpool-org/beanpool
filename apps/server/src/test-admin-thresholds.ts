@@ -12,12 +12,11 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestThresholdsAdmin123!';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword, getThresholds, DEFAULT_THRESHOLDS, getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { getThresholds, DEFAULT_THRESHOLDS, getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -32,7 +31,6 @@ function assert(cond: boolean, msg: string): void {
 
 async function main() {
     console.log('Running admin thresholds endpoint tests...\n');
-    initAdminPassword();
 
     await initTls();
     initStateEngine();

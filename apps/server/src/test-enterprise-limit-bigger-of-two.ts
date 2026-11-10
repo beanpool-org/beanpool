@@ -30,7 +30,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'BiggerOfTwo123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -46,7 +45,6 @@ import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -142,7 +140,6 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
 
 async function main(): Promise<void> {
     console.log('An enterprise\'s limit is the bigger of its opening line or its pledges, over HTTPS\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

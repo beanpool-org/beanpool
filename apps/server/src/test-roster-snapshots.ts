@@ -85,14 +85,12 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const snaps = await import('./roster-snapshots.js');
     const { formerKeysReader } = await import('./engine/key-succession.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     PORT = await startHttpsServer(0);

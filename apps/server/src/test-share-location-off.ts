@@ -31,7 +31,6 @@ delete process.env.PUBLIC_ADDRESS_AUTO;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
-process.env.ADMIN_PASSWORD = 'ShareLocationOff123!';
 
 import crypto from 'node:crypto';
 
@@ -84,7 +83,7 @@ function holdsThePlace(text: string): boolean {
 async function main() {
     console.log('"Share Location & Radius" OFF hides the community\'s place from everyone but its members...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateLocalConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer, PUBLIC_READ_EXACT } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -92,7 +91,6 @@ async function main() {
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
 
     await initTls();
-    initAdminPassword();
     se.initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
     // The dashboard names the node's key (ephemeral ports, no peers).

@@ -11,7 +11,6 @@
  *   3. 1-step accept and cancel: five turns push the seller twice in all (the first accept and its cancel), and the
  *      buyer's Beans come back each time. A seller's cancel of a quiet deal still tells the buyer.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-push-repeat-folds.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 for (const k of ['CF_RECORD_NAME', 'NODE_ROLE', 'NODE_PROFILE', 'EXPO_ACCESS_TOKEN', 'ENFORCE_READ_AUTH']) delete process.env[k];

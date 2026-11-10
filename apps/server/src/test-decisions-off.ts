@@ -28,7 +28,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 process.env.NODE_PROFILE = 'global';
-process.env.ADMIN_PASSWORD = 'Decisions-Off-Admin-61!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -76,9 +75,7 @@ const show = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify
 async function main() {
     const { db, initSchema } = await import('./db/db.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     initSchema();
-    initAdminPassword();
     const se = await import('./state-engine.js');
     await se.initStateEngine();
     const { initTls } = await import('./services/tls.js');

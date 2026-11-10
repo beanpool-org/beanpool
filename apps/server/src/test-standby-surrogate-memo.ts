@@ -37,7 +37,6 @@ async function main(): Promise<void> {
     // After the environment above: ENFORCE_LEDGER_AUTH is read when engine/sync.ts loads.
     const core = await import('@beanpool/core');
     const { ed25519 } = await import('@noble/curves/ed25519.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
@@ -48,7 +47,6 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
 
     console.log('A standby with ENFORCE_LEDGER_AUTH keeps a signed send whose note holds a lone surrogate (#1515)\n');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);

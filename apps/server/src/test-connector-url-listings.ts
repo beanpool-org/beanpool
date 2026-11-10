@@ -14,7 +14,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';
@@ -22,7 +21,6 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import * as cm from './connector-manager.js';
@@ -92,7 +90,6 @@ function makeFakeNode(listingsByPeer: Map<string, any[]>) {
 
 async function main() {
     console.log('Running connector URL listings test...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);

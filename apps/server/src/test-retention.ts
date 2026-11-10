@@ -38,7 +38,6 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.LISTING_ARCHIVE_DAYS;
-process.env.ADMIN_PASSWORD = 'Retention-Suite-Admin-77!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -93,8 +92,6 @@ async function main() {
     const { getImageStore } = await import('./storage/image-store.js');
 
     initSchema();
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     const se = await import('./state-engine.js');
     await se.initStateEngine();
     const { archiveEndedPosts: archiveEngine } = await import('./engine/posts.js');

@@ -24,7 +24,7 @@ export const PW_STANDBY = 'Standby-Own-Pw-618!';
 export const TUNNEL_TOKEN = 'tunnel-' + crypto.randomBytes(12).toString('hex');
 export const STANDBY_OWN_ADDRESS = { name: 'standby-own', mode: 'direct', hostname: 'standby-own.example' };
 /** A start of the standby: its own admin password, as a standby. */
-export const STANDBY_ENV = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' };
+export const STANDBY_ENV = { NODE_ROLE: 'backup' };
 
 /**
  * node_config rows a main server's boot writes and a standby's does not (the 2026-10-02 review of #1433): the listing-photo
@@ -219,12 +219,12 @@ export async function buildWorld(script: string, root: string): Promise<World> {
     const baseDir = path.join(root, 'standby-base');
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const main = await spawnNode(script, mainDir, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+    const main = await spawnNode(script, mainDir, { NODE_ROLE: 'primary' });
     try {
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken, tunnelToken: TUNNEL_TOKEN });
         fs.mkdirSync(baseDir, { recursive: true });
         fs.copyFileSync(path.join(mainDir, 'genesis.json'), path.join(baseDir, 'genesis.json'));
-        const standby = await spawnNode(script, baseDir, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(script, baseDir, { NODE_ROLE: 'backup' });
         let before: Record<string, any>;
         try {
             await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });

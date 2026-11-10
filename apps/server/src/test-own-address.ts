@@ -51,7 +51,6 @@
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-own-address.ts
  */
 import http from 'node:http';
 import fs from 'node:fs';

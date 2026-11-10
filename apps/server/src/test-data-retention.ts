@@ -40,7 +40,6 @@ import Koa from 'koa';
 import { lockedDm } from './dm-test-payload.js';
 
 const ADMIN_PW = 'Data-Retention-Pw-8841!k';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 // Booted as a standby: the scheduler reads the role once it is loaded (index.ts step 2.61).
 process.env.NODE_ROLE = 'backup';
 delete process.env.CF_RECORD_NAME;
@@ -53,7 +52,6 @@ const se = await import('./state-engine.js');
 const { db } = await import('./db/db.js');
 const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
 const { setNodeRole } = await import('./config/node-role.js');
-const { initAdminPassword } = await import('./config/local-config.js');
 const { checkAdminAuth } = await import('./admin-auth.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { parseCommunitySettings } = await import('./config/community-settings.js');
@@ -101,7 +99,6 @@ function oldLine(message: string, at: number): number {
 const lineExists = (id: number) => !!db.prepare('SELECT 1 FROM system_logs WHERE id = ?').get(id);
 
 async function main() {
-    initAdminPassword();
     se.initStateEngine();
 
     // ── 1. A standby runs no snapshots, and removes the ones past their age ──────────────────────

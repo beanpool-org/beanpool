@@ -24,14 +24,13 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 const ADMIN_PW = 'Money-Followups-Pw-4417!';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setCommonsBalance } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initAdminPassword, getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db, createCrowdfundProject } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
@@ -135,7 +134,6 @@ function ledgerAddsUp(step: string): void {
 
 async function main(): Promise<void> {
     console.log('Money follow-ups from #1379 and #1374\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     ADMIN = ownerTokenHeaders('admin');

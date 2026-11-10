@@ -61,10 +61,9 @@ async function nodeChild(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, getLocalConfig, localConfigRestoredNotice } = await import('./config/local-config.js');
+    const { getLocalConfig, localConfigRestoredNotice } = await import('./config/local-config.js');
     const { initClaimCode } = await import('./claim-code.js');
     await initTls();
-    initAdminPassword();
     se.initStateEngine();
     initClaimCode();
     const port = await startHttpsServer(0);
@@ -83,7 +82,7 @@ async function writerChild(): Promise<void> {
 function run(dir: string, args: string[]): Promise<{ code: number | null; out: string }> {
     return new Promise((resolve) => {
         const env: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test' };
-        for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete env[k];
+        for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete env[k];
         const p = spawn(process.execPath, [...process.execArgv, SCRIPT, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '';
         p.stdout.on('data', (d) => { out += d; });
@@ -97,7 +96,7 @@ const started: ChildProcess[] = [];
 
 function startNode(dir: string): Promise<Node> {
     const env: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', DISABLE_UPDATE_CHECK: 'true' };
-    for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete env[k];
+    for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete env[k];
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--node'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     started.push(proc);
     let out = '';

@@ -33,7 +33,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -46,7 +45,6 @@ import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './adm
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -141,7 +139,6 @@ function sessionHeaders(pub: string, role: 'owner' | 'admin'): Record<string, st
 
 async function main(): Promise<void> {
     console.log('The known floor over HTTPS\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

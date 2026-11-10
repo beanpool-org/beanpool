@@ -17,12 +17,11 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword, updateLocalConfig } from './config/local-config.js';
+import { updateLocalConfig } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
 import { turnOn2faForTests, ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
@@ -96,7 +95,6 @@ const reasonOf = (c: SettlementCapacity): string | null => (c.ok ? null : c.reas
 
 async function main() {
     console.log('Running credit-cap operator route tests (#143)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);

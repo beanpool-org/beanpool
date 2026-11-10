@@ -21,7 +21,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -29,7 +28,6 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, createPost as rawCreatePost, updatePost, getPosts } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
@@ -110,7 +108,6 @@ const titlesFor = (peerId: string): string[] => listingsForPeer(peerId).map(l =>
 
 async function main() {
     console.log('Running per-listing reach tests (#143 step 4)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);

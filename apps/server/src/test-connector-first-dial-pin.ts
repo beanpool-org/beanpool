@@ -23,7 +23,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 process.env.ENABLE_PEER_CONNECTORS = 'true';
 
 import fs from 'node:fs';
@@ -34,7 +33,6 @@ import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import * as cm from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
@@ -191,7 +189,6 @@ function proxy(plan: Array<{ port: number; delay: number }>): Promise<{ port: nu
 async function main() {
     console.log('Running connector first-dial pin tests (FED-07)...\n');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
 

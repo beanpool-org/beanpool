@@ -33,7 +33,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
-process.env.ADMIN_PASSWORD = 'ContactTest123!'; // read by initAdminPassword
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -109,11 +108,9 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { issueRekeyCode } = await import('./engine/member-wizards.js');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

@@ -36,7 +36,6 @@ delete process.env.DIRECTORY_UNLISTED;
 delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
-process.env.ADMIN_PASSWORD = 'PeekTicketAdmin123!';
 
 import crypto from 'node:crypto';
 
@@ -95,7 +94,7 @@ function must<T>(v: T | null | undefined, what: string): T {
 async function main(): Promise<void> {
     console.log('\n=== The peek ticket: one post shared outside the community (S6) ===\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
@@ -109,7 +108,6 @@ async function main(): Promise<void> {
     beforeCall = () => { resetGatewayRateLimit(); resetAdminRateLimit(); resetAdminAuthTarpit(); pruneAuthAttempts(Date.now() + 120_000); };
 
     await initTls();
-    initAdminPassword();
     se.initStateEngine();
     const OWNER = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

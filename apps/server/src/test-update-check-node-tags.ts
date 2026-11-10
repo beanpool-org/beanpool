@@ -20,13 +20,11 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'UpdateCheckNodeTags123!';
 process.env.APP_VERSION = '1.2.20';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 const PW = 'UpdateCheckNodeTags123!';
@@ -84,7 +82,6 @@ async function version(): Promise<any> {
 
 async function main() {
     console.log('--- TEST: the update check reads only node releases (v<semver>) ---');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

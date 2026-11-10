@@ -120,10 +120,8 @@ async function seedBig(a: { n: number; convenor: string; member: string }): Prom
 /** The real server, on port 0, reporting its heap's peak (sampled every 5 ms) when asked on stdin. */
 async function serve(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -148,11 +146,9 @@ function assert(cond: boolean, msg: string): void {
 /** The server in this process, for the sections that check answers rather than the heap. */
 async function inProcessServer(): Promise<{ base: string; se: typeof import('./state-engine.js'); db: typeof import('./db/db.js')['db']; core: typeof import('@beanpool/core'); engine: typeof import('@beanpool/engine') }> {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);

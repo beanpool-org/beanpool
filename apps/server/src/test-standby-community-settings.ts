@@ -445,7 +445,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string, extra: Record<string, string> = {}) => ({
-        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000', ...extra,
+        NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000', ...extra,
     });
     const gwen = newId('Gwen');
     const [ann, bo] = ['Ann', 'Bo'].map(newId);

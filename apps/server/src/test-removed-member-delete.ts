@@ -39,7 +39,6 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
 const PW = 'RemovedDeletePass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -54,7 +53,6 @@ import { removalProposedFromBefore } from './decisions-from-before-test-fixture.
 import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -211,7 +209,6 @@ const balancesOf = (...ents: string[]) => ents.map(e => getBalance(e).balance_c)
 
 async function main(): Promise<void> {
     console.log('Delete account from an account the community closed, and from a visitor’s row\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     ADMIN = ownerTokenHeaders('admin');

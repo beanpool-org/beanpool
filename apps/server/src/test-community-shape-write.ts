@@ -39,9 +39,7 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
-process.env.ADMIN_PASSWORD = 'CommunityShapeWrite123!';
 // The suites' seam (scripts/server-suites.mjs sets it too): the password from .env, as on a node from before claim codes.
-process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -76,7 +74,7 @@ async function main(): Promise<void> {
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { db } = await import('./db/db.js');
@@ -91,7 +89,6 @@ async function main(): Promise<void> {
     const { SHAPE_NOTE_MAX, memberNoticeBody, memberNoticeBodies, memberNoticeTitle } = await import('./config/community-shape-write.js');
     const { NOTICE_LIMITS } = await import('./engine/kept-notices.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const BASE = `https://localhost:${await startHttpsServer(0)}`;

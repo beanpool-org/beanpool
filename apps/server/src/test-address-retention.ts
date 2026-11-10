@@ -47,7 +47,6 @@ import Koa from 'koa';
 import Database from 'better-sqlite3';
 
 const ADMIN_PW = 'Address-Retention-Pw-5528!q';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 delete process.env.TRUSTED_PROXIES;
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR;
@@ -70,7 +69,7 @@ for (const stream of [process.stdout, process.stderr]) {
 const { initStateEngine } = await import('./state-engine.js');
 const { setNodeRole } = await import('./config/node-role.js');
 const { startP2P } = await import('./p2p.js');
-const { initAdminPassword, setReplicationToken, updateLocalConfig } = await import('./config/local-config.js');
+const { setReplicationToken, updateLocalConfig } = await import('./config/local-config.js');
 const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js');
 const { checkAdminPassword, notePasswordFailure, acquirePasswordAttempt, settlePasswordAttempt, resetPasswordBrake } = await import('./password-brake.js');
 const { resolveClientIp, resetUntrustedForwardersForTests } = await import('./client-ip.js');
@@ -126,7 +125,6 @@ const refusedReport = JSON.stringify({
 });
 
 async function main() {
-    initAdminPassword();
     updateLocalConfig({ replicationTokenOnly: false }); // a wrong admin password is still tried, so it is refused as one
     setNodeRole('primary');
     initStateEngine();

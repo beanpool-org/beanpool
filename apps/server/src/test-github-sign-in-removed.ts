@@ -328,7 +328,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server holding every shape of GitHub row ──
         console.log('\n— 1. a main server whose members hold GitHub copies, released copies and open-door records —');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
@@ -364,7 +364,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.a, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.a, 'genesis.json'));
-        a = await spawnNode(SCRIPT, dirs.a, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        a = await spawnNode(SCRIPT, dirs.a, { NODE_ROLE: 'backup' });
         nodes.push(a);
         await a.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await a.send('resync');
@@ -380,7 +380,7 @@ async function main(): Promise<void> {
         require_((await a.send('state')).joins.length === 2, 'standby A holds Mia\'s GitHub record as a standby from before this change would');
         await a.kill('SIGTERM');
         copyDir(dirs.a, dirs.b);
-        a = await spawnNode(SCRIPT, dirs.a, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        a = await spawnNode(SCRIPT, dirs.a, { NODE_ROLE: 'backup' });
         nodes.push(a);
         require_(a.ready.role === 'backup', 'standby A starts again, as the standby');
         const aLines = a.output().match(githubLine) ?? [];
@@ -396,7 +396,7 @@ async function main(): Promise<void> {
         // ── 3. The main server starts again ──
         console.log('\n— 3. the main server starts again: every GitHub row goes, and nothing else changes —');
         await main.kill('SIGTERM');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         require_(main.ready.role === 'primary', 'it starts as the main server');
         const lines = main.output().match(githubLine) ?? [];
@@ -474,7 +474,7 @@ async function main(): Promise<void> {
         // A second start removes nothing.
         const beforeSecond = await main.send('state');
         await main.kill('SIGTERM');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         assert((main.output().match(githubLine) ?? []).length === 0, 'the next start finds nothing to remove, and says nothing');
         const again = await main.send('state');
@@ -508,7 +508,7 @@ async function main(): Promise<void> {
         console.log('\n— 5. the main server dies, and standby B, which still holds every GitHub row, takes over —');
         await a.kill('SIGTERM');
         await main.kill('SIGKILL');
-        b = await spawnNode(SCRIPT, dirs.b, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        b = await spawnNode(SCRIPT, dirs.b, { NODE_ROLE: 'backup' });
         nodes.push(b);
         require_(b.ready.role === 'backup', 'standby B starts as a standby');
         assert((b.output().match(githubLine) ?? []).some((l) => /removed 0 GitHub recovery copies[^\n]*1 open-door join record\b/.test(l)),
@@ -525,7 +525,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await b.exited;
         assert(exit === 0, `standby B restarts itself (exit ${exit})`);
-        b = await spawnNode(SCRIPT, dirs.b, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        b = await spawnNode(SCRIPT, dirs.b, { NODE_ROLE: 'backup' });
         nodes.push(b);
         require_(b.ready.role === 'primary', 'it is the main server');
         const bLines = b.output().match(githubLine) ?? [];

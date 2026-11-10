@@ -289,14 +289,14 @@ export function newPair(script: string): Pair {
         script, root, dir: (n: string) => path.join(root, n), nodes: [], started: Date.now(),
         replicationToken: crypto.randomBytes(32).toString('hex'),
         envM: {
-            ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', NODE_ENV: 'test',
+            NODE_ROLE: 'primary', NODE_ENV: 'test',
             // M keeps a copy no page was asked of for two minutes, as in production (SYNC_COPY_IDLE_MS): scaled to 3 s, a
             // stager's start or a page's import under load took longer, and M closed the copy under S. A copy a standby left
             // open is closed by the step that left it (closeLeftCopy).
             SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
         },
         envS: {
-            ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+            NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
             MAX_IMPORT_ROWS_PER_CATEGORY: String(CAP), BACKUP_RESYNC_RETRY_MS: String(RETRY_MS), BACKUP_PAGE_GAP_MS: '0',
         },
         gwen, ann, bo, cy, dee,

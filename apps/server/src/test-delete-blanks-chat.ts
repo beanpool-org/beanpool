@@ -371,7 +371,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: Rhea writes in every kind of chat —');
-        const main = await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
+        const main = await spawnNode(SCRIPT, dir('main'), { NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee'], [eli.pk, 'Eli']] });
         const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS });
@@ -436,7 +436,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. the standby S copies M —');
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dir('standby'), { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, dir('standby'), { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');
@@ -555,7 +555,7 @@ async function main(): Promise<void> {
         console.log('\n— 6. a new standby S2 copies M afterwards —');
         fs.mkdirSync(dir('standby2'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby2'), 'genesis.json'));
-        const standby2 = await spawnNode(SCRIPT, dir('standby2'), { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby2 = await spawnNode(SCRIPT, dir('standby2'), { NODE_ROLE: 'backup' });
         nodes.push(standby2);
         await standby2.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const copied = await standby2.send('resync');

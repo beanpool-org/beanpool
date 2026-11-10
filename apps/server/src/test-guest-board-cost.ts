@@ -58,11 +58,10 @@ async function main() {
     const se: any = await import('./state-engine.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { guestPost, ONE_PASS_MAX_MEASURED, setMemberPhoto } = await import('@beanpool/engine');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const httpPort = await startHttpServer(0);

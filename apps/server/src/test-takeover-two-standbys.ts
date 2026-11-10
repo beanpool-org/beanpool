@@ -163,13 +163,13 @@ async function main(): Promise<void> {
     const address = await webAddress();
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const envA = { ADMIN_PASSWORD: PW_A, NODE_ROLE: 'backup', BEANPOOL_TEST_IDENTITY_EPOCH_URL: address.url };
-    const envB = { ADMIN_PASSWORD: PW_B, NODE_ROLE: 'backup', BEANPOOL_TEST_IDENTITY_EPOCH_URL: address.url };
+    const envA = { NODE_ROLE: 'backup', BEANPOOL_TEST_IDENTITY_EPOCH_URL: address.url };
+    const envB = { NODE_ROLE: 'backup', BEANPOOL_TEST_IDENTITY_EPOCH_URL: address.url };
 
     try {
         // ── 1 ──
         console.log('\n— 1. a main server and two standbys with the same keys; the main server dies —');
-        const main = track(await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' }));
+        const main = track(await spawnNode(SCRIPT, dir('main'), { NODE_ROLE: 'primary' }));
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         const mainPeerId = main.ready.peerId;
         const held: Record<string, string[]> = {};
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
 
         // The main server's URL a standby copies from often IS the community's address: asked too, with no web address given.
         copyDir(dir('b-before'), dir('b-url'));
-        const bUrl = track(await spawnNode(SCRIPT, dir('b-url'), { ADMIN_PASSWORD: PW_B, NODE_ROLE: 'backup' }));
+        const bUrl = track(await spawnNode(SCRIPT, dir('b-url'), { NODE_ROLE: 'backup' }));
         await bUrl.send('set-primary-url', { url: a.base });
         const viaUrl = await openKeys(bUrl, setup.code);
         assert(viaUrl.status === 409 && viaUrl.body.alreadyTakenOver === true && /the main server's address/.test(viaUrl.body.error),

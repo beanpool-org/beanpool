@@ -80,7 +80,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'VisitorsActPass123!';
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -102,7 +101,6 @@ import { createDecision } from './decisions-engine.js';
 import { startHttpsServer, getKoaApp, resetAdminRateLimit } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { requestNonces } from './engine/member-signature.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -283,7 +281,6 @@ function asBeforeThisRule(v: Id, make: () => void): void {
 
 async function main(): Promise<void> {
     console.log("A visitor's row can't act as a member\n");
-    initAdminPassword();
     await initTls();
     initStateEngine();
     // The sweeps send Vera's every refused write and more, hundreds of signed requests in seconds with the gateway reset

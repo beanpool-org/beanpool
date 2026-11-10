@@ -66,7 +66,6 @@ const LOCAL_RUN = !!process.env.DM_REQUESTS_LOCAL_NODE;
 if (LOCAL_RUN) delete process.env.NODE_PROFILE; else process.env.NODE_PROFILE = 'global';
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'DmRequestsPass123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -81,7 +80,6 @@ import {
     ensureTransactionConversation, dispatchPushNotification, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -252,7 +250,6 @@ async function senderSees(sender: Id, conv: string, firstLine: string, receiver:
 
 async function main(): Promise<void> {
     console.log(`\n=== Message requests (${LOCAL_RUN ? 'local' : 'global'} profile) ===\n`);
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

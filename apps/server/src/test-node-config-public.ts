@@ -31,7 +31,6 @@ delete process.env.PUBLIC_ADDRESS_AUTO;
 delete process.env.ENFORCE_READ_AUTH;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 const ADMIN_PASSWORD = 'NodeConfigAdmin123!';
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 import crypto from 'node:crypto';
 
@@ -81,7 +80,6 @@ function signedHeaders(path: string): Record<string, string> {
 async function main() {
     console.log('GET /api/node/config returns only what its public readers use...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initStateEngine, getNodeConfig, updateNodeConfig } = await import('./state-engine.js');
     const { withKeptTunnelToken } = await import('./services/public-address-agent.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -89,7 +87,6 @@ async function main() {
     const { db } = await import('./db/db.js');
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     PORT = await startHttpsServer(0);

@@ -134,7 +134,7 @@ async function main(): Promise<void> {
 
     try {
         console.log('\n— 1. the main server and its names —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
         nodes.push(main);
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         assert(/^BPRC-1 /.test(setup.code) && setup.envelopeId, 'the main server has a recovery code and a take-over envelope');
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. a standby copies it —');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pull1 = await standby.send('pull');
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
         assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
         const exitCode = await standby.exited;
         assert(exitCode === 0, `the standby restarts itself (exit ${exitCode})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         assert(standby.ready.role === 'primary', 'it is the main server now');
 

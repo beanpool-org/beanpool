@@ -38,7 +38,6 @@ delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
 const ADMIN_PASSWORD = 'CommunityCardAdmin123!';
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 import crypto from 'node:crypto';
 
@@ -91,7 +90,7 @@ const hasDoor = (html: string, door: string) => new RegExp(`data-door="${door}"`
 async function main(): Promise<void> {
     console.log('\n=== A stranger at a community\'s door: the public card (S15) ===\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { initStateEngine, updateNodeConfig } = se;
     const { wrapCreatePost, TEST_PHOTO } = await import('./post-test-helper.js');
@@ -106,7 +105,6 @@ async function main(): Promise<void> {
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     const ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

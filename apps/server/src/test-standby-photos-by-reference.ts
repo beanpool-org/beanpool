@@ -306,11 +306,11 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const envM = {
-        ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', NODE_ENV: 'test',
+        NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const envS = {
-        ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
         BACKUP_RESYNC_RETRY_MS: String(RESYNC_RETRY_MS), BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
     };
     const gwen = newId('Gwen');

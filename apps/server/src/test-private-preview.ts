@@ -18,7 +18,6 @@
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminPass123!';
 process.env.NODE_PROFILE = 'global';
 process.env.PRIVATE_PREVIEW = '1';
 
@@ -27,7 +26,6 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -125,7 +123,6 @@ async function redeem(id: Id, code: string, callsign: string) {
 
 async function main() {
     console.log('--- TEST: private preview (PRIVATE_PREVIEW=1 on a global-profile node) ---');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

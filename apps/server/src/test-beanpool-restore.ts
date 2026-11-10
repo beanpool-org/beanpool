@@ -661,7 +661,7 @@ console.log('\n— 9. the real node (index.ts) waits while the lock is held —'
                 ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...ports(),
                 // As test-clean-stop runs it: nothing leaves this machine.
                 DISABLE_UPDATE_CHECK: 'true', DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
-                CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '', ADMIN_PASSWORD: '',
+                CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '', 
             } as NodeJS.ProcessEnv,
             stdio: ['ignore', 'pipe', 'pipe'],
         });

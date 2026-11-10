@@ -292,8 +292,8 @@ describe('a line with no listing', () => {
 describe('looking the listing up, for the card', () => {
     it('answers the listing\'s own fields when the node has it for this member', async () => {
         await phoneOf(ana);
-        node.listings = [{ ...EGGS, title: 'Fresh eggs, a dozen', credits: 8, status: 'active' }];
-        expect(await lookupAboutListing('post-eggs-1')).toMatchObject({ id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs, a dozen', credits: 8, status: 'active' });
+        node.listings = [{ ...EGGS, title: 'Fresh eggs, a dozen', price_c: 8, status: 'active' }];
+        expect(await lookupAboutListing('post-eggs-1')).toMatchObject({ id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs, a dozen', price_c: 8, status: 'active' });
     });
 
     it('answers null when the node holds none for them (gone, or hidden from them: one answer)', async () => {

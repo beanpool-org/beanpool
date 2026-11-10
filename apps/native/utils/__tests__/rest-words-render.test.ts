@@ -293,7 +293,7 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
     });
 
     it('the repayment card: what is left, and the way to pay', async () => {
-        debt.repayment = { amount: 200, repaid: 50, left: 150, debtId: 'a'.repeat(32) };
+        debt.repayment = { amount_c: 200, repaid_c: 50, left_c: 150, debtId: 'a'.repeat(32) };
         await renderIn('xx', createElement(RepaymentCard));
         expect(host.textContent).toContain(repaymentBannerWords({ amount_c: 200, left_c: 150 }));
         expect(host.textContent).toMatch(/^\[/);

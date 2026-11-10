@@ -462,7 +462,7 @@ describe('a copy of an Offer or a Need', () => {
 
     it('the row the phone holds reads as show-on-global reads a listing', () => {
         expect(listingForCopy({ id: 'h', type: 'need', category: 'food', title: 'T', description: 'D', credits: 5, price_type: 'hourly', author_pubkey: 'k', lat: 1, lng: 2, tags: 'food.eggs', free_tags: '', status: 'paused' }, ['/p/0']))
-            .toMatchObject({ id: 'h', type: 'need', credits: 5, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
+            .toMatchObject({ id: 'h', type: 'need', price_c: 5, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
     });
 });
 

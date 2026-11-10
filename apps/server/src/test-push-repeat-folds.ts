@@ -65,6 +65,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const posts: any = await import('./engine/posts.js');
     const escrow: any = await import('./engine/escrow.js');
+    const notices: any = await import('./engine/push-notices.js').catch(() => null);
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
     await initTls();
     se.initStateEngine();
@@ -272,7 +273,14 @@ async function main(): Promise<void> {
         await flush(); sent.length = 0;
         const a1 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
         const d1 = await call('POST', dan, '/api/marketplace/transactions/complete', { transactionId: a1.body?.transaction?.id, confirmerPublicKey: dan.pk });
-        await flush(); sent.length = 0;
+        await flush();
+        // Each push's words keep its figure in Beans, not hundredths (the deciding review of #3033, escrow.ts): the 1-Bean
+        // loaf is "1 Beans" in escrow, and its payment out, less the 1.5% fee truncated, "0.99 Beans" released.
+        const noticeBody = (m: any, who: Id) => notices?.readPushNotice(m?.data?.i, who.pk)?.body ?? m?.body ?? '';
+        const sidWords = pushesTo(sid).map(m => noticeBody(m, sid));
+        assert(sidWords.some(b => b.includes('— 1 Beans are now in escrow.')) && sidWords.some(b => b.includes('Payment of 0.99 Beans was released')),
+            `the accept and the release push Sid their figures in Beans (${JSON.stringify(sidWords)})`);
+        sent.length = 0;
         const a2 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
         await flush();
         assert(a1.status === 200 && d1.status === 200 && a2.status === 200 && pushesTo(sid, 'market.request').length === 1,

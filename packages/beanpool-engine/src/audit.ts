@@ -8,7 +8,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { beans, isHundredths } from '@beanpool/core';
+import { beans, isHundredths, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { getMemberTrustProfile, washTradingAnalysisStepsOnSnapshot, drainSteps, runStepsInSlices } from './trust.js';
 
 type Db = Database.Database;
@@ -310,7 +310,8 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
             for (const key of keys) {
                 yield;
                 const floor = floorOf(key);
-                if (floor <= -600) {
+                // A floor at or past the Resident line (-600 Beans, in hundredths like every floor).
+                if (floor <= PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD) {
                     const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
                     if (memberRow?.joined_at) {
                         const joined = new Date(memberRow.joined_at);

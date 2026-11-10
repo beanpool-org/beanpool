@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -1060,7 +1060,7 @@ function runMainServerMigrations(): void {
     // community's owners and admins vouch on the day this lands. Stored rows only, no balance read; never throws.
     try {
         const granted = grantMissingRoleBudgets();
-        if (granted > 0) logger.info('SYS', `Vouchers: ${granted} owner(s) and admin(s) given a budget of ${voucherBudgetSetting()} Beans to vouch from.`, { granted });
+        if (granted > 0) logger.info('SYS', `Vouchers: ${granted} owner(s) and admin(s) given a budget of ${formatHundredths(voucherBudgetSetting(), 'en')} Beans to vouch from.`, { granted });
     } catch (e) { console.warn('[Vouchers] Could not give owners and admins their budgets:', e); }
 
     // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
@@ -8386,13 +8386,16 @@ export function getCommunityHealth(): CommunityHealth {
 
     // 3. Sybil Funnel: invitees purchasing from their inviter via marketplace
     try {
+        // The sums are whole hundredths; the owner's threshold is Beans (thresholds.sybilFunnelMinAmount, fractions allowed),
+        // so it is compared in hundredths, to the nearest one.
+        const funnelMin_c = Math.round(t.sybilFunnelMinAmount * HUNDREDTHS_PER_BEAN);
         // Primary: completed marketplace deals where buyer was invited by seller
         const funnelRows = db.prepare(`
-            SELECT 
+            SELECT
                 seller.public_key as farmer_pubkey,
                 seller.callsign as farmer_callsign,
                 COUNT(DISTINCT mt.buyer_pubkey) as puppet_count,
-                ROUND(SUM(mt.amount_c), 2) as total_funneled,
+                SUM(mt.amount_c) as total_funneled,
                 GROUP_CONCAT(DISTINCT buyer.callsign) as puppet_names,
                 GROUP_CONCAT(DISTINCT buyer.public_key) as puppet_keys
             FROM marketplace_transactions mt
@@ -8404,15 +8407,15 @@ export function getCommunityHealth(): CommunityHealth {
             GROUP BY seller.public_key
             HAVING puppet_count >= ?
                AND total_funneled >= ?
-        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, t.sybilFunnelMinAmount) as any[];
+        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, funnelMin_c) as any[];
 
         // Secondary: direct transfers (for Resident+ accounts that graduated past Ghost)
         const directFunnelRows = db.prepare(`
-            SELECT 
+            SELECT
                 inviter.public_key as farmer_pubkey,
                 inviter.callsign as farmer_callsign,
                 COUNT(DISTINCT txn.from_pubkey) as puppet_count,
-                ROUND(SUM(txn.amount_c), 2) as total_funneled,
+                SUM(txn.amount_c) as total_funneled,
                 GROUP_CONCAT(DISTINCT puppet.callsign) as puppet_names,
                 GROUP_CONCAT(DISTINCT puppet.public_key) as puppet_keys
             FROM transactions txn
@@ -8428,7 +8431,7 @@ export function getCommunityHealth(): CommunityHealth {
             GROUP BY inviter.public_key
             HAVING puppet_count >= ?
                AND total_funneled >= ?
-        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, t.sybilFunnelMinAmount) as any[];
+        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, funnelMin_c) as any[];
 
         // Merge & deduplicate by farmer
         const seen = new Set<string>();
@@ -8470,7 +8473,7 @@ export function getCommunityHealth(): CommunityHealth {
             flags.push({
                 type: 'sybil_funnel',
                 severity: 'alert',
-                description: `Invite funnel: ${row.puppet_count} invitees of "${row.farmer_callsign}" sent ${row.total_funneled}B back (${isolatedPuppets} with 0 other partners)`,
+                description: `Invite funnel: ${row.puppet_count} invitees of "${row.farmer_callsign}" sent ${formatHundredths(row.total_funneled, 'en')} Beans back (${isolatedPuppets} with 0 other partners)`,
                 members: [row.farmer_pubkey, ...(row.puppet_keys?.split(',') || [])]
             });
         }

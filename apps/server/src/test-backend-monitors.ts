@@ -81,6 +81,19 @@ async function main() {
         const metrics3 = runWashSybilMetricsAudit()!;
         assert(metrics3.delinquentCount === 0, `0 delinquent accounts after recent transaction (got ${metrics3.delinquentCount})`);
 
+        // --- Test 3a: a cohort on the Resident tier's floor is no velocity anomaly ---
+        // Floors are whole hundredths: a Resident's -200 Beans is -20000. The line is the Resident threshold (-600 Beans),
+        // not -600 hundredths (6 Beans), which every new member with a vouch or the known grant passes (the deciding review
+        // of #3033, engine audit.ts). Nine days old: under 14, and a week apart from Test 3's cohort.
+        const residents = Array.from({ length: 3 }, (_, i) => `res${i}-${Date.now()}`);
+        for (const u of residents) {
+            seedMember(u, 0, 9);
+            adminSetTier(u, 'Resident'); // floor -200
+        }
+        const metricsResidents = runWashSybilMetricsAudit()!;
+        assert(metricsResidents.cohortAnomalies === 0,
+            `a week's cohort of new members at a -200 Beans floor is not fast-growing: the line is -600 Beans (got ${metricsResidents.cohortAnomalies})`);
+
         // --- Test 3: Cohort Velocity Report ---
         // Let's seed a cohort of new accounts created on the same week.
         // We'll join them 2 days ago.
@@ -100,6 +113,26 @@ async function main() {
         const health1 = getCommunityHealth();
         const cohortFlag = health1.flags.find(f => f.type === 'cohort_velocity' && f.description.includes('Cohort Velocity Anomaly'));
         assert(!!cohortFlag, 'Cohort Velocity Anomaly flag was raised in community health report');
+
+        // --- Test 4b: the invite-funnel alert's line is the owner's Beans (100 by default), the sums whole hundredths ---
+        // (the deciding review of #3033, state-engine.ts: it compared hundredths with Beans, so it fired at 1 Bean, and its
+        // words said "15000B" for 150 Beans).
+        const farmer = `farm-${Date.now()}`;
+        seedMember(farmer, 0, 30);
+        const puppets = [`pupA-${Date.now()}`, `pupB-${Date.now()}`];
+        for (const p of puppets) {
+            seedMember(p, 0, 20);
+            db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(farmer, p);
+        }
+        const funnelOf = () => getCommunityHealth().flags.find((f) => f.type === 'sybil_funnel' && (f as { members?: string[] }).members?.[0] === farmer);
+        tx(puppets[0], farmer, hc(0.5), 1);
+        tx(puppets[1], farmer, hc(0.5), 1);
+        assert(!funnelOf(), 'two invitees sending their inviter 1 Bean in all raise no invite-funnel alert: the line is 100 Beans');
+        tx(puppets[0], farmer, hc(75), 1);
+        tx(puppets[1], farmer, hc(74), 1);
+        const funnel = funnelOf();
+        assert(!!funnel && funnel.description.includes('sent 150 Beans back'),
+            `at 150 Beans in all it is raised, its figure in Beans (${funnel?.description ?? 'no flag'})`);
 
         // Let's test the Aggregate Credit Spike alert.
         // We need a previous metric from system_metrics table created at <datetime('now', '-23 hours')

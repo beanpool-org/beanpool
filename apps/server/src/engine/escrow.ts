@@ -1204,7 +1204,7 @@ export function acceptPost(
         hasBlocked(post.authorPublicKey, buyerPublicKey) || !repeatDealPushDue(post.id, buyerPublicKey, tx.id) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
-        `${tx.buyerCallsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
+        `${tx.buyerCallsign || 'A member'} accepted "${post.title}" — ${formatHundredths(finalCredits, 'en')} Beans are now in escrow.`,
         { screen: 'post', postId: post.id, txId: tx.id },
         'marketplace',
         'market.request'
@@ -1341,7 +1341,7 @@ export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released:
             [row.seller_pubkey],
             actor,
             push?.title ?? '🎉 Deal Completed!',
-            push?.body ?? `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
+            push?.body ?? `Payment of ${formatHundredths(netPayout, 'en')} Beans was released for "${post?.title || 'your post'}"`,
             { screen: 'post', postId: row.post_id, txId: row.id },
             'escrow',
             'trade.update'

@@ -375,12 +375,13 @@ describe('the known floor\'s dial', () => {
         expect(confirmationDialOn(db)).toBe(false);
         db.prepare('DELETE FROM node_config WHERE key = ?').run(CONFIRMATION_DIAL_KEY);
         expect(confirmationDialOn(db)).toBe(true);
-        db.prepare("INSERT INTO node_config VALUES (?, '3000')").run(CREDIT_CAP_KEY);
-        db.prepare("INSERT INTO node_config VALUES (?, '1500')").run(KNOWN_FLOOR_KEY);
-        expect([savedCreditCap(db), creditCap(db), knownFloor(db)]).toEqual([3000, 3000, 1500]);
-        db.prepare("UPDATE node_config SET value = '2500' WHERE key = ?").run(KNOWN_FLOOR_KEY);
-        db.prepare("UPDATE node_config SET value = '2000' WHERE key = ?").run(CREDIT_CAP_KEY);
-        expect([savedCreditCap(db), creditCap(db), knownFloor(db)]).toEqual([2000, 2000, 2000]); // a floor is never above the cap
+        // Whole hundredths, as node_config keeps money settings: 3,000 and 1,500 Beans.
+        db.prepare("INSERT INTO node_config VALUES (?, '300000')").run(CREDIT_CAP_KEY);
+        db.prepare("INSERT INTO node_config VALUES (?, '150000')").run(KNOWN_FLOOR_KEY);
+        expect([savedCreditCap(db), creditCap(db), knownFloor(db)]).toEqual([300000, 300000, 150000]);
+        db.prepare("UPDATE node_config SET value = '250000' WHERE key = ?").run(KNOWN_FLOOR_KEY);
+        db.prepare("UPDATE node_config SET value = '200000' WHERE key = ?").run(CREDIT_CAP_KEY);
+        expect([savedCreditCap(db), creditCap(db), knownFloor(db)]).toEqual([200000, 200000, 200000]); // a floor is never above the cap
         db.prepare("INSERT INTO node_config VALUES (?, 'off')").run(CONFIRMATION_DIAL_KEY);
         expect([confirmationDialOn(db), creditCap(db)]).toEqual([false, CREDIT_CAP_DEFAULT]);
     });

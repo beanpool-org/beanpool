@@ -50,8 +50,8 @@ describe('the confirmation dial, on by default', () => {
 
     it("uses the owner's saved cap only while the dial is on", () => {
         const db = community();
-        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '3000');
-        expect(creditCap(db)).toBe(3000);
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '300000');
+        expect(creditCap(db)).toBe(300000);
         setDial(db, 'off');
         expect(creditCap(db)).toBe(CREDIT_CAP_DEFAULT);
     });
@@ -63,7 +63,7 @@ describe('the confirmation dial, on by default', () => {
         expect(memberKnownGrant(db, 'kim')).toBe(0);
         setDial(db, 'on');
         expect(confirmationDialOn(db)).toBe(false);
-        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '3000');
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CREDIT_CAP_KEY, '300000');
         expect(creditCap(db)).toBe(CREDIT_CAP_DEFAULT);
         configureKnownFloorBeans(() => true);
         expect(confirmationDialOn(db)).toBe(true);

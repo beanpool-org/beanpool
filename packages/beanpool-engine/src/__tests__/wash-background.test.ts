@@ -14,7 +14,7 @@ import {
 const SCHEMA = `
     CREATE TABLE members (public_key TEXT PRIMARY KEY, joined_at TEXT);
     CREATE TABLE marketplace_transactions (
-        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, amount_c REAL, status TEXT, completed_at TEXT
+        id TEXT PRIMARY KEY, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, amount_c INTEGER, status TEXT, completed_at TEXT
     );
     CREATE INDEX idx_mt_buyer_status ON marketplace_transactions(buyer_pubkey, status);
     CREATE INDEX idx_mt_seller_status ON marketplace_transactions(seller_pubkey, status);
@@ -35,9 +35,10 @@ function fileDb(): Database.Database {
 const key = (i: number) => `k${String(i).padStart(6, '0')}`;
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 let tradeN = 0;
-function trade(db: Database.Database, buyer: string, seller: string, credits: number, at = daysAgo(60)): void {
+/** A completed trade of `beans` Beans, stored as the node stores it: whole hundredths (amount_c). */
+function trade(db: Database.Database, buyer: string, seller: string, beans: number, at = daysAgo(60)): void {
     db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`)
-        .run(`t${tradeN++}`, buyer, seller, credits, at);
+        .run(`t${tradeN++}`, buyer, seller, Math.round(beans * 100), at);
 }
 function member(db: Database.Database, pk: string, joinedDaysAgo: number): void {
     db.prepare('INSERT OR IGNORE INTO members (public_key, joined_at) VALUES (?, ?)').run(pk, daysAgo(joinedDaysAgo));
@@ -287,8 +288,8 @@ describe('wash analysis: what floors read (S2)', () => {
                 expect(q).toBeLessThanOrEqual(Math.max(qualifiedTradeValue(db, k, before), qualifiedTradeValue(db, k, now)));
             }
             // The pair counts for nothing from the first read after its trades; each keeps its honest partner.
-            expect(qualifiedTradeValue(db, 'pa')).toBe(120);
-            expect(qualifiedTradeValue(db, 'pb')).toBe(130);
+            expect(qualifiedTradeValue(db, 'pa')).toBe(12000);
+            expect(qualifiedTradeValue(db, 'pb')).toBe(13000);
             // The ring's trades count, as they did with the analysis in hand before (today's rule within its window).
             for (const k of ring) expect(qualifiedTradeValue(db, k)).toBe(qualifiedTradeValue(db, k, before));
             reads++;
@@ -318,13 +319,13 @@ describe('wash analysis: what floors read (S2)', () => {
         completeRaceTrades(db, []);
         trade(db, 'o3', 'o4', 500);
         trade(db, 'o4', 'o3', 60);
-        expect(qualifiedTradeValue(db, 'pa', before)).toBe(120);
-        expect(qualifiedTradeValue(db, 'pb', before)).toBe(130);
-        expect(qualifiedTradeValue(db, 'o3', before)).toBe(500);
+        expect(qualifiedTradeValue(db, 'pa', before)).toBe(12000);
+        expect(qualifiedTradeValue(db, 'pb', before)).toBe(13000);
+        expect(qualifiedTradeValue(db, 'o3', before)).toBe(50000);
         // Exactly on the line is not a wash pair (r < 0.15): 287.50 / 212.50 over a gross of 500.
         trade(db, 'o1', 'o2', 287.5);
         trade(db, 'o2', 'o1', 212.5);
-        expect(qualifiedTradeValue(db, 'o1', before)).toBe(120 + 500);
+        expect(qualifiedTradeValue(db, 'o1', before)).toBe(12000 + 50000);
     });
 
     it('no analysis: one is worked out in one go at the read, with no turn given; a clear drops a refresh in flight', async () => {

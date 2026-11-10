@@ -89,7 +89,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 category TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL,
-                credits REAL NOT NULL,
+                price_c INTEGER NOT NULL DEFAULT 0,
                 price_type TEXT DEFAULT 'fixed',
                 author_pubkey TEXT NOT NULL REFERENCES members(public_key),
                 created_at DATETIME NOT NULL,

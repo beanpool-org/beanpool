@@ -32,12 +32,10 @@
  *     a pledge and a release under the routes; nothing is written. A pledge S holds that M doesn't (as its own release
  *     route wrote one before it refused) is counted by the whole-copy check, and a whole copy deletes it: Probe Co's
  *     floor, allowance and backing on S are M's again (before, it stayed through every copy and a take-over).
- *  8. A value the standby's own table refuses (#1276 review 4118882942). M's members table is a community's from before
- *     the enterprise unification (Slice 3's columns came from ALTERs, with no CHECK); S's is a fresh install's. With whole
- *     hundredths the goal column is goal_amount_c, which the step to whole hundredths adds with the schema's CHECK
- *     (db/hundredths-step.ts), so no older build's goal below 0 survives the upgrade and M's own table refuses one. M
- *     refuses a goal below 0 at its routes too, and holds one written around its table's rule (as only a raw write or a
- *     damaged page leaves now). The running S's delta and whole copy land, the goal
+ *  8. A value the standby's own table refuses (#1276 review 4118882942). M's members table and S's are a fresh install's
+ *     (a community's from before the enterprise unification is a file the 1.4.0 gate refuses: db/schema-gate.ts), so M's
+ *     own table refuses a goal below 0, and so do its routes; it holds one written around its table's rule (as only a raw
+ *     write or a damaged page leaves now). The running S's delta and whole copy land, the goal
  *     left out (S keeps its own), a listing made after it arrives, and the whole-copy check reports the value; a fresh
  *     standby's first copy lands with the goal at its default, and so do its next pulls (before, every copy was refused
  *     on the CHECK, and a fresh standby held no member). Neither copy is exact, and neither asks for a force-resync (one
@@ -399,20 +397,6 @@ const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.
 /** A server's rows of the Home keys (home.layout, interests: engine/home-preferences.ts), every member's, in key order. */
 const homeRows = (r: Rows) => r.member_preferences.filter((p) => p.pref_key === 'home.layout' || p.pref_key === 'interests');
 
-/**
- * The members table of a community from before the enterprise unification: every column a fresh install's has but Slice 3's
- * five (purpose, goal_amount_c, deadline_at, lifecycle, paused). db.ts adds four with ALTERs that carry no CHECK; the goal,
- * money, is added by the step to whole hundredths (db/hundredths-step.ts) with the schema's CHECK.
- */
-function membersBeforeSlice3(): string {
-    const schema = fs.readFileSync(path.join(path.dirname(SCRIPT), 'db', 'schema.sql'), 'utf-8');
-    const create = /CREATE TABLE IF NOT EXISTS members \([\s\S]*?\n\);/.exec(schema)?.[0] ?? '';
-    const lines = create.split('\n');
-    const kept = lines.filter((l) => !/^\s*(purpose|goal_amount_c|deadline_at|lifecycle|paused)\s/.test(l));
-    if (lines.length - kept.length !== 5) throw new Error(`schema.sql's members table: expected Slice 3's five columns, found ${lines.length - kept.length}`);
-    return kept.join('\n');
-}
-
 /** A stopped node's database, written as the old importer left it. */
 function withDb(dir: string, fn: (db: Database.Database) => void): void {
     const db = new Database(path.join(dir, 'state.db'));
@@ -449,10 +433,9 @@ async function main(): Promise<void> {
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: an enterprise with keepers and pledges, a project, trust, holiday, opt-outs —');
-        // M's members table is that of a community running since before the enterprise unification: its Slice 3 columns
-        // come from db.ts's ALTERs, with no CHECK (step 8).
+        // (M's members table was a community's from before the enterprise unification until the 1.4.0 gate, which refuses a
+        // file that old: db/schema-gate.ts. M is a fresh install's now; step 8 plants its goal around the table's rule.)
         fs.mkdirSync(dir('main'), { recursive: true });
-        withDb(dir('main'), (db) => db.exec(membersBeforeSlice3()));
         const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
@@ -696,7 +679,7 @@ async function main(): Promise<void> {
         console.log('\n— 8. an older main server\'s row holds a goal below 0, which a standby\'s table refuses: left out, reported, and copying goes on —');
         const shapes8 = { m: await main.send('goal-rule'), s: await standby.send('goal-rule') };
         require_(shapes8.m === true && shapes8.s === true,
-            `M's goal column has the schema's CHECK though its members table predates Slice 3: the step to whole hundredths adds goal_amount_c with it (db/hundredths-step.ts), so no older build's goal below 0 survives; S's, from schema.sql, has it too (${JSON.stringify(shapes8)})`);
+            `M's goal column has the schema's CHECK, and so has S's, both from schema.sql (${JSON.stringify(shapes8)})`);
         // Whole hundredths at the door: -5 Beans is -500. An enterprise's goal is a money field (money-body.ts optionalHundredthsOf
         // refuses one below 0 as amount_c_required); a crowdfund's is checked against the goal rule (db.ts isAcceptableGoal).
         const minus8 = await S_(eve, '/api/treasury', { name: 'Minus Fund', purpose: 'Below zero', lifecycle: 'bounded', goalAmount_c: -500 });

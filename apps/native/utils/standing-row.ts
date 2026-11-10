@@ -3,7 +3,7 @@
  * can read a row it holds (the listing page's pinned deal) without a round trip through utils/db.ts, which writes and reads
  * them (applyDelta, acceptMarketplacePost, getMarketplaceTransactions' local copy).
  */
-import type { StandingPeriodUnit, StandingPhase } from '@beanpool/core';
+import { isHundredths, type StandingPeriodUnit, type StandingPhase } from '@beanpool/core';
 
 /**
  * The standing deal's fields of a deal row as the node reads it (@beanpool/engine escrow.ts standingFields), kept as one JSON
@@ -12,7 +12,8 @@ import type { StandingPeriodUnit, StandingPhase } from '@beanpool/core';
 export function standingJsonOf(tx: any): string | null {
     if (!tx?.standingId || !tx.standingPhase) return null;
     return JSON.stringify({
-        phase: tx.standingPhase, beans: tx.standingBeans ?? null, unit: tx.standingUnit ?? null, max: tx.standingMaxPeriods ?? null,
+        // Per period, whole hundredths of a Bean (the node's standingBeans_c); anything else, no figure.
+        phase: tx.standingPhase, beans_c: isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : null, unit: tx.standingUnit ?? null, max: tx.standingMaxPeriods ?? null,
         nextDueAt: tx.standingNextDueAt ?? null, startsAt: tx.standingStartsAt ?? null, shortSince: tx.standingShortSince ?? null,
         stopped: !!tx.standingStopped,
         endedReason: tx.standingEndedReason ?? null, stoppedBy: tx.standingStoppedBy ?? null, endedAt: tx.standingEndedAt ?? null,
@@ -24,7 +25,8 @@ export interface StandingRowFields {
     standingId?: string;
     periodNo?: number | null;
     standingPhase?: StandingPhase;
-    standingBeans?: number | null;
+    /** Per period, whole hundredths of a Bean. */
+    standingBeans_c?: number | null;
     standingUnit?: StandingPeriodUnit | null;
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string | null;
@@ -43,7 +45,7 @@ export function standingOfRow(r: { standing_id?: string | null; period_no?: numb
         const s = r.standing ? JSON.parse(r.standing) : null;
         if (s && typeof s === 'object' && typeof s.phase === 'string') {
             Object.assign(out, {
-                standingPhase: s.phase, standingBeans: s.beans, standingUnit: s.unit, standingMaxPeriods: s.max,
+                standingPhase: s.phase, standingBeans_c: isHundredths(s.beans_c) ? s.beans_c : null, standingUnit: s.unit, standingMaxPeriods: s.max,
                 standingNextDueAt: s.nextDueAt, standingStartsAt: s.startsAt, standingShortSince: s.shortSince, standingStopped: !!s.stopped,
                 standingEndedReason: s.endedReason ?? null, standingStoppedBy: s.stoppedBy ?? null, standingEndedAt: s.endedAt ?? null,
             });

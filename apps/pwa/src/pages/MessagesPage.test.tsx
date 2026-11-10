@@ -52,8 +52,7 @@ vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
 }));
 
-// What a line's words go with: the identities here are not real keys, and the signing itself is core's own to test.
-const LINE_SIG = vi.hoisted(() => ({ sig: 'c2ln', at: '2026-11-01T00:00:00.000Z' }));
+// The identities here are not real keys: sealing and signing a line (format 4, one call) is core's own to test.
 vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     // The thread's order is the real one: by the node's timestamps (core dmThreadInShownOrder).
     dmThreadInShownOrder: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmThreadInShownOrder,
@@ -65,8 +64,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
     sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
-    signDmLine: vi.fn(() => LINE_SIG),
-    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
     checkDmThread: vi.fn(() => new Map()),
     dmAfterReference: vi.fn(() => null),
     dmLineMarkText: vi.fn(() => null),
@@ -1099,7 +1097,7 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
             'the back fence', '00000',        // the caption, encrypted into the message body
             'image',
             { data: 'data:image/jpeg;base64,resized', nonce: '00000', mime: 'image/jpeg' },
-            JSON.stringify({ lineSig: LINE_SIG }),   // the caption's signature: the photo itself is not signed
+            undefined,   // nothing beside the line: each part's signature is in its own ciphertext (format 4)
             picture.messageId,
         );
 
@@ -1507,7 +1505,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         const sealedTo = vi.mocked(sealDmLine).mock.calls.at(-1)![2];
         expect(sealedTo.senderPubHex).toBe('my-pubkey');
         expect(sealedTo.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, JSON.stringify({ lineSig: LINE_SIG }), sealedTo.messageId);
+        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, undefined, sealedTo.messageId);
         expect(encodePlaintext).not.toHaveBeenCalled();
         await waitFor(() => expect(said()).toBeNull());
         expect(composer.value).toBe('');
@@ -1549,7 +1547,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         vi.mocked(editMessageApi).mockResolvedValueOnce({ success: true } as any);
         await pressEnter(composer);
         await waitFor(() => expect(editMessageApi).toHaveBeenCalledTimes(1));
-        expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE, LINE_SIG);
+        expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE);
         // An edit is sealed to its own line's id.
         expect(vi.mocked(sealDmLine).mock.calls.at(-1)![2]).toMatchObject({ senderPubHex: 'my-pubkey', messageId: 'msg-mine' });
         expect(encodePlaintext).not.toHaveBeenCalled();

@@ -55,7 +55,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/e2e-crypto')>()),
     dmLineShownText: vi.fn((v: { text: string | null } | undefined) => v?.text ?? ''),
     dmLineIsUnattributed: vi.fn(() => false),
-    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
 }));
 
 vi.mock('../lib/api', async (importOriginal) => ({

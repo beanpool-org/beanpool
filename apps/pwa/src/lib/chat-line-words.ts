@@ -57,7 +57,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // core dm-crypto.ts: what stands in for a DM line, the one line under a marked one, and who a quote is from.
     "🔒 This message couldn't be verified, so it isn't shown.": word("🔒 This message couldn't be verified, so it isn't shown."),
     "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": word("⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown."),
-    "Sent from an older version of the app: BeanPool can't confirm who wrote it.": word("Sent from an older version of the app: BeanPool can't confirm who wrote it."),
     'Shown out of the order it was written in.': word('Shown out of the order it was written in.'),
     'Moved here from another conversation.': word('Moved here from another conversation.'),
     "From your community's admins. Not a private message: the community's server can read it.": word("From your community's admins. Not a private message: the community's server can read it."),

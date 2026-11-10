@@ -22,9 +22,11 @@ const QUIET = 'flex-1 min-h-[44px] py-2 px-2 rounded-lg border border-nature-300
  * Take this up? (§2.2): how long (until stopped, or for k periods) and when it starts (today, or up to 30 days ahead), what is
  * held now and how it runs, then Agree. `now` is for tests.
  */
-export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, onAgree, now }: {
+export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, onAgree, now, room }: {
     unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; busy: boolean;
     onCancel: () => void; onAgree: (choice: StandingChoice) => void; now?: number;
+    /** The payer's usable room (balance less their usable floor), when known: short of the first period, Agree is disabled. */
+    room?: number | null;
 }) {
     const [untilStopped, setUntilStopped] = useState(true);
     const [periods, setPeriods] = useState(6);
@@ -33,7 +35,7 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
     // The start is worked out again at Agree: the node refuses one more than 10 minutes old (checkStandingStart), and a member
     // may tap it long after the screen opened. The lines show the start as of now.
     const startAt = () => standingStartAt(now ?? Date.now(), later ? daysAhead : 0);
-    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods }, day);
+    const l = standingTakeUpLines({ unit, beans, title, payeeName, startsAt: startAt(), periods, room }, day);
     return (
         <div data-testid="standing-take-up" className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2 flex flex-col gap-3">
             <p className="font-bold text-nature-900 dark:text-white text-center text-sm">{l.title}</p>
@@ -81,9 +83,10 @@ export function StandingTakeUp({ unit, beans, title, payeeName, busy, onCancel, 
                 <p>{l.howItRuns}</p>
                 <p>{l.shortAhead}</p>
             </div>
+            {l.noRoom && <p data-testid="standing-no-room" role="status" className="text-sm font-bold text-bp-ink-warning text-center break-words">{l.noRoom}</p>}
             <div className="flex gap-2">
                 <button type="button" onClick={onCancel} disabled={busy} className={QUIET}>{t('Cancel')}</button>
-                <button type="button" data-testid="standing-agree" disabled={busy}
+                <button type="button" data-testid="standing-agree" disabled={busy || !!l.noRoom}
                     onClick={() => onAgree({ periods: untilStopped ? null : periods, startsAt: startAt() })}
                     className="flex-1 min-h-[44px] py-2 px-2 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60 break-words">
                     {l.agree}

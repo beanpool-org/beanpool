@@ -276,6 +276,8 @@ export const standingLines = {
         ? t("If you're short when a month is due, you'll be told a few days before.")
         : t("If you're short when a week is due, you'll be told the day before.")),
     agree: (beans: number) => t('Agree and pay {n} Beans', { n: n2(beans) }),
+    /** Agree is disabled when the payer's usable room can't pay the first period (design §3: never a button that fails). */
+    noRoom: (beans: number, room: number) => t('You need {n} Beans of room; you have {room}', { n: n2(beans), room: n2(Math.max(0, room)) }),
 
     // The deal card while it runs (design §3)
     since: (unit: StandingPeriodUnit, date: string, beans: number) => (unit === 'month'
@@ -470,9 +472,21 @@ export function standingStartAt(now: number, daysAhead: number): number {
     return now + d * 86_400_000;
 }
 
+/**
+ * The Beans a member can pay now, from the node's balance read (GET /api/ledger/balance): their balance less their usable
+ * floor (the floor their live Offers unlock; the earned floor when the read has none). Null when the read isn't there, so a
+ * take-up whose room is unknown is never disabled by a guess (the node still checks).
+ */
+export function standingRoomOf(b: { balance?: number | null; floor?: number | null; usableFloor?: number | null } | null | undefined): number | null {
+    if (!b || typeof b.balance !== 'number' || !Number.isFinite(b.balance)) return null;
+    const floor = typeof b.usableFloor === 'number' && Number.isFinite(b.usableFloor) ? b.usableFloor
+        : typeof b.floor === 'number' && Number.isFinite(b.floor) ? b.floor : 0;
+    return Math.round((b.balance - floor) * 100) / 100;
+}
+
 /** Every line of the take-up screen (design §3), one set for both apps. `day` writes a date as the app does ("9 Nov"). */
 export function standingTakeUpLines(
-    input: { unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; startsAt: number; periods: number },
+    input: { unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; startsAt: number; periods: number; room?: number | null },
     day: (iso: string) => string,
 ) {
     const { unit, beans } = input;
@@ -491,6 +505,9 @@ export function standingTakeUpLines(
         howItRuns: standingLines.howItRuns(unit),
         shortAhead: standingLines.shortAhead(unit),
         agree: standingLines.agree(beans),
+        // The payer's usable room (balance less their usable floor), when the app knows it: short of the first period, Agree
+        // is disabled and this line says why. Null when there is room, or the room isn't known (the node still checks).
+        noRoom: input.room != null && Number.isFinite(input.room) && input.room < beans ? standingLines.noRoom(beans, input.room) : null,
         fewer: t('One fewer'),
         more: t('One more'),
         earlier: t('A day earlier'),

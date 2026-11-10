@@ -33,6 +33,19 @@ describe('Take this up? (design §3)', () => {
         expect(onAgree).toHaveBeenCalledWith({ periods: null, startsAt: NOW });
         expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and pay 50 Beans');
     });
+    it("without room for the first month, Agree is disabled with a plain line; with room, or room not known, it stays (design §3)", () => {
+        const onAgree = vi.fn();
+        const { rerender } = render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={30} />);
+        expect(screen.getByTestId('standing-no-room').textContent).toBe('You need 50 Beans of room; you have 30');
+        expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(screen.getByTestId('standing-agree'));
+        expect(onAgree).not.toHaveBeenCalled();
+        for (const room of [50, null]) {
+            rerender(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={room} />);
+            expect(screen.queryByTestId('standing-no-room')).toBeNull();
+            expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(false);
+        }
+    });
     it('for a count of months, one more each tap; a later start moves the dates', () => {
         const onAgree = show();
         fireEvent.click(screen.getByLabelText('For 6 months'));

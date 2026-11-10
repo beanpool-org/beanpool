@@ -17,6 +17,7 @@ import {
     standingTakeUpLines,
     standingUnitForListing,
     type StandingDealRow,
+    standingRoomOf,
 } from '../standing-deal.js';
 import { BOUND_SIGNATURE_MARKER, ed25519Signer } from '../request-signing.js';
 import { dealStep, listingDealLines } from '../deal-step.js';
@@ -114,6 +115,22 @@ describe('standingTakeUpLines: the take-up screen (design §3)', () => {
         expect(l.startOn).toBe('On 11 Nov');
         expect(l.paidNow).toBe('12.5 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.5 at the start of each week, until one of you stops it.');
         expect(l.shortAhead).toBe("If you're short when a week is due, you'll be told the day before.");
+    });
+    it("Agree is never a button that fails: short of the first period's room, a plain line says so (design §3)", () => {
+        const base = { unit: 'month' as const, beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', startsAt: NOW, periods: 6 };
+        expect(standingTakeUpLines({ ...base, room: 30 }, day).noRoom).toBe('You need 50 Beans of room; you have 30');
+        expect(standingTakeUpLines({ ...base, room: -4 }, day).noRoom).toBe('You need 50 Beans of room; you have 0');
+        expect(standingTakeUpLines({ ...base, room: 49.99 }, day).noRoom).toBe('You need 50 Beans of room; you have 49.99');
+        // Room enough, or not known (the node still checks): no line, Agree stays.
+        for (const room of [50, 120, null, undefined, NaN]) expect(standingTakeUpLines({ ...base, room }, day).noRoom).toBeNull();
+    });
+    it("standingRoomOf: the balance less the usable floor, else the earned floor; null when there's no read", () => {
+        expect(standingRoomOf({ balance: 10, floor: -100, usableFloor: -20 })).toBe(30);
+        expect(standingRoomOf({ balance: 10, floor: -40 })).toBe(50);
+        expect(standingRoomOf({ balance: -25.5, floor: -20, usableFloor: -20 })).toBe(-5.5);
+        expect(standingRoomOf({ balance: 7 })).toBe(7);
+        expect(standingRoomOf(null)).toBeNull();
+        expect(standingRoomOf({ floor: -20 })).toBeNull();
     });
 });
 

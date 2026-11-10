@@ -876,6 +876,10 @@ export function initSchema() {
     moveGroupPicturesOutOfRows();
 
     db.exec(schemaSql);
+    // The name fold's TEMP triggers (the one write path of members.callsign_fold): the call where this connection opened
+    // made none on a fresh install, which had no members table yet. On any other file they are there already, and this
+    // does nothing (CREATE TEMP TRIGGER IF NOT EXISTS).
+    installNameFold(db);
 
     // The passes still run at every boot after the exec, each its own guard. markExistingVisitors and
     // bringMembersToSchemaRules write their node_config marker on a fresh install and find it on every kept node (A32,

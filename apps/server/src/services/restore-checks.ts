@@ -46,6 +46,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
+import { readSchemaGate } from '../db/schema-gate.js';
 
 export interface ArchiveLimits {
     /** What the members' contents may add up to, unpacked. */
@@ -531,6 +532,10 @@ export function checkRestoreDatabase(candidate: string, live: Database.Database,
             throw refuse(`has a schema this server cannot read (${e?.message || e})`);
         }
         if (notCommunity) throw refuse(`is not a BeanPool database (${notCommunity})`);
+        // The database's gate (db/schema-gate.ts), which reads only: a backup this release would not open is refused here,
+        // before anything is restored, in the gate's own words. Put in place, it would stop the node's next start.
+        const gate = readSchemaGate(handle);
+        if (gate.kind === 'refused') throw new RestoreRefused(gate.line.replace(/^This database/, "This backup's state.db"), 400);
 
         const id = (o: SchemaObject) => `${o.type} ${o.name}`;
         const known = new Map(triggersAndViews(live).map((o) => [id(o), o.sql]));

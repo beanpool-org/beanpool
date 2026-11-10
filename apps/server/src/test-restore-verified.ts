@@ -564,8 +564,33 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
-    // What a node of those releases holds once it was updated (`extra` for oldReleaseDb): node_roles as this version's
-    // schema.sql makes it, its founder the owner. No boot removes the old trigger, so it is still there.
+    // A database a kept node holds at the cutover (__fixtures__/schema-v1.2.36.sql at user_version 4: what the 1.4.0 gate
+    // opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that release's
+    // recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
+    const KEPT_SCHEMA = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'schema-v1.2.36.sql'), 'utf8');
+    const OLD_RECOVERY_REQUESTS = [
+        OLD_SCHEMA.match(/CREATE TABLE IF NOT EXISTS recovery_requests \([\s\S]*?\n\);/)?.[0] ?? '',
+        OLD_SCHEMA.match(/CREATE TRIGGER IF NOT EXISTS recovery_requests_touch_updated_at[\s\S]*?END;/)?.[0] ?? '',
+    ];
+    assert(OLD_RECOVERY_REQUESTS.every((s) => s.length > 0), "setup: v1.2.18's recovery_requests and its touch trigger");
+    const keptNodeDb = (extra: string[] = []) => {
+        const f = path.join(fs.mkdtempSync(path.join(work, 'kept-')), 'state.db');
+        const d = new Database(f);
+        d.exec(KEPT_SCHEMA);
+        for (const s of OLD_RECOVERY_REQUESTS) d.exec(s);
+        const at = new Date().toISOString();
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES ('genesis', 'Genesis', ?)`).run(at);
+        for (const [pk, callsign] of [['f0'.repeat(32), 'OldFounder'], ['cd'.repeat(32), 'OldMember']]) {
+            d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`)
+                .run(pk, callsign, at, callsign === 'OldFounder' ? 'genesis' : 'f0'.repeat(32));
+            d.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
+        }
+        for (const s of extra) d.exec(s);
+        d.pragma('user_version = 4');
+        d.close();
+        return f;
+    };
+    // Its founder the owner (`extra` for keptNodeDb or oldReleaseDb): node_roles as this version's schema.sql makes it.
     const nodeRolesDdl = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'db', 'schema.sql'), 'utf8')
         .match(/CREATE TABLE IF NOT EXISTS node_roles \([\s\S]*?\n\);/)?.[0];
     assert(!!nodeRolesDdl, 'setup: node_roles as schema.sql makes it');
@@ -657,8 +682,16 @@ async function main(): Promise<void> {
             // one is not refused for it. Under float Beans a missing `balance` column was refused here.
             const noAccountKey = made('no-account-key.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (balance_c INTEGER)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+            // Stamped, so the gate opens it (db/schema-gate.ts): what is checked here is the core tables alone.
             const noMoneyColumn = made('no-money-column.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
-                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+                "INSERT INTO node_config (key, value) VALUES ('schema_release', '1.4.0')", 'PRAGMA user_version = 5']);
+            // The same with a node_config no release made (no value column): the gate answers, refusing; it does not throw.
+            const oddConfig = made('odd-config.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)', 'PRAGMA user_version = 5']);
+            const odd = check(oddConfig);
+            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.2\.36\./.test((odd as any).error ?? ''),
+                `4. user_version 5 with a node_config no release made: refused 400 in the gate's words, not a 500 (${JSON.stringify(odd).slice(0, 200)})`);
             for (const [label, f, why] of [
                 ['an empty database', emptyDb, 'no members table'], ['a dummy table', dummyDb, 'no members table'],
                 ['members(x INT)', wrongDb, 'its members table has no public_key column'], ['a members view', viewDb, 'no members table'],
@@ -734,7 +767,7 @@ async function main(): Promise<void> {
         }
 
         // ── 8. N1: the backups the live nodes made ──
-        console.log('\n── 8. N1: a backup of a node updated from v1.2.15 … v1.2.18 restores; a trigger this version does not know, and a backup with no node_roles, are refused ──');
+        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.2.36, are refused ──');
         {
             const RETIRED = 'recovery_requests_touch_updated_at';
             const triggersIn = (f: string): string[] => {
@@ -762,15 +795,31 @@ async function main(): Promise<void> {
             };
             const stoppedNode = () => { const d = newDir(); runChild('stopped', d, env); return d; };
 
-            const oldDb = oldReleaseDb(UPDATED);
+            const oldDb = keptNodeDb(UPDATED);
             assert(triggersIn(oldDb).includes(RETIRED), `8. setup: the updated node's database carries ${RETIRED}`);
             const a = direct(oldDb);
             assert(a.ok === true && !(a as any).left.includes(RETIRED),
                 `8. it passes the check, with ${RETIRED} dropped from the file (${JSON.stringify(a).slice(0, 300)})`);
-            const gone = direct(oldReleaseDb([...UPDATED, 'CREATE TABLE old_thing (x INT, at TEXT)',
+            const gone = direct(keptNodeDb([...UPDATED, 'CREATE TABLE old_thing (x INT, at TEXT)',
                 `CREATE TRIGGER old_thing_touch AFTER UPDATE ON old_thing BEGIN UPDATE old_thing SET at = 'now' WHERE rowid = NEW.rowid; END`]));
             assert(gone.ok === true && !(gone as any).left.includes('old_thing_touch'),
                 `8. a trigger on a table this version does not have passes, dropped from the file (${JSON.stringify(gone).slice(0, 300)})`);
+            // A backup last started before 1.2.36, node_roles and all: the gate would refuse it at the next start
+            // (db/schema-gate.ts), so the restore refuses it first, in the gate's words, and the file is left as it was.
+            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. "
+                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.37, then start this version again. Nothing was changed.';
+            const older = oldReleaseDb(UPDATED);
+            const olderBytes = fs.readFileSync(older).toString('base64');
+            const tooOld = direct(older);
+            assert(!tooOld.ok && (tooOld as any).status === 400 && (tooOld as any).error === OLDER && fs.readFileSync(older).toString('base64') === olderBytes,
+                `8. a v1.2.18 backup with node_roles: refused 400 in the gate's words, the file untouched (${JSON.stringify(tooOld).slice(0, 260)})`);
+            {
+                const node = stoppedNode();
+                const before = JSON.stringify(await dirState(node));
+                const s = shell(node, ['restore', '--unlocked', tarOf(older)], 'UNLOCKED\n');
+                assert(s.code === 1 && s.out.includes(OLDER) && JSON.stringify(await dirState(node)) === before,
+                    `8. beanpool restore --unlocked of it: refused in those words, exit 1, nothing changed (exit ${s.code}: ${s.out.trim().slice(-260)})`);
+            }
 
             const dir = stoppedNode();
             const r = shell(dir, ['restore', '--unlocked', tarOf(oldDb)], 'UNLOCKED\n');
@@ -799,7 +848,7 @@ async function main(): Promise<void> {
                 [`a trigger on members named ${RETIRED}`, [`DROP TRIGGER ${RETIRED}`,
                     `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END`], RETIRED],
             ] as const) {
-                const crafted = oldReleaseDb([...UPDATED, ...extra]);
+                const crafted = keptNodeDb([...UPDATED, ...extra]);
                 const d = direct(crafted);
                 assert(!d.ok && (d as any).status === 400 && String((d as any).error).includes(`trigger "${named}"`), `8. ${label}: the check refuses it (${String((d as any).error).slice(0, 160)})`);
                 const node = stoppedNode();

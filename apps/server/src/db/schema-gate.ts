@@ -60,8 +60,11 @@ export function readSchemaGate(conn: Database.Database): SchemaGate {
     const stamp = conn.pragma('user_version', { simple: true }) as number;
     if (stamp > SCHEMA_STAMP) return { kind: 'refused', line: refusedTooNew(stamp) };
     if (stamp === SCHEMA_STAMP && has('table', 'node_config')) {
-        const row = conn.prepare('SELECT value FROM node_config WHERE key = ?').get(SCHEMA_RELEASE_KEY) as { value: string } | undefined;
-        if (row) return { kind: 'stamped', release: row.value };
+        let release: unknown;
+        try {
+            release = (conn.prepare('SELECT value FROM node_config WHERE key = ?').get(SCHEMA_RELEASE_KEY) as { value: unknown } | undefined)?.value;
+        } catch { /* a node_config no release made (no key or value column): no stamp */ }
+        if (typeof release === 'string') return { kind: 'stamped', release };
     }
     // CONVERSION CODE, log row CUT1, remove in 1.4.1: an unstamped database a kept node last started on 1.2.36 or 1.2.37.
     if (stamp === 4 && has('index', RELEASE_1_2_36_OBJECT)) return { kind: 'release-1.2.36' };

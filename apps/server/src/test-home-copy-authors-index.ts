@@ -5,8 +5,9 @@
  * version. idx_posts_copy_authors (a plain partial index, no function in it, so an older release still opens the file)
  * makes it one seek.
  *
- *  1. A state.db made by v1.2.18 (__fixtures__/schema-v1.2.18.sql, with posts in it), booted by initSchema: the index is
- *     made, partial on origin_node, every post kept; booted again, nothing changes.
+ *  1. A state.db a kept node last started on 1.2.36 (__fixtures__/schema-v1.2.36.sql, with posts in it; the release that
+ *     made the index), booted by initSchema: the index is kept, partial on origin_node, every post kept; booted again,
+ *     nothing changes. (A file from before the index is one the 1.4.0 gate refuses: db/schema-gate.ts reads this index.)
  *  2. The question's plan uses the index, and no EXISTS in it scans the posts table.
  *  3. The answers did not change: a member with a copy of their own posts held from elsewhere, with a post here, with a post
  *     for them or assigned to them, or in no way: false for the first four, true for the last, and the same as an
@@ -69,20 +70,20 @@ async function main(): Promise<void> {
     assert(!!dataDir, 'BEANPOOL_DATA_DIR is set');
     fs.mkdirSync(dataDir!, { recursive: true });
 
-    // ── 1. A database of v1.2.18, with posts in it ──
-    console.log('\n── 1. A state.db from before the index, booted ──');
+    // ── 1. A database of v1.2.36, with posts in it ──
+    console.log('\n── 1. A state.db a kept node last started on 1.2.36, booted ──');
     const old = new Database(path.join(dataDir!, 'state.db'));
-    old.exec(fs.readFileSync(path.join(HERE, '__fixtures__', 'schema-v1.2.18.sql'), 'utf8'));
-    assert(!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the old file has no such index');
+    old.exec(fs.readFileSync(path.join(HERE, '__fixtures__', 'schema-v1.2.36.sql'), 'utf8'));
+    old.pragma('user_version = 4');
+    assert(!!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the 1.2.36 file has the index, as 1.2.36 made it');
     const at = new Date().toISOString();
     old.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Genesis', ?)`).run(GENESIS, at);
     for (const [pk, name] of [[LOCAL, 'Local'], [COPY, 'Copy'], [BOTH, 'Both'], [TARGET, 'Target'], [ASSIGNED, 'Assigned'], [NOBODY, 'Nobody'], [FILLER, 'Filler']]) {
         old.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`).run(pk, name, at, GENESIS);
-        // The v1.2.18 file's own column (REAL `balance`): the boot's hundredths step drops old money (db/hundredths-step.ts).
+        // The v1.2.36 file's own column (REAL `balance`): the boot's hundredths step drops old money (db/hundredths-step.ts).
         old.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
     }
-    // The old table has only the columns of its day (no target_pubkey, no assigned_to: the boot adds them), so a post for a
-    // member and one assigned to a member are set after the first boot.
+    // A post for a member and one assigned to a member are set after the first boot, through the booted connection.
     const addPost = old.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, origin_node)
                                  VALUES (?, 'offer', 'food', ?, 'bread', ?, ?)`);
     addPost.run('p-local', 'Local loaves', LOCAL, null);
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
 
     const first = await inspect();
     assert(first.table === 'posts' && /^CREATE INDEX idx_posts_copy_authors ON posts\(author_pubkey\) WHERE origin_node IS NOT NULL$/.test(String(first.sql)),
-        `1. booting the old file makes ${INDEX}: a plain partial index on posts(author_pubkey) where origin_node IS NOT NULL, no function in it (${first.sql})`);
+        `1. the booted file has ${INDEX}: a plain partial index on posts(author_pubkey) where origin_node IS NOT NULL, no function in it (${first.sql})`);
     assert(first.posts === 306, `1. every post is kept (${first.posts})`);
     const { db, initSchema } = await import('./db/db.js');
     db.prepare(`UPDATE posts SET target_pubkey = ? WHERE id = 'p-for'`).run(TARGET);

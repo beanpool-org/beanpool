@@ -8,9 +8,10 @@ import {
     PROTOCOL_CONSTANTS, TIER_LEVELS, getTier, grantedCreditForTier, tierForCredit, tierIndexForCredit, tierIndexForName,
 } from '../protocol.js';
 
+// Credit in whole hundredths (hundredths.ts): 200 Beans is 20000, and one hundredth below a tier is the tier before it.
 const BOUNDARIES: Array<[number, string]> = [
-    [0, 'Newcomer'], [199, 'Newcomer'], [200, 'Resident'], [599, 'Resident'],
-    [600, 'Steward'], [1399, 'Steward'], [1400, 'Elder'], [2000, 'Elder'],
+    [0, 'Newcomer'], [19999, 'Newcomer'], [20000, 'Resident'], [59999, 'Resident'],
+    [60000, 'Steward'], [139999, 'Steward'], [140000, 'Elder'], [200000, 'Elder'],
 ];
 
 describe('TIER_LEVELS', () => {
@@ -22,7 +23,7 @@ describe('TIER_LEVELS', () => {
             ['Steward', c.CREDIT_BASE_FLOOR - c.RESIDENT_THRESHOLD],
             ['Elder', c.CREDIT_BASE_FLOOR - c.STEWARD_THRESHOLD],
         ]);
-        expect(TIER_LEVELS.map(t => t.minCredit)).toEqual([0, 200, 600, 1400]);
+        expect(TIER_LEVELS.map(t => t.minCredit)).toEqual([0, 20000, 60000, 140000]);
     });
 
     it('an admin tier badge lands exactly on that tier', () => {
@@ -44,20 +45,20 @@ describe('tierForCredit', () => {
     });
 
     it('agrees with getTier(floor) on both sides of every boundary', () => {
-        for (let credit = 0; credit <= 2000; credit += 0.5) {
+        for (let credit = 0; credit <= 200000; credit += 50) {
             expect(getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit).name).toBe(tierForCredit(credit).name);
         }
     });
 
     it('treats nonsense as Newcomer', () => {
         expect(tierForCredit(NaN).name).toBe('Newcomer');
-        expect(tierForCredit(-50).name).toBe('Newcomer');
+        expect(tierForCredit(-5000).name).toBe('Newcomer');
     });
 });
 
 describe('getTier', () => {
     it('returns a badge only — nothing a caller could gate on', () => {
-        expect(Object.keys(getTier(-1400)).sort()).toEqual(['emoji', 'name']);
+        expect(Object.keys(getTier(-140000)).sort()).toEqual(['emoji', 'name']);
     });
 });
 

@@ -1,3 +1,4 @@
+import { beans, wholeBeansOf } from '../hundredths.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -47,17 +48,19 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
     it('its Levels card adds up with the tiers the screens use: 200 trust is level 2 of 4, earned from the value traded', () => {
         const s = SAMPLE_COMMUNITY;
         expect([s.trust, s.valueTraded, s.partners, s.rating, s.reviews]).toEqual([200, 582, 5, 4.8, 5]);
+        // The sample's figures are whole Beans (showcase words); the protocol counts hundredths, so each is compared as beans(n).
         // The trust backs the floor, and the tiers read it as level 2 of 4 (what memberLevel gives a screen).
         expect(s.trust).toBe(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - s.floor);
         expect(TIER_LEVELS).toHaveLength(s.levels);
-        expect(tierIndexForCredit(s.trust)).toBe(s.level - 1);
-        expect(memberLevel({ floor_c: s.floor, tierCredit_c: s.trust })).toEqual({ index: s.level - 1, credit: s.trust });
-        expect(s.trust).toBeLessThan(TIER_LEVELS[s.level].minCredit);
-        // All of it earned by trading: the curve gives exactly the trust for the value traded, and one Bean less falls short.
-        expect(earnedCreditFromValue(s.valueTraded)).toBe(s.trust);
-        expect(earnedCreditFromValue(s.valueTraded - 1)).toBeLessThan(s.trust);
+        expect(tierIndexForCredit(beans(s.trust))).toBe(s.level - 1);
+        expect(memberLevel({ floor_c: beans(s.floor), tierCredit_c: beans(s.trust) })).toEqual({ index: s.level - 1, credit: beans(s.trust) });
+        expect(beans(s.trust)).toBeLessThan(TIER_LEVELS[s.level].minCredit);
+        // All of it earned by trading: the curve (in hundredths, so finer than a Bean) gives the card's whole-Bean trust for
+        // the value traded, and one Bean less falls short of it.
+        expect(wholeBeansOf(earnedCreditFromValue(beans(s.valueTraded)))).toBe(s.trust);
+        expect(earnedCreditFromValue(beans(s.valueTraded - 1))).toBeLessThan(beans(s.trust));
         // Value with any one partner counts up to the cap, so that much value needs at least this many partners.
-        expect(s.partners).toBeGreaterThanOrEqual(Math.ceil(s.valueTraded / PER_COUNTERPARTY_VOLUME_CAP));
+        expect(s.partners).toBeGreaterThanOrEqual(Math.ceil(beans(s.valueTraded) / PER_COUNTERPARTY_VOLUME_CAP));
         expect(s.rating).toBeGreaterThan(0);
         expect(s.rating).toBeLessThanOrEqual(5);
         expect(Number.isInteger(s.reviews) && s.reviews > 0).toBe(true);

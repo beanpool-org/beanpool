@@ -179,7 +179,7 @@ export const TABLES: Record<string, TableEntry> = {
             board_standing_changed_at inviter_shown`),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
-            callsign_fold: { reason: "each server makes its own from callsign: db.ts migrateCallsignFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },
+            callsign_fold: { reason: "each server makes its own from callsign: the engine's installNameFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },
         },
     },
     // Holiday, notification settings and reminder defaults, in each member's row (`preferences`, G2b): every writer stamps
@@ -660,7 +660,7 @@ export function isInternalTable(name: string, type: string): boolean {
 export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
     updated_at: { reason: 'the stamp itself' },
     last_active_at: { reason: 'travels only with another change of the row, by design' },
-    callsign_fold: { reason: "made from callsign on each server (db.ts migrateCallsignFold), so a change of callsign, which the trigger lists, carries it" },
+    callsign_fold: { reason: "made from callsign on each server (the engine's installNameFold), so a change of callsign, which the trigger lists, carries it" },
     board_standing_changed_at: { reason: 'every change of standing moves updated_at in the same statement (paused and status are in the trigger; setHolidayMode stamps both), so a delta carries it; listed, the trigger would restamp a copied row' },
 };
 
@@ -821,6 +821,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     backing_drift_said: { kind: 'per-server', reason: "the enterprise counts this server's boot last said in its log, so it says them once per change (state-engine.ts reportBackingFigureDriftAtBoot)" },
     'doorNumbers.*': { kind: 'per-server', reason: "the open door's numbers, this server's own and never copied (engine/door-signal.ts)" },
     'migration_*': { kind: 'per-server', reason: "one-shot boot markers of this server's own database" },
+    schema_release: { kind: 'per-server', reason: "the release whose schema steps last ran on this server's own file, its half of the stamp (db/schema-gate.ts); each server stamps its own" },
 };
 
 /** Fields of the `node_config` row's JSON object (state-engine.ts NodeConfig). */

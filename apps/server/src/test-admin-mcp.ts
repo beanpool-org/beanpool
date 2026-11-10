@@ -41,7 +41,7 @@ import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { submitKnock } from './engine/knocks.js';
 import { listSnapshots } from './services/snapshot-scheduler.js';
 import { getAlertsStatus, updateAlerts } from './services/alerts.js';
-import { db, rebuildSystemLogsCheck } from './db/db.js';
+import { db } from './db/db.js';
 import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { welcomeInstructions, promptText, PROMPTS, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
@@ -147,24 +147,6 @@ async function main(): Promise<void> {
     for (const k of ['log', 'info', 'warn', 'error'] as const) {
         const orig = console[k].bind(console);
         (console as any)[k] = (...a: unknown[]) => { logged.push(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')); orig(...a); };
-    }
-
-    // ── 9b. A system_logs table from before takes the AGENT category, keeping its rows ──
-    {
-        const old = new Database(':memory:');
-        old.exec(`CREATE TABLE system_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
-            category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS')), message TEXT NOT NULL, metadata TEXT);
-            INSERT INTO system_logs (level, category, message) VALUES ('INFO', 'SYS', 'kept 1'), ('WARN', 'AUTH', 'kept 2');`);
-        let refusedBefore = false;
-        try { old.prepare("INSERT INTO system_logs (level, category, message) VALUES ('INFO', 'AGENT', 'x')").run(); } catch { refusedBefore = true; }
-        const rebuilt = rebuildSystemLogsCheck(old);
-        old.prepare("INSERT INTO system_logs (level, category, message) VALUES ('INFO', 'AGENT', 'an assistant read')").run();
-        const rows = old.prepare('SELECT id, category, message FROM system_logs ORDER BY id').all() as any[];
-        assert(refusedBefore && rebuilt && rows.length === 3 && rows[0].message === 'kept 1' && rows[2].id === 3 && rows[2].category === 'AGENT'
-            && rebuildSystemLogsCheck(old) === false,
-        `an old system_logs refuses AGENT; rebuilt, it keeps its rows and ids and takes AGENT; a second run does nothing (${JSON.stringify(rows)})`);
-        old.close();
     }
 
     await initTls();

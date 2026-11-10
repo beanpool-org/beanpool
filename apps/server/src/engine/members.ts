@@ -514,7 +514,7 @@ export function updateProfile(
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
             // Any change, a change of case included: the member's own row is left out of the check, so "marty" →
-            // "Marty" is free, but where a node already holds two names that fold the same (db.ts migrateCallsignFold),
+            // "Marty" is free, but where a node already holds two names that fold the same,
             // one of them may not take the other's spelling exactly (the unique index on lower(callsign) would refuse
             // it as a raw error) or any other case of it.
             if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');

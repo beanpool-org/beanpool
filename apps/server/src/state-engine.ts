@@ -33,8 +33,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, takeVouchResetReport } from './db/db.js';
-import { countsLine } from './db/vouch-reset.js';
+import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -739,29 +738,10 @@ const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
-/**
- * The vouching reset's one system_logs line and the owners' alert (db/vouch-reset.ts, R0), when this boot reset anything:
- * the counts it read before writing, and the rows it changed. Numbers only. Never throws: a boot that reset is a boot.
- */
-function reportVouchResetAtBoot(): void {
-    const r = takeVouchResetReport();
-    if (!r) return;
-    try {
-        const line = `Vouching reset: old vouching is off on this node. Counted first: ${countsLine(r.counts)}. `
-            + `${r.membersReset} member row(s) turned off, ${r.invitesDeleted} unused invite(s) that promised a vouch deleted, `
-            + `and the four vouch columns dropped.`;
-        logger.info('SYS', line, { ...r.counts, membersReset: r.membersReset, invitesDeleted: r.invitesDeleted });
-        void import('./services/alerts.js').then((alerts) => alerts.raiseOnce('reset.vouching', line)).catch(() => { });
-    } catch (e) {
-        console.error('[Boot] Could not log the vouching reset:', e);
-    }
-}
-
 export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
-    reportVouchResetAtBoot();
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
@@ -1077,63 +1057,6 @@ function runMainServerMigrations(): void {
     } catch (e) { console.warn('[Groups] Could not remove readable group chat lines:', e); }
 }
 
-/**
- * The wait before the first turn of a members' photo move resumed after boot, and before a retry once one stops: short,
- * because phones reconnect right after an upgrade, and until the move ends the members list says "no photo" for those
- * it has not reached (armMemberPhotoMoveResume).
- */
-export const MEMBER_PHOTO_RESUME_MS = 5 * 1000;
-/** The wait between two turns while the resumed move has rows left: the event loop is the members' between batches. */
-export const MEMBER_PHOTO_RESUME_GAP_MS = 250;
-/** The longest wait between retries of a resumed move that keeps stopping (a disk still full). */
-export const MEMBER_PHOTO_RESUME_MAX_MS = 60 * 60 * 1000;
-
-/**
- * How long the resumed members' photo move waits before its next turn (armMemberPhotoMoveResume): a short gap while it
- * has rows left; after `failures` turns in a row that stopped, the first wait doubled each time, never past the longest.
- */
-export function memberPhotoResumeWait(outcome: 'more' | 'stopped', failures: number, first = MEMBER_PHOTO_RESUME_MS): number {
-    if (outcome === 'more') return MEMBER_PHOTO_RESUME_GAP_MS;
-    return Math.min(first * 2 ** Math.min(Math.max(failures - 1, 0), 20), MEMBER_PHOTO_RESUME_MAX_MS);
-}
-
-/**
- * A members' photo move that stopped at boot (a full disk, an I/O error) carries on while the node runs (db.ts
- * resumeMemberPhotoMove, #1482), so its photos reach member_photos without waiting for a restart: one batch a turn,
- * a short gap between turns while rows are left, a longer wait each time a turn stops (memberPhotoResumeWait), and no
- * more turns once the move is done. A node whose move finished at boot does one cheap turn (no old column) and stops.
- * On a main server only, and each turn asks the role again: a standby's copy never writes the old column, and its rows
- * are its main server's (engine/sync.ts MEMBER_PHOTO_COLUMNS). Each turn that clears a row's old value bumps the members'
- * and the listings' versions, so no app is answered 304 from a copy made before: the members list gives a photo still
- * inline a stand-in URL (db.ts MEMBER_PHOTO_INLINE_REF), which changes once the photo moves, or goes once a value that
- * was no photo is cleared.
- */
-function armMemberPhotoMoveResume(): void {
-    const first = Number(process.env.MEMBER_PHOTO_RESUME_MS) || MEMBER_PHOTO_RESUME_MS;
-    let failures = 0;
-    const turn = () => {
-        let wait: number;
-        if (getNodeRole() !== 'primary') {
-            wait = MEMBER_PHOTO_RESUME_MAX_MS;
-        } else {
-            let outcome: 'done' | 'more' | 'stopped';
-            try {
-                const done = resumeMemberPhotoMove();
-                outcome = done.outcome;
-                if (done.cleared > 0) { bumpMembersVersion(); bumpPostsVersion(); }
-            } catch (e) {
-                console.warn("[DB] Members' photos: a turn of the resumed move failed:", e);
-                outcome = 'stopped';
-            }
-            if (outcome === 'done') return;
-            failures = outcome === 'stopped' ? failures + 1 : 0;
-            wait = memberPhotoResumeWait(outcome, failures, first);
-        }
-        setTimeout(turn, wait).unref();
-    };
-    setTimeout(turn, first).unref();
-}
-
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
 let mainServerTimersArmed = false;
 
@@ -1151,7 +1074,6 @@ function armMainServerTimers(): void {
     if (mainServerTimersArmed) return;
     mainServerTimersArmed = true;
     const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
-    armMemberPhotoMoveResume();
     setTimeout(onMainServer(() => {
         try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
     }), 60 * 1000);

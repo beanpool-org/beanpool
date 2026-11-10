@@ -10,7 +10,7 @@
  *
  *   1. A keeper bound to enterprise A cannot post/approve/complete/sweep on enterprise B.
  *   2. Admin can assign and revoke per-enterprise, effective without a restart.
- *   3. Existing operators keep working after migration.
+ *   3. The node-wide operator flag alone grants nothing (the seed from it went with the 1.4.0 gate).
  *   4. Members can see who keeps a given enterprise.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-treasury-keepership.ts
@@ -30,7 +30,7 @@ import {
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
+import { db } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -232,29 +232,14 @@ async function main() {
     try { adminAssignTreasuryOperator(eggs, wood, 'admin'); } catch (e: any) { threw = e.message; }
     assert(/cannot keep another treasury/i.test(threw), `a treasury cannot keep another treasury (got "${threw}")`);
 
-    // ── 7. Migration — existing operators keep working ──────────────────────────
-    // Simulate a pre-#106 node: legacy flag set, no bindings.
-    db.prepare('DELETE FROM treasury_operators').run();
+    // ── 7. The node-wide flag alone grants nothing ──────────────────────────
+    // (The seed of bindings from that flag, for a node from before #106, went with the 1.4.0 gate: db/schema-gate.ts.)
     adminSetOperator(doone.pubKeyHex, true);
-    assert(canOperateTreasury(doone.pubKeyHex, eggs) === false, 'pre-migration: the legacy flag alone grants nothing');
-
-    // Expect the rule (legacy operators × enterprises), not a magic number — earlier steps in this
-    // file change how many members hold the flag.
-    const legacyCount = (db.prepare('SELECT COUNT(*) AS c FROM members WHERE can_operate = 1').get() as any).c;
-    const treasuryCount = (db.prepare('SELECT COUNT(*) AS c FROM members WHERE is_treasury = 1').get() as any).c;
-    const written = seedTreasuryOperatorsFromLegacyFlag();
-    assert(
-        written === legacyCount * treasuryCount,
-        `migration over-grants one row per enterprise: ${legacyCount} keeper(s) × ${treasuryCount} enterprise(s) = ${legacyCount * treasuryCount} (wrote ${written})`,
-    );
-    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true, 'post-migration: an existing operator keeps Eggs');
-    assert(canOperateTreasury(doone.pubKeyHex, wood) === true, 'post-migration: and keeps Firewood — pruning is the admin\'s job');
-
-    // Re-running must not resurrect what an admin pruned.
-    adminRevokeTreasuryOperator(wood, doone.pubKeyHex);
-    const again = seedTreasuryOperatorsFromLegacyFlag();
-    assert(again === 0, `migration is a no-op once the table is non-empty (wrote ${again})`);
-    assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a pruned binding STAYS pruned across re-runs');
+    assert(canOperateTreasury(doone.pubKeyHex, eggs) === false, 'the operator flag alone grants nothing: no binding, no authority');
+    // Where the sections below start from: Doone keeps Eggs, by an assignment.
+    adminAssignTreasuryOperator(eggs, doone.pubKeyHex, 'admin');
+    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true && canOperateTreasury(doone.pubKeyHex, wood) === false,
+        'assigned, Doone keeps Eggs and not Firewood');
 
     // ── 8. Admin cannot SPEND an enterprise's money; administration/moderation preserved ──
     const admin = makeIdentity('genesis-admin');

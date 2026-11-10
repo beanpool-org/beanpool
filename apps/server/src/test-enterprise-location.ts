@@ -19,7 +19,8 @@
  *     - /api/treasuries, /api/enterprises and the detail endpoints omit coordinates for completed enterprises.
  *     - A node admin can still clear a completed enterprise's location (signed member route and Settings app route);
  *       a stranger cannot.
- *     - The boot migration clears coordinates already stored on completed enterprises and leaves active ones alone.
+ *     (The boot pass that cleared coordinates already stored on completed enterprises, audit A17, went in the 1.4.0
+ *     cutover: every kept node had run it, and the gate opens no database older than 1.2.36.)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-location.ts
  */
@@ -35,7 +36,7 @@ import {
 } from './state-engine.js';
 import { approximateLocation, roundToRoughly100m } from '@beanpool/core';
 import { startHttpsServer } from './https-server.js';
-import { db, initSchema } from './db/db.js';
+import { db } from './db/db.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -398,19 +399,6 @@ async function main() {
         // Setting (not clearing) a location on a completed enterprise stays refused, even for an admin
         const adminSetCompleted = await signedFetch('POST', `/api/enterprise/${adminClearTarget}/location`, adminId, { lat: -28.5, lng: 153.5 });
         assert(adminSetCompleted.status === 403 || adminSetCompleted.status === 400, `Admin cannot SET a location on a completed enterprise (got ${adminSetCompleted.status})`);
-
-        // 8d. Migration clears coordinates already stored on completed enterprises; active ones untouched
-        const migrateTarget = completedWithCoords('MigrateWoundUp', -28.534, 153.524);
-        const activeBefore = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
-        assert(activeBefore.lat !== null, 'Active enterprise has coordinates before the migration');
-        initSchema();
-        const migratedRow = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
-        assert(migratedRow.lat === null && migratedRow.lng === null, `Migration clears coordinates on a pre-existing completed enterprise (got ${migratedRow.lat}, ${migratedRow.lng})`);
-        const activeAfter = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
-        assert(JSON.stringify(activeAfter) === JSON.stringify(activeBefore), 'Migration leaves an active enterprise’s location untouched');
-        initSchema();
-        const migratedTwice = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
-        assert(migratedTwice.lat === null && migratedTwice.lng === null, 'Migration is idempotent (second boot is a no-op)');
 
         console.log(`\nAll ${passed}/${run} enterprise location tests passed!`);
     } finally {

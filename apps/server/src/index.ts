@@ -72,6 +72,7 @@ import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
+import { refuseUnopenableDatabase } from './db/db.js';
 import { startRecoverNoticeWatch, RECOVER_ACTOR } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
@@ -119,6 +120,10 @@ const PORT_P2P_WS = process.env.PORT_P2P_WS?.trim()
 
 async function main() {
     console.log('\n🫘  BeanPool Node starting...\n');
+
+    // Step 0.4: the database's gate (db/schema-gate.ts), before any step below can write to it (the logger writes its lines
+    // to system_logs): a file this release may not open is refused in one line, as it was.
+    refuseUnopenableDatabase();
 
     // Step 0.5: the data dir's files before anything reads them: a crash's temp files removed, key files made 0600,
     // local-config.json's last good copy written when it has none (boot-file-safety.ts).

@@ -777,7 +777,8 @@ describe('the delete rule: what the node is told and when', () => {
 
     it('only the two hosts call the tool routes; on the server only the store, its route and the copies (standby, re-key, account close) touch the table', () => {
         const REPO = path.resolve(__dirname, '../../../..');
-        const SKIP = /(^|\/)(node_modules|dist|generated|__tests__|android|ios|\.expo)(\/|$)|\.test\.[jt]sx?$|(^|\/)test-[^/]*\.ts$/;
+        // __fixtures__ as the server's own check skips it (test-tool-store.ts): an old release's schema.sql, kept as test data.
+        const SKIP = /(^|\/)(node_modules|dist|generated|__tests__|__fixtures__|android|ios|\.expo)(\/|$)|\.test\.[jt]sx?$|(^|\/)test-[^/]*\.ts$/;
         const walk = (dir: string): string[] => fs.readdirSync(path.join(REPO, dir), { withFileTypes: true }).flatMap((e) => {
             const rel = `${dir}/${e.name}`;
             if (SKIP.test(rel)) return [];
@@ -789,11 +790,11 @@ describe('the delete rule: what the node is told and when', () => {
             .filter((d) => fs.existsSync(path.join(REPO, d)));
         const callers = clients.flatMap(walk).filter((f) => /\/api\/tools\/|\/tools\/\$\{|toolCopyPath\(/.test(read(f)));
         expect(callers.sort()).toEqual(['apps/native/tools/node-copy.ts', 'apps/pwa/src/tools/node-copy.ts', 'packages/beanpool-core/src/tools/node-copy.ts']);
-        // No sync page, Home answer, pooled count or admin screen reads it. db.ts names it for its one rebuild (a CHECK raised
-        // to 128 KB, rows copied across unread).
+        // No sync page, Home answer, pooled count or admin screen reads it. (db.ts named it for its one rebuild, a CHECK raised
+        // to 128 KB, until the 1.4.0 cutover: 1.2.36 has the table in that shape, and the node's gate opens nothing older.)
         const server = walk('apps/server/src').filter((f) => /member_tool_state|tool-state\.js|routes\/tools\.js/.test(read(f)));
         expect(server.sort()).toEqual([
-            'apps/server/src/db/db.ts', 'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+            'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
             'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts', 'apps/server/src/https-server.ts',
             'apps/server/src/routes/tools.ts', 'apps/server/src/state-engine.ts',
         ]);

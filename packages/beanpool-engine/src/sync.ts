@@ -991,7 +991,7 @@ function groupsWithPictures(db: Db, rows: any[]): SyncGroup[] {
 // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
 // delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
 // pulling with the replication token or the admin password (routes/backup.ts): the database's own trust. Never
-// `callsign_fold`: each server makes its own from the name (the server's db.ts migrateCallsignFold).
+// `callsign_fold`: each server makes its own from the name (installNameFold's triggers, names.ts).
 function memberOfRow(row: any, preferencesOf: ReadonlyMap<string, Record<string, string>>): Member {
     const { public_key: _key, updated_at: _stamp, callsign_fold: _fold, ...standing } = row;
     return {

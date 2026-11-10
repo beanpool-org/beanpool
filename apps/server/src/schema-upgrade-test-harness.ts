@@ -69,7 +69,9 @@ export const tmp = (name: string): string =>
  */
 export function lateAddedColumns(): string[] {
     const src = fs.readFileSync(DB_TS_PATH, 'utf-8');
-    const marker = src.indexOf('db.exec(schemaSql)');
+    // The LAST exec: the one every file the gate opens runs (db/schema-gate.ts). The first is a fresh install's, inside its
+    // stamp's transaction on an empty file, where no table exists for an ALTER to meet.
+    const marker = src.lastIndexOf('db.exec(schemaSql)');
     if (marker < 0) throw new Error('Could not find db.exec(schemaSql) in db.ts — this check needs rewriting');
     const cols = (text: string) =>
         [...text.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)].map(m => `${m[1]}.${m[2]}`);

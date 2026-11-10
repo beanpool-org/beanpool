@@ -855,10 +855,12 @@ async function main(): Promise<void> {
         }
     };
     for (const dir of ['apps/server/src', 'packages']) walk(path.join(root, dir));
-    const EXPECTED = ['apps/server/src/db/db.ts', 'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+    // db.ts named it for its one rebuild (a CHECK raised to 128 KB, rows copied across unread) until the 1.4.0 cutover: 1.2.36
+    // has the table in that shape, and the gate opens nothing older (db/schema-gate.ts).
+    const EXPECTED = ['apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
         'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts'];
     assert(same(named.sort(), EXPECTED),
-        `only the store, its schema and its one rebuild (db.ts, a CHECK raised, rows copied across unread), its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
+        `only the store, its schema, its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

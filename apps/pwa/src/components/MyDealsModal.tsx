@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -187,6 +187,11 @@ export function MyDealsModal({
         }
         return map;
     }, [preview, effectiveTransactions, transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set((preview ? effectiveTransactions : transactions)
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [preview, effectiveTransactions, transactions]);
 
     const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
     const rawTxs = preview ? effectiveTransactions : transactions;
@@ -376,7 +381,10 @@ export function MyDealsModal({
                                     // and the card still opens the listing, where Stop is.
                                     const standing = dealsTab === 'pending' ? standingPanel(item, currentPubkey, (iso) => formatDate(new Date(iso), 'day-month')) : null;
                                     const isInteractive = isPending || !!standing || (dealsTab === 'pending' && isRequested);
-                                    const needsReview = !standing && isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+                                    // Core's rule: a standing deal asks for one review, on its first period (design §3).
+                                    const needsReview = !standing && isCompleted && dealStep(item, currentPubkey).state === 'done-to-review';
+                                    // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2).
+                                    const historyLine = dealsTab === 'history' ? standingHistoryLine(item, currentPubkey, (iso) => formatDate(new Date(iso), 'day-month')) : null;
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
 
                                     if (!preview) {
@@ -457,6 +465,9 @@ export function MyDealsModal({
                                                                 className={`text-xs mt-1 break-words ${standing?.warning ? 'font-bold text-amber-800 dark:text-amber-300' : 'text-nature-600 dark:text-nature-400'}`}>
                                                                 {standing ? standing.status : dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
                                                             </p>
+                                                        )}
+                                                        {historyLine && (
+                                                            <p data-testid={`deal-history-${item.id}`} dir="auto" className="text-xs mt-1 break-words text-nature-600 dark:text-nature-400">{historyLine}</p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -605,7 +616,8 @@ export function MyDealsModal({
                                 if (!preview) {
                                     const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
                                     const relatedTx = activeTxsByPostId.get(item.id)?.[0];
-                                    const isHeld = item.status === 'pending' || relatedTx?.status === 'pending';
+                                    const standingTaken = item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id);
+                                    const isHeld = !standingTaken && (item.status === 'pending' || relatedTx?.status === 'pending');
                                     const isActionRequired = relatedTx?.status === 'requested' && ((item.authorPublicKey ?? (item as any).author_pubkey) === currentPubkey);
 
                                     return (
@@ -677,7 +689,9 @@ export function MyDealsModal({
                                                         isActionRequired ? 'text-amber-800 dark:text-amber-400' : 'text-nature-500 dark:text-nature-400'
                                                     }`}>
                                                         {(() => {
-                                                            if (isHeld) {
+                                                            if (standingTaken) {
+                                                                return standingLines.chip();
+                                                            } else if (isHeld) {
                                                                 return t('🤝 Held in Trust');
                                                             } else if (relatedTx?.status === 'requested') {
                                                                 return isActionRequired ? t('⚠️ Action Required') : t('⏳ Awaiting Approval');

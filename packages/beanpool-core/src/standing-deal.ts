@@ -276,6 +276,8 @@ export const standingLines = {
         ? t("If you're short when a month is due, you'll be told a few days before.")
         : t("If you're short when a week is due, you'll be told the day before.")),
     agree: (beans: number) => t('Agree and pay {n} Beans', { n: n2(beans) }),
+    /** Agree is disabled when the payer's usable room can't pay the first period (design §3: never a button that fails). */
+    noRoom: (beans: number, room: number) => t('You need {n} Beans of room; you have {room}', { n: n2(beans), room: n2(Math.max(0, room)) }),
 
     // The deal card while it runs (design §3)
     since: (unit: StandingPeriodUnit, date: string, beans: number) => (unit === 'month'
@@ -376,6 +378,13 @@ export const standingLines = {
         ? t('{title}: the last month of this standing deal is paid. It ends on {date}.', { title, date })
         : t('{title}: the last week of this standing deal is paid. It ends on {date}.', { title, date })),
     ended: (title: string) => t('The standing deal for {title} has ended. Nothing more will be paid.', { title }),
+    // Your deals' History row of one stopped in the grace (amendment §1)
+    historyStoppedByYou: (unit: StandingPeriodUnit, date: string) => (unit === 'month'
+        ? t('Stopped by you on {date} · this month unpaid · nothing owed', { date })
+        : t('Stopped by you on {date} · this week unpaid · nothing owed', { date })),
+    historyStoppedBy: (unit: StandingPeriodUnit, name: string, date: string) => (unit === 'month'
+        ? t('Stopped by {name} on {date} · this month unpaid · nothing owed', { name, date })
+        : t('Stopped by {name} on {date} · this week unpaid · nothing owed', { name, date })),
     serverAway: (title: string) => t("This community's server was away for longer than a whole period, so the standing deal for {title} has ended and nothing was paid for it. Talk to each other, and take it up again if you both want to.", { title }),
     cantRun: (title: string) => t("The standing deal for {title} can't carry on, so it has ended. Nothing more will be paid.", { title }),
 
@@ -470,9 +479,21 @@ export function standingStartAt(now: number, daysAhead: number): number {
     return now + d * 86_400_000;
 }
 
+/**
+ * The Beans a member can pay now, from the node's balance read (GET /api/ledger/balance): their balance less their usable
+ * floor (the floor their live Offers unlock; the earned floor when the read has none). Null when the read isn't there, so a
+ * take-up whose room is unknown is never disabled by a guess (the node still checks).
+ */
+export function standingRoomOf(b: { balance?: number | null; floor?: number | null; usableFloor?: number | null } | null | undefined): number | null {
+    if (!b || typeof b.balance !== 'number' || !Number.isFinite(b.balance)) return null;
+    const floor = typeof b.usableFloor === 'number' && Number.isFinite(b.usableFloor) ? b.usableFloor
+        : typeof b.floor === 'number' && Number.isFinite(b.floor) ? b.floor : 0;
+    return Math.round((b.balance - floor) * 100) / 100;
+}
+
 /** Every line of the take-up screen (design §3), one set for both apps. `day` writes a date as the app does ("9 Nov"). */
 export function standingTakeUpLines(
-    input: { unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; startsAt: number; periods: number },
+    input: { unit: StandingPeriodUnit; beans: number; title: string; payeeName: string; startsAt: number; periods: number; room?: number | null },
     day: (iso: string) => string,
 ) {
     const { unit, beans } = input;
@@ -491,6 +512,9 @@ export function standingTakeUpLines(
         howItRuns: standingLines.howItRuns(unit),
         shortAhead: standingLines.shortAhead(unit),
         agree: standingLines.agree(beans),
+        // The payer's usable room (balance less their usable floor), when the app knows it: short of the first period, Agree
+        // is disabled and this line says why. Null when there is room, or the room isn't known (the node still checks).
+        noRoom: input.room != null && Number.isFinite(input.room) && input.room < beans ? standingLines.noRoom(beans, input.room) : null,
         fewer: t('One fewer'),
         more: t('One more'),
         earlier: t('A day earlier'),
@@ -520,6 +544,10 @@ export interface StandingDealRow {
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
     standingStopped?: boolean;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
 }
 
 /**
@@ -617,6 +645,31 @@ export function standingStopConfirm(tx: StandingDealRow, actingAs: string, day: 
         yes: t('Stop it'),
         no: t('Keep it'),
     };
+}
+
+/**
+ * The History line of an ended standing deal, for one of its sides (amendment §1, §2): stopped in the grace says who stopped
+ * it and when, that the period was unpaid and nothing is owed; its grace run out says it ended unpaid, in each side's words
+ * (the payee never hears the payer's balance). Null for any other end, a deal still running, a one-off deal or a stranger.
+ */
+export function standingHistoryLine(tx: StandingDealRow, me: string, day: (iso: string) => string): string | null {
+    if (!tx.standingId || tx.standingPhase !== 'ended' || !me) return null;
+    const payer = tx.buyerPublicKey === me;
+    if (!payer && tx.sellerPublicKey !== me) return null;
+    const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
+    const valid = (iso: string | null | undefined): iso is string => !!iso && Number.isFinite(Date.parse(iso));
+    const payeeName = tx.sellerCallsign || t('A member');
+    const payerName = tx.buyerCallsign || t('A member');
+    if (tx.standingEndedReason === 'stopped' && valid(tx.standingShortSince) && valid(tx.standingEndedAt)) {
+        if (tx.standingStoppedBy === me) return standingLines.historyStoppedByYou(unit, day(tx.standingEndedAt));
+        const name = tx.standingStoppedBy === tx.buyerPublicKey ? payerName : tx.standingStoppedBy === tx.sellerPublicKey ? payeeName : t('A member');
+        return standingLines.historyStoppedBy(unit, name, day(tx.standingEndedAt));
+    }
+    if (tx.standingEndedReason === 'short' && valid(tx.standingShortSince)) {
+        const title = tx.postTitle || t('A standing deal');
+        return payer ? standingLines.endedShortPayer(unit, title, payeeName) : standingLines.endedShortPayee(unit, payerName, title, day(tx.standingShortSince));
+    }
+    return null;
 }
 
 /** One live "Needs you" line for a short standing deal (amendment §2): the payer's step (amber, counted) or the payee's (calm). */

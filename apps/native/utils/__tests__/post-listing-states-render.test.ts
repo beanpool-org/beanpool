@@ -181,6 +181,8 @@ const node = {
     mine: [] as Array<Record<string, unknown>>, kept: [] as Array<Record<string, unknown>>, keeperOf: [] as string[],
     /** Messages unread on this listing, by the one who wrote them; and every chat the page opened (its arguments). */
     unread: {} as Record<string, number>, chats: [] as unknown[][],
+    /** The phone's cached balance (getBalance), and the node's own read (refreshBalanceFromServer; undefined: it never answers). */
+    cached: null as Record<string, unknown> | null, fresh: undefined as unknown,
 };
 function answers(post: Record<string, unknown>) {
     // The phone's copy of a row (utils/db.ts applyDelta): a standing deal's current period keeps its phase in the `standing` column.
@@ -205,13 +207,14 @@ function answers(post: Record<string, unknown>) {
     };
     const table: Record<string, unknown> = {
         getPost: post, getDb: database, getMemberRatings: { average: 4.5, count: 3 },
-        getBalance: { isBlockedFromTrading: false, keeperOf: node.keeperOf }, fetchGroupDetails: { group: { viewerRole: null } },
+        getBalance: { isBlockedFromTrading: false, keeperOf: node.keeperOf, ...(node.cached ?? {}) }, fetchGroupDetails: { group: { viewerRole: null } },
         getMarketplaceTransactions: node.mine, getDealsFor: node.kept, treasuryComplete: { success: true }, completeMarketplaceTransaction: { success: true },
         treasuryReject: { success: true },
     };
     return (name: string, args: unknown[]) => {
         if (name === 'getUnreadCountForPost') return Promise.resolve(node.unread[String(args[2])] ?? 0);
         if (name === 'createConversationApi') { node.chats.push(args); return Promise.resolve({ id: 'conv-1' }); }
+        if (name === 'refreshBalanceFromServer' && node.fresh !== undefined) return Promise.resolve(node.fresh);
         return name in table ? Promise.resolve(table[name]) : undefined;
     };
 }
@@ -226,7 +229,7 @@ beforeEach(() => {
     nav.to.length = 0;
     alerts.said.length = 0;
     alerts.buttons = [];
-    node.mine = []; node.kept = []; node.keeperOf = []; node.unread = {}; node.chats = [];
+    node.mine = []; node.kept = []; node.keeperOf = []; node.unread = {}; node.chats = []; node.cached = null; node.fresh = undefined;
     chatAboutDrafts.clear();
     events.listeners.clear();
     store.map.clear();
@@ -512,6 +515,50 @@ for (const theme of ['light', 'dark'] as const) {
             await press(host, 'Approve & Commit');
             expect(host.querySelector('[data-testid="standing-take-up"]')).toBeNull();
             expect(net.calls).toContain('db.approveMarketplaceRequest');
+        });
+
+        // The take-up's room (#3032 round 2, the deciding review's inline): only the node's own balance read can disable Agree.
+        // The phone's cached getBalance reads floor 0 when its copy is missing or stale, so a member with room on the node
+        // (10 Beans, usable floor −200) would read 10 and be refused on a guess; unknown room leaves Agree, and the node checks.
+        const MONTHLY = { title: 'Vehicle Storage', price_type: 'monthly', credits: 50 };
+        const agree = () => host.querySelector('[data-testid="standing-agree"]') as HTMLElement;
+        const agreeOff = () => JSON.parse(agree().getAttribute('data-style') ?? '{}').opacity === 0.6;
+        const takeUp = async () => {
+            await open(listing(MONTHLY));
+            await press(host, '🤝 Accept Offer');
+            expect(host.querySelector('[data-testid="standing-take-up"]'), 'the take-up').not.toBeNull();
+        };
+        const tapAgree = async () => { await act(async () => { agree().click(); }); await settle(4); };
+        it("take-up room: the phone's cached balance alone (10 Beans, floor 0: a missing or stale copy) never disables Agree", async () => {
+            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
+            await takeUp();
+            expect(host.querySelector('[data-testid="standing-no-room"]')).toBeNull();
+            expect(agreeOff()).toBe(false);
+            await tapAgree();
+            expect(net.calls).toContain('db.signStandingStart');
+        });
+        it("take-up room: the node's read failed: room unknown, Agree stays", async () => {
+            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
+            node.fresh = null;
+            await takeUp();
+            expect(net.calls).toContain('db.refreshBalanceFromServer');
+            expect(host.querySelector('[data-testid="standing-no-room"]')).toBeNull();
+            expect(agreeOff()).toBe(false);
+        });
+        it("take-up room: the node's own read with room (10 Beans, usable floor −200) over a stale cache: Agree stays", async () => {
+            node.cached = { balance: 10, floor: 0, usableFloor: 0 };
+            node.fresh = { balance: 10, floor: -200, usableFloor: -200 };
+            await takeUp();
+            expect(host.querySelector('[data-testid="standing-no-room"]')).toBeNull();
+            expect(agreeOff()).toBe(false);
+        });
+        it("take-up room: the node's own read with no room (10 Beans, usable floor 0): Agree disabled, the plain line under it", async () => {
+            node.fresh = { balance: 10, floor: 0, usableFloor: 0 };
+            await takeUp();
+            expect(host.querySelector('[data-testid="standing-no-room"]')?.textContent).toBe('You need 50 Beans of room; you have 10');
+            expect(agreeOff()).toBe(true);
+            await tapAgree();
+            expect(net.calls).not.toContain('db.signStandingStart');
         });
 
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {

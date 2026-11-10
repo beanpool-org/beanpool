@@ -234,6 +234,29 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(bell().getAttribute('aria-label')).toMatch(/needs? you/);
     });
 
+    it("a short standing deal's live line (amendment §2): no ✕ on it, and neither ✕ nor Clear all removes it (U2)", async () => {
+        const day = 86_400_000;
+        vi.mocked(db.getMarketplaceTransactions).mockResolvedValueOnce([{
+            id: 'sd-m1', postId: POST, postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: ME, buyerCallsign: 'Zara',
+            sellerPublicKey: 'c'.repeat(64), sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50,
+            standingUnit: 'month', standingStartsAt: new Date(Date.now() - 40 * day).toISOString(), standingShortSince: new Date(Date.now() - 3.2 * day).toISOString(),
+            standingStopped: false,
+        }] as never);
+        node.notices = [notice('n1'), notice('n2')];
+        await renderHeader();
+        await openSheet();
+        const live = () => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => /Vehicle Storage: 50 Beans 3 days overdue/.test(b.getAttribute('aria-label') ?? ''));
+        expect(live()).toHaveLength(1);
+        expect(document.querySelectorAll('[aria-label="Clear this notice"]')).toHaveLength(2);
+        await act(async () => { xFor(0).click(); });
+        await settle();
+        expect(live()).toHaveLength(1);
+        await act(async () => { clearAllButton()!.click(); });
+        await settle();
+        expect(rows()).toHaveLength(0);
+        expect(live()).toHaveLength(1);
+    });
+
     it('with no notices there is no "Clear all"', async () => {
         node.notices = [];
         await renderHeader();

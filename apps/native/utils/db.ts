@@ -1551,6 +1551,7 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
                mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
                mt.post_title as postTitle, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                (SELECT c.id FROM conversations c
                   WHERE c.type = 'dm' AND c.post_id IS NULL
@@ -1584,6 +1585,7 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt
@@ -1682,12 +1684,19 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
     }));
 }
 
-export async function refreshBalanceFromServer(pubkey: string) {
+/** The node's own balance read (GET /api/ledger/balance), as it answered: what a standing take-up's room is read from. */
+export type NodeBalanceRead = { balance?: number | null; floor?: number | null; usableFloor?: number | null; [field: string]: unknown };
+
+/**
+ * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
+ * couldn't be read (no node, refused, offline), so a caller never takes the phone's cached copy for a fresh read.
+ */
+export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBalanceRead | null> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return;
+    if (!anchorUrl) return null;
     try {
         const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}`);
-        if (!res.ok) return;
+        if (!res.ok) return null;
         const balData = await res.json();
         const database = await getDb();
         const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
@@ -1751,8 +1760,10 @@ export async function refreshBalanceFromServer(pubkey: string) {
             const { DeviceEventEmitter } = require('react-native');
             DeviceEventEmitter.emit('sync_data_updated');
         }
+        return balData && typeof balData === 'object' ? balData as NodeBalanceRead : null;
     } catch (e) {
         console.warn(`[refreshBalanceFromServer] Failed for ${pubkey}:`, e);
+        return null;
     }
 }
 
@@ -8742,6 +8753,10 @@ export interface MarketplaceTransaction {
     standingNextDueAt?: string | null;
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
     standingStopped?: boolean;
 }
 

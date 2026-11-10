@@ -1,4 +1,4 @@
-import { nearestFinishedTrade } from '@beanpool/core';
+import { dealStep, nearestFinishedTrade } from '@beanpool/core';
 import type { MarketplaceTransaction } from './api';
 
 // One answer for the Messages list's "Action Needed" line and the chat's rate button: a finished trade, keyed by the
@@ -23,6 +23,8 @@ export function unratedTradeWith(txs: MarketplaceTransaction[], me: string, peer
     let best: MarketplaceTransaction | null = null;
     for (const tx of txs) {
         if (tx.status !== 'completed' || !between(tx, me, peer) || iRated(tx, me)) continue;
+        // A standing deal asks for one review, on its first period (core's dealStep): a later period's row asks nothing.
+        if (dealStep(tx, me).state !== 'done-to-review') continue;
         if (!best || (tx.completedAt ?? tx.createdAt) > (best.completedAt ?? best.createdAt)) best = tx;
     }
     return best;

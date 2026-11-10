@@ -18,7 +18,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import {
-    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, isOthersListingDoorbell, isPushNoticeKind, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
+    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
 } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
@@ -348,7 +348,9 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
 
     const clearWords = bellClearWords();
     const unseen = notices.length;
-    const label = bellLabel(unseen, entries.length);
+    // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
+    const counted = entries.filter(needsYouCounts).length;
+    const label = bellLabel(unseen, counted);
     const small = width < NEEDS_YOU_SLOT;
     const now = Date.now();
 
@@ -362,7 +364,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                         <View style={[s.countDot, small && s.countDotSmall, { backgroundColor: colors.feedback.danger.solid }]}>
                             <Text style={[s.countText, { color: colors.text.onDanger }]} allowFontScaling={false}>{bellBadge(unseen)}</Text>
                         </View>
-                    ) : entries.length > 0 ? <View style={[s.needsDot, { backgroundColor: ACCENT }]} /> : null}
+                    ) : counted > 0 ? <View style={[s.needsDot, { backgroundColor: ACCENT }]} /> : null}
                 </Pressable>
             )}
 

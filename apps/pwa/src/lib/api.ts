@@ -1331,7 +1331,9 @@ export enum SystemMessageType {
     ESCROW_RELEASED = 'ESCROW_RELEASED',
     ESCROW_CANCELLED = 'ESCROW_CANCELLED',
     DISPUTE_OPENED = 'DISPUTE_OPENED',
-    REVIEW_LEFT = 'REVIEW_LEFT'
+    REVIEW_LEFT = 'REVIEW_LEFT',
+    /** A standing deal's record line (due, covered, ended, stopped in the grace): its words are the node's own sentence. */
+    STANDING_DEAL = 'STANDING_DEAL'
 }
 
 export interface SystemMessageMetadata {
@@ -1741,6 +1743,10 @@ export interface MarketplaceTransaction {
     standingNextDueAt?: string;
     standingStartsAt?: string;
     standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
     standingStopped?: boolean;
 }
 

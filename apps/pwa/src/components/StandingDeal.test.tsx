@@ -33,6 +33,19 @@ describe('Take this up? (design §3)', () => {
         expect(onAgree).toHaveBeenCalledWith({ periods: null, startsAt: NOW });
         expect(screen.getByTestId('standing-agree').textContent).toBe('Agree and pay 50 Beans');
     });
+    it("without room for the first month, Agree is disabled with a plain line; with room, or room not known, it stays (design §3)", () => {
+        const onAgree = vi.fn();
+        const { rerender } = render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={30} />);
+        expect(screen.getByTestId('standing-no-room').textContent).toBe('You need 50 Beans of room; you have 30');
+        expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(screen.getByTestId('standing-agree'));
+        expect(onAgree).not.toHaveBeenCalled();
+        for (const room of [50, null]) {
+            rerender(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={room} />);
+            expect(screen.queryByTestId('standing-no-room')).toBeNull();
+            expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(false);
+        }
+    });
     it('for a count of months, one more each tap; a later start moves the dates', () => {
         const onAgree = show();
         fireEvent.click(screen.getByLabelText('For 6 months'));
@@ -149,6 +162,44 @@ describe('Your deals: one card per standing deal', () => {
         expect(within(card).getByTestId('standing-chip-tx-short').textContent).toBe('🔁 STANDING');
         expect(within(card).queryByText('completed')).toBeNull();
         expect(within(card).queryByRole('button', { name: /review/i })).toBeNull();
+    });
+});
+
+describe('Your deals, My listings: a one-off listing a standing deal took is 🔁 STANDING, never Held in Trust (U2)', () => {
+    // The node keeps the listing off the board ('pending') while the standing deal runs; nothing is held in trust (design §1, §3).
+    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', authorPublicKey: PAYEE, credits: 50, createdAt: '2026-10-01T08:00:00.000Z', photos: [] } as any;
+    for (const standingPhase of ['paid', 'short'] as const) {
+        it(`a running standing deal (${standingPhase}) says 🔁 STANDING`, () => {
+            render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[taken]} initialTab="active"
+                transactions={[row({ id: 'tx-1', standingPhase })]} onNavigateToPost={vi.fn()} />);
+            const card = screen.getByTestId('deal-card-post-1');
+            expect(card.textContent).toContain('🔁 STANDING');
+            expect(card.textContent).not.toContain('Held in Trust');
+        });
+    }
+    it('a one-off deal held still says Held in Trust', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[taken]} initialTab="active"
+            transactions={[row({ id: 'tx-1', status: 'pending', standingId: undefined, standingPhase: undefined })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-card-post-1').textContent).toContain('🤝 Held in Trust');
+    });
+});
+
+describe('Your deals, History: an ended standing deal says how it ended; review once (U2)', () => {
+    const STOPPED = { periodNo: 1, standingPhase: 'ended' as const, standingShortSince: '2026-11-09T08:00:00.000Z', standingEndedAt: '2026-11-12T08:00:00.000Z', standingEndedReason: 'stopped', standingStoppedBy: PAYEE, standingStopped: true };
+    it('stopped in the grace by the payee: each side reads its line', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYER }} onClose={vi.fn()} posts={[]} initialTab="history"
+            transactions={[row({ id: 'tx-1', ...STOPPED, ratedByBuyer: true })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-history-tx-1').textContent).toBe('Stopped by Rob on 12 Nov · this month unpaid · nothing owed');
+        cleanup();
+        render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[]} initialTab="history"
+            transactions={[row({ id: 'tx-1', ...STOPPED, ratedBySeller: true })]} onNavigateToPost={vi.fn()} />);
+        expect(screen.getByTestId('deal-history-tx-1').textContent).toBe('Stopped by you on 12 Nov · this month unpaid · nothing owed');
+    });
+    it('a later period unrated offers no Leave Review; the first period does', () => {
+        render(<MyDealsModal visible identity={{ publicKey: PAYER }} onClose={vi.fn()} posts={[]} initialTab="history" onPromptReview={vi.fn()}
+            transactions={[row({ id: 'tx-m2', periodNo: 2, standingPhase: undefined }), row({ id: 'tx-m1', periodNo: 1, standingPhase: undefined })]} onNavigateToPost={vi.fn()} />);
+        expect(within(screen.getByTestId('deal-card-tx-m2')).queryByRole('button', { name: 'Leave Review' })).toBeNull();
+        expect(within(screen.getByTestId('deal-card-tx-m1')).getByRole('button', { name: 'Leave Review' })).toBeTruthy();
     });
 });
 

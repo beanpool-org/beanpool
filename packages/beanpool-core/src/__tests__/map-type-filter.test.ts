@@ -39,9 +39,10 @@ describe('the map type filter (one rule for the phone and the web)', () => {
         expect(ids(visibleMarketPins(posts, state({ type: 'needs', category: 'tools' })))).toEqual([]);
     });
 
-    it('a post filed under a legacy category name sits under the category it was renamed to', () => {
+    it('a post under a word from before the categories were renamed is no longer moved to the new one (none exists: cutover N2, E28)', () => {
         const legacy = [{ id: 'old', type: 'offer', category: 'food_produce', status: 'active', ...at }];
-        expect(ids(visibleMarketPins(legacy, state({ type: 'offers', category: 'food' })))).toEqual(['old']);
+        expect(ids(visibleMarketPins(legacy, state({ type: 'offers', category: 'food' })))).toEqual([]);
+        expect(ids(visibleMarketPins(legacy, state({ type: 'offers', category: 'general' })))).toEqual(['old']);
     });
 
     it('a listing with no place still matches the filter (the web pins it near the community), and visibleMarketPins alone wants a place', () => {

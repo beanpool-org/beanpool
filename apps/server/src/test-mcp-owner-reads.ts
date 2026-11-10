@@ -248,11 +248,13 @@ async function main(): Promise<void> {
         assert(inFence(fromPeer?.category, SAYS) && inFence(fromPeer?.postId, SAYS) && fromPeer?.createdAt === null,
             `a peer's category and id come back fenced, and words in its time as no time (${JSON.stringify(fromPeer?.createdAt)})`);
 
-        // Ordinary rows read as they did, in the words the apps store: the list's, a legacy one's, an event's.
+        // Ordinary rows read as they did, in the words the apps store: the list's and an event's.
         const byId = (id: string) => rowsOf(listed).find((l) => l.postId === id);
         assert(byId(miaPublic)?.category === 'food' && byId(miaPublic)?.link === `/?post=${encodeURIComponent(miaPublic)}` && /^\d{4}-\d{2}-\d{2}T/.test(byId(miaPublic)?.createdAt ?? ''),
             'control: an ordinary listing reads its category, id, link and time as plain text, as before');
-        assert(byId(legacy)?.category === 'food_produce', `control: a legacy category is the node's own word (${byId(legacy)?.category})`);
+        // A word from before the categories were renamed (26 Aug) is not the node's own any more (cutover N2, audit E28): no
+        // listing holds one, and one that did would read as any word off the list does.
+        assert(byId(legacy)?.category === null, `a former category word is off the list: none without include_text (${JSON.stringify(byId(legacy)?.category)})`);
         const anEvent = structured(await seeder.callTool({ name: 'listings_search', arguments: { kind: 'event', limit: 100 } }));
         assert(rowsOf(anEvent).find((l) => l.postId === swap)?.category === 'community', `control: an event's category, the word both apps' events store (${rowsOf(anEvent)[0]?.category})`);
         // The node's own Daily Pulse post, on a board quiet enough to show it: its id and its category are not a stranger's.

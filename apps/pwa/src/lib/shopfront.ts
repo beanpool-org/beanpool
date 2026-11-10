@@ -143,7 +143,7 @@ export function listingStateLine(l: ShopfrontListing): string | null {
     return l.lendable ? t('Out on loan') : t('In a deal');
 }
 
-/** A category's emoji: an older id is today's (core normalizeCategory), anything unknown is General's. */
+/** A category's emoji (core normalizeCategory): anything that is not one of today's is General's. */
 export function categoryEmoji(id: string | null | undefined): string {
     return MARKETPLACE_CATEGORIES_BY_ID.get(normalizeCategory(id))?.emoji ?? '🌱';
 }

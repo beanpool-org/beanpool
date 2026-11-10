@@ -274,8 +274,8 @@ for (const dark of [false, true]) {
             expect([...order].sort((a, b) => a - b)).toEqual(order);
         });
 
-        it('what its keepers do together: each category once, an older id and today\'s as one', async () => {
-            net.answer = community({ getTreasuryDetail: membersView({ offerCategories: ['food', 'tools', 'tools_hardware'] }) });
+        it('what its keepers do together: each category once, whatever its case or spaces', async () => {
+            net.answer = community({ getTreasuryDetail: membersView({ offerCategories: ['food', 'tools', ' Tools'] }) });
             await renderIn();
             const chips = Array.from(byId('shopfront-together')!.querySelectorAll('span')).map((e) => e.textContent).filter((x) => x && x !== 'What we do together');
             expect(chips).toEqual(['🥕 Food', '🛠️ Tools']);

@@ -123,7 +123,8 @@ async function main() {
             nodeRole: rolesByPubkey.get(r.public_key) ?? null,
             avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
             profileUpdatedAt: r.profile_updated_at || null,
-            earnedCredit: r.earned_credit ?? 0,
+            // The route's own key, its value whole hundredths (routes/community.ts directoryMembers reads earned_credit_c).
+            earnedCredit: r.earned_credit_c ?? 0,
             archetype: r.archetype || null,
         }));
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);

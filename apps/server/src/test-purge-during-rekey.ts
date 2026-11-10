@@ -78,9 +78,12 @@ function keySession(kp: Keypair): string {
     return ex.sessionId!;
 }
 
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 const sumOfAccounts = () => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as any).s as number;
 const memberRows = (pk: string) => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE public_key = ? COLLATE NOCASE').get(pk) as any).c as number;
-const accountBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance ?? 0;
+/** An account's balance row, whole hundredths (0 when there is no row). */
+const accountBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance_c ?? 0;
 
 async function runTests() {
     console.log('--- TEST: a removal or deletion during a pending re-key does not bring the member back ---');
@@ -146,7 +149,7 @@ async function runTests() {
     /** Neither key acts: no Beans sent, no profile edited. */
     async function neitherKeyActs(name: string, old: Keypair, fresh: Keypair) {
         for (const [which, kp] of [['old', old], ['new', fresh]] as const) {
-            const send = await signed(kp, '/api/ledger/transfer', { to: rex.pubKeyHex, amount: 1, memo: 'after the re-key' });
+            const send = await signed(kp, '/api/ledger/transfer', { to: rex.pubKeyHex, amount_c: hc(1), memo: 'after the re-key' });
             assert(send.status >= 400, `${name}: the ${which} key can't send Beans (${send.status})`);
             const edit = await signed(kp, '/api/profile/update', { bio: 'I am back' });
             assert(edit.status >= 400, `${name}: the ${which} key can't edit a profile (${edit.status})`);
@@ -158,7 +161,7 @@ async function runTests() {
         const row = getMember(old.pubKeyHex);
         assert(row?.status === 'pruned', `${name}: the old row is still pruned (${row?.status})`);
         assert(memberRows(fresh.pubKeyHex) === 0, `${name}: no member row for the new key`);
-        assert(accountBalance(old.pubKeyHex) === 0 && getBalance(old.pubKeyHex).balance === 0, `${name}: no Beans on the old key`);
+        assert(accountBalance(old.pubKeyHex) === 0 && getBalance(old.pubKeyHex).balance_c === 0, `${name}: no Beans on the old key`);
         assert(accountBalance(fresh.pubKeyHex) === 0, `${name}: no Beans on the new key`);
         const inv = db.prepare('SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?').get(old.pubKeyHex) as any;
         assert(!inv?.rekeyed_to, `${name}: the old key was not re-keyed to anything`);
@@ -173,7 +176,7 @@ async function runTests() {
     {
         const pat = makeKeypair(), patNew = makeKeypair();
         join(pat, 'PatPruned');
-        payFromCommons(pat.pubKeyHex, 40, 'Grant to Pat', { allowDeficit: true });
+        payFromCommons(pat.pubKeyHex, hc(40), 'Grant to Pat', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('A', pat.pubKeyHex);
 
@@ -182,7 +185,7 @@ async function runTests() {
         const prune = await admin('POST', `/api/local/admin/users/${pat.pubKeyHex}/prune`);
         setSwitchOverride('decisions', true);
         assert(prune.status === 200, `A: the owner removes Pat while the re-key is pending (${prune.status} ${prune.json.error ?? ''})`);
-        assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
+        assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance_c === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
 
         const phone = await reEnroll(code, patNew);
         assert(phone.status === 404 && phone.json.error === REKEY_CODE_NOT_VALID, `A: the new phone's ask is refused, as on any dead code (${phone.status} ${phone.json.error})`);
@@ -195,7 +198,7 @@ async function runTests() {
     {
         const sam = makeKeypair(), samNew = makeKeypair();
         join(sam, 'SamSelfPurge');
-        payFromCommons(sam.pubKeyHex, 25, 'Grant to Sam', { allowDeficit: true });
+        payFromCommons(sam.pubKeyHex, hc(25), 'Grant to Sam', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('B', sam.pubKeyHex);
 
@@ -218,7 +221,7 @@ async function runTests() {
     {
         const tia = makeKeypair(), tiaNew = makeKeypair();
         join(tia, 'TiaPending');
-        payFromCommons(tia.pubKeyHex, 15, 'Grant to Tia', { allowDeficit: true });
+        payFromCommons(tia.pubKeyHex, hc(15), 'Grant to Tia', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('C', tia.pubKeyHex);
 
@@ -232,10 +235,10 @@ async function runTests() {
         // The account was never deleted: the re-key is the member's own, and moves it whole.
         assert(phone.status === 200 && phone.json.success === true, `C: the re-key then completes (${phone.status})`);
         assert(getMember(tiaNew.pubKeyHex)?.status === 'active' && getMember(tiaNew.pubKeyHex)?.callsign === 'TiaPending', 'C: the account, name and all, is on the new key');
-        assert(getBalance(tiaNew.pubKeyHex).balance === 15 && accountBalance(tia.pubKeyHex) === 0, 'C: the 15 Beans moved with it, none left on the old key');
+        assert(getBalance(tiaNew.pubKeyHex).balance_c === hc(15) && accountBalance(tia.pubKeyHex) === 0, 'C: the 15 Beans moved with it, none left on the old key');
         assert(memberRows(tia.pubKeyHex) === 0, 'C: no member row is left on the old key');
         assert(runLedgerAudit().ok && sumOfAccounts() === sumBefore, 'C: the ledger audit holds and the sum is unchanged');
-        const send = await signed(tia, '/api/ledger/transfer', { to: rex.pubKeyHex, amount: 1, memo: 'old key' });
+        const send = await signed(tia, '/api/ledger/transfer', { to: rex.pubKeyHex, amount_c: hc(1), memo: 'old key' });
         assert(send.status >= 400, `C: the old key can't send Beans (${send.status})`);
         const again = await signed(tia, '/api/member/purge', { action: 'purge_account' });
         assert(again.status >= 400 && getMember(tiaNew.pubKeyHex)?.status === 'active', `C: the old key can't delete the moved account (${again.status})`);

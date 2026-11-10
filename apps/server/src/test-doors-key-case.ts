@@ -79,6 +79,12 @@ let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
@@ -94,7 +100,7 @@ function makeMember(name: string, beans = 100): Id {
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 
@@ -219,7 +225,7 @@ async function main(): Promise<void> {
     const alice = makeMember('Alice');
     const bob = makeMember('Bob');
     operator = ownerSessionHeaders();
-    const offer = (m: Id, t: string) => createPost('offer', 'produce', t, `${t}, fresh`, 5, 'fixed', m.pk)!;
+    const offer = (m: Id, t: string) => createPost('offer', 'produce', t, `${t}, fresh`, hc(5), 'fixed', m.pk)!;
     offer(alice, 'Alice seedlings'); offer(bob, 'Bob seedlings');
     // A completed trade each, so both may send Beans (the send gate).
     completePostTransaction(acceptPost(offer(bob, 'Bob eggs').id, alice.pk).id, alice.pk);
@@ -305,7 +311,7 @@ async function main(): Promise<void> {
         ['POST', '/api/recovery/shares/status', {}],
         ['POST', '/api/community/register', { publicKey: spelt, callsign: 'Official Admin' }],
         ['POST', '/api/invite/generate', { publicKey: spelt }],
-        ['POST', '/api/ledger/transfer', { to: alice.pk, amount: 1, memo: 'hi' }],
+        ['POST', '/api/ledger/transfer', { to: alice.pk, amount_c: hc(1), memo: 'hi' }],
         ['POST', '/api/messages/conversation', { type: 'dm', participants: [spelt, alice.pk], createdBy: spelt }],
         ['POST', `/api/commons/decisions/nope/vote`, { support: true }],
     ];
@@ -342,10 +348,10 @@ async function main(): Promise<void> {
         assert(isBadKey(caps) && changedTables(before, snapshot()).length === 0,
             `…and a body naming him in ${how} is refused 400 bad_key, no invite written (${show(caps)})`);
     }
-    const aliceBefore = getBalance(alice.pk).balance, bobBefore = getBalance(bob.pk).balance;
-    const send = await call('POST', alice, '/api/ledger/transfer', { to: bob.pk, amount: 2, memo: 'for Bob' }, alice.pk.toUpperCase());
-    assert(send.status === 200 && getBalance(alice.pk).balance === aliceBefore - 2 && getBalance(bob.pk).balance === bobBefore + 2 && !hasRow(alice.pk.toUpperCase()),
-        `Alice signing in capitals sends 2 Beans from her own account to Bob's (${show(send)}; ${aliceBefore}→${getBalance(alice.pk).balance})`);
+    const aliceBefore = getBalance(alice.pk).balance_c, bobBefore = getBalance(bob.pk).balance_c;
+    const send = await call('POST', alice, '/api/ledger/transfer', { to: bob.pk, amount_c: hc(2), memo: 'for Bob' }, alice.pk.toUpperCase());
+    assert(send.status === 200 && getBalance(alice.pk).balance_c === aliceBefore - hc(2) && getBalance(bob.pk).balance_c === bobBefore + hc(2) && !hasRow(alice.pk.toUpperCase()),
+        `Alice signing in capitals sends 2 Beans from her own account to Bob's (${show(send)}; ${beansOf(aliceBefore)}→${beansOf(getBalance(alice.pk).balance_c)})`);
 
     const kit = keypair('Kit');
     const kitKnock = await call('POST', kit, '/api/join/knock', { callsign: 'Kit', message: 'Hello, I live nearby and would like to join.', fromNode: 'https://global.beanpool.org/' }, kit.pk.toUpperCase());
@@ -395,15 +401,15 @@ async function main(): Promise<void> {
     for (const [who, id] of named) {
         for (const [how, spelt] of namedSpellings(id.pk)) {
             const before = snapshot();
-            const s = await call('POST', alice, '/api/ledger/transfer', { to: spelt, amount: 1, memo: 'hi' });
+            const s = await call('POST', alice, '/api/ledger/transfer', { to: spelt, amount_c: hc(1), memo: 'hi' });
             const d = await call('POST', alice, '/api/messages/conversation', { type: 'dm', participants: [alice.pk, spelt], createdBy: alice.pk });
             const changed = changedTables(before, snapshot());
             assert(isBadKey(s) && isBadKey(d) && changed.length === 0,
                 `Alice sends Beans to, and opens a DM with, ${who}'s key ${how}: both refused 400 bad_key, nothing written (${show(s)}; ${show(d)}; changed: ${changed.join(', ') || 'nothing'})`);
         }
     }
-    const fayTo = await call('POST', alice, '/api/ledger/transfer', { to: fay.pk, amount: 1, memo: 'hi' });
-    assert(fayTo.status === 200 && rowsFor(fay.pk).length === 1 && hasRow(fay.pk) && getBalance(fay.pk).balance === 1,
+    const fayTo = await call('POST', alice, '/api/ledger/transfer', { to: fay.pk, amount_c: hc(1), memo: 'hi' });
+    assert(fayTo.status === 200 && rowsFor(fay.pk).length === 1 && hasRow(fay.pk) && getBalance(fay.pk).balance_c === hc(1),
         `a send to a new key in the one spelling still makes its visitor's row, holding the Beans (${show(fayTo)})`);
 
     for (const [how, spelt] of namedSpellings(bob.pk)) {
@@ -423,12 +429,12 @@ async function main(): Promise<void> {
     // A peer's listings and a peer's cross-node buyer arrive from a peer connection, not over HTTP: the functions.
     const PEER = '12D3KooWDoorsKeyCasePeer';
     const PEER_URL = 'https://peer.example.test';
-    const listing = (author: string, title: string) => ({ id: crypto.randomUUID(), type: 'offer', category: 'other', title, description: 'Maths', credits: 3, priceType: 'fixed', authorPublicKey: author, authorCallsign: 'Remote Tutor' });
+    const listing = (author: string, title: string) => ({ id: crypto.randomUUID(), type: 'offer', category: 'other', title, description: 'Maths', price_c: hc(3), priceType: 'fixed', authorPublicKey: author, authorCallsign: 'Remote Tutor' });
     for (const [who, id] of named) {
         for (const [how, spelt] of namedSpellings(id.pk)) {
             const before = snapshot();
             const res = cacheRemoteListings(PEER, PEER_URL, [listing(spelt, `By ${who} ${how}`)]);
-            const buy = handlePurchaseRequest({ key: `k-${crypto.randomUUID()}`, peerId: PEER, buyerPublicKey: spelt, buyerCallsign: 'Official Admin', buyerHomeNode: PEER_URL, sellerPublicKey: alice.pk, amount: 1 } as any) as any;
+            const buy = handlePurchaseRequest({ key: `k-${crypto.randomUUID()}`, peerId: PEER, buyerPublicKey: spelt, buyerCallsign: 'Official Admin', buyerHomeNode: PEER_URL, sellerPublicKey: alice.pk, amount_c: hc(1) } as any) as any;
             const changed = changedTables(before, snapshot());
             assert(res.cached === 0 && res.dropped === 1 && buy.accepted === false && buy.reason === 'invalid_parties' && changed.length === 0,
                 `a peer names ${who}'s key ${how} as a listing's author and as a buyer: the listing is dropped, the purchase refused (invalid_parties), nothing written (${res.cached}/${res.dropped}; ${buy.reason}; changed: ${changed.join(', ') || 'nothing'})`);
@@ -453,7 +459,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     };
     insertStray(PIA, 'Stray Pia', 1, ago(10 * DAY), null);
-    transfer('genesis', PIA, 3, 'sent to the capitals', 'direct', true);
+    transfer('genesis', PIA, hc(3), 'sent to the capitals', 'direct', true);
     insertStray(bobCaps, 'Official Bob', 0, ago(DAY), alice.pk);
     db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'owner:password')`).run(bobCaps);
     insertStray(`${bob.pk}zz`, 'Stray Bob zz', 0, ago(DAY), alice.pk);
@@ -596,7 +602,7 @@ async function main(): Promise<void> {
     const piaKnockRow = db.prepare('SELECT callsign, message FROM join_requests WHERE pubkey = ?').get(pia.pk) as { callsign: string; message: string } | undefined;
     assert(piaKnockRow?.callsign === 'Pia' && /tomatoes/.test(piaKnockRow?.message ?? ''),
         `what Pia wrote when she knocked is kept: removing the stray row scrubbed no one else's knock (${JSON.stringify(piaKnockRow)})`);
-    const piaSend = await call('POST', bob, '/api/ledger/transfer', { to: pia.pk, amount: 1, memo: 'welcome' });
+    const piaSend = await call('POST', bob, '/api/ledger/transfer', { to: pia.pk, amount_c: hc(1), memo: 'welcome' });
     assert(piaSend.status === 200, `and Bob still sends Beans to Pia (${show(piaSend)})`);
     const seenBefore = bobOpen.events.length;
     const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ...lockedDm() });

@@ -1,17 +1,21 @@
 /**
  * A listing edit can't poison a balance (review FABLE-sec-input F1/F2/F6, 2026-10-01, measured on the real engine).
  *
- * The finding: a seller edited their own offer to `{"credits": "abc"}` through POST /api/marketplace/posts/update. It was
+ * The finding (in float Beans, before whole hundredths): a seller edited their own offer to `{"credits": "abc"}` through
+ * POST /api/marketplace/posts/update. It was
  * accepted, SQLite stored the text in the REAL column, and the first buyer approved (request → approve → complete) or
  * one-step accepted had their balance set to NaN in memory and NULL on disk. Every `<` guard on the money path reads NaN
  * as "fine", and the ledger total silently moved (0 → -120 with 5 NULL rows in the probe).
  *
- *   1. The reviewer's sequence through the real edit route: every bad edit is a 400, nothing is written, and the deals
- *      that follow move real Beans — every balance stays finite and the ledger total does not move.
- *   2. Each field an edit can name, sent with a type or value no listing may hold, is refused and nothing is written.
+ *   1. The reviewer's sequence through the real edit route (the price is now `price_c`, whole hundredths): every bad edit
+ *      is a 400, nothing is written, and the deals that follow move real Beans — every balance stays whole hundredths
+ *      and the ledger total does not move.
+ *   2. Each field an edit can name, sent with a type or value no listing may hold, is refused and nothing is written; so
+ *      is a price that is not whole hundredths, and the old `credits` key.
  *   3. The money primitives themselves (core LedgerManager, state-engine transfer / moveToCommons / payFromCommons, the
- *      escrow doors) refuse NaN, Infinity, negative and string amounts and quantities, whatever a caller hands them.
- *   4. The conservation check flags a NULL, text or non-finite balance.
+ *      escrow doors) refuse NaN, Infinity, negative, string and fractional amounts and quantities, whatever a caller
+ *      hands them.
+ *   4. The conservation check flags a NULL, text, non-finite or fractional balance (anything but whole hundredths).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-listing-edit-numbers.ts
  */
@@ -32,6 +36,8 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 
 let run = 0, passed = 0;
+/** Beans to whole hundredths, for the story's figures (exact: each is whole hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
 function check(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
@@ -54,13 +60,16 @@ async function dispatch(router: any, method: string, path: string, ctx: any) {
     return ctx;
 }
 
-/** Every balance row: the total SQLite sums, how many are NULL or not a finite number, and the in-memory balances. */
+/**
+ * Every balance row: the total SQLite sums, how many are NULL or not whole hundredths (text, a float, a non-finite
+ * number), and the in-memory balances, each of which must be whole hundredths too.
+ */
 function ledgerState(keys: string[]) {
     const total = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as any).s as number;
     const bad = (db.prepare(`SELECT COUNT(*) AS c FROM accounts
-        WHERE balance_c IS NULL OR typeof(balance_c) NOT IN ('integer', 'real') OR balance_c > 1e308 OR balance_c < -1e308`).get() as any).c as number;
-    const memory = keys.map((k) => getBalance(k).balance);
-    return { total, bad, memory, memoryFinite: memory.every((b) => typeof b === 'number' && Number.isFinite(b)) };
+        WHERE balance_c IS NULL OR typeof(balance_c) != 'integer'`).get() as any).c as number;
+    const memory = keys.map((k) => getBalance(k).balance_c);
+    return { total, bad, memory, memoryWhole: memory.every((b) => typeof b === 'number' && Number.isSafeInteger(b)) };
 }
 
 function attempt<T>(fn: () => T): { ok: true; value: T } | { ok: false; error: string } {
@@ -80,57 +89,59 @@ async function main() {
     const buyer = makeMember('buyer');
     const third = makeMember('third');
     const everyone = [seller, buyer, third];
-    for (const pk of everyone) transfer('genesis', pk, 100, 'seed', 'direct', true);
+    for (const pk of everyone) transfer('genesis', pk, hc(100), 'seed', 'direct', true);
     // A member must list an offer before they can ask for one (CONTRIBUTION_REQUIRED).
-    createPost('offer', 'services', 'Buyer mends', 'Mending', 5, 'fixed', buyer);
-    createPost('offer', 'services', 'Third digs', 'Digging', 5, 'fixed', third);
+    createPost('offer', 'services', 'Buyer mends', 'Mending', hc(5), 'fixed', buyer);
+    createPost('offer', 'services', 'Third digs', 'Digging', hc(5), 'fixed', third);
 
     const edit = async (actor: string, id: string, updates: Record<string, unknown>) =>
         dispatch(router, 'POST', '/api/marketplace/posts/update', { requestBody: { id, authorPublicKey: actor, ...updates }, state: { actor } });
     const row = (id: string) => db.prepare('SELECT title, description, category, price_c, typeof(price_c) AS t, price_type, lat, lng FROM posts WHERE id = ?').get(id) as any;
 
     // ── 1. The reviewer's sequence ──────────────────────────────────────────────────────────────────
-    console.log('— 1. the reviewer\'s sequence: edit credits to "abc", then request → approve → complete, and acceptPost —');
+    console.log('— 1. the reviewer\'s sequence: edit the price to "abc", then request → approve → complete, and acceptPost —');
     const before = ledgerState(everyone);
-    check(before.bad === 0 && before.memoryFinite, `the ledger starts with every balance a finite number (${JSON.stringify(before)})`);
+    check(before.bad === 0 && before.memoryWhole, `the ledger starts with every balance whole hundredths (${JSON.stringify(before)})`);
 
-    const offer = createPost('offer', 'food', 'Carrots', 'Organic carrots', 10, 'fixed', seller)!;
-    const abc = await edit(seller, offer.id, { credits: 'abc' });
-    check(abc.status === 400, `an edit to credits "abc" is refused with 400 (got ${abc.status ?? 200}: ${JSON.stringify(abc.body)})`);
+    const offer = createPost('offer', 'food', 'Carrots', 'Organic carrots', hc(10), 'fixed', seller)!;
+    const abc = await edit(seller, offer.id, { price_c: 'abc' });
+    check(abc.status === 400, `an edit to price_c "abc" is refused with 400 (got ${abc.status ?? 200}: ${JSON.stringify(abc.body)})`);
     const afterAbc = row(offer.id);
-    check(afterAbc.credits === 10 && afterAbc.t === 'real', `and nothing is written: the listing still asks 10 Beans as a number (${JSON.stringify(afterAbc)})`);
+    check(afterAbc.price_c === hc(10) && afterAbc.t === 'integer', `and nothing is written: the listing still asks 10 Beans as whole hundredths (${JSON.stringify(afterAbc)})`);
 
     const req = attempt(() => requestPost(offer.id, buyer));
     const appr = req.ok ? attempt(() => approvePostRequest(req.value.id, seller)) : req;
     const done = req.ok ? attempt(() => completePostTransaction(req.value.id, buyer)) : req;
     check(req.ok && appr.ok && done.ok, `the buyer's request, the seller's approval and the completion go through at the real price (${JSON.stringify([req, appr, done].map((r) => r.ok ? 'ok' : r.error))})`);
     const afterDeal = ledgerState(everyone);
-    check(afterDeal.bad === 0 && afterDeal.memoryFinite, `every balance is a finite number, in memory and on disk (${JSON.stringify(afterDeal)})`);
-    check(Math.abs(afterDeal.total - before.total) < 1e-9, `and the ledger total did not move (${before.total} → ${afterDeal.total})`);
-    check(Math.abs(getBalance(buyer).balance - 90) < 1e-9, `the buyer paid the real 10 Beans (${getBalance(buyer).balance})`);
+    check(afterDeal.bad === 0 && afterDeal.memoryWhole, `every balance is whole hundredths, in memory and on disk (${JSON.stringify(afterDeal)})`);
+    check(afterDeal.total === before.total, `and the ledger total did not move (${before.total} → ${afterDeal.total})`);
+    check(getBalance(buyer).balance_c === hc(90), `the buyer paid the real 10 Beans (${getBalance(buyer).balance_c} hundredths)`);
 
     // The one-step buy, on a second listing a seller also tried to poison.
-    const offer2 = createPost('offer', 'food', 'Beans', 'Broad beans', 4, 'fixed', seller)!;
-    const abc2 = await edit(seller, offer2.id, { credits: 'abc' });
-    check(abc2.status === 400, `an edit of a second listing to credits "abc" is refused with 400 (got ${abc2.status ?? 200})`);
+    const offer2 = createPost('offer', 'food', 'Beans', 'Broad beans', hc(4), 'fixed', seller)!;
+    const abc2 = await edit(seller, offer2.id, { price_c: 'abc' });
+    check(abc2.status === 400, `an edit of a second listing to price_c "abc" is refused with 400 (got ${abc2.status ?? 200})`);
     const acc = attempt(() => acceptPost(offer2.id, third));
     check(acc.ok, `a third member's one-step accept goes through at the real price (${acc.ok ? 'ok' : acc.error})`);
     const afterAccept = ledgerState(everyone);
-    check(afterAccept.bad === 0 && afterAccept.memoryFinite, `every balance is still a finite number (${JSON.stringify(afterAccept)})`);
-    check(Math.abs(afterAccept.total - before.total) < 1e-9, `and the ledger total still did not move (${before.total} → ${afterAccept.total})`);
+    check(afterAccept.bad === 0 && afterAccept.memoryWhole, `every balance is still whole hundredths (${JSON.stringify(afterAccept)})`);
+    check(afterAccept.total === before.total, `and the ledger total still did not move (${before.total} → ${afterAccept.total})`);
 
     // ── 2. Every field an edit can name ─────────────────────────────────────────────────────────────
     console.log('\n— 2. each field an edit names, with a value no listing may hold, is refused and nothing is written —');
-    const target = createPost('offer', 'food', 'Plums', 'Plums from the tree', 3, 'fixed', seller, -28.5, 153.5)!;
+    const target = createPost('offer', 'food', 'Plums', 'Plums from the tree', hc(3), 'fixed', seller, -28.5, 153.5)!;
     const pristine = row(target.id);
     const bad: [string, Record<string, unknown>][] = [
-        ['credits "abc"', { credits: 'abc' }],
-        ['credits "5" (a string)', { credits: '5' }],
-        ['credits -5', { credits: -5 }],
-        ['credits Infinity', { credits: Infinity }],
-        ['credits NaN', { credits: NaN }],
-        ['credits null', { credits: null }],
-        ['credits 1e12', { credits: 1e12 }],
+        ['price_c "abc"', { price_c: 'abc' }],
+        ['price_c "500" (a string)', { price_c: String(hc(5)) }],
+        ['price_c -5 Beans', { price_c: hc(-5) }],
+        ['price_c Infinity', { price_c: Infinity }],
+        ['price_c NaN', { price_c: NaN }],
+        ['price_c null', { price_c: null }],
+        ['price_c 1e12 Beans', { price_c: hc(1e12) }],
+        ['price_c 450.5 (not whole hundredths)', { price_c: 450.5 }],
+        ['the old credits 5 (an app from before whole hundredths)', { credits: 5 }],
         ['title 123 (a number)', { title: 123 }],
         ['title "" (empty)', { title: '   ' }],
         ['description 42 (a number)', { description: 42 }],
@@ -153,47 +164,48 @@ async function main() {
             `an edit with ${label} is refused with 400 and the listing is unchanged (got ${r.status ?? 200}: ${JSON.stringify(r.body)})`);
     }
     // And the edits a real app sends still land.
-    const good = await edit(seller, target.id, { title: 'Ripe plums', description: '', category: 'food', credits: 4.5, priceType: 'hourly', lat: -28.6, lng: 153.4 });
+    const good = await edit(seller, target.id, { title: 'Ripe plums', description: '', category: 'food', price_c: hc(4.5), priceType: 'hourly', lat: -28.6, lng: 153.4 });
     const landed = row(target.id);
-    check(good.status === undefined && good.body?.success === true && landed.title === 'Ripe plums' && landed.credits === 4.5 && landed.price_type === 'hourly',
+    check(good.status === undefined && good.body?.success === true && landed.title === 'Ripe plums' && landed.price_c === hc(4.5) && landed.price_type === 'hourly',
         `a well-formed edit still lands (${good.status ?? 200}: ${JSON.stringify(landed)})`);
     const cleared = await edit(seller, target.id, { lat: null, lng: null });
     check(cleared.body?.success === true && row(target.id).lat === null, `and an edit may clear the pin (${cleared.status ?? 200})`);
 
     // ── 3. The money primitives, whatever a caller hands them ───────────────────────────────────────
-    console.log('\n— 3. the ledger primitives refuse NaN, Infinity, negative and string amounts —');
-    const junk: [string, unknown][] = [['NaN', NaN], ['Infinity', Infinity], ['-Infinity', -Infinity], ['-5', -5], ['"5" (a string)', '5'], ['"abc"', 'abc']];
+    console.log('\n— 3. the ledger primitives refuse NaN, Infinity, negative, string and fractional amounts —');
+    const junk: [string, unknown][] = [['NaN', NaN], ['Infinity', Infinity], ['-Infinity', -Infinity], ['-5 Beans', hc(-5)], ['"500" (a string)', '500'], ['"abc"', 'abc'],
+        ['0.5 (a fraction of a hundredth)', 0.5]];
     const commonsAtStart = getCommonsBalanceExact();
 
     // core LedgerManager, on its own accounts.
     for (const [label, amount] of junk) {
         const lm = new LedgerManager([
-            { id: 'a', balance: 50, lastDemurrageEpoch: 0 },
-            { id: 'b', balance: 0, lastDemurrageEpoch: 0 },
-            { id: 'escrow_t', balance: 50, lastDemurrageEpoch: 0 },
+            { id: 'a', balance_c: hc(50), lastDemurrageEpoch: 0 },
+            { id: 'b', balance_c: 0, lastDemurrageEpoch: 0 },
+            { id: 'escrow_t', balance_c: hc(50), lastDemurrageEpoch: 0 },
         ]);
         const pot = getCommonsBalanceExact();
-        const t = lm.transfer('a', 'b', amount as number, -100, false);
+        const t = lm.transfer('a', 'b', amount as number, hc(-100), false);
         const m = lm.moveToCommons('escrow_t', amount as number, -Infinity);
         const d = lm.deductFromCommons(amount as number);
-        const bal = lm.getAllAccounts().map((x) => x.balance);
-        check(!t && !m && !d && JSON.stringify(bal) === '[50,0,50]' && getCommonsBalanceExact() === pot,
+        const bal = lm.getAllAccounts().map((x) => x.balance_c);
+        check(!t.ok && t.fee === 0 && !m && !d && JSON.stringify(bal) === JSON.stringify([hc(50), 0, hc(50)]) && getCommonsBalanceExact() === pot,
             `core: transfer, moveToCommons and deductFromCommons refuse ${label}, and nothing moves (${JSON.stringify({ t, m, d, bal, pot: getCommonsBalanceExact() })})`);
         setCommonsBalance(commonsAtStart);
     }
     {
         // An account already holding a broken balance moves nothing, and its demurrage can't spread NaN to the pot.
         const lm = new LedgerManager([
-            { id: 'a', balance: NaN, lastDemurrageEpoch: 0 },
-            { id: 'n', balance: null as unknown as number, lastDemurrageEpoch: 0 },
-            { id: 'b', balance: 10, lastDemurrageEpoch: 0 },
+            { id: 'a', balance_c: NaN, lastDemurrageEpoch: 0 },
+            { id: 'n', balance_c: null as unknown as number, lastDemurrageEpoch: 0 },
+            { id: 'b', balance_c: hc(10), lastDemurrageEpoch: 0 },
         ]);
         const pot = getCommonsBalanceExact();
-        const fromNaN = lm.transfer('a', 'b', 1, -100, true);
-        const toNaN = lm.transfer('b', 'a', 1, -100, true);
-        const fromNull = lm.transfer('n', 'b', 1, -100, true);
-        check(!fromNaN && !toNaN && !fromNull && lm.getAccount('b').balance === 10 && Number.isFinite(getCommonsBalanceExact()) && getCommonsBalanceExact() === pot,
-            `core: an account holding NaN or NULL sends and receives nothing, and reading it leaves the pot alone (${JSON.stringify({ fromNaN, toNaN, fromNull, b: lm.getAccount('b').balance, pot: getCommonsBalanceExact() })})`);
+        const fromNaN = lm.transfer('a', 'b', hc(1), hc(-100), true);
+        const toNaN = lm.transfer('b', 'a', hc(1), hc(-100), true);
+        const fromNull = lm.transfer('n', 'b', hc(1), hc(-100), true);
+        check(!fromNaN.ok && !toNaN.ok && !fromNull.ok && lm.getAccount('b').balance_c === hc(10) && Number.isFinite(getCommonsBalanceExact()) && getCommonsBalanceExact() === pot,
+            `core: an account holding NaN or NULL sends and receives nothing, and reading it leaves the pot alone (${JSON.stringify({ fromNaN, toNaN, fromNull, b: lm.getAccount('b').balance_c, pot: getCommonsBalanceExact() })})`);
         setCommonsBalance(commonsAtStart);
     }
 
@@ -212,7 +224,7 @@ async function main() {
     }
 
     // The escrow doors: a quantity of Infinity (F6), and a listing row already holding text (poisoned before this fix).
-    const hourly = createPost('offer', 'services', 'Weeding', 'By the hour', 2, 'hourly', seller)!;
+    const hourly = createPost('offer', 'services', 'Weeding', 'By the hour', hc(2), 'hourly', seller)!;
     const zeroHourly = createPost('offer', 'services', 'Free help', 'By the hour', 0, 'hourly', seller)!;
     const s3 = ledgerState(everyone);
     const infReq = attempt(() => requestPost(zeroHourly.id, buyer, Infinity));
@@ -229,7 +241,7 @@ async function main() {
     const hFinish = hReq.ok ? attempt(() => completePostTransaction(hReq.value.id, buyer, 2)) : hReq;
     check(hFinish.ok, `and the same deal completes for a real 2 hours (${hFinish.ok ? 'ok' : hFinish.error})`);
 
-    const poisoned = createPost('offer', 'food', 'Leeks', 'Leeks', 6, 'fixed', seller, undefined, undefined, undefined, true)!;
+    const poisoned = createPost('offer', 'food', 'Leeks', 'Leeks', hc(6), 'fixed', seller, undefined, undefined, undefined, true)!;
     db.prepare(`UPDATE posts SET price_c = 'abc' WHERE id = ?`).run(poisoned.id);
     const pReq = attempt(() => requestPost(poisoned.id, buyer));
     const pAcc = attempt(() => acceptPost(poisoned.id, third));
@@ -239,7 +251,7 @@ async function main() {
     // A deal ROW already holding text (struck before this fix): the listing edit can't mend it, since an open deal keeps
     // the price it was struck at (#1374), so each refusal names what does clear it, and that path is measured here.
     const txStatus = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as any)?.status;
-    const reqListing = createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', seller)!;
+    const reqListing = createPost('offer', 'food', 'Chard', 'Chard', hc(3), 'fixed', seller)!;
     const rq = requestPost(reqListing.id, buyer);
     db.prepare(`UPDATE marketplace_transactions SET amount_c = 'abc' WHERE id = ?`).run(rq.id);
     const rqAppr = attempt(() => approvePostRequest(rq.id, seller));
@@ -248,8 +260,8 @@ async function main() {
     const rqRej = attempt(() => rejectPostRequest(rq.id, seller));
     check(rqRej.ok && txStatus(rq.id) === 'rejected', `and declining it clears it (${rqRej.ok ? txStatus(rq.id) : rqRej.error})`);
 
-    const dealListing = createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', seller)!;
-    const buyerBeforeKale = getBalance(buyer).balance;
+    const dealListing = createPost('offer', 'food', 'Kale', 'Kale', hc(6), 'fixed', seller)!;
+    const buyerBeforeKale = getBalance(buyer).balance_c;
     const dq = requestPost(dealListing.id, buyer);
     approvePostRequest(dq.id, seller);
     db.prepare(`UPDATE marketplace_transactions SET amount_c = 'abc' WHERE id = ?`).run(dq.id);
@@ -268,29 +280,30 @@ async function main() {
     // Where the 6 Beans end up (sync check F1, 2026-10-02): Math.min('abc', 6) is NaN, so the removal used to refund
     // nothing and leave them in the escrow of a cancelled deal, which nothing else can reach.
     const kaleEscrow = `escrow_${dq.id}`;
-    const kaleEscrowRow = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(kaleEscrow) as any)?.balance;
-    check(Math.abs(getBalance(buyer).balance - buyerBeforeKale) < 1e-9 && getBalance(kaleEscrow).balance === 0 && kaleEscrowRow === 0,
-        `and the buyer gets the 6 Beans its escrow held back (buyer ${buyerBeforeKale} → ${getBalance(buyer).balance}, escrow ${getBalance(kaleEscrow).balance}, row ${kaleEscrowRow})`);
+    const kaleEscrowRow = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(kaleEscrow) as any)?.balance_c;
+    check(getBalance(buyer).balance_c === buyerBeforeKale && getBalance(kaleEscrow).balance_c === 0 && kaleEscrowRow === 0,
+        `and the buyer gets the 6 Beans its escrow held back (buyer ${buyerBeforeKale} → ${getBalance(buyer).balance_c}, escrow ${getBalance(kaleEscrow).balance_c}, row ${kaleEscrowRow})`);
     const liveAudit = runConservationCheck(db as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
     check(liveAudit.strandedEscrows === 0 && (liveAudit.badBalances ?? 0) === 0,
         `nothing is left stranded in an escrow on the live ledger (${JSON.stringify(liveAudit)})`);
 
     const s3end = ledgerState(everyone);
-    check(s3end.bad === 0 && s3end.memoryFinite && Math.abs(s3end.total - s3.total) < 1e-9,
-        `every balance is still a finite number and the total has not moved (${s3.total} → ${s3end.total}, ${s3end.bad} bad rows)`);
+    check(s3end.bad === 0 && s3end.memoryWhole && s3end.total === s3.total,
+        `every balance is still whole hundredths and the total has not moved (${s3.total} → ${s3end.total}, ${s3end.bad} bad rows)`);
 
     // ── 4. The conservation check ───────────────────────────────────────────────────────────────────
     // On a table as it stood before the column was NOT NULL (an in-memory one: the live table now refuses a NULL), a
-    // balance of 0 wiped to NULL or to text moved no SUM, so the check read "ok".
-    console.log('\n— 4. the conservation check flags a NULL, text or infinite balance —');
+    // balance of 0 wiped to NULL or to text moved no SUM, so the check read "ok". The column holds whole hundredths, as the
+    // node's does: a fraction of a hundredth is no balance either.
+    console.log('\n— 4. the conservation check flags a NULL, text, infinite or fractional balance —');
     const mem = new Database(':memory:');
-    mem.exec(`CREATE TABLE accounts (public_key TEXT PRIMARY KEY, balance_c REAL DEFAULT 0.0);
+    mem.exec(`CREATE TABLE accounts (public_key TEXT PRIMARY KEY, balance_c INTEGER DEFAULT 0);
               CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT);
               CREATE TABLE marketplace_transactions (id TEXT PRIMARY KEY, status TEXT);
-              INSERT INTO accounts VALUES ('a', 10), ('b', -10), ('c', 0);`);
+              INSERT INTO accounts VALUES ('a', 1000), ('b', -1000), ('c', 0);`);
     const clean = runConservationCheck(mem as any);
-    check(clean.ok, `a ledger summing to its baseline with every balance a number is ok (${JSON.stringify(clean)})`);
-    for (const [label, value] of [['NULL (a NaN as better-sqlite3 binds it)', null], ['text', 'abc'], ['Infinity', Infinity]] as [string, unknown][]) {
+    check(clean.ok, `a ledger summing to its baseline with every balance whole hundredths is ok (${JSON.stringify(clean)})`);
+    for (const [label, value] of [['NULL (a NaN as better-sqlite3 binds it)', null], ['text', 'abc'], ['Infinity', Infinity], ['a fraction of a hundredth (0.5)', 0.5]] as [string, unknown][]) {
         mem.prepare(`UPDATE accounts SET balance_c = ? WHERE public_key = 'c'`).run(value);
         const r = runConservationCheck(mem as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
         check(!r.ok && r.badBalances === 1, `a balance of ${label} fails the check and is counted (${JSON.stringify(r)})`);

@@ -38,9 +38,11 @@
  * 11. After the return, the date moved and a new pledge: the leader's cancel pays nobody twice.
  * 12. The leader moves an end date that is over again and again, to dates over or a moment from over, renaming it too:
  *     each backer is told once a day, and once more when it is taken off; a day on, a move tells them again.
- * 13. Pledges not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7): once they went back, the projects row, the page and the
- *     project's read all say 0 raised, not a float residue; its leader can move its date and lower its goal; and when the
- *     new date ends with nothing pledged, nothing goes back and the page says nothing is held.
+ * 13. Pledges that were not exact in binary as float Beans (0.1, 0.3, 0.2, 0.6, 0.7), whole hundredths now: once they
+ *     went back, the projects row, the page and the project's read all say exactly 0 raised; its leader can move its date
+ *     and lower its goal; and when the new date ends with nothing pledged, nothing goes back and the page says nothing is
+ *     held.
+ * Every figure is whole hundredths of a Bean, checked exactly (the story's figures are Beans, `hc` at the edges).
  * 14. The lead handed to another keeper, the projects row still naming its maker: the new lead's move of the end date
  *     reaches the row the return reads; its maker can neither move it nor cancel it, nor can a stranger, nor the new lead
  *     while an admin has switched their operator access off; the new lead's cancel gives each backer their pledge back
@@ -85,7 +87,13 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
-const DUST = 1e-6;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a message. Every balance, escrow and raised figure below is read in hundredths and compared
+ * exactly (no float sums, no dust).
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 let BASE = '';
 
 let run = 0, passed = 0;
@@ -107,15 +115,16 @@ function makeMember(callsign: string): Id {
     return { pubKeyHex, privateKey, callsign };
 }
 
+/** An account's balance row, whole hundredths. */
 const balanceOf = (key: string): number =>
-    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance_c: number } | undefined)?.balance_c ?? 0;
 const escrowOf = (projectId: string) => balanceOf(`escrow_${projectId}`);
+/** A project's raised figure on its projects row, whole hundredths. */
 const raisedOf = (projectId: string): number =>
-    (db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? NaN;
+    (db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(projectId) as { current_amount_c: number } | undefined)?.current_amount_c ?? NaN;
 const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
-const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
-interface OutRow { id: string; to_pubkey: string; amount: number; tax_fee: number | null; memo: string; project_id: string | null; timestamp: string }
+interface OutRow { id: string; to_pubkey: string; amount_c: number; fee_c: number | null; memo: string; project_id: string | null; timestamp: string }
 /** Every ledger row paid out of a project's escrow. */
 const rowsOutOf = (projectId: string): OutRow[] => db.prepare(`
     SELECT id, to_pubkey, amount_c, fee_c, memo, project_id, timestamp FROM transactions WHERE from_pubkey = ? ORDER BY timestamp, rowid
@@ -156,7 +165,7 @@ async function signedFetch(method: 'GET' | 'POST', route: string, body: unknown,
 
 /** A project made as both apps make one: a bounded enterprise with a goal and an end date. */
 async function makeProject(leader: Id, name: string, goal: number, deadlineAt: string): Promise<string> {
-    const made = await signedFetch('POST', '/api/enterprise', { name, purpose: `${name}, for the valley`, lifecycle: 'bounded', goalAmount: goal, deadlineAt }, leader);
+    const made = await signedFetch('POST', '/api/enterprise', { name, purpose: `${name}, for the valley`, lifecycle: 'bounded', goalAmount_c: hc(goal), deadlineAt }, leader);
     assert(made.status === 200 && typeof made.body?.publicKey === 'string', `"${name}" is made through POST /api/enterprise (${made.status} ${made.body?.error ?? ''})`);
     return made.body?.publicKey as string;
 }
@@ -164,7 +173,7 @@ async function makeProject(leader: Id, name: string, goal: number, deadlineAt: s
 /** A pledge through one of the two doors both apps have used. */
 async function pledge(who: Id, projectId: string, amount: number, door: 'treasury' | 'crowdfund'): Promise<void> {
     const route = door === 'treasury' ? `/api/treasury/${projectId}/pledge` : `/api/crowdfund/projects/${projectId}/pledge`;
-    const res = await signedFetch('POST', route, { amount, memo: `${who.callsign}'s pledge` }, who);
+    const res = await signedFetch('POST', route, { amount_c: hc(amount), memo: `${who.callsign}'s pledge` }, who);
     assert(res.status === 200 && res.body?.success === true, `${who.callsign} pledges ${amount} through the ${door} door (${res.status} ${res.body?.error ?? ''})`);
 }
 
@@ -219,11 +228,11 @@ async function child(phase: string): Promise<void> {
 
     if (phase === 'crash-mid-return') {
         const lea = makeMember('Lea'), ann = makeMember('Ann'), ben = makeMember('Ben'), cal = makeMember('Cal');
-        for (const m of [lea, ann, ben, cal]) payFromCommons(m.pubKeyHex, 100, 'Beans to pledge', { allowDeficit: true });
+        for (const m of [lea, ann, ben, cal]) payFromCommons(m.pubKeyHex, hc(100), 'Beans to pledge', { allowDeficit: true });
         const project = crypto.randomUUID();
-        createCrowdfundProject(project, lea.pubKeyHex, 'Seed Library', 'Seeds for the valley', [], 100, new Date(Date.now() + 5 * DAY).toISOString());
+        createCrowdfundProject(project, lea.pubKeyHex, 'Seed Library', 'Seeds for the valley', [], hc(100), new Date(Date.now() + 5 * DAY).toISOString());
         const pledged = { [ann.pubKeyHex]: 10, [ben.pubKeyHex]: 15, [cal.pubKeyHex]: 20 };
-        for (const [who, amount] of Object.entries(pledged)) pledgeToProject(crypto.randomUUID(), project, who, amount, 'Project Pledge');
+        for (const [who, amount] of Object.entries(pledged)) pledgeToProject(crypto.randomUUID(), project, who, hc(amount), 'Project Pledge');
         const w: World = { lea: lea.pubKeyHex, ann: ann.pubKeyHex, ben: ben.pubKeyHex, cal: cal.pubKeyHex, project, pledged };
         fs.writeFileSync(path.join(dir, 'world.json'), JSON.stringify(w));
         // Its end date over 8 days ago: due. From here to the kill nothing awaits, so no timer of this process runs between.
@@ -251,10 +260,10 @@ async function child(phase: string): Promise<void> {
         const atBoot = seen(w);
         // The main server's own minute tick (state-engine.ts armMainServerTimers) is what returns them here.
         const until = Date.now() + 150 * 1000;
-        while (Date.now() < until && escrowOf(w.project) > DUST) await new Promise((r) => setTimeout(r, 500));
+        while (Date.now() < until && escrowOf(w.project) > 0) await new Promise((r) => setTimeout(r, 500));
         const afterTick = seen(w);
         const audit = runLedgerAudit();
-        const outRows = rowsOutOf(w.project).map((r) => ({ to: r.to_pubkey, amount: r.amount, fee: r.tax_fee, project: r.project_id }));
+        const outRows = rowsOutOf(w.project).map((r) => ({ to: r.to_pubkey, amount_c: r.amount_c, fee_c: r.fee_c, project: r.project_id }));
         const wrapper = tickWrapper();
         const again = wrapper ? wrapper() : null;
         write({ atBoot, afterTick, audit, outRows, again, afterAgain: seen(w) });
@@ -303,7 +312,7 @@ async function main(): Promise<void> {
     const ann = makeMember('Ann');
     const ben = makeMember('Ben');
     const cal = makeMember('Cal');
-    for (const m of [lea, max, ann, ben, cal]) payFromCommons(m.pubKeyHex, 200, 'Beans to pledge', { allowDeficit: true });
+    for (const m of [lea, max, ann, ben, cal]) payFromCommons(m.pubKeyHex, hc(200), 'Beans to pledge', { allowDeficit: true });
 
     // ── 1. A project, pledged to through both doors; its page says nothing has gone back ───────────────────────────────
     console.log('── 1. The project and its pledges ──');
@@ -312,7 +321,7 @@ async function main(): Promise<void> {
     await pledge(ben, roof, 5, 'crowdfund');
     await pledge(ben, roof, 10, 'treasury');
     await pledge(cal, roof, 20, 'crowdfund');
-    assert(near(escrowOf(roof), 45) && near(raisedOf(roof), 45), `the roof's escrow holds the 45 Beans pledged (${escrowOf(roof)}), raised 45 (${raisedOf(roof)})`);
+    assert(escrowOf(roof) === hc(45) && raisedOf(roof) === hc(45), `the roof's escrow holds the 45 Beans pledged (${beansOf(escrowOf(roof))}), raised 45 (${beansOf(raisedOf(roof))})`);
     const pageBefore = await readPage(ann, roof);
     assert(!!pageBefore && 'pledgesReturnedAt' in pageBefore && pageBefore.pledgesReturnedAt === null,
         `the page says nothing has gone back: pledgesReturnedAt null (${JSON.stringify(pageBefore?.pledgesReturnedAt)})`);
@@ -332,33 +341,33 @@ async function main(): Promise<void> {
     const roofEarly = { escrow: escrowOf(roof), rows: rowsOutOf(roof).length, ann: balanceOf(ann.pubKeyHex) };
     console.log('── 3. The return ──');
     const first = tick(watched.hooks, dueAt);
-    assert(early.returned === 0 && near(roofEarly.escrow, 45) && roofEarly.rows === 0 && near(roofEarly.ann, roofBefore.ann),
+    assert(early.returned === 0 && roofEarly.escrow === hc(45) && roofEarly.rows === 0 && roofEarly.ann === roofBefore.ann,
         `a millisecond before its end date + 7 nothing moves (${JSON.stringify(early)}, escrow ${roofEarly.escrow}, rows ${roofEarly.rows})`);
     assert(first.returned === 1 && first.left === 0, `at its end date + 7 the project's pledges go back (${JSON.stringify(first)})`);
 
-    assert(near(balanceOf(ann.pubKeyHex), roofBefore.ann + 10), `Ann gets back exactly her 10 (${balanceOf(ann.pubKeyHex) - roofBefore.ann})`);
-    assert(near(balanceOf(ben.pubKeyHex), roofBefore.ben + 15), `Ben gets back exactly his 5 + 10 (${balanceOf(ben.pubKeyHex) - roofBefore.ben})`);
-    assert(near(balanceOf(cal.pubKeyHex), roofBefore.cal + 20), `Cal gets back exactly their 20 (${balanceOf(cal.pubKeyHex) - roofBefore.cal})`);
-    assert(near(balanceOf(lea.pubKeyHex), roofBefore.lea), `the leader's own balance is untouched (${balanceOf(lea.pubKeyHex)})`);
-    assert(near(stateEngine.getBalance(ann.pubKeyHex).balance, roofBefore.ann + 10), 'and the in-memory ledger agrees with the rows');
-    assert(escrowOf(roof) <= DUST, `the roof's escrow is empty (${escrowOf(roof)})`);
-    assert(near(balanceOf(roof), 0), `the enterprise's own account is untouched (${balanceOf(roof)})`);
-    assert(near(sumBalances(), totalBefore), `the node's total is unchanged (${sumBalances()} vs ${totalBefore})`);
+    assert(balanceOf(ann.pubKeyHex) === roofBefore.ann + hc(10), `Ann gets back exactly her 10 (${beansOf(balanceOf(ann.pubKeyHex) - roofBefore.ann)})`);
+    assert(balanceOf(ben.pubKeyHex) === roofBefore.ben + hc(15), `Ben gets back exactly his 5 + 10 (${beansOf(balanceOf(ben.pubKeyHex) - roofBefore.ben)})`);
+    assert(balanceOf(cal.pubKeyHex) === roofBefore.cal + hc(20), `Cal gets back exactly their 20 (${beansOf(balanceOf(cal.pubKeyHex) - roofBefore.cal)})`);
+    assert(balanceOf(lea.pubKeyHex) === roofBefore.lea, `the leader's own balance is untouched (${beansOf(balanceOf(lea.pubKeyHex))})`);
+    assert(stateEngine.getBalance(ann.pubKeyHex).balance_c === roofBefore.ann + hc(10), 'and the in-memory ledger agrees with the rows');
+    assert(escrowOf(roof) === 0, `the roof's escrow is empty (${escrowOf(roof)})`);
+    assert(balanceOf(roof) === 0, `the enterprise's own account is untouched (${balanceOf(roof)})`);
+    assert(sumBalances() === totalBefore, `the node's total is unchanged (${sumBalances()} vs ${totalBefore})`);
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${audit.ok}, drift ${audit.drift})`);
+    assert(audit.ok && audit.drift === 0, `the ledger audit holds with 0 drift (ok ${audit.ok}, drift ${audit.drift})`);
     const roofRows = rowsOutOf(roof);
     const rowTo = (who: Id) => roofRows.filter((r) => r.to_pubkey === who.pubKeyHex);
     assert(roofRows.length === 3 && rowTo(ann).length === 1 && rowTo(ben).length === 1 && rowTo(cal).length === 1,
-        `one ledger row each, Ben's two pledges as one (${JSON.stringify(roofRows.map((r) => [r.to_pubkey.slice(0, 6), r.amount]))})`);
-    assert(near(rowTo(ben)[0]?.amount ?? 0, 15) && roofRows.every((r) => !r.tax_fee),
-        `fee-free, each the backer's own sum (${JSON.stringify(roofRows.map((r) => [r.amount, r.tax_fee]))})`);
+        `one ledger row each, Ben's two pledges as one (${JSON.stringify(roofRows.map((r) => [r.to_pubkey.slice(0, 6), r.amount_c]))})`);
+    assert(rowTo(ben)[0]?.amount_c === hc(15) && roofRows.every((r) => !r.fee_c),
+        `fee-free, each the backer's own sum (${JSON.stringify(roofRows.map((r) => [r.amount_c, r.fee_c]))})`);
     assert(roofRows.every((r) => r.project_id === roof && /^Pledge returned: "Village Hall Roof"/.test(r.memo)),
         `each row names the project and says why ("${roofRows[0]?.memo}")`);
-    assert(near(raisedOf(roof), 0), `the roof shows 0 raised (${raisedOf(roof)})`);
+    assert(raisedOf(roof) === 0, `the roof shows 0 raised (${raisedOf(roof)})`);
     const pageAfter = await readPage(ann, roof);
     const returnedAt = roofRows.map((r) => r.timestamp).sort().at(-1);
-    assert(pageAfter?.pledgesReturnedAt === returnedAt && pageAfter?.currentAmount === 0,
-        `the page says when they went back (${pageAfter?.pledgesReturnedAt} = ${returnedAt}), and 0 raised (${pageAfter?.currentAmount})`);
+    assert(pageAfter?.pledgesReturnedAt === returnedAt && pageAfter?.currentAmount_c === 0,
+        `the page says when they went back (${pageAfter?.pledgesReturnedAt} = ${returnedAt}), and 0 raised (${pageAfter?.currentAmount_c})`);
 
     // ── 4. Each backer and the leader are told ────────────────────────────────────────────────────────────────────
     console.log('── 4. The notices ──');
@@ -395,7 +404,7 @@ async function main(): Promise<void> {
     const second = tick(watched.hooks);
     const third = tick(watched.hooks, Date.now() + 365 * DAY);
     assert(second.returned === 0 && third.returned === 0, `a second tick, and one a year on, return nothing (${JSON.stringify(second)} ${JSON.stringify(third)})`);
-    assert(rowsOutOf(roof).length === 3 && near(sumBalances(), sumNow) && near(balanceOf(ann.pubKeyHex), roofBefore.ann + 10),
+    assert(rowsOutOf(roof).length === 3 && sumBalances() === sumNow && balanceOf(ann.pubKeyHex) === roofBefore.ann + hc(10),
         'and move nothing');
     assert(watched.live.length === counts.live && watched.pushes.length === counts.pushes && keptFor(ann.pubKeyHex).length === counts.kept,
         'and tell nobody');
@@ -407,7 +416,7 @@ async function main(): Promise<void> {
     await pledge(ben, shed, 4, 'crowdfund');
     // A move before the end date is over is an ordinary edit: nobody is told.
     const earlyMove = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: shed, creatorPubkey: lea.pubKeyHex, title: 'Tool Shed', description: 'Tool Shed, for the valley', goalAmount: 80, deadlineAt: new Date(Date.now() + 12 * DAY).toISOString() }, lea);
+        { id: shed, creatorPubkey: lea.pubKeyHex, title: 'Tool Shed', description: 'Tool Shed, for the valley', goalAmount_c: hc(80), deadlineAt: new Date(Date.now() + 12 * DAY).toISOString() }, lea);
     assert(earlyMove.status === 200, `the leader moves the date before it is over (${earlyMove.status} ${earlyMove.body?.error ?? ''})`);
     assert(keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved').length === 0, 'and nobody is told of that');
     // Its end date 3 days gone: in the week. Not due at this process's real time, so its own tick leaves it alone.
@@ -415,7 +424,7 @@ async function main(): Promise<void> {
     setDeadline(shed, shedOldDeadline);
     const shedNewDeadline = new Date(Date.now() + 10 * DAY).toISOString();
     const moved = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: shed, creatorPubkey: lea.pubKeyHex, title: 'Tool Shed', description: 'Tool Shed, for the valley', goalAmount: 80, deadlineAt: shedNewDeadline }, lea);
+        { id: shed, creatorPubkey: lea.pubKeyHex, title: 'Tool Shed', description: 'Tool Shed, for the valley', goalAmount_c: hc(80), deadlineAt: shedNewDeadline }, lea);
     assert(moved.status === 200, `the leader moves the date in the week after it (${moved.status} ${moved.body?.error ?? ''})`);
     const shedRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(shed) as { deadline_at: string };
     assert(shedRow?.deadline_at === shedNewDeadline, `the project's end date is the new one (${shedRow?.deadline_at})`);
@@ -427,10 +436,10 @@ async function main(): Promise<void> {
     assert(keptFor(lea.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved').length === 0, 'the leader, who moved it, is not told');
     assert(keptFor(cal.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved').length === 0, 'a member who did not back it is not told');
     const oldWeekOver = tick(watched.hooks, Date.parse(shedOldDeadline) + 7 * DAY + HOUR);
-    assert(near(escrowOf(shed), 12) && rowsOutOf(shed).length === 0,
+    assert(escrowOf(shed) === hc(12) && rowsOutOf(shed).length === 0,
         `when the old week is over nothing goes back (${JSON.stringify(oldWeekOver)}, escrow ${escrowOf(shed)})`);
     await pledge(cal, shed, 3, 'crowdfund');
-    assert(near(escrowOf(shed), 15), `and the project takes pledges again (escrow ${escrowOf(shed)})`);
+    assert(escrowOf(shed) === hc(15), `and the project takes pledges again (escrow ${beansOf(escrowOf(shed))})`);
 
     // ── 7. A project that reached its goal, and one with no end date ─────────────────────────────────────────────────────
     console.log('── 7. Funded, and no end date ──');
@@ -438,13 +447,13 @@ async function main(): Promise<void> {
     await pledge(ann, well, 10, 'treasury');
     await pledge(ben, well, 10, 'crowdfund');
     const wellStatus = (db.prepare('SELECT status FROM projects WHERE id = ?').get(well) as { status: string }).status;
-    assert(wellStatus === 'FUNDED' && near(balanceOf(well), 20) && escrowOf(well) <= DUST, `the well reached its goal: FUNDED, 20 swept to it (${wellStatus}, ${balanceOf(well)})`);
+    assert(wellStatus === 'FUNDED' && balanceOf(well) === hc(20) && escrowOf(well) === 0, `the well reached its goal: FUNDED, 20 swept to it (${wellStatus}, ${beansOf(balanceOf(well))})`);
     // A pledge planted after the goal, as the old pledgeToProject took them: the stranded-pledges boot step's, never this.
     const late = crypto.randomUUID();
-    db.prepare('UPDATE accounts SET balance_c = balance_c - 4 WHERE public_key = ?').run(cal.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(hc(4), cal.pubKeyHex);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(`escrow_${well}`);
-    db.prepare('UPDATE accounts SET balance_c = balance_c + 4 WHERE public_key = ?').run(`escrow_${well}`);
-    db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id) VALUES (?, ?, ?, 4, ?, ?)').run(late, cal.pubKeyHex, `escrow_${well}`, 'Project Pledge', well);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(hc(4), `escrow_${well}`);
+    db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id) VALUES (?, ?, ?, ?, ?, ?)').run(late, cal.pubKeyHex, `escrow_${well}`, hc(4), 'Project Pledge', well);
     reconcileLedgerFromDb();
     const open = await makeProject(max, 'Open Solar', 500, new Date(Date.now() + 10 * DAY).toISOString());
     await pledge(cal, open, 6, 'treasury');
@@ -452,22 +461,22 @@ async function main(): Promise<void> {
     setDeadline(well, new Date(Date.now() - 30 * DAY).toISOString());
     setDeadline(open, null);
     const funded = tick(watched.hooks);
-    assert(funded.returned === 0 && near(balanceOf(well), 20) && near(escrowOf(well), 4) && rowsOutOf(well).every((r) => r.to_pubkey === well),
-        `a funded project's Beans stay where they are, the planted pledge too (${JSON.stringify(funded)}, ${balanceOf(well)}, escrow ${escrowOf(well)})`);
-    assert(near(escrowOf(open), 6) && rowsOutOf(open).length === 0, `a project with no end date keeps its pledges (escrow ${escrowOf(open)})`);
-    assert(near(balanceOf(ann.pubKeyHex), wellBefore.ann) && near(balanceOf(ben.pubKeyHex), wellBefore.ben) && near(balanceOf(cal.pubKeyHex), wellBefore.cal),
+    assert(funded.returned === 0 && balanceOf(well) === hc(20) && escrowOf(well) === hc(4) && rowsOutOf(well).every((r) => r.to_pubkey === well),
+        `a funded project's Beans stay where they are, the planted pledge too (${JSON.stringify(funded)}, ${beansOf(balanceOf(well))}, escrow ${beansOf(escrowOf(well))})`);
+    assert(escrowOf(open) === hc(6) && rowsOutOf(open).length === 0, `a project with no end date keeps its pledges (escrow ${beansOf(escrowOf(open))})`);
+    assert(balanceOf(ann.pubKeyHex) === wellBefore.ann && balanceOf(ben.pubKeyHex) === wellBefore.ben && balanceOf(cal.pubKeyHex) === wellBefore.cal,
         'and no backer is paid anything');
     // The planted pledge goes back to Cal by hand, so the node's books are as they were.
-    db.prepare('UPDATE accounts SET balance_c = balance_c + 4 WHERE public_key = ?').run(cal.pubKeyHex);
-    db.prepare('UPDATE accounts SET balance_c = balance_c - 4 WHERE public_key = ?').run(`escrow_${well}`);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(hc(4), cal.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(hc(4), `escrow_${well}`);
     db.prepare('DELETE FROM transactions WHERE id = ?').run(late);
     reconcileLedgerFromDb();
 
     // ── 8. On a standby nothing moves; on the main server the wrapper its minute tick calls returns it ────────────────────
     console.log('── 8. A standby, then the main server again ──');
     const hall = crypto.randomUUID();
-    createCrowdfundProject(hall, max.pubKeyHex, 'Hall Kitchen', 'A kitchen for the hall', [], 50, new Date(Date.now() + 10 * DAY).toISOString());
-    pledgeToProject(crypto.randomUUID(), hall, ann.pubKeyHex, 6, 'Project Pledge');
+    createCrowdfundProject(hall, max.pubKeyHex, 'Hall Kitchen', 'A kitchen for the hall', [], hc(50), new Date(Date.now() + 10 * DAY).toISOString());
+    pledgeToProject(crypto.randomUUID(), hall, ann.pubKeyHex, hc(6), 'Project Pledge');
     const annBeforeHall = balanceOf(ann.pubKeyHex);
     const hallCounts = { live: watched.live.length, pushes: watched.pushes.length, kept: keptFor(ann.pubKeyHex).length };
     // From here to the end of the part nothing awaits.
@@ -484,11 +493,11 @@ async function main(): Promise<void> {
     const hallOnStandby = { escrow: escrowOf(hall), ann: balanceOf(ann.pubKeyHex), live: watched.live.length, pushes: watched.pushes.length, kept: keptFor(ann.pubKeyHex).length };
     const wrapper = tickWrapper();
     const onMain = wrapper ? wrapper() : { returned: -1, left: -1 };
-    assert(onStandby?.returned === 0 && (wrapperOnStandby === null || wrapperOnStandby?.returned === 0) && near(hallOnStandby.escrow, 6) && near(hallOnStandby.ann, annBeforeHall),
+    assert(onStandby?.returned === 0 && (wrapperOnStandby === null || wrapperOnStandby?.returned === 0) && hallOnStandby.escrow === hc(6) && hallOnStandby.ann === annBeforeHall,
         `on a standby nothing moves (${JSON.stringify(onStandby)} ${JSON.stringify(wrapperOnStandby)}, escrow ${hallOnStandby.escrow})`);
     assert(hallOnStandby.live === hallCounts.live && hallOnStandby.pushes === hallCounts.pushes && hallOnStandby.kept === hallCounts.kept, 'and nobody is told');
-    assert(onMain.returned === 1 && escrowOf(hall) <= DUST && near(balanceOf(ann.pubKeyHex), annBeforeHall + 6),
-        `on the main server the wrapper the minute tick calls returns it (${JSON.stringify(onMain)}, Ann +${balanceOf(ann.pubKeyHex) - annBeforeHall})`);
+    assert(onMain.returned === 1 && escrowOf(hall) === 0 && balanceOf(ann.pubKeyHex) === annBeforeHall + hc(6),
+        `on the main server the wrapper the minute tick calls returns it (${JSON.stringify(onMain)}, Ann +${beansOf(balanceOf(ann.pubKeyHex) - annBeforeHall)})`);
     assert(keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Hall Kitchen"')).length === 1,
         'and Ann is told, through the node\'s own notices');
 
@@ -497,12 +506,12 @@ async function main(): Promise<void> {
     // return for every other backer of the project, for good. Marty, board, 27 Oct 2026: "To the Commons".
     console.log('── 9. A backer who closed their account ──');
     const dan = makeMember('Dan'), eve = makeMember('Eve'), zed = makeMember('Zed');
-    for (const m of [dan, eve, zed]) payFromCommons(m.pubKeyHex, 100, 'Beans to pledge', { allowDeficit: true });
+    for (const m of [dan, eve, zed]) payFromCommons(m.pubKeyHex, hc(100), 'Beans to pledge', { allowDeficit: true });
     const bench = await makeProject(max, 'Park Bench', 200, new Date(Date.now() + 10 * DAY).toISOString());
     await pledge(dan, bench, 40, 'treasury');
     await pledge(eve, bench, 25, 'crowdfund');
     await pledge(zed, bench, 0.01, 'treasury');
-    assert(near(escrowOf(bench), 65.01), `the bench's escrow holds the 65.01 pledged (${escrowOf(bench)})`);
+    assert(escrowOf(bench) === hc(65.01), `the bench's escrow holds the 65.01 pledged (${beansOf(escrowOf(bench))})`);
     const purged = purgeMemberSelf(zed.pubKeyHex);
     const zedRow = db.prepare('SELECT status FROM members WHERE public_key = ?').get(zed.pubKeyHex) as { status: string } | undefined;
     assert(purged.ok === true && zedRow?.status === 'pruned', `Zed deletes his account (${JSON.stringify(purged)}, ${zedRow?.status})`);
@@ -514,29 +523,29 @@ async function main(): Promise<void> {
     setDeadline(bench, new Date(Date.now() - 8 * DAY).toISOString());
     const closedTick = tick(watched.hooks);
     assert(closedTick.returned === 1 && closedTick.left === 0, `the tick returns the project, and leaves nothing for the operator (${JSON.stringify(closedTick)})`);
-    assert(near(balanceOf(dan.pubKeyHex), benchBefore.dan + 40), `Dan gets back exactly his 40 (${balanceOf(dan.pubKeyHex) - benchBefore.dan})`);
-    assert(near(balanceOf(eve.pubKeyHex), benchBefore.eve + 25), `Eve gets back exactly her 25 (${balanceOf(eve.pubKeyHex) - benchBefore.eve})`);
-    assert(near(getCommonsBalanceExact(), benchBefore.commons + 0.01), `the Commons gains Zed's 0.01 (${getCommonsBalanceExact() - benchBefore.commons})`);
-    assert(escrowOf(bench) <= DUST && near(raisedOf(bench), 0), `the bench's escrow is 0 (${escrowOf(bench)}), raised 0 (${raisedOf(bench)})`);
-    assert(near(sumBalances(), benchBefore.sum), `the node's total is unchanged (${sumBalances()} vs ${benchBefore.sum})`);
+    assert(balanceOf(dan.pubKeyHex) === benchBefore.dan + hc(40), `Dan gets back exactly his 40 (${beansOf(balanceOf(dan.pubKeyHex) - benchBefore.dan)})`);
+    assert(balanceOf(eve.pubKeyHex) === benchBefore.eve + hc(25), `Eve gets back exactly her 25 (${beansOf(balanceOf(eve.pubKeyHex) - benchBefore.eve)})`);
+    assert(getCommonsBalanceExact() === benchBefore.commons + hc(0.01), `the Commons gains Zed's 0.01 (${beansOf(getCommonsBalanceExact() - benchBefore.commons)})`);
+    assert(escrowOf(bench) === 0 && raisedOf(bench) === 0, `the bench's escrow is 0 (${escrowOf(bench)}), raised 0 (${raisedOf(bench)})`);
+    assert(sumBalances() === benchBefore.sum, `the node's total is unchanged (${sumBalances()} vs ${benchBefore.sum})`);
     const closedAudit = runLedgerAudit();
-    assert(closedAudit.ok && Math.abs(closedAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${closedAudit.ok}, drift ${closedAudit.drift})`);
+    assert(closedAudit.ok && closedAudit.drift === 0, `the ledger audit holds with 0 drift (ok ${closedAudit.ok}, drift ${closedAudit.drift})`);
     const benchRows = rowsOutOf(bench);
     const toCommonsRows = benchRows.filter((r) => r.to_pubkey === 'COMMONS_POOL');
-    assert(benchRows.length === 3 && toCommonsRows.length === 1 && near(toCommonsRows[0]?.amount ?? 0, 0.01) && !toCommonsRows[0]?.tax_fee
+    assert(benchRows.length === 3 && toCommonsRows.length === 1 && toCommonsRows[0]?.amount_c === hc(0.01) && !toCommonsRows[0]?.fee_c
         && benchRows.every((r) => r.project_id === bench) && !benchRows.some((r) => r.to_pubkey === zed.pubKeyHex),
-        `one row each to Dan and Eve, and one of 0.01 to the Commons, each naming the project (${JSON.stringify(benchRows.map((r) => [r.to_pubkey.slice(0, 8), r.amount, r.project_id === bench]))})`);
+        `one row each to Dan and Eve, and one of 0.01 to the Commons, each naming the project (${JSON.stringify(benchRows.map((r) => [r.to_pubkey.slice(0, 8), r.amount_c, r.project_id === bench]))})`);
     assert(toCommonsRows[0]?.memo === 'Pledge from a closed account, returned to the Commons',
         `the Commons row says what it is, in plain words ("${toCommonsRows[0]?.memo}")`);
     assert(!!toCommonsRows[0] && !/Zed|Deleted Member/.test(toCommonsRows[0].memo) && !toCommonsRows[0].memo.includes(zed.pubKeyHex.slice(0, 8)),
         'and names nobody');
-    assert(near(sumBalances(), benchBefore.sum) && tick(watched.hooks).left === 0, 'a second tick leaves nothing for the operator either');
+    assert(sumBalances() === benchBefore.sum && tick(watched.hooks).left === 0, 'a second tick leaves nothing for the operator either');
     const benchPage = await readPage(dan, bench);
     const benchReturnedAt = benchRows.map((r) => r.timestamp).sort().at(-1);
-    // 0 raised as both apps read it, in cents (pledgeReturnLine, the funding box): 65.01 less 40, 25 and 0.01 leaves the
-    // escrow a float residue far below a cent (5e-15, measured), under the dust the return and the hygiene sweep ignore.
-    assert(benchPage?.pledgesReturnedAt === benchReturnedAt && Math.round(Number(benchPage?.currentAmount) * 100) === 0,
-        `the page, which both apps read, says the Beans went back (${benchPage?.pledgesReturnedAt} = ${benchReturnedAt}), and 0 raised (${benchPage?.currentAmount})`);
+    // 0 raised as both apps read it: under float Beans 65.01 less 40, 25 and 0.01 left the escrow a float residue far below
+    // a cent (5e-15, measured), so this was read in cents. In whole hundredths 6501 less 4000, 2500 and 1 is exactly 0.
+    assert(benchPage?.pledgesReturnedAt === benchReturnedAt && benchPage?.currentAmount_c === 0,
+        `the page, which both apps read, says the Beans went back (${benchPage?.pledgesReturnedAt} = ${benchReturnedAt}), and exactly 0 raised (${benchPage?.currentAmount_c})`);
     for (const who of [dan, eve]) {
         const kept = keptFor(who.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Park Bench"'));
         assert(kept.length === 1 && /went back to you/.test(kept[0].body), `${who.callsign} is told their pledge went back, as before ("${kept[0]?.body}")`);
@@ -556,26 +565,26 @@ async function main(): Promise<void> {
     // A wound-up enterprise as a backer: its account closed when it wound up, and what it had went to the Commons. So does its
     // pledge, and the other backer is paid.
     const kit = makeMember('Kit Co-op');
-    payFromCommons(kit.pubKeyHex, 20, 'Beans to pledge', { allowDeficit: true });
+    payFromCommons(kit.pubKeyHex, hc(20), 'Beans to pledge', { allowDeficit: true });
     const swing = crypto.randomUUID();
-    createCrowdfundProject(swing, max.pubKeyHex, 'Creek Swing', 'A swing by the creek', [], 40, new Date(Date.now() + 10 * DAY).toISOString());
-    pledgeToProject(crypto.randomUUID(), swing, ann.pubKeyHex, 5, 'Project Pledge');
-    pledgeToProject(crypto.randomUUID(), swing, kit.pubKeyHex, 3, 'Project Pledge');
+    createCrowdfundProject(swing, max.pubKeyHex, 'Creek Swing', 'A swing by the creek', [], hc(40), new Date(Date.now() + 10 * DAY).toISOString());
+    pledgeToProject(crypto.randomUUID(), swing, ann.pubKeyHex, hc(5), 'Project Pledge');
+    pledgeToProject(crypto.randomUUID(), swing, kit.pubKeyHex, hc(3), 'Project Pledge');
     db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(kit.pubKeyHex);
     const swingBefore = { ann: balanceOf(ann.pubKeyHex), kit: balanceOf(kit.pubKeyHex), commons: getCommonsBalanceExact() };
     setDeadline(swing, new Date(Date.now() - 8 * DAY).toISOString());
     const woundUp = tick(watched.hooks);
-    assert(woundUp.returned === 1 && woundUp.left === 0 && escrowOf(swing) <= DUST && near(balanceOf(ann.pubKeyHex), swingBefore.ann + 5)
-        && near(balanceOf(kit.pubKeyHex), swingBefore.kit) && near(getCommonsBalanceExact(), swingBefore.commons + 3),
-        `a wound-up enterprise's pledge goes to the Commons, and Ann is paid (${JSON.stringify(woundUp)}, Ann +${balanceOf(ann.pubKeyHex) - swingBefore.ann}, Commons +${getCommonsBalanceExact() - swingBefore.commons})`);
+    assert(woundUp.returned === 1 && woundUp.left === 0 && escrowOf(swing) === 0 && balanceOf(ann.pubKeyHex) === swingBefore.ann + hc(5)
+        && balanceOf(kit.pubKeyHex) === swingBefore.kit && getCommonsBalanceExact() === swingBefore.commons + hc(3),
+        `a wound-up enterprise's pledge goes to the Commons, and Ann is paid (${JSON.stringify(woundUp)}, Ann +${beansOf(balanceOf(ann.pubKeyHex) - swingBefore.ann)}, Commons +${beansOf(getCommonsBalanceExact() - swingBefore.commons)})`);
 
     // A backer who still can't be paid here, a live visitor's row: the whole project is left for the operator.
     const vic = makeMember('Vic');
-    payFromCommons(vic.pubKeyHex, 50, 'Beans to pledge', { allowDeficit: true });
+    payFromCommons(vic.pubKeyHex, hc(50), 'Beans to pledge', { allowDeficit: true });
     const shade = crypto.randomUUID();
-    createCrowdfundProject(shade, max.pubKeyHex, 'Shade Sail', 'Shade for the playground', [], 40, new Date(Date.now() + 10 * DAY).toISOString());
-    pledgeToProject(crypto.randomUUID(), shade, ann.pubKeyHex, 5, 'Project Pledge');
-    pledgeToProject(crypto.randomUUID(), shade, vic.pubKeyHex, 7, 'Project Pledge');
+    createCrowdfundProject(shade, max.pubKeyHex, 'Shade Sail', 'Shade for the playground', [], hc(40), new Date(Date.now() + 10 * DAY).toISOString());
+    pledgeToProject(crypto.randomUUID(), shade, ann.pubKeyHex, hc(5), 'Project Pledge');
+    pledgeToProject(crypto.randomUUID(), shade, vic.pubKeyHex, hc(7), 'Project Pledge');
     db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(vic.pubKeyHex);
     const annBeforeShade = balanceOf(ann.pubKeyHex);
     const shadeCounts = { kept: keptFor(ann.pubKeyHex).length, live: watched.live.length, commons: getCommonsBalanceExact() };
@@ -584,12 +593,12 @@ async function main(): Promise<void> {
     const visitorAgain = tick(watched.hooks);
     assert(visitor.returned === 0 && visitor.left === 1 && visitorAgain.left === 1,
         `the project is left for the operator, tick after tick (${JSON.stringify(visitor)} ${JSON.stringify(visitorAgain)})`);
-    assert(near(escrowOf(shade), 12) && near(balanceOf(ann.pubKeyHex), annBeforeShade) && rowsOutOf(shade).length === 0
-        && near(getCommonsBalanceExact(), shadeCounts.commons),
-        `exactly as it was: Ann is not paid her part alone, and nothing goes to the Commons (escrow ${escrowOf(shade)})`);
+    assert(escrowOf(shade) === hc(12) && balanceOf(ann.pubKeyHex) === annBeforeShade && rowsOutOf(shade).length === 0
+        && getCommonsBalanceExact() === shadeCounts.commons,
+        `exactly as it was: Ann is not paid her part alone, and nothing goes to the Commons (escrow ${beansOf(escrowOf(shade))})`);
     assert(keptFor(ann.pubKeyHex).length === shadeCounts.kept && watched.live.length === shadeCounts.live, 'and nobody is told');
     const finalAudit = runLedgerAudit();
-    assert(Math.abs(finalAudit.drift) < 0.0001, `the ledger audit still holds with 0 drift (${finalAudit.drift})`);
+    assert(finalAudit.drift === 0, `the ledger audit still holds with 0 drift (${finalAudit.drift})`);
 
     // ── 11. After the return the project is still there: its date moved, then its leader's cancel pays nobody twice ──────
     // The leader's cancel (POST /api/crowdfund/projects/delete, db.ts deleteCrowdfundProject) refunds the pledges its escrow
@@ -601,28 +610,28 @@ async function main(): Promise<void> {
     const returnDay = new Date();
     returnDay.setUTCHours(0, 0, 0, 0);
     const toReturnDay = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount: 100, deadlineAt: returnDay.toISOString() }, lea);
+        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount_c: hc(100), deadlineAt: returnDay.toISOString() }, lea);
     assert(toReturnDay.status === 200, `the leader moves the roof's end date to the return's own day (${toReturnDay.status} ${toReturnDay.body?.error ?? ''})`);
     const returnDayPage = await readPage(ann, roof);
     assert(returnDayPage?.pledgesReturnedAt === null, `its page no longer says they went back: the return was for the old end date (${returnDayPage?.pledgesReturnedAt})`);
     const reopened = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount: 100, deadlineAt: new Date(Date.now() + 10 * DAY).toISOString() }, lea);
+        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount_c: hc(100), deadlineAt: new Date(Date.now() + 10 * DAY).toISOString() }, lea);
     assert(reopened.status === 200, `the leader moves the roof's end date after its pledges went back (${reopened.status} ${reopened.body?.error ?? ''})`);
     assert(keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && n.body.includes('"Village Hall Roof"')).length === 0,
         'nobody is told: nothing of theirs is held');
     const reopenedPage = await readPage(ann, roof);
     assert(reopenedPage?.pledgesReturnedAt === null, `its page no longer says they went back: its end date is ahead again (${reopenedPage?.pledgesReturnedAt})`);
     await pledge(ann, roof, 7, 'treasury');
-    assert(near(escrowOf(roof), 7), `it takes a new pledge (escrow ${escrowOf(roof)})`);
+    assert(escrowOf(roof) === hc(7), `it takes a new pledge (escrow ${beansOf(escrowOf(roof))})`);
     const beforeCancel = { ann: balanceOf(ann.pubKeyHex), ben: balanceOf(ben.pubKeyHex), cal: balanceOf(cal.pubKeyHex), sum: sumBalances() };
     const cancelled = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: roof, creatorPubkey: lea.pubKeyHex }, lea);
     assert(cancelled.status === 200, `the leader cancels it (${cancelled.status} ${cancelled.body?.error ?? ''})`);
-    assert(near(balanceOf(ann.pubKeyHex), beforeCancel.ann + 7), `Ann gets back only the 7 still held, not her 10 again (${balanceOf(ann.pubKeyHex) - beforeCancel.ann})`);
-    assert(near(balanceOf(ben.pubKeyHex), beforeCancel.ben) && near(balanceOf(cal.pubKeyHex), beforeCancel.cal),
+    assert(balanceOf(ann.pubKeyHex) === beforeCancel.ann + hc(7), `Ann gets back only the 7 still held, not her 10 again (${beansOf(balanceOf(ann.pubKeyHex) - beforeCancel.ann)})`);
+    assert(balanceOf(ben.pubKeyHex) === beforeCancel.ben && balanceOf(cal.pubKeyHex) === beforeCancel.cal,
         `Ben and Cal, paid back a week after the end date, are not paid again (Ben ${balanceOf(ben.pubKeyHex) - beforeCancel.ben}, Cal ${balanceOf(cal.pubKeyHex) - beforeCancel.cal})`);
-    assert(near(escrowOf(roof), 0) && near(sumBalances(), beforeCancel.sum), `its escrow ends at 0, not below (${escrowOf(roof)}), and the total is unchanged`);
+    assert(escrowOf(roof) === 0 && sumBalances() === beforeCancel.sum, `its escrow ends at 0, not below (${escrowOf(roof)}), and the total is unchanged`);
     const cancelAudit = runLedgerAudit();
-    assert(cancelAudit.ok && Math.abs(cancelAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${cancelAudit.ok}, drift ${cancelAudit.drift})`);
+    assert(cancelAudit.ok && cancelAudit.drift === 0, `the ledger audit holds with 0 drift (ok ${cancelAudit.ok}, drift ${cancelAudit.drift})`);
 
     // ── 12. The leader moves an end date that is over again and again: each backer is told once a day ──────────────────
     // Review of #2525: the update route takes a date back to 36 hours ago (routes/project-deadline.ts, "today anywhere"),
@@ -638,7 +647,7 @@ async function main(): Promise<void> {
     setDeadline(racks, new Date(Date.now() - 5 * DAY).toISOString());
     const toldOfRacks = (who: Id) => keptFor(who.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && enterpriseOf(n) === racks);
     const moveRacks = (deadlineAt: string, title = 'Bike Racks') => signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: racks, creatorPubkey: lea.pubKeyHex, title, description: 'Bike Racks, for the valley', goalAmount: 60, deadlineAt }, lea);
+        { id: racks, creatorPubkey: lea.pubKeyHex, title, description: 'Bike Racks, for the valley', goalAmount_c: hc(60), deadlineAt }, lea);
     const moves: number[] = [];
     // Each time to another date already over, a second apart, and renamed every other time: the notice's words change too.
     for (let i = 0; i < 6; i++) moves.push((await moveRacks(new Date(Date.now() - 30 * HOUR - i * 1000).toISOString(), i % 2 ? 'Bike Racks' : 'Bike Racks!')).status);
@@ -676,15 +685,15 @@ async function main(): Promise<void> {
     assert(pushDayOn.length === 1 && [...pushDayOn[0].targets].sort().join() === [ann, ben].map((m) => m.pubKeyHex).sort().join()
         && pushDayOn[0].kind === 'community.notice' && pushDayOn[0].category === 'escrow',
         `with one push to the two of them (${pushDayOn.length}, ${pushDayOn[0]?.targets.length}, ${pushDayOn[0]?.kind}, ${pushDayOn[0]?.category})`);
-    assert(near(escrowOf(racks), 10) && rowsOutOf(racks).length === 0, `and nothing went back meanwhile (escrow ${escrowOf(racks)})`);
+    assert(escrowOf(racks) === hc(10) && rowsOutOf(racks).length === 0, `and nothing went back meanwhile (escrow ${beansOf(escrowOf(racks))})`);
 
-    // ── 13. Pledges not exact in binary: once they went back the raised figure is 0, not what the floats leave ───────────
-    // Review of #2525: SQLite adds a project's pledges up in the order they came, the return adds them up backer by backer,
-    // and with amounts not exact in binary the two sums differ in their last bits. Lowering the raised figure by one sum left
-    // a residue of the other where everything went back, and the project's read (db.ts rowToProjectRow, its pledge rows less
-    // the return's) left one of its own. The leader's update read either as pledges received and refused a new goal, and the
-    // page read the first as Beans still held, so both apps said they were due back. Every amount the parts above use is
-    // exact in binary, so none of them could see it.
+    // ── 13. Pledges not exact in binary: once they went back the raised figure is exactly 0 ──────────────────────────
+    // Review of #2525 (float Beans): SQLite added a project's pledges up in the order they came, the return added them up
+    // backer by backer, and with amounts not exact in binary the two sums differed in their last bits. Lowering the raised
+    // figure by one sum left a residue of the other where everything went back, and the project's read (db.ts
+    // rowToProjectRow, its pledge rows less the return's) left one of its own. The leader's update read either as pledges
+    // received and refused a new goal, and the page read the first as Beans still held, so both apps said they were due
+    // back. In whole hundredths (10, 30, 20, 60, 70) every order sums to the same integer: the checks stay, exact.
     console.log('── 13. Pledges not exact in binary ──');
     // A leader of its own: Lea has started three enterprises today, as many as the node lets anyone start in 24 hours.
     const ola = makeMember('Ola');
@@ -699,30 +708,30 @@ async function main(): Promise<void> {
     // Its end date 8 days gone: due. Set and returned with nothing awaited between, so this process's own tick can't take it.
     setDeadline(seeds, new Date(Date.now() - 8 * DAY).toISOString());
     const seedsReturn = tick(watched.hooks);
-    assert(seedsReturn.returned === 1 && escrowOf(seeds) <= DUST
-        && near(balanceOf(ann.pubKeyHex), seedsBefore.ann + 1) && near(balanceOf(ben.pubKeyHex), seedsBefore.ben + 0.9),
-        `the pledges go back, Ann her 0.1 + 0.2 + 0.7 and Ben his 0.3 + 0.6 (${JSON.stringify(seedsReturn)}, Ann +${balanceOf(ann.pubKeyHex) - seedsBefore.ann}, Ben +${balanceOf(ben.pubKeyHex) - seedsBefore.ben}, escrow ${escrowOf(seeds)})`);
+    assert(seedsReturn.returned === 1 && escrowOf(seeds) === 0
+        && balanceOf(ann.pubKeyHex) === seedsBefore.ann + hc(1) && balanceOf(ben.pubKeyHex) === seedsBefore.ben + hc(0.9),
+        `the pledges go back, Ann her 0.1 + 0.2 + 0.7 and Ben his 0.3 + 0.6 (${JSON.stringify(seedsReturn)}, Ann +${beansOf(balanceOf(ann.pubKeyHex) - seedsBefore.ann)}, Ben +${beansOf(balanceOf(ben.pubKeyHex) - seedsBefore.ben)}, escrow ${escrowOf(seeds)})`);
     assert(raisedOf(seeds) === 0, `the projects row says 0 raised, not a residue (${raisedOf(seeds)})`);
     const seedsPage = await readPage(ann, seeds);
-    assert(seedsPage?.currentAmount === 0, `the page says 0 raised (${seedsPage?.currentAmount})`);
-    assert(getCrowdfundProject(seeds)?.current_amount === 0, `and so does the project's read (${getCrowdfundProject(seeds)?.current_amount})`);
+    assert(seedsPage?.currentAmount_c === 0, `the page says 0 raised (${seedsPage?.currentAmount_c})`);
+    assert(getCrowdfundProject(seeds)?.current_amount_c === 0, `and so does the project's read (${getCrowdfundProject(seeds)?.current_amount_c})`);
     // Its leader takes it up again: a later end date, then a lower goal. Nothing of anyone's is held, so the goal can change.
     const seedsNewDeadline = new Date(Date.now() + 10 * DAY).toISOString();
-    const updateSeeds = (goalAmount: number) => signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: seeds, creatorPubkey: ola.pubKeyHex, title: 'Seed Swap', description: 'Seed Swap, for the valley', goalAmount, deadlineAt: seedsNewDeadline }, ola);
+    const updateSeeds = (goalBeans: number) => signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: seeds, creatorPubkey: ola.pubKeyHex, title: 'Seed Swap', description: 'Seed Swap, for the valley', goalAmount_c: hc(goalBeans), deadlineAt: seedsNewDeadline }, ola);
     const seedsMoved = await updateSeeds(50);
     assert(seedsMoved.status === 200, `its leader moves its end date after the return (${seedsMoved.status} ${seedsMoved.body?.error ?? ''})`);
     const seedsLowered = await updateSeeds(20);
-    assert(seedsLowered.status === 200 && seedsLowered.body?.project?.goal_amount === 20 && seedsLowered.body?.project?.current_amount === 0,
-        `and lowers its goal to 20 (${seedsLowered.status} ${seedsLowered.body?.error ?? ''}: goal ${seedsLowered.body?.project?.goal_amount}, raised ${seedsLowered.body?.project?.current_amount})`);
+    assert(seedsLowered.status === 200 && seedsLowered.body?.project?.goal_amount_c === hc(20) && seedsLowered.body?.project?.current_amount_c === 0,
+        `and lowers its goal to 20 (${seedsLowered.status} ${seedsLowered.body?.error ?? ''}: goal ${seedsLowered.body?.project?.goal_amount_c}, raised ${seedsLowered.body?.project?.current_amount_c})`);
     // Nobody pledges to it again, and its new end date ends too: nothing goes back, and the page has nothing held to say is due.
     // Read only: a tick that far on would return the other parts' projects as well.
     const seedsLater = unfunded?.findUnfundedProjectsDue(Date.parse(seedsNewDeadline) + 12 * DAY).filter((p) => p.projectId === seeds);
     const seedsPageLater = await readPage(ann, seeds);
-    assert(seedsLater?.length === 0 && escrowOf(seeds) <= DUST && rowsOutOf(seeds).length === 2,
+    assert(seedsLater?.length === 0 && escrowOf(seeds) === 0 && rowsOutOf(seeds).length === 2,
         `12 days after the new end date the return finds nothing of it to give back (${JSON.stringify(seedsLater)}, escrow ${escrowOf(seeds)}, ${rowsOutOf(seeds).length} rows out)`);
-    assert(seedsPageLater?.currentAmount === 0 && seedsPageLater?.pledgesReturnedAt === null,
-        `and the page says 0 raised and nothing went back for that date, so neither app says Beans are due back (${seedsPageLater?.currentAmount}, ${seedsPageLater?.pledgesReturnedAt})`);
+    assert(seedsPageLater?.currentAmount_c === 0 && seedsPageLater?.pledgesReturnedAt === null,
+        `and the page says 0 raised and nothing went back for that date, so neither app says Beans are due back (${seedsPageLater?.currentAmount_c}, ${seedsPageLater?.pledgesReturnedAt})`);
 
     // ── 14. A new lead moves the end date: it reaches the row the return reads ─────────────────────────────────────────
     // Review of #2525: the update wrote the projects row only where its creator_pubkey matched, and that column holds the
@@ -742,17 +751,17 @@ async function main(): Promise<void> {
     setDeadline(gate, new Date(Date.now() - 3 * DAY).toISOString());
     const gateNewDeadline = new Date(Date.now() + 10 * DAY).toISOString();
     const gateMoved = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: gate, creatorPubkey: kim.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount: 60, deadlineAt: gateNewDeadline }, kim);
+        { id: gate, creatorPubkey: kim.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount_c: hc(60), deadlineAt: gateNewDeadline }, kim);
     assert(gateMoved.status === 200, `Kim, the lead, moves the end date (${gateMoved.status} ${gateMoved.body?.error ?? ''})`);
     const gateRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(gate) as { deadline_at: string };
     assert(gateRow?.deadline_at === gateNewDeadline, `the projects row the return reads has the new end date (${gateRow?.deadline_at})`);
     const gateKept = keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && n.body.includes('"Garden Gate"'));
     assert(gateKept.length === 1, `Ann, a backer, is told the end date moved (${gateKept.length})`);
     await pledge(ben, gate, 2, 'crowdfund');
-    assert(near(escrowOf(gate), 6), `and the project takes pledges again (escrow ${escrowOf(gate)})`);
+    assert(escrowOf(gate) === hc(6), `and the project takes pledges again (escrow ${beansOf(escrowOf(gate))})`);
     // Uma, its maker but no longer its lead, can't change it.
     const umaMove = await signedFetch('POST', '/api/crowdfund/projects/update',
-        { id: gate, creatorPubkey: uma.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount: 60, deadlineAt: new Date(Date.now() + 30 * DAY).toISOString() }, uma);
+        { id: gate, creatorPubkey: uma.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount_c: hc(60), deadlineAt: new Date(Date.now() + 30 * DAY).toISOString() }, uma);
     const gateAfter = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(gate) as { deadline_at: string };
     assert(umaMove.status !== 200 && gateAfter?.deadline_at === gateNewDeadline,
         `Uma, who made it but no longer leads it, can't move it (${umaMove.status}; end date ${gateAfter?.deadline_at})`);
@@ -768,26 +777,26 @@ async function main(): Promise<void> {
         `its page says Kim and Ada may cancel it, Uma and Cal not (${JSON.stringify(flags)})`);
     const gateBefore = { ann: balanceOf(ann.pubKeyHex), ben: balanceOf(ben.pubKeyHex), uma: balanceOf(uma.pubKeyHex), sum: sumBalances() };
     const umaCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: uma.pubKeyHex }, uma);
-    assert(umaCancel.status !== 200 && near(escrowOf(gate), 6) && rowsOutOf(gate).length === 0,
+    assert(umaCancel.status !== 200 && escrowOf(gate) === hc(6) && rowsOutOf(gate).length === 0,
         `Uma can't cancel it: nothing moves (${umaCancel.status} ${umaCancel.body?.error ?? ''}; escrow ${escrowOf(gate)})`);
     const calCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: cal.pubKeyHex }, cal);
-    assert(calCancel.status !== 200 && near(escrowOf(gate), 6), `nor can Cal (${calCancel.status} ${calCancel.body?.error ?? ''})`);
+    assert(calCancel.status !== 200 && escrowOf(gate) === hc(6), `nor can Cal (${calCancel.status} ${calCancel.body?.error ?? ''})`);
     // Nor Kim while an admin has switched Kim's operator access off: such a keeper acts for no enterprise, and the signed
     // request still reaches the route (db.ts mayCancelProject, review of #2554).
     stateEngine.adminSetOperator(kim.pubKeyHex, false);
     const kimOffCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
-    assert(kimOffCancel.status !== 200 && near(escrowOf(gate), 6) && rowsOutOf(gate).length === 0,
+    assert(kimOffCancel.status !== 200 && escrowOf(gate) === hc(6) && rowsOutOf(gate).length === 0,
         `nor Kim, its lead, with operator access switched off: nothing moves (${kimOffCancel.status} ${kimOffCancel.body?.error ?? ''}; escrow ${escrowOf(gate)})`);
     const kimOffFlag = await mayCancelOf(kim);
     assert(kimOffFlag === false, `and its page doesn't offer Kim the cancel then (${kimOffFlag})`);
     stateEngine.adminSetOperator(kim.pubKeyHex, true);
     const kimCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
     assert(kimCancel.status === 200, `Kim, its lead, cancels it (${kimCancel.status} ${kimCancel.body?.error ?? ''})`);
-    assert(near(balanceOf(ann.pubKeyHex), gateBefore.ann + 4) && near(balanceOf(ben.pubKeyHex), gateBefore.ben + 2) && near(balanceOf(uma.pubKeyHex), gateBefore.uma),
-        `Ann gets back her 4 and Ben his 2, once each; Uma's balance doesn't move (${balanceOf(ann.pubKeyHex) - gateBefore.ann}, ${balanceOf(ben.pubKeyHex) - gateBefore.ben})`);
-    assert(near(escrowOf(gate), 0) && near(sumBalances(), gateBefore.sum), `its escrow ends at 0 (${escrowOf(gate)}) and the total is unchanged`);
+    assert(balanceOf(ann.pubKeyHex) === gateBefore.ann + hc(4) && balanceOf(ben.pubKeyHex) === gateBefore.ben + hc(2) && balanceOf(uma.pubKeyHex) === gateBefore.uma,
+        `Ann gets back her 4 and Ben his 2, once each; Uma's balance doesn't move (${beansOf(balanceOf(ann.pubKeyHex) - gateBefore.ann)}, ${beansOf(balanceOf(ben.pubKeyHex) - gateBefore.ben)})`);
+    assert(escrowOf(gate) === 0 && sumBalances() === gateBefore.sum, `its escrow ends at 0 (${escrowOf(gate)}) and the total is unchanged`);
     const gateAudit = runLedgerAudit();
-    assert(gateAudit.ok && Math.abs(gateAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${gateAudit.ok}, drift ${gateAudit.drift})`);
+    assert(gateAudit.ok && gateAudit.drift === 0, `the ledger audit holds with 0 drift (ok ${gateAudit.ok}, drift ${gateAudit.drift})`);
 
     // ── 10. A node killed in the middle of a return ───────────────────────────────────────────────────────────────────
     console.log('── 10. Killed in the middle of a return, then booted again ──');
@@ -798,7 +807,7 @@ async function main(): Promise<void> {
     assert(crash.signal === 'SIGKILL' && crash.saw?.module === true && !crash.saw?.finished,
         `the node is killed after the return's second payment (signal ${crash.signal}, status ${crash.status}, saw ${JSON.stringify(crash.saw)})`);
     const before: Seen | undefined = crash.saw?.before;
-    assert(!!w && !!before && near(before.escrow, 45) && before.outRows === 0, `before the return its escrow held the 45 pledged (${JSON.stringify(before)})`);
+    assert(!!w && !!before && before.escrow === hc(45) && before.outRows === 0, `before the return its escrow held the 45 pledged (${JSON.stringify(before)})`);
     if (crash.signal !== 'SIGKILL') {
         console.error(crash.output.slice(-3000));
         assert(false, 'the rest of part 10 needs a node killed in the middle of its return');
@@ -810,15 +819,15 @@ async function main(): Promise<void> {
     if (boot.status !== 0) console.error(boot.output.slice(-3000));
     const s = boot.saw;
     assert(boot.status === 0 && !!s, `it boots again on the same data dir (status ${boot.status})`);
-    const sameAs = (a: Seen | undefined, b: Seen | undefined) => !!a && !!b && (['ann', 'ben', 'cal', 'lea', 'escrow', 'sum', 'outRows', 'notices', 'raised'] as const).every((k) => near(a[k], b[k]));
+    const sameAs = (a: Seen | undefined, b: Seen | undefined) => !!a && !!b && (['ann', 'ben', 'cal', 'lea', 'escrow', 'sum', 'outRows', 'notices', 'raised'] as const).every((k) => a[k] === b[k]);
     assert(sameAs(s?.atBoot, before), `nothing of the killed return was kept: no backer paid, the escrow whole, no row, no notice (${JSON.stringify(s?.atBoot)})`);
     if (w && before) {
         const after: Seen | undefined = s?.afterTick;
-        assert(!!after && near(after.ann, before.ann + 10) && near(after.ben, before.ben + 15) && near(after.cal, before.cal + 20),
+        assert(!!after && after.ann === before.ann + hc(10) && after.ben === before.ben + hc(15) && after.cal === before.cal + hc(20),
             `the main server's own minute tick returns every pledge exactly once (${JSON.stringify(after)})`);
-        assert(!!after && after.escrow <= DUST && near(after.sum, before.sum) && after.outRows === 3 && after.notices === 4 && near(after.raised, 0),
+        assert(!!after && after.escrow === 0 && after.sum === before.sum && after.outRows === 3 && after.notices === 4 && after.raised === 0,
             'the escrow empty, the total unchanged, one row per backer, a notice for each backer and the leader');
-        assert(s?.audit?.ok === true && Math.abs(s?.audit?.drift ?? 1) < 0.0001, `the ledger audit holds with 0 drift (${JSON.stringify(s?.audit)})`);
+        assert(s?.audit?.ok === true && s?.audit?.drift === 0, `the ledger audit holds with 0 drift (${JSON.stringify(s?.audit)})`);
         assert(s?.again?.returned === 0 && sameAs(s?.afterAgain, after), `a second tick in that process moves nothing (${JSON.stringify(s?.again)})`);
         const again = runPhase(dir, 'boot-again');
         if (again.status !== 0) console.error(again.output.slice(-3000));

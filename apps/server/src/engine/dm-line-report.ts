@@ -134,8 +134,9 @@ export interface ReportedDmLine {
     /** The key whose signature verified, or null. */
     signer: string | null;
     /**
-     * 'verified': that key signed this sealed line, to the reporter. 'unsigned': it carries no signature (a line of a format
-     * before 4, in a report taken before the 1.4.0 cutover). 'unverified': it carries one that doesn't verify.
+     * 'verified': that key signed this sealed line, to the reporter. 'unsigned': it carries no signature in its column (a line
+     * of a format before 4, sent before the 1.4.0 cutover: whatever a 1.3.x app sent beside it is not read). 'unverified': it
+     * carries one that doesn't verify.
      */
     signature: 'verified' | 'unsigned' | 'unverified';
     /** Always the reporter's own account of the line: nothing here proves the words. */

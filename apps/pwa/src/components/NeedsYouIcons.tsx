@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
     BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellClearWords, bellLabel, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
-    isPushNoticeKind, NEEDS_YOU_PRIORITY, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
+    isPushNoticeKind, NEEDS_YOU_PRIORITY, needsYouCounts, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
 } from '@beanpool/core';
 import { t } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
@@ -478,7 +478,9 @@ export function NeedsYouIcons({
         api.clearAllBellNotices().catch(() => { refreshBell(); });
     };
     const unseen = notices.length;
-    const label = bellLabel(unseen, entries.length);
+    // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
+    const counted = entries.filter(needsYouCounts).length;
+    const label = bellLabel(unseen, counted);
     const bell = (small: boolean) => (
         <button
             type="button"
@@ -503,7 +505,7 @@ export function NeedsYouIcons({
                 >
                     {bellBadge(unseen)}
                 </span>
-            ) : entries.length > 0 ? (
+            ) : counted > 0 ? (
                 <span
                     data-testid="bell-dot"
                     className={`absolute top-2.5 ${small ? 'right-0' : 'right-2'} w-[9px] h-[9px] rounded-full pointer-events-none ${isSidebar ? 'bg-bp-gold-fill' : 'bg-amber-300'}`}

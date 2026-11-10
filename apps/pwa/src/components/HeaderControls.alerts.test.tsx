@@ -459,6 +459,44 @@ describe('The bell: what happened, until it is opened', () => {
         expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
     });
 
+    // DESIGN-standing-deals-upfront-amend-fable §2, as the node's Home answer writes them (routes/home-answer.ts, U1).
+    const PAYER_LINE: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov', target: { to: 'deal', postId: 'p-storage', txId: 'sd-m1' } };
+    const PAYEE_LINE: NeedsItem = { kind: 'deal', count: 1, accent: false, label: "Marty's 50 Beans for Vehicle Storage: 3 days overdue · we try until 24 Nov · you can stop it now", target: { to: 'deal', postId: 'p-storage', txId: 'sd-m1' } };
+
+    it("a short standing deal (U2): the payer's line is amber and counts; neither ✕ nor Clear all removes it; it opens the deal", async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-sd"', answer: makeHomeAnswer([PAYER_LINE]) as any });
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(2);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        const sheet = openSheet();
+        const line = within(sheet).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov/ });
+        expect(line.querySelector('.text-bp-ink-warning')).toBeTruthy();
+        // ✕ is on the notices only.
+        expect(within(sheet).getAllByRole('button', { name: 'Clear this notice' })).toHaveLength(2);
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
+        await settle();
+        const after = screen.getByRole('dialog');
+        expect(within(after).queryAllByTestId('bell-notice')).toHaveLength(0);
+        expect(within(after).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue/ })).toBeInTheDocument();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+        fireEvent.click(within(after).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p-storage', 'sd-m1');
+    });
+
+    it("the payee's line is listed in the sheet, calm, and not counted: no dot for it alone (the step is the payer's)", async () => {
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-sd2"', answer: makeHomeAnswer([PAYEE_LINE]) as any });
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
+        const sheet = openSheet();
+        const line = within(sheet).getByRole('button', { name: /Marty's 50 Beans for Vehicle Storage: 3 days overdue/ });
+        expect(line.querySelector('.text-bp-ink-warning')).toBeNull();
+        expect(line.textContent).not.toMatch(/short|balance/i);
+    });
+
     it('no notices, no "Clear all": the sheet offers it only with something to clear', async () => {
         vi.spyOn(api, 'getBellNotices').mockResolvedValue([]);
         vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([INVITE]) as any });

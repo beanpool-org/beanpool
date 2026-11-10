@@ -4639,7 +4639,6 @@
   "below zero": "പൂജ്യത്തിന് താഴെ",
   "made a voucher by @{name}": "@{name} ഗ്യാരന്റർ ആക്കി",
   "{amount} Beans{raised} · {source}": "{amount} പയർ{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "ആകെ {total}-ൽ {below} പൂജ്യത്തിന് താഴെ · എഴുതിത്തള്ളിയത് {off}",
   "{left} left · {held} held": "{left} ബാക്കി · {held} മാറ്റിവെച്ചു",
   "{left} of {total} left": "{total}-ൽ {left} ബാക്കി",
   "{name} · Voucher": "{name} · ഗ്യാരന്റർ",

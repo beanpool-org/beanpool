@@ -4640,7 +4640,6 @@
   "below zero": "sous zéro",
   "made a voucher by @{name}": "nommé parrain par @{name}",
   "{amount} Beans{raised} · {source}": "{amount} haricots{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} sur {total} sous zéro · effacé {off}",
   "{left} left · {held} held": "{left} restants · {held} retenus",
   "{left} of {total} left": "{left} sur {total} restants",
   "{name} · Voucher": "{name} · Parrain",

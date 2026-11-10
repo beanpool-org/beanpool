@@ -59,7 +59,7 @@ import {
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
-import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
+import { assertBeansOn, getProfileSwitches, getNodeProfile } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
 import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 import { ownCoreLockRow } from '../config/core-settings.js';
@@ -972,6 +972,12 @@ function passedOnOf(pk: string): { amount: number; people: number; belowZero: nu
     };
 }
 
+/** What this voucher's vouches that landed since `sinceMs` add up to (room_gifts of kind 'vouch'): the card's last-30-days figure. */
+function vouchedSince(pk: string, sinceMs: number): number {
+    return (db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND at > ?")
+        .get(pk, new Date(sinceMs).toISOString()) as { n: number }).n;
+}
+
 /** One voucher's numbers (the vouchers block's row, the card's head). No balance figure: "below zero" is a count. */
 export function voucherSummary(pk: string) {
     const row = voucherRow(pk);
@@ -982,6 +988,8 @@ export function voucherSummary(pk: string) {
     const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount IS NOT NULL').get(pk) as { n: number }).n;
     const marks = [...tradingOf(pk).values()];
     return {
+        // The card's headline: "Vouched 350 to 4 people · 100 in the last 30 days · …". A sum of vouch amounts, never a balance.
+        vouchedLast30Days: vouchedSince(pk, Date.now() - 30 * DAY_MS),
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
         madeBy: row?.made_by ?? null, madeByCallsign: callsignOf(row?.made_by), madeAt: row?.made_at ?? null,
         stoppedAt: row?.stopped_at ?? null, stopReason: row?.stop_reason ?? null,
@@ -993,14 +1001,76 @@ export function voucherSummary(pk: string) {
 }
 
 /**
- * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, by
- * callsign. The names list orders entries by the names its admins' phones open, which this server never reads: each row
- * carries its entry id, and the phone puts the block in the list's own order.
+ * A voucher budget promised on an invite nobody has used yet (invites-vouching I4, DESIGN §3 ask 5(b)): it lands when the
+ * invited person joins and is confirmed, so until then they are "waiting to join". By entry id: the name is sealed in the
+ * names list, which this server never reads, so the committee's phone opens it. Never the code (a live code in another
+ * admin's hands could be self-redeemed; names-list.ts readBoundInvites says the same), and never a balance.
+ */
+export interface WaitingVoucher {
+    entryId: string; level: number; vouchAmount: number | null;
+    madeBy: string; madeByCallsign: string; madeAt: string; expiresAt: string;
+}
+
+/** Every unused, in-date invite bound to an entry that promises a voucher budget, newest first, one per entry. */
+export function waitingToJoin(at = Date.now()): WaitingVoucher[] {
+    const rows = db.prepare(`SELECT names_entry_id AS entryId, voucher_level AS level, vouch_amount AS vouchAmount, created_by AS madeBy, created_at AS madeAt
+        FROM invite_codes WHERE used_by IS NULL AND voucher_level IS NOT NULL AND names_entry_id IS NOT NULL AND created_at > ?
+        ORDER BY created_at DESC, code ASC`).all(lifeCutoff(at)) as { entryId: string; level: number; vouchAmount: number | null; madeBy: string; madeAt: string }[];
+    const seen = new Set<string>();
+    const out: WaitingVoucher[] = [];
+    for (const r of rows) {
+        if (seen.has(r.entryId)) continue;
+        seen.add(r.entryId);
+        out.push({ ...r, madeByCallsign: callsignOf(r.madeBy), expiresAt: new Date(Date.parse(r.madeAt) + INVITE_LIFE_MS).toISOString() });
+    }
+    return out;
+}
+
+/**
+ * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, owners
+ * first (they vouch by role, with no limit: "Owners · no limit") and then by callsign, and `waiting`: the promised budgets
+ * of invites not used yet. The names list orders entries by the names its admins' phones open, which this server never
+ * reads: each row carries its entry id, and the phone puts the block in the list's own order.
  */
 export function vouchersBlock() {
     const keys = db.prepare(`SELECT v.member_pubkey AS pk FROM vouchers v JOIN members m ON m.public_key = v.member_pubkey
         WHERE v.stopped_at IS NULL AND m.status = 'active' AND m.is_visitor = 0 ORDER BY m.callsign COLLATE NOCASE ASC, v.member_pubkey ASC`).all() as { pk: string }[];
-    return { vouchers: keys.map((k) => voucherSummary(k.pk)), settings: voucherSettings() };
+    const vouchers = keys.map((k) => voucherSummary(k.pk));
+    return {
+        vouchers: [...vouchers.filter((v) => v.noLimit), ...vouchers.filter((v) => !v.noLimit)],
+        waiting: waitingToJoin(),
+        settings: voucherSettings(),
+    };
+}
+
+/**
+ * The button a profile shows an owner or admin, following the person's state (invites-vouching I4, DESIGN §3 ask 2):
+ *   add       not on the names list (no live confirmation): "Add to the names list", the one-step add-and-confirm form
+ *   make      confirmed, and the viewer is on the credit committee: "Make a voucher"
+ *   voucher   a voucher now: "Voucher · 400 left ›" (an owner: no limit), opening the card
+ * A plain admin (off the committee) gets Add and the voucher card but never Make; a confirmation still waiting for its
+ * second admin offers nothing. Null for anyone who is not an owner or admin, for their own profile, where a community keeps
+ * no names list (the worldwide one), for an account that can't be a voucher, and wherever Beans are off: a voucher is a budget of
+ * Beans (every voucher writer calls assertBeansOn), so that community has no voucher, no Make and no card to open, and its
+ * names-list step is offered no more than the web offers it (the web reads this only where Beans are live). A left-over figure
+ * is a budget, not a balance.
+ */
+export type ProfileVoucherButton =
+    | { state: 'add' }
+    | { state: 'make' }
+    | { state: 'voucher'; left: number; noLimit: boolean };
+
+export function profileVoucherButton(viewer: string | null | undefined, target: string): ProfileVoucherButton | null {
+    if (!viewer || viewer === target || !isNodeAdmin(viewer)) return null;
+    if (getNodeProfile() === 'global' || !getProfileSwitches().beans) return null;
+    const m = getMember(db, target);
+    if (!m || m.status !== 'active' || isVisitorKey(db, target) || m.isTreasury) return null;
+    if (liveVoucher(target)) return { state: 'voucher', left: budgetOf(target).left, noLimit: isNodeOwner(target) };
+    const conf = db.prepare('SELECT needs_second, seconded_at FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL')
+        .get(target) as { needs_second: number; seconded_at: string | null } | undefined;
+    if (!conf) return { state: 'add' };
+    if (conf.needs_second && !conf.seconded_at) return null;
+    return isOnCreditCommittee(viewer) ? { state: 'make' } : null;
 }
 
 /** One line of a Budget history: what moved, by whose hand, and for what, never which invite code. */

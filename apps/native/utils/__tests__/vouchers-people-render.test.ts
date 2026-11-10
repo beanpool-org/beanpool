@@ -148,8 +148,11 @@ const row = (pk: string, callsign: string, over: Record<string, unknown> = {}) =
     passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over,
 });
 /** The node's block, in the node's order (vouchersBlock() orders by callsign; here Wren before Jane's row to prove the phone keeps it). */
+const OWNER_ROW = row(key('a'), 'Sally', { source: 'role', noLimit: true, left: 0, held: 0, level: 0, vouched: 200, peopleVouched: 2, belowZero: 0, vouchedLast30Days: 200 });
+const WAITING = { entryId: '7'.repeat(32), level: 1000, vouchAmount: 25, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
 const BLOCK = {
-    vouchers: [row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
+    vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
+    waiting: [WAITING],
     settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
 };
 const COMMITTEE_ONLY = 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.';
@@ -214,8 +217,8 @@ describe('People → Invites: the Vouchers block, exactly as the node answers (�
             const b = block();
             expect(b).not.toBeNull();
             const rows = Array.from(b!.querySelectorAll('[data-testid="voucher-row"]')).map((r) => r.textContent);
-            expect(rows).toEqual([voucherRowText(BLOCK.vouchers[0]), voucherRowText(BLOCK.vouchers[1])]);
-            expect(rows).toEqual(['@Wren · 1500 of 1500 left · 0 vouched · 0 below zero ›', '@jane · 550 of 650 left · 4 vouched · 1 below zero ›']);
+            expect(rows).toEqual([voucherRowText(BLOCK.vouchers[1]), voucherRowText(BLOCK.vouchers[2])]);
+            expect(rows).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
             expect(b!.textContent).toContain('+ Make someone a voucher');
             // Above the invite form (§11: "at the TOP of that screen, above Invite someone").
             const heading = inviteHeading();
@@ -255,5 +258,66 @@ describe('People → Invites: the Vouchers block, exactly as the node answers (�
         expect(safe!.textContent).toContain('Their budget');
         expect(safe!.textContent).toContain('Set budget to: 700');
         expect(net.calls).toContain(`fetch ${NODE}/api/names/vouchers/${key('d')}`);
+    });
+});
+
+describe('People → Invites: the Vouchers block reshaped (invites-vouching I4)', () => {
+    const texts = (sel: string) => Array.from(host.querySelectorAll(sel)).map((r) => r.textContent);
+
+    it('owners are pinned first under one line "Owners · no limit", each row "@Sally · 2 vouched ›" with no budget words', async () => {
+        await renderAs('owner');
+        const b = block()!;
+        expect(b).not.toBeNull();
+        expect(texts('[data-testid="vouchers-owners-line"]')).toEqual(['Owners · no limit']);
+        expect(texts('[data-testid="voucher-owner-row"]')).toEqual(['@Sally · 2 vouched ›']);
+        expect(texts('[data-testid="voucher-owner-row"]')[0]).not.toMatch(/left|budget|of \d|below zero|limit/i);
+        // Pinned: the owners' line and row come before every other voucher's row.
+        const ownerRow = b.querySelector('[data-testid="voucher-owner-row"]')!;
+        const firstOther = b.querySelector('[data-testid="voucher-row"]')!;
+        expect(ownerRow.compareDocumentPosition(firstOther) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // The other rows say who and what is left, and nothing else.
+        expect(texts('[data-testid="voucher-row"]')).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
+    });
+
+    it('Waiting to join lists the promised budget from the node’s `waiting`, below the vouchers, the name on the phone until the list is open', async () => {
+        await renderAs('owner');
+        const b = block()!;
+        expect(texts('[data-testid="vouchers-waiting-heading"]')).toEqual(['Waiting to join']);
+        expect(texts('[data-testid="voucher-waiting-row"]')).toEqual(['Name on the phone · waiting to join · budget 1,000 ›']);
+        const lastVoucher = Array.from(b.querySelectorAll('[data-testid="voucher-row"]')).pop()!;
+        const waiting = b.querySelector('[data-testid="voucher-waiting-row"]')!;
+        expect(lastVoucher.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // Nothing in the block is a balance, a code or a bare entry id.
+        expect(b.textContent).not.toMatch(/balance/i);
+        expect(b.textContent).not.toContain('7'.repeat(32));
+        // A waiting row opens the names list, where the entry's own line is.
+        await act(async () => { (waiting as HTMLElement).click(); });
+        expect(nav.pushed).toEqual(['/names-list']);
+    });
+
+    it('without a waiting invite, there is no Waiting to join section', async () => {
+        const noWaiting = { ...BLOCK, waiting: [] };
+        const node = fakeNode();
+        globalThis.fetch = (async (url: unknown, init?: { headers?: Record<string, string> }) => {
+            if (String(url) === `${NODE}/api/names/vouchers`) return new Response(JSON.stringify(noWaiting), { status: 200 });
+            return (node as any)(url, init);
+        }) as unknown as typeof fetch;
+        await renderAs('owner');
+        expect(block()).not.toBeNull();
+        expect(host.querySelector('[data-testid="vouchers-waiting-heading"]')).toBeNull();
+        expect(host.querySelector('[data-testid="voucher-waiting-row"]')).toBeNull();
+    });
+
+    it('a node from before I4 (no `waiting`, no owner flag) still draws: every voucher a "left" row, nothing waiting', async () => {
+        const old = { vouchers: BLOCK.vouchers.slice(1).map(({ ...r }) => r), settings: BLOCK.settings };
+        const node = fakeNode();
+        globalThis.fetch = (async (url: unknown, init?: { headers?: Record<string, string> }) => {
+            if (String(url) === `${NODE}/api/names/vouchers`) return new Response(JSON.stringify(old), { status: 200 });
+            return (node as any)(url, init);
+        }) as unknown as typeof fetch;
+        await renderAs('owner');
+        expect(texts('[data-testid="voucher-row"]')).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
+        expect(host.querySelector('[data-testid="vouchers-owners-line"]')).toBeNull();
+        expect(host.querySelector('[data-testid="vouchers-waiting-heading"]')).toBeNull();
     });
 });

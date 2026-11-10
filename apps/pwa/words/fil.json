@@ -4639,7 +4639,6 @@
   "below zero": "mababa sa zero",
   "made a voucher by @{name}": "ginawang tagapagpatunay ni @{name}",
   "{amount} Beans{raised} · {source}": "{amount} munggo{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} ng {total} mababa sa zero · na-write off {off}",
   "{left} left · {held} held": "{left} natitira · {held} nakareserba",
   "{left} of {total} left": "{left} ng {total} ang natitira",
   "{name} · Voucher": "{name} · Tagapagpatunay",

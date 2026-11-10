@@ -4639,7 +4639,6 @@
   "below zero": "sıfırın altında",
   "made a voucher by @{name}": "@{name} tarafından kefil yapıldı",
   "{amount} Beans{raised} · {source}": "{amount} fasulye{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{total} içinden {below} sıfırın altında · silinen {off}",
   "{left} left · {held} held": "{left} kaldı · {held} tutuluyor",
   "{left} of {total} left": "{total} içinden {left} kaldı",
   "{name} · Voucher": "{name} · Kefil",

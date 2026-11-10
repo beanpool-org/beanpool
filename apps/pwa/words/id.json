@@ -4463,7 +4463,6 @@
   "below zero": "di bawah nol",
   "made a voucher by @{name}": "dijadikan penjamin oleh @{name}",
   "{amount} Beans{raised} · {source}": "{amount} kacang{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} dari {total} di bawah nol · dihapusbukukan {off}",
   "{left} left · {held} held": "tersisa {left} · ditahan {held}",
   "{left} of {total} left": "tersisa {left} dari {total}",
   "{name} · Voucher": "{name} · Penjamin",

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
+import { useLocalSearchParams, router, ErrorBoundary, useFocusEffect } from 'expo-router';
 
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -39,6 +39,7 @@ import { signedRequestWords } from '../components/signed-request-lines';
 import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InvitedByCard } from '../components/InvitedByCard';
+import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 
 
 
@@ -792,6 +793,32 @@ export default function PublicProfileScreen() {
         return () => { cancelled = true; };
     }, [pubKeyStr, isSelf, identity?.publicKey]);
 
+    // The owner's or admin's button (I4) follows the person's state, and this screen stays under the ones the button opens (the
+    // names list, the voucher's card): when it is in front again the node is asked again, so Add to the names list does not
+    // stay on screen after the person was added (a second tap would seal a duplicate entry) and Make a voucher does not stay
+    // after a voucher was made. Only where a button was shown (the node sends one to owners and admins alone), and only the
+    // button is taken from the answer; the first focus is the read above.
+    const voucherButtonNow = useRef<unknown>(undefined);
+    voucherButtonNow.current = trust?.voucherButton;
+    const profileKeyNow = useRef(pubKeyStr);
+    profileKeyNow.current = pubKeyStr;
+    const focusedBefore = useRef(false);
+    useFocusEffect(useCallback(() => {
+        if (!focusedBefore.current) { focusedBefore.current = true; return undefined; }
+        const asked = profileKeyNow.current;
+        if (!asked || voucherButtonNow.current === undefined) return undefined;
+        let stale = false;
+        getTrustProfile(asked)
+            .then((fresh: any) => {
+                if (stale || !fresh || profileKeyNow.current !== asked) return;
+                setTrust((prev: any) => (!prev || JSON.stringify(prev.voucherButton ?? null) === JSON.stringify(fresh.voucherButton ?? null)
+                    ? prev
+                    : { ...prev, voucherButton: fresh.voucherButton }));
+            })
+            .catch(() => null);
+        return () => { stale = true; };
+    }, []));
+
     // On a community that says `membersOnDemand`: the card by key when none is held or it is a day old. Its own effect:
     // the node profile (useNodeProfile) is known a moment after the screen mounts, and as a dependency of the reads above
     // it asked the node for the ratings and the trust profile twice on every open (review of #1859, NB5).
@@ -1417,6 +1444,18 @@ export default function PublicProfileScreen() {
                             {/* Invited by, and Brought in n people (I3): the server says who reads which (InvitedByCard). */}
                             {showsBeans && (
                                 <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                            )}
+
+                            {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only, and
+                                says none where Beans are off (a voucher is a Beans budget). Gated here as the web is, and as the card above. */}
+                            {!isSelf && showsBeans && (
+                                <ProfileVoucherButton
+                                    button={trust.voucherButton}
+                                    memberPubkey={pubKeyStr ?? ''}
+                                    callsign={profile?.callsign || callsignStr || ''}
+                                    anchorUrl={anchorUrl ?? ''}
+                                    identity={identity}
+                                />
                             )}
 
                             {/* Vouch for @sam (V3 §9) */}

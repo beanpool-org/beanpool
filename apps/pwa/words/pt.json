@@ -4640,7 +4640,6 @@
   "below zero": "abaixo de zero",
   "made a voucher by @{name}": "tornou-se recomendador por @{name}",
   "{amount} Beans{raised} · {source}": "{amount} feijões{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} de {total} abaixo de zero · perdoado {off}",
   "{left} left · {held} held": "restam {left} · retidos {held}",
   "{left} of {total} left": "restam {left} de {total}",
   "{name} · Voucher": "{name} · Recomendador",

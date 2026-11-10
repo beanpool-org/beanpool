@@ -26,7 +26,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
@@ -232,7 +232,10 @@ export default function PeopleScreen() {
     const [madeCard, setMadeCard] = useState<{ who: string | null; invite: InviteRowSource } | null>(null);
     const [makeAnother, setMakeAnother] = useState(false);
     // Pending is open with an invite bound to a names-list entry in it: the names list is opened to read that name.
-    const [needList, setNeedList] = useState(false);
+    // Pending is open with a bound invite in it, and the Vouchers block has a waiting row: either reads a name from the list.
+    const [pendingNeedsList, setNeedList] = useState(false);
+    const [waitingNeedsList, setWaitingNeedsList] = useState(false);
+    const needList = pendingNeedsList || waitingNeedsList;
     
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
@@ -241,7 +244,7 @@ export default function PeopleScreen() {
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
-    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; settings: VoucherSettings } | null>(null);
+    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; settings: VoucherSettings } | null>(null);
     // Whether the node said this member is on the credit committee (it answers GET /api/names/vouchers only for them; a 403 is
     // its no). Undefined while not heard, or when the ask failed: never read as a no.
     const [onCommittee, setOnCommittee] = useState<boolean | undefined>(undefined);
@@ -1443,6 +1446,9 @@ export default function PeopleScreen() {
                             {vouchersData && (
                                 <VouchersBlock
                                     vouchers={vouchersData.vouchers}
+                                    waiting={vouchersData.waiting}
+                                    names={inviteNames.entryNames}
+                                    onNeedNames={setWaitingNeedsList}
                                     onOpen={setSelectedVoucherPubkey}
                                     onMakeVoucher={() => router.push('/names-list')}
                                 />

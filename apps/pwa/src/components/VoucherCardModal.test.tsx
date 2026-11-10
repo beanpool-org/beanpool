@@ -104,6 +104,18 @@ describe('VoucherCardModal (slice V3, §5, §10)', () => {
         expect(closeBtn.className).toMatch(/min-h-\[44px\]/);
     });
 
+    it('the card puts its numbers first (invites-vouching I4): the headline, then the budget; the 30-day figure from the node, no balance', async () => {
+        vi.mocked(api.getVoucherCard).mockResolvedValue({ ...SAMPLE_CARD, vouched: 350, peopleVouched: 4, vouchedLast30Days: 100, belowZero: 1, writtenOff: 0 });
+        render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
+        const headline = await screen.findByTestId('voucher-headline');
+        expect(headline).toHaveTextContent('Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0');
+        // First in the card, ahead of the budget line.
+        const budget = screen.getByText(/550 of 1,?000 left/);
+        expect(headline.compareDocumentPosition(budget) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(document.body.textContent).not.toContain('people who joined');
+        expect(document.body.textContent).not.toMatch(/balance/i);
+    });
+
     it("an owner's card says No limit, with no held line and no Set budget to (Marty, 9 Nov)", async () => {
         vi.mocked(api.getVoucherCard).mockResolvedValue({ ...SAMPLE_CARD, noLimit: true });
         render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);

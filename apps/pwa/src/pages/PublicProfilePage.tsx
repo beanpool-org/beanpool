@@ -25,6 +25,7 @@ import { LOCAL_COMMUNITY_LINES, freePriceWords } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { InvitedByCard } from '../components/InvitedByCard';
+import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -50,7 +51,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const beansMarked = marked(beansMode);
     // Who invited them, and whom they brought in (I3), from the trust profile the server tailors to this reader. Beans-gated as
     // the phone's trust panel is (its inviter line sits there): where Beans are off, neither app draws it.
-    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; for: string } | null>(null);
+    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; voucherButton?: unknown; for: string } | null>(null);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -242,7 +243,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         setInvite(null);
         if (beansMode !== 'live') return;
         getTrustProfile(pubkey)
-            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, for: pubkey }); })
+            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, voucherButton: tp.voucherButton, for: pubkey }); })
             .catch(() => null);
         return () => { cancelled = true; };
     }, [pubkey, beansMode]);
@@ -453,6 +454,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {invite && invite.for === pubkey && (
                     <InvitedByCard vouchedInBy={invite.vouchedInBy} broughtIn={invite.broughtIn} isSelf={isSelf} targetPubkey={pubkey} onOpenProfile={onOpenProfile} />
                 )}
+
+                {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only. */}
+                {!isSelf && invite && invite.for === pubkey && <ProfileVoucherButton button={invite.voucherButton} memberPubkey={pubkey} />}
 
                 {/* Vouch for @sam (V3 §9) */}
                 {!isSelf && myVouching?.voucher && (!atMax || !!vouchSuccess || !!vouchRefusal) && (

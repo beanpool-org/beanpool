@@ -376,7 +376,7 @@ try {
 
         // 4. People → Invites: the Vouchers block People renders (components/VouchersBlock.tsx)
         await open(`view=block&scheme=${scheme}`);
-        await page.getByText('@zara · 550 of 650 left · 4 vouched · 1 below zero ›').waitFor();
+        await page.getByText('@zara · 550 left ›').waitFor();
         await measure(`vouchers-invites-block-${scheme}`);
 
         // 5. The names list: the voucher first with its tag, Make a voucher on Mary Smith's entry, the filter chips

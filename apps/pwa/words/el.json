@@ -4639,7 +4639,6 @@
   "below zero": "κάτω από το μηδέν",
   "made a voucher by @{name}": "ορίστηκε ως εγγυητής από @{name}",
   "{amount} Beans{raised} · {source}": "{amount} φασόλια{raised} · {source}",
-  "{below} of {total} below zero · written off {off}": "{below} από {total} κάτω από το μηδέν · διαγράφηκαν {off}",
   "{left} left · {held} held": "απομένουν {left} · δεσμευμένα {held}",
   "{left} of {total} left": "απομένουν {left} από {total}",
   "{name} · Voucher": "{name} · Εγγυητής",

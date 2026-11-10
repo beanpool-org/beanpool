@@ -36,7 +36,6 @@ vi.mock('../e2e-crypto', async (orig) => ({
     ...(await orig<any>()),
     openDmLine: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
     checkDmThread: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
-    decryptDmFormat2: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
 }));
 
 import { getUnreadByConversation } from '../db';

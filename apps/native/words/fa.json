@@ -1723,7 +1723,6 @@
   "Trust hold cancelled and funds refunded.": "نگهداری در امانت لغو شد و موجودی بازگردانده شد.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 این پیام قابل تأیید نبود، بنابراین نمایش داده نمی‌شود.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ این پیام رمزگذاری نشده بود، بنابراین BeanPool نمی‌تواند تأیید کند چه کسی آن را نوشته است. نمایش داده نمی‌شود.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "ارسال‌شده از نسخه قدیمی‌تر برنامه: BeanPool نمی‌تواند تأیید کند چه کسی آن را نوشته است.",
   "Shown out of the order it was written in.": "خارج از ترتیبی که نوشته شده بود نمایش داده می‌شود.",
   "Moved here from another conversation.": "از گفتگوی دیگری به اینجا منتقل شد.",
   "From your community's admins. Not a private message: the community's server can read it.": "از طرف مدیران جامعه شما. پیام خصوصی نیست: سرور جامعه می‌تواند آن را بخواند.",

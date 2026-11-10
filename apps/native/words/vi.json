@@ -1637,7 +1637,6 @@
   "Trust hold cancelled and funds refunded.": "Lệnh giữ uỷ thác đã bị hủy và tiền đã được hoàn lại.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Tin nhắn này không thể xác minh, nên không được hiển thị.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Tin nhắn này không được mã hóa, nên BeanPool không thể xác nhận người viết. Tin nhắn không được hiển thị.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Được gửi từ phiên bản ứng dụng cũ hơn: BeanPool không thể xác nhận người viết.",
   "Shown out of the order it was written in.": "Hiển thị không theo thứ tự lúc viết.",
   "Moved here from another conversation.": "Đã được chuyển đến đây từ cuộc trò chuyện khác.",
   "From your community's admins. Not a private message: the community's server can read it.": "Từ quản trị viên cộng đồng của bạn. Không phải tin nhắn riêng tư: máy chủ của cộng đồng có thể đọc được tin nhắn này.",

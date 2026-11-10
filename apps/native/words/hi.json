@@ -1724,7 +1724,6 @@
   "Trust hold cancelled and funds refunded.": "ट्रस्ट होल्ड रद्द किया गया और राशि वापस की गई।",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 इस संदेश की पुष्टि नहीं की जा सकी, इसलिए इसे नहीं दिखाया गया है।",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ यह संदेश एन्क्रिप्ट नहीं था, इसलिए BeanPool पुष्टि नहीं कर सकता कि इसे किसने लिखा है। इसे नहीं दिखाया गया है।",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "ऐप के पुराने संस्करण से भेजा गया: BeanPool पुष्टि नहीं कर सकता कि इसे किसने लिखा है।",
   "Shown out of the order it was written in.": "जिस क्रम में लिखा गया था, उससे अलग क्रम में दिखाया गया है।",
   "Moved here from another conversation.": "किसी अन्य बातचीत से यहाँ ले जाया गया।",
   "From your community's admins. Not a private message: the community's server can read it.": "आपके समुदाय के व्यवस्थापकों की ओर से। यह कोई निजी संदेश नहीं है: समुदाय का सर्वर इसे पढ़ सकता है।",

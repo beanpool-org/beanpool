@@ -1638,7 +1638,6 @@
   "Trust hold cancelled and funds refunded.": "Penahanan jaminan dibatalkan dan dana dikembalikan.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Pesan ini tidak dapat diverifikasi, jadi tidak ditampilkan.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Pesan ini tidak dienkripsi, sehingga BeanPool tidak dapat memastikan siapa penulisnya. Pesan tidak ditampilkan.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Dikirim dari versi aplikasi yang lebih lama: BeanPool tidak dapat memastikan siapa penulisnya.",
   "Shown out of the order it was written in.": "Ditampilkan di luar urutan penulisannya.",
   "Moved here from another conversation.": "Dipindahkan ke sini dari percakapan lain.",
   "From your community's admins. Not a private message: the community's server can read it.": "Dari admin komunitasmu. Bukan pesan pribadi: server komunitas dapat membacanya.",

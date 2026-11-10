@@ -1637,7 +1637,6 @@
   "Trust hold cancelled and funds refunded.": "代管已取消，款項已退還。",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 此訊息無法驗證，因此未予顯示。",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ 此訊息未加密，因此 BeanPool 無法確認發送者身分。該訊息未予顯示。",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "自舊版應用程式發送：BeanPool 無法確認發送者身分。",
   "Shown out of the order it was written in.": "未按發送順序顯示。",
   "Moved here from another conversation.": "從其他對話移至此處。",
   "From your community's admins. Not a private message: the community's server can read it.": "來自社群管理員。這不是私人訊息：社群伺服器可以讀取。",

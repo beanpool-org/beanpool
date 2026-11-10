@@ -1722,7 +1722,6 @@
   "Trust hold cancelled and funds refunded.": "Retenue en fiducie annulée et fonds remboursés.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Ce message n'a pas pu être vérifié, il n'est donc pas affiché.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Ce message n'était pas chiffré, BeanPool ne peut donc pas confirmer son auteur. Il n'est pas affiché.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Envoyé depuis une ancienne version de l'application : BeanPool ne peut pas confirmer l'auteur.",
   "Shown out of the order it was written in.": "Affiché dans le désordre par rapport à son écriture.",
   "Moved here from another conversation.": "Déplacé ici depuis une autre discussion.",
   "From your community's admins. Not a private message: the community's server can read it.": "Des administrateurs de votre communauté. Ce n'est pas un message privé : le serveur de la communauté peut le lire.",

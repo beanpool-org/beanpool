@@ -1723,7 +1723,6 @@
   "Trust hold cancelled and funds refunded.": "Güvence iptal edildi ve bakiye iade edildi.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Bu mesaj doğrulanamadı, bu nedenle gösterilmiyor.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Bu mesaj şifrelenmemişti, bu nedenle BeanPool kimin yazdığını doğrulayamaz. Gösterilmiyor.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Uygulamanın daha eski bir sürümünden gönderildi: BeanPool kimin yazdığını doğrulayamaz.",
   "Shown out of the order it was written in.": "Yazıldığı sıra dışında gösteriliyor.",
   "Moved here from another conversation.": "Başka bir sohbetten buraya taşındı.",
   "From your community's admins. Not a private message: the community's server can read it.": "Topluluğunuzun yöneticilerinden. Özel bir mesaj değildir: topluluğun sunucusu bunu okuyabilir.",

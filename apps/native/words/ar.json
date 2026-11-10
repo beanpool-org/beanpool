@@ -2062,7 +2062,6 @@
   "Trust hold cancelled and funds refunded.": "تم إلغاء الضمان واسترداد الرصيد.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 تعذر التحقق من هذه الرسالة، لذا لم يتم عرضها.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ لم تكن هذه الرسالة مشفرة، لذا لا يمكن لـ BeanPool تأكيد كاتبها. لم يتم عرضها.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "أُرسلت من إصدار أقدم من التطبيق: لا يمكن لـ BeanPool تأكيد كاتبها.",
   "Shown out of the order it was written in.": "معروضة بترتيب مختلف عن وقت كتابتها.",
   "Moved here from another conversation.": "نُقلت إلى هنا من محادثة أخرى.",
   "From your community's admins. Not a private message: the community's server can read it.": "من مشرفي مجتمعك. ليست رسالة خاصة: يمكن لخادم المجتمع قراءتها.",

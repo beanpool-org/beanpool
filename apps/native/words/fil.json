@@ -1722,7 +1722,6 @@
   "Trust hold cancelled and funds refunded.": "Kinansela ang paghawak sa tiwala at naibalik ang pondo.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Hindi ma-verify ang mensaheng ito, kaya hindi ito ipinapakita.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Hindi naka-encrypt ang mensaheng ito, kaya hindi makumpirma ng BeanPool kung sino ang sumulat nito. Hindi ito ipinapakita.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Ipinadala mula sa mas lumang bersyon ng app: hindi makumpirma ng BeanPool kung sino ang sumulat nito.",
   "Shown out of the order it was written in.": "Ipinapakita nang wala sa pagkakasunud-sunod kung kailan ito isinulat.",
   "Moved here from another conversation.": "Inilipat dito mula sa ibang pag-uusap.",
   "From your community's admins. Not a private message: the community's server can read it.": "Mula sa mga admin ng iyong komunidad. Hindi pribadong mensahe: mababasa ito ng server ng komunidad.",

@@ -170,8 +170,8 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     return openCopy(expectedDbName, url, null);
 }
 
-/** What a clear asks of the next open of its copy (clearDB): the cache tables go, and with the identity leaving, its group keys and tools too. */
-interface CopyClear { identityLeaves: boolean }
+/** A clear's open (clearDB): the cache tables go whatever the copy's number, and `alsoDrop` with them (the account's own, as it leaves). */
+interface CopyClear { alsoDrop: string }
 
 /**
  * Open `file`'s copy and make it (_doInitDB) on a connection of its own, before anything else has it: published as the
@@ -346,8 +346,6 @@ const CACHE_TABLES = [
     'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held',
 ] as const;
 const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
-/** The account's own tables, not a copy of the node's: they go only as the identity leaves the phone (clearDB identityLeaves). */
-const DROP_IDENTITY_TABLES_SQL = ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;';
 
 /**
  * Make the copy `database` opens: the schema below, a copy below this build's number cleared first, and `clear`'s tables
@@ -380,9 +378,7 @@ async function _doInitDB(database: SQLite.SQLiteDatabase, clear: CopyClear | nul
             console.warn('[SQLite] Could not forget the sync cursors of a copy below the schema number:', e);
         }
     }
-    const drops = (copyBelowSchema || clear ? DROP_CACHE_TABLES_SQL : '')
-        // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
-        + (clear?.identityLeaves ? DROP_IDENTITY_TABLES_SQL : '');
+    const drops = (copyBelowSchema || clear ? DROP_CACHE_TABLES_SQL : '') + (clear?.alsoDrop ?? '');
 
     // We execute the same exact schema.sql payload to guarantee 1:1 API compatibility locally
     const schema = `
@@ -745,14 +741,14 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     } catch (e) {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
-    // The copy to clear: the community's copy open now, opened and made if none is (getDb sets each handle's file).
+    // The copy open now (getDb sets each handle's file).
     const file = dbFileOf.get(await getDb())!;
     let cleared: Promise<SQLite.SQLiteDatabase> | null = null;
     // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
     await acquireSyncLock({ urgent: true });
     try {
-        // An open on its way finishes first, as for a move (whileCopyMoves): its copy is closed below with the rest.
+        // An open on its way finishes first (as whileCopyMoves).
         while (getDbPromise) {
             const opening = getDbPromise;
             releaseSyncLock();
@@ -762,11 +758,12 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        // Closed, so no reader, writer or sync holds a statement on the copy as its tables go: SQLite refuses a DROP TABLE
-        // under one ("database table is locked"). Cleared and made again on a connection of its own (openCopy), which every
-        // ask from here waits for.
+        // Closed, so no statement is open on it as its tables go ("database table is locked"); made again by openCopy.
         await closeOpenCopy();
-        cleared = openCopy(file, null, { identityLeaves: !!opts.identityLeaves });
+        cleared = openCopy(file, null, {
+            // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
+            alsoDrop: opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : '',
+        });
     } finally {
         releaseSyncLock();
     }

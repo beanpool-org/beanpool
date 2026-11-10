@@ -64,10 +64,13 @@ describe('ReportedDirectMessage', () => {
         expect(screen.getByText('Rude words')).toBeInTheDocument();
     });
 
-    it('a line from an older app says it has no signature', async () => {
+    it('a line sent before 1.4 says it has no signature, and why, never that its app does not sign', async () => {
         serve({ ...base, signature: 'unsigned', signer: null, signedAt: null });
         render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r1" />);
         expect(await screen.findByText('No signature')).toBeInTheDocument();
+        // 1.3.x apps signed beside the line (#2705): what "No signature" means now is a line sent before the 1.4 update.
+        expect(screen.getByText(/It was sent before the server's update to BeanPool 1\.4, and messages from before then aren't checked\./)).toBeInTheDocument();
+        expect(screen.queryByText(/doesn't sign/)).toBeNull();
     });
 
     it('a shape the node should not send never reads as verified', async () => {

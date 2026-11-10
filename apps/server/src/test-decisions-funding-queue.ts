@@ -38,6 +38,8 @@ import { setCommonsBalance } from '@beanpool/core';
 
 // Every assertion runs and failures are reported together, so one broken case does not hide the others.
 let run = 0, passed = 0;
+/** The story's figures are Beans; the pot, balances and a grant's `amount_c` are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
 function assert(cond: any, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ FAIL: ${msg}`); }
@@ -47,8 +49,8 @@ function seedMember(pk: string, callsign: string, isTreasury = false): void {
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`
         INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
-        VALUES (?, ?, ?, 'active', 0, ?, 50)
-    `).run(pk, callsign, joinedAt, isTreasury ? 1 : 0);
+        VALUES (?, ?, ?, 'active', 0, ?, ?)
+    `).run(pk, callsign, joinedAt, isTreasury ? 1 : 0, hc(50));
     db.prepare(`
         INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)
         ON CONFLICT(public_key) DO NOTHING
@@ -85,16 +87,19 @@ const ENTERPRISE = 'fq_ent_' + Date.now();
 const MEMBER = 'fq_member_' + Date.now();
 const REAL_ENTERPRISE = 'fq_real_ent_' + Date.now();
 
-// Stored params text for each unusable amount. All of them reach preflight's "Invalid grant amount".
+// Stored params text for each unusable amount. All of them reach preflight's "Invalid grant amount". A grant's amount
+// is `amount_c`, whole hundredths: half a hundredth and a figure written as text are as unusable as a word.
 const BAD_PARAMS: Array<[string, string | null]> = [
-    ['a word ("ten")', '{"amount":"ten"}'],
-    ['an overflowing string ("1e999")', '{"amount":"1e999"}'],
-    ['an overflowing number (1e999)', '{"amount":1e999}'],
-    ['a negative amount (-5)', '{"amount":-5}'],
-    ['a null amount', '{"amount":null}'],
+    ['a word ("ten")', '{"amount_c":"ten"}'],
+    ['an overflowing string ("1e999")', '{"amount_c":"1e999"}'],
+    ['an overflowing number (1e999)', '{"amount_c":1e999}'],
+    ['a negative amount (-5)', '{"amount_c":-500}'],
+    ['a null amount', '{"amount_c":null}'],
     ['a missing amount', '{}'],
     ['no params', null],
-    ['unparseable params', '{"amount": 500'],
+    ['unparseable params', '{"amount_c": 50000'],
+    ['half a hundredth (0.5)', '{"amount_c":0.5}'],
+    ['a figure written as text ("50000")', '{"amount_c":"50000"}'],
 ];
 
 async function runFundingQueueSuite() {
@@ -115,8 +120,8 @@ async function runFundingQueueSuite() {
         for (const pool of [10, 1000]) {
             for (const [label, params] of BAD_PARAMS) {
                 const tag = `${effect}, ${label}, pool ${pool}`;
-                setCommonsBalance(pool);
-                const recipientBefore = ledger.getAccount(recipient).balance;
+                setCommonsBalance(hc(pool));
+                const recipientBefore = ledger.getAccount(recipient).balance_c;
                 const bad = insertDecision({ effect, subject: recipient, params, status: 'passed_queued_for_funds' });
                 assert(queuedCount() === 1, `[${tag}] the corrupted row holds the one queue slot before the tick`);
 
@@ -126,22 +131,22 @@ async function runFundingQueueSuite() {
                 assert(after.status === 'execution_blocked' && after.executionError === errorText,
                     `[${tag}] one tick blocks it with "${errorText}" (got ${after.status} / ${after.executionError ?? after.executionReason})`);
                 assert(queuedCount() === 0, `[${tag}] the queue slot is free`);
-                assert(getCommonsBalanceExact() === pool, `[${tag}] the Commons is unchanged (${getCommonsBalanceExact()})`);
-                assert(ledger.getAccount(recipient).balance === recipientBefore && decisionTxCount(bad) === 0,
+                assert(getCommonsBalanceExact() === hc(pool), `[${tag}] the Commons is unchanged (${getCommonsBalanceExact()})`);
+                assert(ledger.getAccount(recipient).balance_c === recipientBefore && decisionTxCount(bad) === 0,
                     `[${tag}] the recipient got nothing and no transaction was written`);
 
                 // A real grant the pool can't cover yet now takes the slot, then runs once the pool can.
-                setCommonsBalance(10);
-                const realBefore = ledger.getAccount(REAL_ENTERPRISE).balance;
-                const real = insertDecision({ effect: 'grant_enterprise', subject: REAL_ENTERPRISE, params: '{"amount":500}', status: 'passed' });
+                setCommonsBalance(hc(10));
+                const realBefore = ledger.getAccount(REAL_ENTERPRISE).balance_c;
+                const real = insertDecision({ effect: 'grant_enterprise', subject: REAL_ENTERPRISE, params: `{"amount_c":${hc(500)}}`, status: 'passed' });
                 const res = executeDecision(real);
                 assert(res.status === 'passed_queued_for_funds',
                     `[${tag}] a real 500-bean grant queues after it (got ${res.status}${res.error ? ' / ' + res.error : ''})`);
-                setCommonsBalance(510);
+                setCommonsBalance(hc(510));
                 tickDecisions();
                 assert(getDecision(real)!.status === 'executed'
-                    && ledger.getAccount(REAL_ENTERPRISE).balance === realBefore + 500
-                    && getCommonsBalanceExact() === 10,
+                    && ledger.getAccount(REAL_ENTERPRISE).balance_c === realBefore + hc(500)
+                    && getCommonsBalanceExact() === hc(10),
                     `[${tag}] the real grant executes once the pool covers it`);
                 // Leave nothing queued for the next case, whatever the outcome above.
                 db.prepare("UPDATE decisions SET status = 'failed' WHERE status = 'passed_queued_for_funds'").run();
@@ -151,18 +156,18 @@ async function runFundingQueueSuite() {
 
     // ── 3. A valid queued grant still waits for funds and runs when they arrive ──
     console.log('\n--- 3. A valid queued grant waits, then runs ---');
-    setCommonsBalance(10);
-    const entBefore = ledger.getAccount(ENTERPRISE).balance;
-    const valid = insertDecision({ effect: 'grant_enterprise', subject: ENTERPRISE, params: '{"amount":500}', status: 'passed_queued_for_funds' });
+    setCommonsBalance(hc(10));
+    const entBefore = ledger.getAccount(ENTERPRISE).balance_c;
+    const valid = insertDecision({ effect: 'grant_enterprise', subject: ENTERPRISE, params: `{"amount_c":${hc(500)}}`, status: 'passed_queued_for_funds' });
     tickDecisions();
     tickDecisions();
     assert(getDecision(valid)!.status === 'passed_queued_for_funds', 'A valid 500-bean grant stays queued while the pool holds 10');
-    assert(getCommonsBalanceExact() === 10 && ledger.getAccount(ENTERPRISE).balance === entBefore && decisionTxCount(valid) === 0,
+    assert(getCommonsBalanceExact() === hc(10) && ledger.getAccount(ENTERPRISE).balance_c === entBefore && decisionTxCount(valid) === 0,
         'Nothing moves while it waits');
-    setCommonsBalance(600);
+    setCommonsBalance(hc(600));
     tickDecisions();
     assert(getDecision(valid)!.status === 'executed', 'It executes on the tick after the pool reaches 600');
-    assert(ledger.getAccount(ENTERPRISE).balance === entBefore + 500 && getCommonsBalanceExact() === 100,
+    assert(ledger.getAccount(ENTERPRISE).balance_c === entBefore + hc(500) && getCommonsBalanceExact() === hc(100),
         'The enterprise gets 500 and the Commons drops to 100');
     assert(decisionTxCount(valid) === 1, 'One grant transaction carries the decision as its signer');
     assert(queuedCount() === 0, 'The slot is free again');
@@ -171,25 +176,38 @@ async function runFundingQueueSuite() {
     console.log('\n--- 4. write_off_deficit in the queue ---');
     const DEBT_ENT = 'fq_debt_ent_' + Date.now();
     seedMember(DEBT_ENT, 'Debt Enterprise', true);
-    setCommonsBalance(10);
+    setCommonsBalance(hc(10));
     // A balance of minus infinity: corruption, but it makes the deficit Infinity.
-    ledger.getAccount(DEBT_ENT).balance = -Infinity;
+    ledger.getAccount(DEBT_ENT).balance_c = -Infinity;
     const infWriteOff = insertDecision({ effect: 'write_off_deficit', subject: DEBT_ENT, params: null, status: 'passed_queued_for_funds' });
     tickDecisions();
     const infAfter = getDecision(infWriteOff)!;
     assert(infAfter.status === 'execution_blocked' && infAfter.executionError === 'Invalid enterprise deficit',
         `A queued write-off with an infinite deficit is blocked in one tick with "Invalid enterprise deficit" (got ${infAfter.status} / ${infAfter.executionError ?? infAfter.executionReason})`);
     assert(queuedCount() === 0, 'The queue slot is free');
-    assert(getCommonsBalanceExact() === 10 && decisionTxCount(infWriteOff) === 0 && ledger.getAccount(DEBT_ENT).balance === -Infinity,
+    assert(getCommonsBalanceExact() === hc(10) && decisionTxCount(infWriteOff) === 0 && ledger.getAccount(DEBT_ENT).balance_c === -Infinity,
         'The Commons and the enterprise are unchanged, and no transaction was written');
     db.prepare("UPDATE decisions SET status = 'failed' WHERE status = 'passed_queued_for_funds'").run();
 
+    // A deficit that is not whole hundredths (corruption again: 20 Beans and half a hundredth, more than the pool holds) is
+    // no figure to wait on either: preflight blocks it, so the tick must hand it over rather than hold the slot for it.
+    ledger.getAccount(DEBT_ENT).balance_c = -(hc(20) + 0.5);
+    const halfWriteOff = insertDecision({ effect: 'write_off_deficit', subject: DEBT_ENT, params: null, status: 'passed_queued_for_funds' });
+    tickDecisions();
+    const halfAfter = getDecision(halfWriteOff)!;
+    assert(halfAfter.status === 'execution_blocked' && halfAfter.executionError === 'Invalid enterprise deficit',
+        `A queued write-off whose deficit is not whole hundredths is blocked in one tick with "Invalid enterprise deficit" (got ${halfAfter.status} / ${halfAfter.executionError ?? halfAfter.executionReason})`);
+    assert(queuedCount() === 0, 'The queue slot is free');
+    assert(getCommonsBalanceExact() === hc(10) && decisionTxCount(halfWriteOff) === 0,
+        'The Commons is unchanged, and no transaction was written');
+    db.prepare("UPDATE decisions SET status = 'failed' WHERE status = 'passed_queued_for_funds'").run();
+
     // A write-off whose deficit has since been cleared still completes, moving nothing (unchanged behaviour).
-    ledger.getAccount(DEBT_ENT).balance = 0;
+    ledger.getAccount(DEBT_ENT).balance_c = 0;
     const clearedWriteOff = insertDecision({ effect: 'write_off_deficit', subject: DEBT_ENT, params: null, status: 'passed_queued_for_funds' });
     tickDecisions();
     assert(getDecision(clearedWriteOff)!.status === 'executed', 'A queued write-off with no deficit left completes on the next tick');
-    assert(getCommonsBalanceExact() === 10 && decisionTxCount(clearedWriteOff) === 0 && ledger.getAccount(DEBT_ENT).balance === 0,
+    assert(getCommonsBalanceExact() === hc(10) && decisionTxCount(clearedWriteOff) === 0 && ledger.getAccount(DEBT_ENT).balance_c === 0,
         'It moves nothing');
     assert(queuedCount() === 0, 'The queue slot is free');
 

@@ -146,6 +146,9 @@ function keypair(name: string, holding?: string): Id {
     }
 }
 
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), in its rows and its bodies (`amount_c`). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: string): Id {
     const id = keypair(name, holding);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
@@ -153,7 +156,7 @@ function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: str
         .run(id.pk, name, ago(joinedDaysAgo * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 
@@ -266,7 +269,7 @@ const changedTables = (a: Map<string, string>, b: Map<string, string>) =>
 
 const hasRow = (pk: string) => !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(pk);
 const isVisitorRow = (pk: string) => (db.prepare('SELECT is_visitor FROM members WHERE public_key = ?').get(pk) as any)?.is_visitor === 1;
-const balanceOf = (pk: string) => getBalance(pk).balance;
+const balanceOf = (pk: string) => getBalance(pk).balance_c;
 /** The same refusal: status, code and words (a JSON-RPC refusal's `error` is an object, its code and message: compared by value). */
 const same = (a: Res, b: Res) => a.status === b.status && a.body?.code === b.body?.code
     && JSON.stringify(a.body?.error) === JSON.stringify(b.body?.error);
@@ -312,7 +315,7 @@ async function main(): Promise<void> {
     const bob = makeMember('BobVA');
     const carol = makeMember('CarolVA');
     const mia = makeMember('MiaVA');          // the control: a member making every write in the table
-    const offer = (m: Id, title: string, credits = 5) => createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', m.pk, undefined, undefined, [TINY_PNG])!;
+    const offer = (m: Id, title: string, beans = 5) => createPost('offer', 'produce', title, `${title}, fresh`, hc(beans), 'fixed', m.pk, undefined, undefined, [TINY_PNG])!;
     for (const m of [alice, bob, carol, mia]) offer(m, `${m.name} seedlings`);
 
     // A trade each for Mia and Alice (standing for Decisions, a trade to rate) and for Bob.
@@ -332,7 +335,7 @@ async function main(): Promise<void> {
     const group = createGroup({ name: 'Garden club VA', createdBy: alice.pk, joinPolicy: 'open' } as any);
     joinGroup(group.id, bob.pk);
     const project = `proj-${crypto.randomUUID()}`;
-    createCrowdfundProject(project, alice.pk, 'Community oven VA', 'A wood-fired oven', [], 500, null);
+    createCrowdfundProject(project, alice.pk, 'Community oven VA', 'A wood-fired oven', [], hc(500), null);
     const enterprise = createTreasury('Seed bank VA', AVATAR, 0, { leadKeeperPubkey: alice.pk, purpose: 'Seeds for everyone' } as any);
     const keyOf = (t: any): string => t.publicKey ?? t.treasury?.publicKey;
     const enterpriseKey = keyOf(enterprise);
@@ -353,8 +356,8 @@ async function main(): Promise<void> {
     const veraDm = createConversation('dm', [alice.pk, vera.pk], alice.pk)!;
     const hiVera = lockedDm();
     const aliceLine = sendMessage(veraDm.id, alice.pk, hiVera.ciphertext, hiVera.nonce)!;
-    transfer('genesis', vera.pk, 30, 'welcome gift', 'direct', true);
-    assert(isVisitorRow(vera.pk) && balanceOf(vera.pk) === 30, "setup: Vera's row is a visitor's, made by Alice's DM, holding 30 Beans");
+    transfer('genesis', vera.pk, hc(30), 'welcome gift', 'direct', true);
+    assert(isVisitorRow(vera.pk) && balanceOf(vera.pk) === hc(30), "setup: Vera's row is a visitor's, made by Alice's DM, holding 30 Beans");
     // What a visitor's row could get before this rule, so that nothing but the rule refuses her below.
     let veraOffer = '';
     let veraTrade = '';
@@ -377,8 +380,8 @@ async function main(): Promise<void> {
         // orchard; a lead's row on an apiary of her own, where as lead she approved Quinn's request to keep it, which is
         // still waiting out its objection window.
         adminAssignTreasuryOperator(enterpriseKey, vera.pk, 'admin');
-        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, 5, ?, NULL)')
-            .run(crypto.randomUUID(), vera.pk, enterpriseKey, new Date().toISOString());
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)')
+            .run(crypto.randomUUID(), vera.pk, enterpriseKey, hc(5), new Date().toISOString());
         adminAssignTreasuryOperator(orchard, vera.pk, 'admin');
         apiary = keyOf(createTreasury('Vera apiary VA', AVATAR, 0, { leadKeeperPubkey: vera.pk, purpose: 'Honey' } as any));
         adminAssignTreasuryOperator(apiary, cody.pk, 'admin');
@@ -414,9 +417,9 @@ async function main(): Promise<void> {
         { name: 'report a post (row 6)', method: 'POST', path: () => '/api/reports',
             body: a => ({ reporterPubkey: a.pk, targetPubkey: alice.pk, targetPostId: aliceOffer.id, reason: 'spam' }) },
         { name: 'post an offer (row 7)', method: 'POST', path: () => '/api/marketplace/posts',
-            body: a => ({ type: 'offer', category: 'produce', title: `Plums from ${a.name}`, description: 'A box', credits: 3, priceType: 'fixed', authorPublicKey: a.pk, photos: [TINY_PNG] }) },
+            body: a => ({ type: 'offer', category: 'produce', title: `Plums from ${a.name}`, description: 'A box', price_c: hc(3), priceType: 'fixed', authorPublicKey: a.pk, photos: [TINY_PNG] }) },
         { name: 'post a poll (row 7)', method: 'POST', path: () => '/api/marketplace/posts',
-            body: a => ({ type: 'poll', category: 'community', title: `Which day, ${a.name}?`, description: '', credits: 0, priceType: 'fixed', authorPublicKey: a.pk,
+            body: a => ({ type: 'poll', category: 'community', title: `Which day, ${a.name}?`, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: a.pk,
                 pollOptions: [{ id: 'x', text: 'Monday' }, { id: 'y', text: 'Friday' }] }) },
         { name: 'vote in a poll (row 7)', method: 'POST', path: () => `/api/marketplace/posts/${poll.id}/vote`, body: a => ({ optionId: 'a', voterPublicKey: a.pk }) },
         { name: 'request a listing (row 8)', method: 'POST', path: () => '/api/marketplace/posts/request', body: a => ({ postId: aliceOffer.id, buyerPublicKey: a.pk }) },
@@ -428,24 +431,24 @@ async function main(): Promise<void> {
             memberOk: r => ok(r) && r.body?.post?.eventPrivateNote === NOTE },
         { name: "write in an event's chat (row 10)", method: 'POST', path: () => `/api/marketplace/posts/${event.id}/chat/message`, body: () => ({ text: 'I can bring a ladder' }) },
         { name: 'set an event reminder (row 10)', method: 'PUT', path: () => `/api/events/${event.id}/reminder`, body: () => ({ offsets: [60] }) },
-        { name: 'pledge to a crowdfund (row 11)', method: 'POST', path: () => `/api/crowdfund/projects/${project}/pledge`, body: a => ({ fromPubkey: a.pk, amount: 2 }) },
+        { name: 'pledge to a crowdfund (row 11)', method: 'POST', path: () => `/api/crowdfund/projects/${project}/pledge`, body: a => ({ fromPubkey: a.pk, amount_c: hc(2) }) },
         // The same crowdfund through an enterprise's pledge route: it pledges to the crowdfund when the enterprise has a goal, as
         // every crowdfund has (pledgeDispatchHandler), and a note sends it there whatever the goal.
-        { name: "pledge to a crowdfund through an enterprise's pledge route", method: 'POST', path: () => `/api/enterprise/${project}/pledge`, body: () => ({ amount: 2 }) },
+        { name: "pledge to a crowdfund through an enterprise's pledge route", method: 'POST', path: () => `/api/enterprise/${project}/pledge`, body: () => ({ amount_c: hc(2) }) },
         { name: "pledge to a crowdfund through a treasury's pledge route, with a note", method: 'POST', path: () => `/api/treasury/${project}/pledge`,
-            body: () => ({ amount: 2, memo: 'For the oven' }) },
+            body: () => ({ amount_c: hc(2), memo: 'For the oven' }) },
         // The rest a visitor's row could write (the sweep in section 2 found them).
         { name: 'set an area on the People list', method: 'POST', path: () => '/api/community/me/area', body: () => ({ lat: -28.55, lng: 153.51 }) },
         { name: 'add a friend', method: 'POST', path: () => '/api/friends/add', body: a => ({ ownerPubkey: a.pk, friendPubkey: carol.pk }) },
         { name: 'change the profile', method: 'POST', path: () => '/api/profile/update', body: a => ({ bio: `${a.name} grows garlic` }) },
         { name: 'set holiday mode', method: 'POST', path: () => '/api/members/holiday', body: () => ({ enabled: false }) },
         { name: 'start an enterprise', method: 'POST', path: () => '/api/enterprise', body: a => ({ name: `Bakery of ${a.name}`, purpose: 'Bread' }) },
-        { name: 'ask to keep an enterprise', method: 'POST', path: () => `/api/enterprise/${enterpriseKey}/keepers/request`, body: () => ({ pledgedBacking: 0 }) },
+        { name: 'ask to keep an enterprise', method: 'POST', path: () => `/api/enterprise/${enterpriseKey}/keepers/request`, body: () => ({ pledgedBacking_c: 0 }) },
         { name: "write in an enterprise's discussion", method: 'POST', path: () => `/api/enterprise/${enterpriseKey}/thread/message`, body: () => ({ text: 'When do you open?' }) },
         { name: 'propose a Commons project', method: 'POST', path: () => '/api/commons/projects',
-            body: a => ({ proposerPubkey: a.pk, title: `Shade sails by ${a.name}`, description: 'For the market', requestedAmount: 10 }) },
+            body: a => ({ proposerPubkey: a.pk, title: `Shade sails by ${a.name}`, description: 'For the market', requestedAmount_c: hc(10) }) },
         { name: 'start a crowdfund', method: 'POST', path: () => '/api/crowdfund/projects',
-            body: a => ({ creatorPubkey: a.pk, title: `Kiln for ${a.name}`, description: 'A kiln', goalAmount: 50 }) },
+            body: a => ({ creatorPubkey: a.pk, title: `Kiln for ${a.name}`, description: 'A kiln', goalAmount_c: hc(50) }) },
         { name: 'propose a Decision', method: 'POST', path: () => '/api/commons/decisions',
             body: a => ({ title: `Freeze Bob's credit (${a.name})`, description: 'Bob has deals half done', touches: 'member', effect: 'freeze_credit', subject: bob.pk }) },
         { name: 'vote on a Decision', method: 'POST', path: () => `/api/commons/decisions/${decision.id}/vote`, body: () => ({ support: true }) },
@@ -704,10 +707,10 @@ async function main(): Promise<void> {
         targetPubkey: alice.pk, friendPubkey: carol.pk, memberPubkey: alice.pk, to: alice.pk, candidatePubkey: bob.pk,
         participants: [a.pk, carol.pk], type: 'dm', id: aliceOffer.id, postId: aliceOffer.id, targetPostId: aliceOffer.id, groupId: group.id,
         conversationId: veraDm.id, messageId: aliceLine.id, transactionId: miaBuys.id, projectId: project,
-        category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', credits: 1, priceType: 'fixed', amount: 1,
+        category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', price_c: hc(1), priceType: 'fixed', amount_c: hc(1),
         ...lockedDm(), emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
         bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
-        duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount: 10, requestedAmount: 10,
+        duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount_c: hc(10), requestedAmount_c: hc(10),
         platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'freeze_credit', subject: bob.pk,
         token: 'ExponentPushToken[swept]', preferences: { chat: true },
     });
@@ -956,21 +959,21 @@ async function main(): Promise<void> {
 
         const veraBefore = balanceOf(vera.pk);
         const bobBefore = balanceOf(bob.pk);
-        const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount: 5, memo: 'For the jam' });
-        assert(send.status === 200 && Math.abs(balanceOf(vera.pk) - (veraBefore - 5)) < 1e-6 && Math.abs(balanceOf(bob.pk) - (bobBefore + 5)) < 1e-6,
+        const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount_c: hc(5), memo: 'For the jam' });
+        assert(send.status === 200 && balanceOf(vera.pk) === veraBefore - hc(5) && balanceOf(bob.pk) === bobBefore + hc(5),
             `it sends Beans it holds to a member (${show(send)})`);
-        const over = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount: 10_000 });
-        assert(over.status === 400 && Math.abs(balanceOf(vera.pk) - (veraBefore - 5)) < 1e-6, `and no more than it holds (${show(over)})`);
-        const toFresh = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: fresh.pk, amount: 1 });
+        const over = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount_c: hc(10_000) });
+        assert(over.status === 400 && balanceOf(vera.pk) === veraBefore - hc(5), `and no more than it holds (${show(over)})`);
+        const toFresh = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: fresh.pk, amount_c: hc(1) });
         assert(toFresh.status === 403 && toFresh.body?.code === 'not_a_member' && toFresh.body?.error === NOT_A_MEMBER && !hasRow(fresh.pk)
-            && Math.abs(balanceOf(vera.pk) - (veraBefore - 5)) < 1e-6,
+            && balanceOf(vera.pk) === veraBefore - hc(5),
             `it can't pay a key that has no row here: refused, no row made, nothing moves (${show(toFresh)})`);
         // A visitor that never traded: the send gate refuses it as it refuses any new account, in words that say how.
         const vic = keypair('VicVA');
-        transfer('genesis', vic.pk, 10, 'welcome gift', 'direct', true);
-        const vicSend = await call('POST', vic, '/api/ledger/transfer', { from: vic.pk, to: bob.pk, amount: 1 });
+        transfer('genesis', vic.pk, hc(10), 'welcome gift', 'direct', true);
+        const vicSend = await call('POST', vic, '/api/ledger/transfer', { from: vic.pk, to: bob.pk, amount_c: hc(1) });
         assert(isVisitorRow(vic.pk) && vicSend.status === 400 && /receive Beans/.test(vicSend.body?.error ?? '')
-            && /pass them on once you join this community/.test(vicSend.body?.error ?? '') && balanceOf(vic.pk) === 10,
+            && /pass them on once you join this community/.test(vicSend.body?.error ?? '') && balanceOf(vic.pk) === hc(10),
             `a visitor with no completed trade is refused by the send gate, told it receives Beans and can pass them on once it joins (${show(vicSend)})`);
 
         const balance = await call('GET', vera, `/api/ledger/balance/${vera.pk}`);
@@ -988,19 +991,19 @@ async function main(): Promise<void> {
     {
         const newbie = makeMember('NewbieVA', 20);   // no completed trade: the send gate refuses a send
         const gated = keypair('GatedVA');
-        const r1 = await call('POST', newbie, '/api/ledger/transfer', { from: newbie.pk, to: gated.pk, amount: 1 });
+        const r1 = await call('POST', newbie, '/api/ledger/transfer', { from: newbie.pk, to: gated.pk, amount_c: hc(1) });
         assert(r1.status === 400 && !hasRow(gated.pk), `a send the send gate refuses leaves the recipient with no row (${show(r1)})`);
         const over = keypair('OverVA');
-        const r2 = await call('POST', mia, '/api/ledger/transfer', { from: mia.pk, to: over.pk, amount: 100_000 });
+        const r2 = await call('POST', mia, '/api/ledger/transfer', { from: mia.pk, to: over.pk, amount_c: hc(100_000) });
         assert(r2.status === 400 && !hasRow(over.pk), `so does one over what the sender holds (${show(r2)})`);
         const paid = keypair('PaidVA');
-        const r3 = await call('POST', mia, '/api/ledger/transfer', { from: mia.pk, to: paid.pk, amount: 2 });
+        const r3 = await call('POST', mia, '/api/ledger/transfer', { from: mia.pk, to: paid.pk, amount_c: hc(2) });
         const acct = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(paid.pk) as any;
-        assert(r3.status === 200 && isVisitorRow(paid.pk) && Math.abs(Number(acct?.balance) - 2) < 1e-6 && Math.abs(balanceOf(paid.pk) - 2) < 1e-6,
+        assert(r3.status === 200 && isVisitorRow(paid.pk) && acct?.balance_c === hc(2) && balanceOf(paid.pk) === hc(2),
             `a send that goes through makes the recipient's visitor's row, holding the Beans (${show(r3)}, ${JSON.stringify(acct)})`);
         // A key with no row here holds nothing to send: refused as this rule refuses a visitor's write, not a 500 (3b's note).
         const before = snapshot();
-        const r4 = await call('POST', nobody, '/api/ledger/transfer', { from: nobody.pk, to: mia.pk, amount: 1 });
+        const r4 = await call('POST', nobody, '/api/ledger/transfer', { from: nobody.pk, to: mia.pk, amount_c: hc(1) });
         const changed = changedTables(before, snapshot());
         assert(r4.status === 403 && r4.body?.code === 'not_a_member' && r4.body?.error === NOT_A_MEMBER && changed.length === 0 && !hasRow(nobody.pk),
             `a key with no row sends nothing: 403 not_a_member, in plain words, and nothing is written (${show(r4)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
@@ -1019,7 +1022,7 @@ async function main(): Promise<void> {
         const eventLine = await call('POST', bob, `/api/marketplace/posts/${event.id}/chat/message`, { text: 'Event secret: park by the shed' });
         const noteEdit = await call('POST', alice, '/api/marketplace/posts/update', { id: event.id, authorPublicKey: alice.pk, eventPrivateNote: `${NOTE}, new code 9902` });
         const dmLine = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
-        const paid = await call('POST', alice, '/api/ledger/transfer', { from: alice.pk, to: vera.pk, amount: 1, memo: 'thanks' });
+        const paid = await call('POST', alice, '/api/ledger/transfer', { from: alice.pk, to: vera.pk, amount_c: hc(1), memo: 'thanks' });
         assert(groupLine.status < 300 && eventLine.status < 300 && noteEdit.status === 200 && dmLine.status === 200 && paid.status === 200,
             `setup: a group line, an event line, a new note, a DM line and a payment to Vera (${groupLine.status} ${eventLine.status} ${noteEdit.status} ${dmLine.status} ${paid.status})`);
         await settle(400);
@@ -1137,8 +1140,8 @@ async function main(): Promise<void> {
         assert(kept.every(r => r.status === 200) && again.body?.conversation?.id === veraDm.id,
             `in her DM she asks for it again, replies, edits, reacts, deletes her line, marks it read and unmutes it (${kept.map(r => r.status).join(' ')})`);
         const bobBefore = balanceOf(bob.pk);
-        const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount: 1, memo: 'Through the gate' });
-        assert(send.status === 200 && Math.abs(balanceOf(bob.pk) - (bobBefore + 1)) < 1e-6, `she sends Beans she holds (${show(send)})`);
+        const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount_c: hc(1), memo: 'Through the gate' });
+        assert(send.status === 200 && balanceOf(bob.pk) === bobBefore + hc(1), `she sends Beans she holds (${show(send)})`);
         const token = await call('POST', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]', platform: 'android' });
         const prefs = await call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: { notify_chat: false } });
         const untoken = await call('DELETE', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]' });
@@ -1178,7 +1181,7 @@ async function main(): Promise<void> {
         const aliceSays = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
         const sid = makeMember('SidVA');
         db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(sid.pk);
-        const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk, photos: [TINY_PNG] });
+        const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', price_c: hc(2), priceType: 'fixed', authorPublicKey: sid.pk, photos: [TINY_PNG] });
         assert(aliceSays.status === 200 && JSON.stringify(sidPosts.body) !== GATE_ANSWER,
             `a member writes in the DM, and a suspended member is answered by the route, not the gate (${show(aliceSays)}; ${show(sidPosts)})`);
         gate?.setVisitorGateForTests(false);
@@ -1267,7 +1270,7 @@ async function main(): Promise<void> {
 
         // 4111438923: she takes down her own listing, from before this rule, and nothing else.
         const aliceQuinces = offer(alice, 'Alice quinces 5c');
-        const seedPackets = createPost('offer', 'produce', 'Seed packets 5c', 'Seeds', 1, 'fixed', enterpriseKey, undefined, undefined, [TINY_PNG])!;
+        const seedPackets = createPost('offer', 'produce', 'Seed packets 5c', 'Seeds', hc(1), 'fixed', enterpriseKey, undefined, undefined, [TINY_PNG])!;
         let herEvent = '';
         let herPoll = '';
         asBeforeThisRule(vera, () => {
@@ -1353,17 +1356,17 @@ async function main(): Promise<void> {
         const invite = await call('POST', alice, '/api/invite/generate', { publicKey: alice.pk });
         const redeem = await call('POST', vera, '/api/invite/redeem', { code: invite.body?.invite?.code, publicKey: vera.pk, callsign: 'Vera' });
         assert(redeem.status === 200 && !isVisitorRow(vera.pk), `its own signed redeem makes its row a member's (${show(redeem)})`);
-        const post = await call('POST', vera, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Vera honey, second batch', description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: vera.pk, photos: [TINY_PNG] });
+        const post = await call('POST', vera, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Vera honey, second batch', description: 'Jars', price_c: hc(3), priceType: 'fixed', authorPublicKey: vera.pk, photos: [TINY_PNG] });
         const rsvp = await call('POST', vera, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' });
         const join = await call('POST', vera, `/api/groups/${group.id}/join`);
         const report = await call('POST', vera, '/api/reports', { reporterPubkey: vera.pk, targetPubkey: alice.pk, targetPostId: aliceOffer.id, reason: 'spam' });
-        const pledge = await call('POST', vera, `/api/crowdfund/projects/${project}/pledge`, { fromPubkey: vera.pk, amount: 1 });
+        const pledge = await call('POST', vera, `/api/crowdfund/projects/${project}/pledge`, { fromPubkey: vera.pk, amount_c: hc(1) });
         const dmCarol = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, carol.pk], createdBy: vera.pk });
         const edit = await call('POST', vera, '/api/messages/react', { messageId: aliceLine.id, authorPubkey: vera.pk, emoji: '👍' });
         assert([post, rsvp, join, report, pledge, dmCarol, edit].every(ok) && rsvp.body?.post?.eventPrivateNote?.includes('9902'),
             `it posts, RSVPs (and reads the note), joins a group, reports, pledges, opens a DM and reacts (${[post, rsvp, join, report, pledge, dmCarol, edit].map(r => r.status).join(' ')})`);
         const fresh = keypair('FreshTwoVA');
-        const pay = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: fresh.pk, amount: 1 });
+        const pay = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: fresh.pk, amount_c: hc(1) });
         assert(pay.status === 200 && isVisitorRow(fresh.pk), `and pays a key with no row, which gets a visitor's row (${show(pay)})`);
     }
 

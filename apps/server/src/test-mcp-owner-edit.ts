@@ -73,6 +73,11 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 86_400_000;
 const settle = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms); });
 const row = (id: string): any => db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
+/**
+ * The assistant's tools speak Beans (`beans: 3`, agent/owner-posts.ts); the row holds whole hundredths (`price_c`, 1 Bean =
+ * 100). `hc` turns the Beans the assistant gave into the hundredths the row must hold, exactly.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 const fenced = (v: any): string => v?.text ?? '';
 
 async function jpeg(width: number, height: number): Promise<string> {
@@ -183,7 +188,7 @@ async function main(): Promise<void> {
         assert(!moved.isError && structured(moved)?.postId === offerId && row(offerId)?.lat === -38.123 && row(offerId)?.lng === 145.988
             && structured(moved)?.lat === -38.123 && structured(moved)?.lng === 145.988,
             `the pin moves, rounded to 100 m as the apps round it, and the answer says where it stands (${errorText(moved) || JSON.stringify(structured(moved))})`);
-        assert(JSON.stringify(structured(moved)?.changed) === JSON.stringify(['lat', 'lng']) && row(offerId)?.title === 'Lemons from the tree' && row(offerId)?.credits === 3,
+        assert(JSON.stringify(structured(moved)?.changed) === JSON.stringify(['lat', 'lng']) && row(offerId)?.title === 'Lemons from the tree' && row(offerId)?.price_c === hc(3),
             `only the fields sent change (${JSON.stringify(structured(moved)?.changed)})`);
         const near = (at: { lat: number; lng: number }) => getPosts({ near: { ...at, radiusKm: 5 }, viewerPubkey: mia.pub } as any).map((p) => p.id);
         assert(near({ lat: -38.123, lng: 145.988 }).includes(offerId) && !near(OLD).includes(offerId), 'the old place does not linger: found by distance at the new place, gone from the old');
@@ -359,7 +364,7 @@ async function main(): Promise<void> {
         section('── 6. A listing\'s terms, shop and lending ──');
         const terms = await edit({ post_id: offerId, repeatable: true, cash_also_needed: true, price_type: 'hourly', category: 'tools', beans: 7 });
         const t = row(offerId);
-        assert(!terms.isError && t?.repeatable === 1 && t?.cash_also_needed === 1 && t?.price_type === 'hourly' && t?.category === 'tools' && t?.credits === 7, `repeatable, cash, price type, category and price (${errorText(terms) || 'ok'})`);
+        assert(!terms.isError && t?.repeatable === 1 && t?.cash_also_needed === 1 && t?.price_type === 'hourly' && t?.category === 'tools' && t?.price_c === hc(7), `repeatable, cash, price type, category and price (${errorText(terms) || 'ok'})`);
         const offAgain = await edit({ post_id: offerId, repeatable: false, cash_also_needed: false });
         assert(!offAgain.isError && row(offerId)?.repeatable === 0 && row(offerId)?.cash_also_needed === 0, `and false takes them off (${errorText(offAgain) || 'ok'})`);
         const flagText = await edit({ post_id: offerId, repeatable: 'false' });
@@ -400,7 +405,7 @@ async function main(): Promise<void> {
         const needId = await made('create_need', listing('A ladder for a week'));
         const asBakery = await made('create_enterprise_listing', { ...listing('Bakery rye loaves'), kind: 'offer', as_enterprise: enterpriseRef(bakery) });
         const asBakeryEvent = await made('create_event', event('Bakery open day', { as_enterprise: enterpriseRef(bakery) }));
-        const unchanged = (id: string) => { const r = row(id); return `${r.title}|${r.lat}|${r.lng}|${r.category}|${r.credits}|${r.updated_at}`; };
+        const unchanged = (id: string) => { const r = row(id); return `${r.title}|${r.lat}|${r.lng}|${r.category}|${r.price_c}|${r.updated_at}`; };
         for (const [what, id, args, says] of [
             ['a start on an Offer', offerId, { start_at: inDays(3) }, /An Offer or a Need has no start_at/],
             ['a place name on a Need', needId, { place_name: 'The hall' }, /An Offer or a Need has no place_name/],
@@ -424,7 +429,7 @@ async function main(): Promise<void> {
             assert(r.isError === true && says.test(errorText(r)) && unchanged(id) === was, `${what} → refused in words, unchanged (${errorText(r).slice(0, 70)})`);
         }
         const keeper = await edit({ post_id: asBakery, lat: -28.7, lng: 153.4, beans: 6, repeatable: false });
-        assert(!keeper.isError && row(asBakery)?.lat === -28.7 && row(asBakery)?.credits === 6 && row(asBakery)?.repeatable === 0 && row(asBakery)?.author_pubkey === bakery, `an enterprise's Offer moves, by the keeper, and stays the enterprise's (${errorText(keeper) || 'ok'})`);
+        assert(!keeper.isError && row(asBakery)?.lat === -28.7 && row(asBakery)?.price_c === hc(6) && row(asBakery)?.repeatable === 0 && row(asBakery)?.author_pubkey === bakery, `an enterprise's Offer moves, by the keeper, and stays the enterprise's (${errorText(keeper) || 'ok'})`);
         const keeperEvent = await edit({ post_id: asBakeryEvent, lat: -28.71, lng: 153.41, place_name: 'The bakery' });
         assert(!keeperEvent.isError && row(asBakeryEvent)?.lat === -28.71 && row(asBakeryEvent)?.author_pubkey === bakery, `an enterprise's event too (${errorText(keeperEvent) || 'ok'})`);
 
@@ -505,8 +510,8 @@ async function main(): Promise<void> {
         const notMine = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
         const tiny = await jpeg(240, 200);
         const byB = await made('create_offer', listing('Helper-made marmalade'), b);
-        const fromApp = createPost('offer', 'food', 'Olive\'s own jam, from the app', 'From the phone.', 2, 'fixed', owner.pub, -28.55, 153.5, [tiny], false)!.id;
-        const miasOwn = createPost('offer', 'food', 'Mia\'s kombucha', 'Scoby too.', 2, 'fixed', mia.pub, -28.55, 153.5, [tiny], false)!.id;
+        const fromApp = createPost('offer', 'food', 'Olive\'s own jam, from the app', 'From the phone.', hc(2), 'fixed', owner.pub, -28.55, 153.5, [tiny], false)!.id;
+        const miasOwn = createPost('offer', 'food', 'Mia\'s kombucha', 'Scoby too.', hc(2), 'fixed', mia.pub, -28.55, 153.5, [tiny], false)!.id;
         for (const [label, id] of [['another assistant\'s', byB], ['the owner\'s own from the app', fromApp], ['Mia\'s', miasOwn]] as const) {
             const r = await edit({ post_id: id, lat: -30, lng: 150 });
             assert(r.isError === true && errorText(r) === notMine && row(id)?.lat === -28.55, `${label} post → refused in words, its pin unchanged (${errorText(r).slice(0, 50)})`);
@@ -555,14 +560,14 @@ async function main(): Promise<void> {
         // Free, so the deal holds no Beans and the audit below still reads the same; a change of price is refused all the same.
         const dealId = await made('create_offer', { ...listing('Firewood by the load'), beans: 0, repeatable: true });
         const deal = acceptPost(dealId, mia.pub);
-        const beansBefore = row(dealId)?.credits;
+        const beansBefore = row(dealId)?.price_c;
         const held = await edit({ post_id: dealId, beans: 9 });
         const heldType = await edit({ post_id: dealId, price_type: 'hourly' });
-        assert(held.isError === true && errorText(held) === PRICE_FROZEN_ERROR && heldType.isError === true && errorText(heldType) === PRICE_FROZEN_ERROR && row(dealId)?.credits === beansBefore,
+        assert(held.isError === true && errorText(held) === PRICE_FROZEN_ERROR && heldType.isError === true && errorText(heldType) === PRICE_FROZEN_ERROR && row(dealId)?.price_c === beansBefore && beansBefore === 0,
             `a live deal holds the price, in the engine's words (${errorText(held).slice(0, 60)})`);
         const dealMoved = await edit({ post_id: dealId, lat: -28.61, lng: 153.59 });
         const txAfter = db.prepare('SELECT status, amount_c FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
-        assert(!dealMoved.isError && row(dealId)?.lat === -28.61 && txAfter?.credits === deal.credits, `and lets the place move, as a person's edit does; the deal stands (${errorText(dealMoved) || JSON.stringify(txAfter)})`);
+        assert(!dealMoved.isError && row(dealId)?.lat === -28.61 && txAfter?.amount_c === deal.amount_c && txAfter?.amount_c === 0, `and lets the place move, as a person's edit does; the deal stands (${errorText(dealMoved) || JSON.stringify(txAfter)})`);
 
         // A one-off in a deal is out of both apps' edit form, and stays out of this one (status 'pending').
         const oneOffDeal = await made('create_offer', { ...listing('One load of mulch'), beans: 0 });

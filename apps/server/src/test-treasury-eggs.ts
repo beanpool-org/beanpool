@@ -3,7 +3,7 @@
  *
  * Exercises the whole enterprise concept through the real engine functions, no HTTP/UI:
  *   1. createTreasury mints a real member account (the Commons' trading face) that is
- *      demurrage-exempt, flagged is_treasury, and granted a bounded credit line.
+ *      demurrage-exempt and flagged is_treasury; its keeper's pledge grants it a bounded credit line (E29: no opening line).
  *   2. The treasury AUTHORS a recurring eggs Offer and a paid tending Need (proving a
  *      treasury-member clears the createPost member gate + the need "offer covenant").
  *   3. It pays the chicken-tender FIRST, at zero balance — going into a bounded deficit on
@@ -21,7 +21,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, createPost, acceptPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance, adminSetOperator, canOperate,
-    adminAssignTreasuryOperator,
+    adminAssignTreasuryOperator, pledgeEnterpriseBacking,
 } from './state-engine.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -37,7 +37,9 @@ function seedMember(pk: string, callsign: string) {
     setMemberPhoto(db, pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
-const bal = (pk: string) => getBalance(pk).balance;
+/** The story's figures are Beans; balances, prices and the credit line are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
+const bal = (pk: string) => getBalance(pk).balance_c;
 
 async function main() {
     console.log('Running community-treasury eggs end-to-end test...\n');
@@ -45,42 +47,57 @@ async function main() {
     initStateEngine();
 
     // ---- 1. Create the treasury ---------------------------------------------------------
-    const { publicKey: T } = createTreasury('Community Eggs', AVATAR, 200);
+    const { publicKey: T } = createTreasury('Community Eggs', AVATAR, hc(200));
     const trow = db.prepare("SELECT is_treasury, status, callsign FROM members WHERE public_key=?").get(T) as any;
     assert(!!trow && trow.is_treasury === 1 && trow.status === 'active', '1. createTreasury inserts an active is_treasury member row');
     assert(getBalance(T).isTreasury === true, '1. balance endpoint reports isTreasury=true for the treasury');
-    assert(getBalance(T).activated === true && getBalance(T).floor <= -200, '1. treasury has a bounded credit line (floor ≤ -200)');
+    // Its bounded credit line is its keeper's pledge: the opening line createTreasury once granted is gone (E29, Marty's
+    // yes, 10 Nov 2026; engine trust.ts enterpriseAllowance counts keepers' pledges only). Kyle, its keeper, pledges 200 of
+    // his earned credit, which is completed trade (qualifiedTradeValue): two purchases of 500 Beans from two sellers, all
+    // three members of two months' standing (an insular cluster of new members earns nothing), earn him 320.
+    const K = 'keeper-kyle-000000000000000000000000000000';
+    seedMember(K, 'Kyle-Keeper');
+    const twoMonthsAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    for (const [i, seller] of ['seller-sam-00000000000000000000000000000000', 'seller-sue-00000000000000000000000000000000'].entries()) {
+        seedMember(seller, `Seller-${i}`);
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(twoMonthsAgo, seller, K);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                    VALUES (?, ?, ?, ?, ?, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+            .run(`kyle-trade-${i}`, `kyle-post-${i}`, K, seller, hc(500));
+    }
+    adminAssignTreasuryOperator(T, K);
+    const pledge = pledgeEnterpriseBacking(T, K, hc(200));
+    assert(pledge.amount_c === hc(200), `1. its keeper pledges 200 of his earned credit to it (${pledge.amount_c} hundredths)`);
+    assert(getBalance(T).activated === true && getBalance(T).floor_c <= -hc(200), `1. treasury has a bounded credit line (floor ≤ -200; floor_c ${getBalance(T).floor_c})`);
     assert(bal(T) === 0, '1. treasury starts at 0 balance (no beans minted)');
 
     // ---- 2. Treasury authors its offer + need (the member-gate + covenant proof) ---------
-    const eggs = createPost('offer', 'food', 'Dozen free-range eggs', 'Fresh daily from the community flock', 12, 'fixed', T, undefined, undefined, [AVATAR], true);
+    const eggs = createPost('offer', 'food', 'Dozen free-range eggs', 'Fresh daily from the community flock', hc(12), 'fixed', T, undefined, undefined, [AVATAR], true);
     assert(eggs !== null && eggs.authorPublicKey === T, '2. treasury AUTHORS a recurring eggs Offer (clears createPost member gate)');
-    const tend = createPost('need', 'labour', 'Tend the chickens this week', 'Feed, water, collect + clean', 20, 'fixed', T, undefined, undefined, [AVATAR]);
+    const tend = createPost('need', 'labour', 'Tend the chickens this week', 'Feed, water, collect + clean', hc(20), 'fixed', T, undefined, undefined, [AVATAR]);
     assert(tend !== null, '2. treasury authors a paid tending Need (need "offer covenant" satisfied by the eggs offer)');
 
     // ---- 3. Pay the tender FIRST, from 0 → bounded deficit on the credit line ------------
     const F = 'tender-fiona-000000000000000000000000000000';
     seedMember(F, 'Fiona-Tender');
-    const K = 'keeper-kyle-000000000000000000000000000000';
-    seedMember(K, 'Kyle-Keeper');
-    adminAssignTreasuryOperator(T, K);
     const req = requestPost(tend!.id, F);                 // tender bids to help
     approvePostRequest(req.id, T, { authSigner: K });     // keeper approves → funds escrow (T → escrow 20)
-    assert(bal(T) === -20, '3. treasury funds tending from 0 → -20 (bounded overdraft in action)');
+    assert(bal(T) === -hc(20), '3. treasury funds tending from 0 → -20 (bounded overdraft in action)');
     completePostTransaction(req.id, T, undefined, { authSigner: K }); // keeper releases → tender paid
     // 20 − 1.5% = 19.7. The tender is the SELLER here (selling labour), and #165 charges the
     // community fee on the escrow payout, so they net the same as any other seller. This test
     // was written 2026-07-26, while escrow payouts were still wrongly passing isFeeExempt=true,
     // and so encoded that bug as its expectation until b0c1063 flipped the flag.
-    assert(bal(F) === 19.7, '3. tender receives 19.7 — 20 less the 1.5% community fee, same as any seller');
-    assert(bal(T) === -20, '3. treasury sits at -20 (a real deficit, repaid below by income)');
+    // In hundredths: 2000 less a fee of 30 (1.5%, whole) is 1970.
+    assert(bal(F) === hc(19.7), `3. tender receives 19.7 — 20 less the 1.5% community fee, same as any seller (${bal(F)} hundredths)`);
+    assert(bal(T) === -hc(20), '3. treasury sits at -20 (a real deficit, repaid below by income)');
 
     // ---- 4. Egg sales repay the deficit and return the enterprise to surplus -------------
     const B = 'egg-buyer-brenda-0000000000000000000000000000';
     seedMember(B, 'Brenda-Buyer');
-    createPost('offer', 'misc', 'Homemade jam', 'so Brenda can trade', 5, 'fixed', B, undefined, undefined, [AVATAR]); // buyer needs a live offer to trade
-    transfer('COMMONS_POOL', B, 50, 'test funding', 'direct', true);                    // give the buyer some beans
-    assert(bal(B) === 50, '4. buyer funded with 50 beans');
+    createPost('offer', 'misc', 'Homemade jam', 'so Brenda can trade', hc(5), 'fixed', B, undefined, undefined, [AVATAR]); // buyer needs a live offer to trade
+    transfer('COMMONS_POOL', B, hc(50), 'test funding', 'direct', true);                // give the buyer some beans
+    assert(bal(B) === hc(50), '4. buyer funded with 50 beans');
 
     for (let i = 1; i <= 2; i++) {
         const sale = acceptPost(eggs!.id, B);            // buyer pays 12 into escrow
@@ -88,12 +105,12 @@ async function main() {
         const still = db.prepare("SELECT status FROM posts WHERE id=?").get(eggs!.id) as any;
         assert(still.status === 'active', `4. recurring eggs offer stays live after sale #${i}`);
     }
-    assert(bal(B) === 26, '4. buyer paid 24 for two dozen (50 → 26)');
+    assert(bal(B) === hc(26), '4. buyer paid 24 for two dozen (50 → 26)');
     // The treasury is the seller of the eggs, so its income is fee-bearing too: 2 × 12 = 24 gross,
-    // less 1.5% each (0.36), nets 23.64. −20 + 23.64 = 3.64. The buyer still pays 24 GROSS (line
+    // less 1.5% each (0.18 on each 12, so 0.36), nets 23.64. −20 + 23.64 = 3.64. The buyer still pays 24 GROSS (line
     // above) — the fee comes off the seller's side, which is the whole shape of it: a treasury pays
     // the community fee on what it earns, exactly like a person does.
-    assert(bal(T) === 3.64, '4. treasury −20 + 23.64 net income = +3.64: deficit repaid, back in surplus');
+    assert(bal(T) === hc(3.64), `4. treasury −20 + 23.64 net income = +3.64: deficit repaid, back in surplus (${bal(T)} hundredths)`);
 
     // ---- 5. Operator capability (the client role signal) --------------------------------
     const OP = 'operator-otto-00000000000000000000000000000000';

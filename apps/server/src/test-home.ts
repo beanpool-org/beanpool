@@ -172,6 +172,16 @@ async function postJson(urlPath: string, id: Id, payload: unknown): Promise<Res>
 const gz = (s: string) => zlib.gzipSync(Buffer.from(s)).length;
 /** A balance as a JSON number anywhere in an answer: a bare substring also matches part of a distance or a time. */
 const hasNumber = (text: string, n: number) => new RegExp(`[:\\[,]${String(n).replace('.', '\\.')}[,\\]}]`).test(text);
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), in its rows and on the wire (`balance_c`,
+ * `in_c`, `price_c` ...). `hc` turns a Beans figure into hundredths, so every money check below is an exact integer `===`.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+/**
+ * The Commons pot as the community card says it (memberFigures): in whole Beans, truncated toward zero, so the card never
+ * says the pot holds more than it does. The card carries it as hundredths: wholeBeans(pot) * 100.
+ */
+const wholeBeans = (hundredths: number) => Math.trunc(hundredths / 100);
 /** The request's own header bytes, as a client sends them (no Cloudflare in front): the floor of what any request costs. */
 const headerBytes = (h: Record<string, string>) => Object.entries(h).reduce((n, [k, v]) => n + k.length + v.length + 4, 0);
 
@@ -207,9 +217,9 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng, earned_credit_c)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id.pk, name, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(), owner.pk,
-                `INV-${name.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null, opts.earned ?? 0);
+                `INV-${name.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null, hc(opts.earned ?? 0));
         setMemberPhoto(db, id.pk, TINY_PNG); // the photo goes where every writer puts it (member_photos, the row's avatar_ref)
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, MONEY ? opts.balance ?? 0 : 0);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, MONEY ? hc(opts.balance ?? 0) : 0);
         return id;
     };
     const BYRON = { lat: -28.6, lng: 153.6 };
@@ -222,7 +232,7 @@ async function main(): Promise<void> {
 
     // Listings: Bob's food, newest, and his garden offer, older; Carol's bread; an event and a poll.
     const post = (author: Id, type: 'offer' | 'need' | 'poll' | 'event', category: string, title: string, extra: Record<string, unknown> = {}) =>
-        se.createPost(type, category, title, `${title} description`, MONEY && (type === 'offer' || type === 'need') ? 5 : 0, 'fixed', author.pk,
+        se.createPost(type, category, title, `${title} description`, MONEY && (type === 'offer' || type === 'need') ? hc(5) : 0, 'fixed', author.pk,
             BYRON.lat + 0.01, BYRON.lng + 0.01, type === 'poll' ? undefined : [TINY_PNG], false, undefined, false, extra as any)!;
     const garden = post(bob, 'offer', 'garden', 'HomeSentinel seedlings');
     db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(new Date(Date.now() - 3 * DAY).toISOString(), garden.id);
@@ -238,8 +248,8 @@ async function main(): Promise<void> {
 
     // Deals: Bob asks for Alice's drill (waits on her); Bob and Carol have one of their own, in progress.
     const deal = (id: string, postId: string, buyer: Id, seller: Id, status: string) =>
-        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 5, ?)')
-            .run(id, postId, buyer.pk, seller.pk, status);
+        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(id, postId, buyer.pk, seller.pk, hc(5), status);
     if (MONEY) deal('tx-home-alice', alicesOffer.id, bob, alice, 'requested');
     if (MONEY) deal('tx-home-carol', carolsBread.id, bob, carol, 'pending');
 
@@ -282,7 +292,7 @@ async function main(): Promise<void> {
     const hugeCategory = `cat${'c'.repeat(HUGE)}`;
     const hugeListing = async (who: Id) => {
         const r = await postJson('/api/marketplace/posts', who, {
-            type: 'offer', category: 'garden', title: 'HomeSentinel huge category', description: 'An ordinary offer', credits: 0,
+            type: 'offer', category: 'garden', title: 'HomeSentinel huge category', description: 'An ordinary offer', price_c: 0,
             authorPublicKey: who.pk, lat: BYRON.lat + 0.01, lng: BYRON.lng + 0.01, photos: [TINY_PNG],
         });
         const id = r.body?.id ?? r.body?.post?.id;
@@ -321,8 +331,9 @@ async function main(): Promise<void> {
     /**
      * A payment between two parties as a settled deal moves it: through the escrow path, which a member's first trade
      * needs no earlier one for (the send gate is for a direct gift), and with no fee, so the figures are the amounts.
+     * `amount` is in Beans.
      */
-    const pay = (from: Id, to: string, amount: number, memo: string) => se.transfer(from.pk, to, amount, memo, 'escrow', true);
+    const pay = (from: Id, to: string, amount: number, memo: string) => se.transfer(from.pk, to, hc(amount), memo, 'escrow', true);
     /** A chat line as the node stores one: plaintext-v1 as an older app sent it, or a sealed group line's bytes. Each one later than the last. */
     const chatLine = (conversationId: string, author: Id, text: string, sealed?: { ciphertext: string; nonce: string; metadata: string | null }) => {
         lastLineAt = Math.max(Date.now(), lastLineAt + 1);
@@ -375,16 +386,18 @@ async function main(): Promise<void> {
         return { ent, carols, bobsLine, mia, ned };
     };
     type W3 = Awaited<ReturnType<typeof w3Fixtures>>;
-    /** The signer's own figures for this month, read as the ledger holds them (getTransactions): circulation fees apart. */
+    /**
+     * The signer's own figures for this month, read as the ledger holds them (getTransactions): circulation fees apart.
+     * Whole hundredths summed as integers, in the card's own key order, so the two compare exactly.
+     */
     const ownMonthOf = (id: Id) => {
         const lines = se.getTransactions(id.pk, 500).filter(t => Date.parse(t.timestamp) >= monthStart);
         const fee = (t: { id: string; to: string }) => t.to === 'COMMONS_POOL' && t.id.startsWith('demurrage_');
-        const r2 = (n: number) => Math.round(n * 100) / 100;
         return {
             trades: lines.filter(t => !fee(t)).length,
-            in: r2(lines.filter(t => !fee(t) && t.to === id.pk).reduce((n, t) => n + t.amount - (t.taxFee || 0), 0)),
-            out: r2(lines.filter(t => !fee(t) && t.from === id.pk).reduce((n, t) => n + t.amount, 0)),
-            fees: r2(lines.filter(fee).reduce((n, t) => n + t.amount, 0)),
+            in_c: lines.filter(t => !fee(t) && t.to === id.pk).reduce((n, t) => n + t.amount_c - (t.fee_c || 0), 0),
+            out_c: lines.filter(t => !fee(t) && t.from === id.pk).reduce((n, t) => n + t.amount_c, 0),
+            fees_c: lines.filter(fee).reduce((n, t) => n + t.amount_c, 0),
         };
     };
     /**
@@ -407,12 +420,12 @@ async function main(): Promise<void> {
         if (!MONEY) return;
         const m = await get(`/api/home?${ALL}&publicKey=${w3.ned.pk}`, w3.mia);
         const ned = ownMonthOf(w3.ned);
-        const nedBalance = se.getBalance(w3.ned.pk).balance;
-        assert(m.status === 200 && m.body?.cards?.beans?.balance === se.getBalance(w3.mia.pk).balance && !hasNumber(m.text, nedBalance) && !hasNumber(m.text, ned.out),
-            `Mia naming Ned's key gets her own Beans and month, never Ned's balance ${nedBalance} or his ${ned.out} out (${JSON.stringify(m.body?.cards?.beans)})`);
+        const nedBalance = se.getBalance(w3.ned.pk).balance_c;
+        assert(m.status === 200 && m.body?.cards?.beans?.balance_c === se.getBalance(w3.mia.pk).balance_c && !hasNumber(m.text, nedBalance) && !hasNumber(m.text, ned.out_c),
+            `Mia naming Ned's key gets her own Beans and month, never Ned's balance ${nedBalance} or his ${ned.out_c} out, in hundredths (${JSON.stringify(m.body?.cards?.beans)})`);
         const aMonth = a.body?.cards?.beans?.month;
         const aliceOwn = ownMonthOf(alice);
-        assert(!!aMonth && aMonth.trades === aliceOwn.trades && aMonth.in === aliceOwn.in && aMonth.out === aliceOwn.out && !hasNumber(a.text, 4.25),
+        assert(!!aMonth && aMonth.trades === aliceOwn.trades && aMonth.in_c === aliceOwn.in_c && aMonth.out_c === aliceOwn.out_c && !hasNumber(a.text, hc(4.25)),
             `Alice's month is her own (${JSON.stringify(aMonth)}), never Mia's 4.25 in`);
     };
 
@@ -462,7 +475,7 @@ async function main(): Promise<void> {
         assert(msgLine?.label === 'Unread message from HomeBob' && msgLine?.target?.conversationId === dm?.id, `unread from Bob (${msgLine?.label})`);
         assert(c.deals?.open === 1 && c.deals?.waitingOnMe?.txId === 'tx-home-alice', `deals: one open, waiting on her (${JSON.stringify(c.deals)})`);
         const titles = (c.market?.items ?? []).map((i: any) => i.title);
-        assert(titles.length === 4 && titles[0] === 'HomeSentinel seedlings' && c.market.items.every((i: any) => typeof i.credits === 'number' && typeof i.photoUrl === 'string'),
+        assert(titles.length === 4 && titles[0] === 'HomeSentinel seedlings' && c.market.items.every((i: any) => Number.isSafeInteger(i.price_c) && typeof i.photoUrl === 'string'),
             `market: four, her starred garden first though older, each with Beans and a photo (${titles.join(' | ')})`);
         assert(c.market?.total14d >= 7 && c.market?.examples === undefined, `and the count of the fortnight's listings (${c.market?.total14d})`);
         assert(c.events?.items?.[0]?.id === event.id && c.events.items[0].place === 'HomeSentinel Town Hall', `events: the seed swap, with its place for a member (${JSON.stringify(c.events?.items?.[0])})`);
@@ -479,7 +492,7 @@ async function main(): Promise<void> {
         // Up to four since W3 (§2), and the week holds three.
         assert(pulse.length === 3 && pulse[0].category === 'garden' && /^\/api\/pulse\/items\/item-home-2\/thumbnail$/.test(pulse[0].thumbnailUrl),
             `pulse: the week's three, her starred garden first, thumbnails through the node (${JSON.stringify(pulse.map((p: any) => [p.category, p.thumbnailUrl]))})`);
-        assert(c.beans?.balance === 42.5 && typeof c.beans?.room === 'number' && typeof c.beans?.tier === 'string', `beans: her own 42.5 (${JSON.stringify(c.beans)})`);
+        assert(c.beans?.balance_c === hc(42.5) && typeof c.beans?.room_c === 'number' && typeof c.beans?.tier === 'string', `beans: her own 42.5 (${JSON.stringify(c.beans)})`);
         assert(c.notices?.unseen === 1 && c.notices?.first?.id === aliceNotice && c.notices.first.line === 'A moderator kept your post.',
             `notices: hers, its first line (${JSON.stringify(c.notices)})`);
         assert(typeof c.community?.members === 'number' && c.community.members >= 5 && typeof c.community?.tradesThisMonth === 'number',
@@ -503,11 +516,11 @@ async function main(): Promise<void> {
     console.log('\n── 3. nobody else\'s deal, notice, balance or vote ──');
     {
         const a = await get(`/api/home?${ALL}`, alice);
-        assert(!a.text.includes('tx-home-carol') && !a.text.includes('HomeSentinel carol notice') && !hasNumber(a.text, 7.25) && (a.text.match(/"balance":/g) ?? []).length === 1 && a.body?.cards?.beans?.balance === 42.5,
+        assert(!a.text.includes('tx-home-carol') && !a.text.includes('HomeSentinel carol notice') && !hasNumber(a.text, hc(7.25)) && (a.text.match(/"balance_c":/g) ?? []).length === 1 && a.body?.cards?.beans?.balance_c === hc(42.5),
             "Alice's answer holds no deal, notice or balance of anyone else's");
         const b = await get(`/api/home?${ALL}&publicKey=${alice.pk}`, bob);
-        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !hasNumber(b.text, 42.5) && !b.text.includes(aliceNotice ?? 'none') && b.body?.cards?.notices === undefined,
-            `Bob naming Alice's key in the query gets his own Beans and none of her things (${b.body?.cards?.beans?.balance})`);
+        assert(b.status === 200 && b.body?.cards?.beans?.balance_c === hc(50) && !hasNumber(b.text, hc(42.5)) && !b.text.includes(aliceNotice ?? 'none') && b.body?.cards?.notices === undefined,
+            `Bob naming Alice's key in the query gets his own Beans and none of her things (${b.body?.cards?.beans?.balance_c})`);
         assert(b.body?.cards?.deals?.open === 2 && !b.body?.cards?.needs?.items?.some((i: any) => i.kind === 'message'),
             `Bob's deals are his two, and Alice's unread is not his (${JSON.stringify(b.body?.cards?.deals)})`);
         const d = await get(`/api/home?${ALL}`, dan);
@@ -531,7 +544,7 @@ async function main(): Promise<void> {
         assert(bobWithAlices.status === 200, "Alice's tag never gets Bob a 304");
 
         // Two other members pay each other: nothing of Alice's Home moves.
-        const paid = se.transfer(bob.pk, carol.pk, 1, 'HomeSentinel thanks', 'escrow');
+        const paid = se.transfer(bob.pk, carol.pk, hc(1), 'HomeSentinel thanks', 'escrow');
         const afterPay = await get('/api/home', alice, { 'If-None-Match': first.etag! });
         assert(!!paid && afterPay.status === 304, `Bob paying Carol leaves Alice's tag as it was: a 304 (paid ${!!paid}, got ${afterPay.status})`);
 
@@ -739,7 +752,7 @@ async function main(): Promise<void> {
         const fay = member('HomeSearchFay', { area: FAR });
         const gus = member('HomeSearchGus'); // no area: no point
         const at = (author: Id, type: 'offer' | 'need', title: string, dLat: number) =>
-            se.createPost(type, 'food', title, `${title} description`, MONEY ? 5 : 0, 'fixed', author.pk, FAR.lat + dLat, FAR.lng, [TINY_PNG], false, undefined, false, {} as any)!;
+            se.createPost(type, 'food', title, `${title} description`, MONEY ? hc(5) : 0, 'fixed', author.pk, FAR.lat + dLat, FAR.lng, [TINY_PNG], false, undefined, false, {} as any)!;
         // The nearest is a need with "chicken" in it and no "egg": only the synonym map (eggs → chicken) finds it.
         const coop = at(bob, 'need', 'HomeQuail chicken coop wanted', 0.001);
         const near = [1, 2, 3, 4, 5].map(i => at(bob, 'offer', `HomeQuail fresh eggs ${i}`, 0.001 + i * 0.002));
@@ -988,11 +1001,11 @@ async function main(): Promise<void> {
 
         // The enterprise: its balance (open, #1286), keepers, this month's figures and its latest line, for its keeper.
         const e = c.enterprise;
-        const entBalance = se.getBalance(w3.ent.publicKey).balance;
-        assert(e?.id === w3.ent.publicKey && e.name === 'HomeSentinel Bakery' && e.keepers === 1 && e.balance === entBalance && entBalance === 5,
+        const entBalance = se.getBalance(w3.ent.publicKey).balance_c;
+        assert(e?.id === w3.ent.publicKey && e.name === 'HomeSentinel Bakery' && e.keepers === 1 && e.balance_c === entBalance && entBalance === hc(5),
             `enterprise: the bakery, one keeper, its balance as the ledger holds it (${JSON.stringify(e)}, ledger ${entBalance})`);
-        assert(JSON.stringify(e?.month) === JSON.stringify({ trades: 1, in: 3, out: 0 })
-            && e?.latest?.amount === 3 && e.latest.who === 'HomeBob' && e.latest.kind === 'member' && Number.isFinite(Date.parse(e.latest.at)),
+        assert(JSON.stringify(e?.month) === JSON.stringify({ trades: 1, in_c: hc(3), out_c: 0 })
+            && e?.latest?.amount_c === hc(3) && e.latest.who === 'HomeBob' && e.latest.kind === 'member' && Number.isFinite(Date.parse(e.latest.at)),
             `enterprise: this month one line, 3 in (last month's 2 left out), the latest +3 from Bob (${JSON.stringify(e?.month)} ${JSON.stringify(e?.latest)})`);
 
         // Decide: the open Decisions as rows, soonest first, "You voted" hers (she voted on the compost bay in section 4), and the poll.
@@ -1016,44 +1029,44 @@ async function main(): Promise<void> {
 
         // Beans: the member's own month; Mia's, with a line from last month left out.
         const aliceMonth = ownMonthOf(alice);
-        assert(c.beans?.balance === 42.5 && JSON.stringify(c.beans?.month) === JSON.stringify({ ...aliceMonth, more: false }),
+        assert(c.beans?.balance_c === hc(42.5) && JSON.stringify(c.beans?.month) === JSON.stringify({ ...aliceMonth, more: false }),
             `beans: her own month as her ledger holds it (${JSON.stringify(c.beans?.month)}, ledger ${JSON.stringify(aliceMonth)})`);
         const miaBeans = (await get('/api/home?cards=beans', w3.mia)).body?.cards?.beans;
         const miaOwn = ownMonthOf(w3.mia);
-        assert(miaOwn.trades === 2 && miaOwn.in === 4.25 && miaOwn.out === 1.75 && JSON.stringify(miaBeans?.month) === JSON.stringify({ ...miaOwn, more: false })
-            && miaBeans?.balance === se.getBalance(w3.mia.pk).balance,
+        assert(miaOwn.trades === 2 && miaOwn.in_c === hc(4.25) && miaOwn.out_c === hc(1.75) && JSON.stringify(miaBeans?.month) === JSON.stringify({ ...miaOwn, more: false })
+            && miaBeans?.balance_c === se.getBalance(w3.mia.pk).balance_c,
             `beans: Mia's month, 2 trades, 4.25 in, 1.75 out, last month's 0.65 left out (${JSON.stringify(miaBeans)})`);
 
         // A payment that carries the 1.5% fee (review of #2416): "in" on both cards is what the payee was credited, net of
         // the fee, as the latest line and the balance say it, never the amount paid. `pay` takes no fee, so these don't use it.
-        const r2 = (n: number) => Math.round(n * 100) / 100;
-        const [entBefore, miaBefore] = [se.getBalance(w3.ent.publicKey).balance, se.getBalance(w3.mia.pk).balance];
+        const [entBefore, miaBefore] = [se.getBalance(w3.ent.publicKey).balance_c, se.getBalance(w3.mia.pk).balance_c];
         const feePaid = [
-            !!se.transfer(bob.pk, w3.ent.publicKey, 10, 'HomeSentinel with a fee', 'escrow'),
-            !!se.transfer(w3.ned.pk, w3.mia.pk, 10, 'HomeSentinel with a fee', 'escrow'),
+            !!se.transfer(bob.pk, w3.ent.publicKey, hc(10), 'HomeSentinel with a fee', 'escrow'),
+            !!se.transfer(w3.ned.pk, w3.mia.pk, hc(10), 'HomeSentinel with a fee', 'escrow'),
         ];
-        const entRose = r2(se.getBalance(w3.ent.publicKey).balance - entBefore);
-        const miaRose = r2(se.getBalance(w3.mia.pk).balance - miaBefore);
-        assert(feePaid.every(Boolean) && entRose === 9.85 && miaRose === 9.85,
+        const entRose = se.getBalance(w3.ent.publicKey).balance_c - entBefore;
+        const miaRose = se.getBalance(w3.mia.pk).balance_c - miaBefore;
+        // 1.5% of 1000 hundredths is 15, a whole fee: each payee is credited 985.
+        assert(feePaid.every(Boolean) && entRose === hc(9.85) && miaRose === hc(9.85),
             `setup: Bob pays the bakery and Ned pays Mia 10 Beans each, the fee taken (${feePaid.join(',')}; credited ${entRose} and ${miaRose})`);
         const fe = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
-        assert(fe?.month?.trades === e.month.trades + 1 && fe.month.in === r2(e.month.in + entRose) && fe.month.out === e.month.out
-            && fe.latest?.amount === entRose && fe.balance === se.getBalance(w3.ent.publicKey).balance,
-            `enterprise: the payment with a fee adds what the bakery was credited, ${entRose}, to this month's in, as its latest line and balance say (${JSON.stringify(fe?.month)} ${JSON.stringify(fe?.latest)}, balance ${fe?.balance})`);
+        assert(fe?.month?.trades === e.month.trades + 1 && fe.month.in_c === e.month.in_c + entRose && fe.month.out_c === e.month.out_c
+            && fe.latest?.amount_c === entRose && fe.balance_c === se.getBalance(w3.ent.publicKey).balance_c,
+            `enterprise: the payment with a fee adds what the bakery was credited, ${entRose} hundredths, to this month's in, as its latest line and balance say (${JSON.stringify(fe?.month)} ${JSON.stringify(fe?.latest)}, balance ${fe?.balance_c})`);
         const miaFee = (await get('/api/home?cards=beans', w3.mia)).body?.cards?.beans?.month;
-        assert(miaFee?.trades === miaOwn.trades + 1 && miaFee.in === r2(miaOwn.in + miaRose) && miaFee.out === miaOwn.out && miaFee.fees === miaOwn.fees,
-            `beans: Mia's month adds what she was credited, ${miaRose}, not the 10 Ned paid (${JSON.stringify(miaFee)})`);
+        assert(miaFee?.trades === miaOwn.trades + 1 && miaFee.in_c === miaOwn.in_c + miaRose && miaFee.out_c === miaOwn.out_c && miaFee.fees_c === miaOwn.fees_c,
+            `beans: Mia's month adds what she was credited, ${miaRose} hundredths, not the 10 Ned paid (${JSON.stringify(miaFee)})`);
 
         // Community: the figures. Listings to anyone answered; the rest to a member who reads as one.
         const info = se.getPublicCommunityInfo();
         const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                          AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(new Date(Date.now() - 7 * DAY).toISOString()) as { c: number }).c;
         assert(c.community?.listings === info.postCount && c.community.joined7d === joined7d && joined7d === 1 && c.community.eventsSoon === 1
-            && c.community.commonsPot === Math.round(info.commonsBalance) && Number.isInteger(c.community.commonsPot),
-            `community: ${info.postCount} listings, ${joined7d} joined this week (Carol), one event in the fortnight, the Commons pot in whole Beans (${JSON.stringify(c.community)})`);
+            && c.community.commonsPot_c === wholeBeans(info.commonsBalance_c) * 100 && c.community.commonsPot_c % 100 === 0,
+            `community: ${info.postCount} listings, ${joined7d} joined this week (Carol), one event in the fortnight, the Commons pot in whole Beans, as hundredths (${JSON.stringify(c.community)}; pot ${info.commonsBalance_c} hundredths)`);
         const d = await get(`/api/home?${ALL}`, dan);
         assert(d.status === 200 && d.body?.cards?.community?.listings === info.postCount
-            && ['joined7d', 'eventsSoon', 'commonsPot'].every(k => !(k in (d.body?.cards?.community ?? {}))),
+            && ['joined7d', 'eventsSoon', 'commonsPot_c'].every(k => !(k in (d.body?.cards?.community ?? {}))),
             `a suspended member's community card: the listings count, none of what a member reads (${JSON.stringify(d.body?.cards?.community)})`);
         // An event that is running (started an hour ago, ends in two) is coming up: counted as the Events card beside the
         // figure lists it (review of #2416), and once it has ended, in neither. Posted with a start ahead, then moved.
@@ -1150,14 +1163,14 @@ async function main(): Promise<void> {
         assert(stamped.status === 200 && stamped.etag !== needsOnly.etag && sansAt(stamped.body) === sansAt(needsOnly.body),
             `her own line moves the tag of a Home that doesn't show it (cards=needs): the chat stamp (${stamped.status}, the body ${sansAt(stamped.body) === sansAt(needsOnly.body) ? 'unchanged' : 'changed'})`);
         const steady = await get('/api/home', alice);
-        const potBefore = se.getPublicCommunityInfo().commonsBalance;
+        const potBefore = se.getPublicCommunityInfo().commonsBalance_c;
         const traded = [
             !!pay(w3.ned, bob.pk, 1, 'HomeSentinel thanks'),
-            !!se.transfer(w3.ned.pk, carol.pk, 1, 'HomeSentinel with a fee', 'escrow'),
+            !!se.transfer(w3.ned.pk, carol.pk, hc(1), 'HomeSentinel with a fee', 'escrow'),
         ];
-        const potAfter = se.getPublicCommunityInfo().commonsBalance;
-        assert(traded.every(Boolean) && potAfter > potBefore && Math.round(potAfter) === Math.round(potBefore),
-            `setup: Ned pays Bob, and pays Carol with the 1.5% fee to the Commons (pot ${potBefore} → ${potAfter}, whole Beans the same)`);
+        const potAfter = se.getPublicCommunityInfo().commonsBalance_c;
+        assert(traded.every(Boolean) && potAfter > potBefore && wholeBeans(potAfter) === wholeBeans(potBefore),
+            `setup: Ned pays Bob, and pays Carol with the 1.5% fee to the Commons (pot ${potBefore} → ${potAfter} hundredths, whole Beans the same)`);
         const notMoved = await get('/api/home', alice, { 'If-None-Match': steady.etag! });
         assert(notMoved.status === 304, `another member's trades leave her tag as it was: a 304 (${notMoved.status})`);
     }
@@ -1201,12 +1214,12 @@ async function main(): Promise<void> {
         // Each card's size, and what W3 added to it (the card without W3's fields, measured the same way).
         const withoutW3: Record<string, (card: any) => unknown> = {
             deals: ({ items: _i, ...rest }) => rest,
-            enterprise: ({ keepers: _k, balance: _b, month: _m, latest: _l, ...rest }) => rest,
+            enterprise: ({ keepers: _k, balance_c: _b, month: _m, latest: _l, ...rest }) => rest,
             decide: ({ items: _i, poll: _p, ...rest }) => rest,
             groups: (g) => ({ ...g, items: g.items.map(({ last: _l, ...item }: any) => item) }),
             pulse: (p) => ({ ...p, items: p.items.slice(0, 2).map(({ publishedAt: _p, ...item }: any) => item) }),
             beans: ({ month: _m, ...rest }) => rest,
-            community: ({ listings: _l, joined7d: _j, eventsSoon: _e, commonsPot: _c, ...rest }) => rest,
+            community: ({ listings: _l, joined7d: _j, eventsSoon: _e, commonsPot_c: _c, ...rest }) => rest,
         };
         const sized = Object.entries(full.body?.cards ?? {}).map(([id, card]) => {
             const text = JSON.stringify(card);
@@ -1257,7 +1270,7 @@ async function main(): Promise<void> {
             const [fewLines, few] = [lines(), await entTimes()];
             const t0 = performance.now();
             let paid = 0;
-            for (let i = 0; i < 1000; i++) if (pay(bob, w3.ent.publicKey, 0.01, 'HomeSentinel a penny')) paid++;
+            for (let i = 0; i < 1000; i++) if (pay(bob, w3.ent.publicKey, 0.01, 'HomeSentinel a penny')) paid++;   // 1 hundredth each
             const writeMs = performance.now() - t0;
             const [manyLines, many] = [lines(), await entTimes()];
             const book = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
@@ -1299,13 +1312,13 @@ async function main(): Promise<void> {
         setOverride('beans', 'false');
         setOverride('escrow', 'false');
         const r = await get(`/api/home?${ALL}`, alice);
-        assert(r.body?.features?.beans === true && r.body?.cards?.beans?.balance === 42.5 && r.body?.cards?.deals?.open === 1,
+        assert(r.body?.features?.beans === true && r.body?.cards?.beans?.balance_c === hc(42.5) && r.body?.cards?.deals?.open === 1,
             `a local node whose ledger has moved keeps Beans and escrow on, overridden or not, and so the cards (${JSON.stringify(r.body?.cards?.beans)})`);
         setOverride('beans', null);
         setOverride('escrow', null);
         for (const id of [bob, carol]) {
-            const own = (await get(`/api/home?cards=beans`, id)).body?.cards?.beans?.balance;
-            const ledger = se.getBalance(id.pk).balance;
+            const own = (await get(`/api/home?cards=beans`, id)).body?.cards?.beans?.balance_c;
+            const ledger = se.getBalance(id.pk).balance_c;
             assert(own === ledger, `${id.name}'s Beans card is ${id.name}'s own balance, as the ledger holds it (${own} = ${ledger})`);
         }
     }
@@ -1402,7 +1415,7 @@ async function main(): Promise<void> {
             assert(names(r.text).length === 0 && !r.text.includes('/api/avatar/') && !r.text.includes('HomeSentinel Town Hall'),
                 `${who}: names nobody, no face, not the event's typed place (${names(r.text).join(',')})`);
             const m = r.body?.cards?.market;
-            assert(Array.isArray(m?.items) && m.items.length <= 3 && m.items.every((i: any) => Number.isInteger(i.distanceKm) && i.credits === undefined),
+            assert(Array.isArray(m?.items) && m.items.length <= 3 && m.items.every((i: any) => Number.isInteger(i.distanceKm) && i.price_c === undefined && i.credits === undefined),
                 `${who}: at most three listings, each a whole-km distance from its area, no price where Beans are off (${JSON.stringify(m?.items?.map((i: any) => i.distanceKm))})`);
             assert(r.body?.cards?.events?.items?.[0]?.place === null && r.body?.cards?.events?.items?.[0]?.rsvp === null, `${who}: an event with no place and no RSVP`);
             const landing = await get(`/api/global/home?lat=${BYRON.lat}&lng=${BYRON.lng}`, id);
@@ -1413,7 +1426,7 @@ async function main(): Promise<void> {
                 answer: ['generatedAt', 'profile', 'features', 'welcome', 'me', 'layout', 'cards'],
                 community: ['name', 'members', 'communities'],
                 market: ['items', 'total14d', 'more', 'examples'],
-                marketItem: ['id', 'type', 'title', 'category', 'credits', 'photoUrl', 'distanceKm'],
+                marketItem: ['id', 'type', 'title', 'category', 'price_c', 'photoUrl', 'distanceKm'],
                 events: ['items', 'radiusKm'],
                 eventItem: ['id', 'title', 'startsAt', 'endsAt', 'place', 'rsvp', 'distanceKm', 'startLocal', 'tz', 'online', 'repeat', 'repeatUntil'],
             };
@@ -1436,21 +1449,21 @@ async function main(): Promise<void> {
             `no Beans and no deals where they are off (${cardsOf(a).join(',')})`);
         // H0b, with something to hide: a balance and a deal written behind the switches' back (the ledger "never moved"
         // is kept while Beans are configured off, config/node-profile.ts), so only the cards' own gates keep them out.
-        db.prepare('UPDATE accounts SET balance_c = 42.5 WHERE public_key = ?').run(alice.pk);
+        db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(42.5), alice.pk);
         se.reconcileLedgerFromDb();
         db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES ('tx-home-global', ?, ?, ?, 0, 'requested')")
             .run(alicesOffer.id, bob.pk, alice.pk);
         const s = getProfileSwitches();
         const gated = await get(`/api/home?${ALL}`, alice);
-        assert(!s.beans && !s.escrow && se.getBalance(alice.pk).balance === 42.5, 'setup: Beans and escrow still off, Alice holding 42.5 and asked for a deal');
-        assert(gated.status === 200 && gated.body?.cards?.beans === undefined && !hasNumber(gated.text, 42.5),
+        assert(!s.beans && !s.escrow && se.getBalance(alice.pk).balance_c === hc(42.5), 'setup: Beans and escrow still off, Alice holding 42.5 and asked for a deal');
+        assert(gated.status === 200 && gated.body?.cards?.beans === undefined && !hasNumber(gated.text, hc(42.5)),
             `Beans off: no Beans card and her balance nowhere in her answer (${cardsOf(gated).join(',')})`);
         assert(gated.body?.cards?.deals === undefined && !gated.body?.cards?.needs?.items?.some((i: any) => i.kind === 'deal') && !gated.text.includes('tx-home-global'),
             'escrow off: no deals card and no deal line, though a deal waits on her');
         assert(c.find?.point === 'area' && typeof c.community?.communities === 'number' && c.community?.tradesThisMonth === undefined,
             `find from her area; the community card counts communities, no trades (${JSON.stringify(c.community)})`);
         // W3 (§2): global's figures are members, communities listed and listings; the local ones are not there.
-        assert(typeof c.community?.listings === 'number' && ['joined7d', 'eventsSoon', 'commonsPot'].every(k => !(k in (c.community ?? {}))),
+        assert(typeof c.community?.listings === 'number' && ['joined7d', 'eventsSoon', 'commonsPot_c'].every(k => !(k in (c.community ?? {}))),
             `the global community card: members, communities and listings, no week's joins, events or Commons pot (${JSON.stringify(c.community)})`);
         // F5: the worldwide community has no place of its own, wherever its server is: the sun and moon card uses her area.
         const { updateLocalConfig } = await import('./config/local-config.js');
@@ -1534,13 +1547,13 @@ async function main(): Promise<void> {
     async function openReadsRun(): Promise<void> {
         console.log('── ENFORCE_READ_AUTH=false: the route holds its own line ──');
         const unsigned = await get(`/api/home?publicKey=${alice.pk}`);
-        assert(unsigned.status === 401 && !hasNumber(unsigned.text, 42.5), `an unsigned call is still refused, 401 (got ${unsigned.status})`);
+        assert(unsigned.status === 401 && !hasNumber(unsigned.text, hc(42.5)), `an unsigned call is still refused, 401 (got ${unsigned.status})`);
         const stranger = await get(`/api/home?publicKey=${alice.pk}`, outsider);
-        assert(stranger.status === 403 && !hasNumber(stranger.text, 42.5), `a non-member is still refused, 403 (got ${stranger.status})`);
+        assert(stranger.status === 403 && !hasNumber(stranger.text, hc(42.5)), `a non-member is still refused, 403 (got ${stranger.status})`);
         const a = await get(`/api/home?${ALL}`, alice);
-        assert(a.status === 200 && a.body?.cards?.beans?.balance === 42.5, `Alice's Beans are her own 42.5 (${JSON.stringify(a.body?.cards?.beans)})`);
+        assert(a.status === 200 && a.body?.cards?.beans?.balance_c === hc(42.5), `Alice's Beans are her own 42.5 (${JSON.stringify(a.body?.cards?.beans)})`);
         const b = await get(`/api/home?${ALL}&publicKey=${alice.pk}`, bob);
-        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !hasNumber(b.text, 42.5),
+        assert(b.status === 200 && b.body?.cards?.beans?.balance_c === hc(50) && !hasNumber(b.text, hc(42.5)),
             `Bob naming Alice's key gets his own 50, never her 42.5 (${JSON.stringify(b.body?.cards?.beans)})`);
         // W3's privacy checks with read auth off: nobody else's deal, balance, month, notice or group line.
         await w3Privacy(await w3Fixtures());

@@ -280,10 +280,12 @@ async function main() {
         assert(engine.confirmationDialOn(db) === false, '…raw SQL that switches it off is the next read');
         db.prepare('DELETE FROM node_config WHERE key = ?').run(engine.CONFIRMATION_DIAL_KEY);
         assert(engine.confirmationDialOn(db) === true, '…and its removal');
-        const shown = kf.setKnownFloorSettings('owner', { confirmation: false, creditCap: 3000, knownFloor: 1500 });
-        assert(shown.confirmation === false && shown.creditCap === 3000 && shown.knownFloor === 1500, 'the owner console\'s setter: the next read says what was set');
-        assert(engine.confirmationDialOn(db) === false && engine.savedCreditCap(db) === 3000 && engine.knownFloor(db) === 1500, '…through the engine\'s reads too');
-        const back = kf.setKnownFloorSettings('owner', { confirmation: true, creditCap: 2000, knownFloor: 1000 });
+        // The cap and the known floor are whole hundredths (`*_c`): 3000 and 1500 Beans.
+        const hc = (beans: number) => Math.round(beans * 100);
+        const shown = kf.setKnownFloorSettings('owner', { confirmation: false, creditCap_c: hc(3000), knownFloor_c: hc(1500) });
+        assert(shown.confirmation === false && shown.creditCap_c === hc(3000) && shown.knownFloor_c === hc(1500), 'the owner console\'s setter: the next read says what was set');
+        assert(engine.confirmationDialOn(db) === false && engine.savedCreditCap(db) === hc(3000) && engine.knownFloor(db) === hc(1500), '…through the engine\'s reads too');
+        const back = kf.setKnownFloorSettings('owner', { confirmation: true, creditCap_c: hc(2000), knownFloor_c: hc(1000) });
         assert(back.confirmation === true && engine.confirmationDialOn(db) === true, 'switched back on: the next read');
         cli.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(engine.CONFIRMATION_DIAL_KEY, 'off');
         assert(engine.confirmationDialOn(db) === false, 'the dial switched off by another connection is the next read');

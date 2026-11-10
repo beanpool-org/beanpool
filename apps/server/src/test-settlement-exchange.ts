@@ -63,11 +63,14 @@ function throws(fn: () => unknown, re: RegExp, msg: string) {
     assert(re.test(m), `${msg} (got "${m}")`);
 }
 
-/** The ledger keeps raw floats, so every arithmetic comparison here rounds to 4dp on both sides. */
-const r4 = (n: number): number => Math.round(n * 10000) / 10000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into
+ * hundredths at the door. Every balance, amount and fee below is an integer, so every comparison is exact (`===`):
+ * there is no rounding left to do on either side.
+ */
+const hc = (beans: number): number => Math.round(beans * 100);
 const balanceOf = (pk: string): number =>
-    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
-const near = (a: number, b: number): boolean => r4(a) === r4(b);
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance_c ?? 0;
 const escrowFor = (key: string): string => `escrow_${key}`;
 
 /** Ledger rows whose memo names this settlement — how we prove a reversal ADDS entries, not removes them. */
@@ -77,28 +80,28 @@ const txnsFor = (key: string): number =>
 /** The exact amount of a settlement's fee entry, straight from the ledger row that recorded it. */
 const feeTxnAmount = (key: string): number | null =>
     (db.prepare(`SELECT amount_c FROM transactions WHERE to_pubkey='COMMONS_POOL' AND memo LIKE ?`)
-        .get(`%fee (${key})%`) as any)?.amount ?? null;
+        .get(`%fee (${key})%`) as any)?.amount_c ?? null;
 
 /**
- * The Commons row is now persisted EXACTLY, so these are equalities rather than tolerances.
+ * The Commons row is persisted EXACTLY, so the checks on it are equalities rather than tolerances.
  *
- * The earlier version of this file carried a 0.005 tolerance and justified it as pre-existing rounding in
- * `persistCommonsBalance`. That was wrong to accept: it hid a real conservation failure this very PR
- * introduces — a 0.075 fee persisted as 0.08, reloaded after a restart, then reversed by refunding 0.075,
- * leaves 0.005 minted from nothing. A tolerance in a conservation test is how that stays invisible.
+ * An earlier version of this file carried a 0.005 tolerance and justified it as rounding in
+ * `persistCommonsBalance`. That was wrong to accept: it hid a real conservation failure (a 0.075 fee persisted as
+ * 0.08, reloaded after a restart, then reversed by refunding 0.075, left 0.005 minted from nothing). With whole
+ * hundredths the fee is truncated once, the row holds that integer, and a tolerance has nothing left to hide.
  */
-const exactly = (a: number, b: number): boolean => r4(a) === r4(b);
 
+/** `balance` is the story's Beans; the member also has 500 Beans of earned credit (a credit line to buy on). */
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null);
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
+        .run(pk, callsign, hc(500), homeNodeUrl ?? null);
     // Seed the epoch at NOW, not 0. Epoch 0 is 1970, so the first transfer would apply ~56 years of
     // compound demurrage and every balance assertion below would be measuring decay instead of settlement.
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+        .run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
@@ -141,12 +144,12 @@ async function main() {
     // ── 1. Receipts are bound to their issuer ───────────────────────────────────────────────────
     const proto: SettlementReceipt = {
         key: 'r-1', issuerPeerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-1', amount: 5, committedAt: '2026-08-01T00:00:00.000Z',
+        sellerPublicKey: seller, postId: 'post-1', amount_c: hc(5), committedAt: '2026-08-01T00:00:00.000Z',
     };
     const goodSig = await signReceipt(proto, brisKey);
     assert(await verifyReceipt(proto, goodSig, BRIS) === true, 'a receipt verifies against its issuer');
 
-    assert(await verifyReceipt({ ...proto, amount: 50 }, goodSig, BRIS) === false,
+    assert(await verifyReceipt({ ...proto, amount_c: hc(50) }, goodSig, BRIS) === false,
         'inflating the amount breaks the signature');
     assert(await verifyReceipt({ ...proto, sellerPublicKey: visitor }, goodSig, BRIS) === false,
         'redirecting the seller breaks the signature');
@@ -171,36 +174,38 @@ async function main() {
     const buyerBefore = balanceOf(buyer);
     const commonsBefore = balanceOf('COMMONS_POOL');
     const KEY = 'k-cross-1';
-    const AMOUNT = 5;
+    const AMOUNT = hc(5);
     const FEE = crossNodeFee(AMOUNT);
-    assert(FEE === 0.075, 'the fee on a 5-bean crossing is 0.075 (1.5%)');
+    assert(FEE === 7,
+        `the fee on a 5-bean crossing is 0.07: 1.5% is 7.5 hundredths, truncated once, the half-hundredth staying with the buyer (got ${FEE})`);
 
     const opened = beginOutboundSettlement({
         key: KEY, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-1', amount: AMOUNT,
+        sellerPublicKey: seller, postId: 'post-1', amount_c: AMOUNT,
     });
     assert(opened.state === 'escrowed', 'a purchase opens in escrow — nothing has crossed the border');
-    assert(near(balanceOf(`escrow_${KEY}`), AMOUNT + FEE), 'escrow holds price AND fee — the buyer pays the fee on top');
-    assert(near(balanceOf(buyer), buyerBefore - AMOUNT - FEE), 'and it has left the buyer\'s spendable balance');
+    assert(opened.amount_c === AMOUNT && opened.fee_c === FEE, `the row holds the price and the fee as computed once (${opened.amount_c}, ${opened.fee_c})`);
+    assert(balanceOf(`escrow_${KEY}`) === AMOUNT + FEE, 'escrow holds price AND fee — the buyer pays the fee on top');
+    assert(balanceOf(buyer) === buyerBefore - AMOUNT - FEE, 'and it has left the buyer\'s spendable balance');
     assert(beginOutboundSettlement({
         key: KEY, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-1', amount: AMOUNT,
+        sellerPublicKey: seller, postId: 'post-1', amount_c: AMOUNT,
     }).state === 'escrowed', 'a retried purchase reuses the same hold rather than taking twice');
-    assert(near(balanceOf(`escrow_${KEY}`), AMOUNT + FEE), 'confirmed: the retry did not double-charge');
+    assert(balanceOf(`escrow_${KEY}`) === AMOUNT + FEE, 'confirmed: the retry did not double-charge');
 
     const { receipt: rc1, signature: sig1 } = await commitOutboundSettlement(KEY, BRIS, brisKey, 'https://brisbane.beanpool.org');
 
-    assert(near(balanceOf(buyer), buyerBefore - AMOUNT - FEE), 'buyer is debited price + fee (−5.075)');
-    assert(feeTxnAmount(KEY) === FEE, 'the fee entry records EXACTLY 0.075 — not a rounded stand-in');
-    assert(exactly(balanceOf('COMMONS_POOL'), commonsBefore + FEE),
-        'and it lands in OUR Commons EXACTLY — not rounded to 2dp on the way to disk');
-    assert(near(getEnergyBalance(BRIS), AMOUNT), 'the bridge carries the PRICE ONLY (+5.000), never price plus fee');
+    assert(balanceOf(buyer) === buyerBefore - AMOUNT - FEE, `buyer is debited price + fee (−5.07; got ${balanceOf(buyer) - buyerBefore} hundredths)`);
+    assert(feeTxnAmount(KEY) === FEE, `the fee entry records EXACTLY the 7 hundredths taken — not a recomputed stand-in (${feeTxnAmount(KEY)})`);
+    assert(balanceOf('COMMONS_POOL') === commonsBefore + FEE,
+        'and it lands in OUR Commons EXACTLY — the same integer on disk');
+    assert(getEnergyBalance(BRIS) === AMOUNT, 'the bridge carries the PRICE ONLY (+5), never price plus fee');
     assert(balanceOf(`escrow_${KEY}`) === 0, 'escrow closes to exactly zero — no dust left behind');
     assert(getSettlement(KEY)!.state === 'committed', 'and the row is committed BEFORE the receipt is handed out');
 
     const { receipt: rc2, signature: sig2 } = await commitOutboundSettlement(KEY, BRIS, brisKey);
     assert(sig1 === sig2, 'a re-commit returns the SAME receipt — never a second valid one for one key');
-    assert(near(getEnergyBalance(BRIS), AMOUNT), 'and writes no second set of entries');
+    assert(getEnergyBalance(BRIS) === AMOUNT, 'and writes no second set of entries');
 
     // The replayed pair must actually VERIFY. Rebuilding the receipt from the row returned the old
     // signature next to different bytes (committedAt came from a different clock, buyerHomeNode was never
@@ -220,14 +225,14 @@ async function main() {
     const RACE = 'k-race';
     beginOutboundSettlement({
         key: RACE, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-r', amount: 4,
+        sellerPublicKey: seller, postId: 'post-r', amount_c: hc(4),
     });
     const bridgeBeforeRace = getEnergyBalance(BRIS);
     const [raceA, raceB] = await Promise.all([
         commitOutboundSettlement(RACE, BRIS, brisKey, 'https://brisbane.beanpool.org'),
         commitOutboundSettlement(RACE, BRIS, brisKey, 'https://brisbane.beanpool.org'),
     ]);
-    assert(near(getEnergyBalance(BRIS), bridgeBeforeRace + 4),
+    assert(getEnergyBalance(BRIS) === bridgeBeforeRace + hc(4),
         'two overlapping commits credit the bridge ONCE — the second sees the committed row and replays it');
     assert(balanceOf(escrowFor(RACE)) === 0, 'and escrow closes to zero rather than being driven negative');
     assert(raceA.signature === raceB.signature, 'both callers get the SAME receipt, not two valid ones');
@@ -252,75 +257,85 @@ async function main() {
         'and the member-visible memo explains it in plain language');
     assert(reversalMemos.every(m => !/CAPACITY_LAPSED/.test(m)),
         'with no internal enum anywhere in what the member sees');
-    assert(near(balanceOf(buyer), buyerBefore), 'the buyer is made whole — fee refunded too, since no crossing happened');
+    assert(balanceOf(buyer) === buyerBefore, 'the buyer is made whole — fee refunded too, since no crossing happened');
     assert(getEnergyBalance(BRIS) === 0, 'the bridge is back to square');
-    assert(exactly(balanceOf('COMMONS_POOL'), commonsBefore),
+    assert(balanceOf('COMMONS_POOL') === commonsBefore,
         'and the Commons gives the fee back');
     assert(txnsFor(KEY) > txnsBeforeReversal,
         'the reversal ADDS ledger rows — deleting them would make a settled trade look like one that never happened');
     assert(reverseOutboundSettlement(KEY, 'again').state === 'reversed', 'reversing twice is an idempotent no-op');
-    assert(near(balanceOf(buyer), buyerBefore), 'confirmed: no double refund');
+    assert(balanceOf(buyer) === buyerBefore, 'confirmed: no double refund');
 
     // ── 4. An unasked hold is released, not compensated ──────────────────────────────────────────
     const K2 = 'k-cross-2';
-    beginOutboundSettlement({ key: K2, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 8 });
-    assert(balanceOf(buyer) < buyerBefore, 'the hold really took the beans');
+    beginOutboundSettlement({ key: K2, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(8) });
+    assert(balanceOf(buyer) === buyerBefore - hc(8) - crossNodeFee(hc(8)), 'the hold really took the beans: price and fee');
     abandonOutboundSettlement(K2, 'INTERRUPTED_BEFORE_ASK');
-    assert(near(balanceOf(buyer), buyerBefore), 'releasing an unasked hold refunds price + fee');
+    assert(balanceOf(buyer) === buyerBefore, 'releasing an unasked hold refunds price + fee');
     assert(getSettlement(K2)!.state === 'abandoned', 'and marks it abandoned — nothing crossed, nothing to compensate');
     throws(() => reverseOutboundSettlement(K2, 'x'), /not reversible/,
         'an abandoned hold cannot then be "reversed" — there are no entries to compensate');
 
     // ── 5. The seller's node: the cap gates the reservation (Rule 5) ──────────────────────────────
     const R1 = 'k-in-1';
+    /** A peer's purchase ask. `amount_c` is what crosses the wire: whole hundredths (`hc(5)` for 5 Beans). */
     const ask = (
-        key: string, amount: number, peerId = BRIS, sellerPublicKey = seller, buyerPublicKey = remoteBuyer,
+        key: string, amount_c: number, peerId = BRIS, sellerPublicKey = seller, buyerPublicKey = remoteBuyer,
     ) => handlePurchaseRequest({
         key, peerId, buyerPublicKey, buyerCallsign: 'Bris Buyer',
-        buyerHomeNode: 'https://brisbane.beanpool.org', sellerPublicKey, postId: 'post-9', amount,
+        buyerHomeNode: 'https://brisbane.beanpool.org', sellerPublicKey, postId: 'post-9', amount_c,
     });
 
-    let decision = ask(R1, 5);
+    let decision = ask(R1, hc(5));
     assert(decision.accepted === false && (decision as any).reason === 'no_cap_configured',
         'with no cap set, settlement is refused — the safe state is the current state (§3.2)');
     assert(!getSettlement(R1), 'and a refusal writes no row: refusing is not a commitment');
 
-    setConnectorCreditCap(BRIS_ADDR, 100);
-    decision = ask(R1, 5);
+    // The cap is counted in the bridge's own unit, whole hundredths (settlementCapacity compares it with balance_c).
+    setConnectorCreditCap(BRIS_ADDR, hc(100));
+    decision = ask(R1, hc(5));
     assert(decision.accepted === true, 'with a cap set, the reservation is accepted');
     assert(getSettlement(R1)!.state === 'reserved', 'state reserved — the seller is NOT paid yet (Rule 3c)');
     assert(new Date(getSettlement(R1)!.reservedUntil!).getTime() > Date.now(), 'and the hold has a future expiry');
 
-    const retry = ask(R1, 5);
+    const retry = ask(R1, hc(5));
     assert(retry.accepted === true && (retry as any).reservedUntil === getSettlement(R1)!.reservedUntil,
         'a retried ask returns the SAME reservation, not a second one');
 
-    const conflict = ask(R1, 5, OTHER);
+    const conflict = ask(R1, hc(5), OTHER);
     assert(conflict.accepted === false && (conflict as any).reason === 'key_conflict',
         'a key already held for another peer is refused — otherwise one peer\'s receipt pays from another\'s line');
 
-    const amountConflict = ask(R1, 500);
+    const amountConflict = ask(R1, hc(500));
     assert(amountConflict.accepted === false && (amountConflict as any).reason === 'key_conflict',
         're-asking with the same key for a BIGGER amount is refused, not answered yes at the reserved figure');
-    assert(getSettlement(R1)!.amount === 5, 'and the reservation still holds its original amount');
+    const oneMore = ask(R1, hc(5) + 1);
+    assert(oneMore.accepted === false && (oneMore as any).reason === 'key_conflict',
+        'and so is one hundredth more: the same trade is the same integer');
+    assert(getSettlement(R1)!.amount_c === hc(5), 'and the reservation still holds its original amount');
 
-    setConnectorCreditCap(OTHER_ADDR, 10);
-    const over = ask('k-in-over', 999, OTHER);
+    setConnectorCreditCap(OTHER_ADDR, hc(10));
+    const over = ask('k-in-over', hc(999), OTHER);
     assert(over.accepted === false && (over as any).reason === 'cap_exhausted', 'an amount beyond the cap is refused');
     assert(/limit/i.test((over as any).message), 'and says so in plain language, not a code');
 
-    const notLocal = ask('k-in-visitor', 5, BRIS, visitor);
+    const notLocal = ask('k-in-visitor', hc(5), BRIS, visitor);
     assert(notLocal.accepted === false && (notLocal as any).reason === 'seller_not_local',
         'we will not pay a non-member out of a bridge account — that is #102 wearing a different hat');
-    for (const bad of [0, -5, NaN, Infinity]) {
+    for (const bad of [0, -hc(5), NaN, Infinity]) {
         const r = ask(`k-in-bad-${bad}`, bad as number);
         assert(r.accepted === false && (r as any).reason === 'invalid_amount', `an amount of ${bad} is refused`);
     }
+    // A peer's amount is whole hundredths or nothing: half a hundredth is not a figure any move can carry.
+    // (Asked on OTHER's line, so a wrongly kept reservation cannot also skew BRIS's headroom checks below.)
+    const half = ask('k-in-bad-half', 0.5, OTHER);
+    assert(half.accepted === false && (half as any).reason === 'invalid_amount' && !getSettlement('k-in-bad-half'),
+        `an amount of half a hundredth is refused and writes no row (${JSON.stringify(half)})`);
 
     // A peer naming one of OUR members as its buyer is refused. Not a cosmetic check: accepting it reaches
     // registerVisitor, which would stamp a home_node_url onto that local row and — via #102's guard —
     // freeze the member out of spending on their own node. Any peer knowing a public key could do it.
-    const impersonation = ask('k-in-impersonate', 5, BRIS, seller, buyer);
+    const impersonation = ask('k-in-impersonate', hc(5), BRIS, seller, buyer);
     assert(impersonation.accepted === false && (impersonation as any).reason === 'buyer_is_local',
         'a peer cannot name one of our own members as a cross-node buyer');
     const localRow = db.prepare('SELECT home_node_url AS h FROM members WHERE public_key=?').get(buyer) as any;
@@ -336,7 +351,7 @@ async function main() {
     const sellerBefore = balanceOf(seller);
     const inReceipt: SettlementReceipt = {
         key: R1, issuerPeerId: BRIS, buyerPublicKey: remoteBuyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-9', amount: 5, committedAt: new Date().toISOString(),
+        sellerPublicKey: seller, postId: 'post-9', amount_c: hc(5), committedAt: new Date().toISOString(),
     };
     const inSig = await signReceipt(inReceipt, brisKey);
 
@@ -344,7 +359,7 @@ async function main() {
     assert(badSig.settled === false && (badSig as any).reason === 'BAD_SIGNATURE', 'an unverifiable receipt is refused');
     assert(balanceOf(seller) === sellerBefore, 'and the seller is not paid');
 
-    const inflated = { ...inReceipt, amount: 500 };
+    const inflated = { ...inReceipt, amount_c: hc(500) };
     const inflatedSig = await signReceipt(inflated, brisKey);
     const infOut = await handleReceiptDelivery({ key: R1, receipt: inflated, signature: inflatedSig, peerId: BRIS });
     assert(infOut.settled === false && (infOut as any).reason === 'RECEIPT_MISMATCH',
@@ -357,12 +372,12 @@ async function main() {
 
     const paid = await handleReceiptDelivery({ key: R1, receipt: inReceipt, signature: inSig, peerId: BRIS });
     assert(paid.settled === true, 'a matching, verified receipt pays the seller');
-    assert(near(balanceOf(seller), sellerBefore + 5), 'the seller receives EXACTLY the agreed amount — no fee deducted');
-    assert(near(getEnergyBalance(BRIS), -5), 'our bridge goes NEGATIVE by the price: that negative IS the credit we extended');
+    assert(balanceOf(seller) === sellerBefore + hc(5), 'the seller receives EXACTLY the agreed amount — no fee deducted');
+    assert(getEnergyBalance(BRIS) === -hc(5), 'our bridge goes NEGATIVE by the price: that negative IS the credit we extended');
     assert(getSettlement(R1)!.state === 'settled', 'and the settlement is closed');
 
     const redeliver = await handleReceiptDelivery({ key: R1, receipt: inReceipt, signature: inSig, peerId: BRIS });
-    assert(redeliver.settled === true && near(balanceOf(seller), sellerBefore + 5),
+    assert(redeliver.settled === true && balanceOf(seller) === sellerBefore + hc(5),
         'a redelivered receipt is an idempotent no-op — the seller is never paid twice');
 
     // ── 7. GET_RECEIPT_STATUS is scoped to the asker ──────────────────────────────────────────────
@@ -373,14 +388,14 @@ async function main() {
 
     // ── 8. CAPACITY_LAPSED: the cap is re-checked at payment, not trusted from the reservation ────
     const R2 = 'k-in-lapse';
-    setConnectorCreditCap(BRIS_ADDR, 100);
-    assert(ask(R2, 20).accepted === true, 'a fresh reservation is accepted inside the cap');
+    setConnectorCreditCap(BRIS_ADDR, hc(100));
+    assert(ask(R2, hc(20)).accepted === true, 'a fresh reservation is accepted inside the cap');
 
     // The operator drops the cap below what we have already extended while the receipt is in flight.
-    setConnectorCreditCap(BRIS_ADDR, 1);
+    setConnectorCreditCap(BRIS_ADDR, hc(1));
     const lapseReceipt: SettlementReceipt = {
         key: R2, issuerPeerId: BRIS, buyerPublicKey: remoteBuyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-9', amount: 20, committedAt: new Date().toISOString(),
+        sellerPublicKey: seller, postId: 'post-9', amount_c: hc(20), committedAt: new Date().toISOString(),
     };
     const lapseSig = await signReceipt(lapseReceipt, brisKey);
     const sellerBeforeLapse = balanceOf(seller);
@@ -393,14 +408,14 @@ async function main() {
 
     // ── 9. A lapsed reservation is released; a late receipt is refused, not honoured ──────────────
     const R3 = 'k-in-stale';
-    setConnectorCreditCap(BRIS_ADDR, 100);
-    assert(ask(R3, 3).accepted === true, 'a reservation to be left to expire');
+    setConnectorCreditCap(BRIS_ADDR, hc(100));
+    assert(ask(R3, hc(3)).accepted === true, 'a reservation to be left to expire');
     db.prepare(`UPDATE settlements SET reserved_until = '2020-01-01T00:00:00.000Z' WHERE key = ?`).run(R3);
     const sellerBeforeExpiry = balanceOf(seller);
     assert(expireStaleReservations() >= 1, 'a lapsed reservation is released');
     assert(getSettlement(R3)!.state === 'abandoned', 'marked abandoned');
     assert(balanceOf(seller) === sellerBeforeExpiry, 'and no beans moved — a reservation never held any');
-    const lateReceipt: SettlementReceipt = { ...lapseReceipt, key: R3, amount: 3 };
+    const lateReceipt: SettlementReceipt = { ...lapseReceipt, key: R3, amount_c: hc(3) };
     const late = await handleReceiptDelivery({
         key: R3, receipt: lateReceipt, signature: await signReceipt(lateReceipt, brisKey), peerId: BRIS,
     });
@@ -409,29 +424,29 @@ async function main() {
     // ── 10. Boot recovery ────────────────────────────────────────────────────────────────────────
     // An inbound row stuck at 'held' — we crashed after persisting a verified receipt, before paying.
     const R4 = 'k-in-held';
-    assert(ask(R4, 4).accepted === true, 'reserve one to strand at held');
-    const heldReceipt: SettlementReceipt = { ...lapseReceipt, key: R4, amount: 4 };
+    assert(ask(R4, hc(4)).accepted === true, 'reserve one to strand at held');
+    const heldReceipt: SettlementReceipt = { ...lapseReceipt, key: R4, amount_c: hc(4) };
     db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
         .run(await signReceipt(heldReceipt, brisKey), JSON.stringify(heldReceipt), R4);
     const sellerBeforeRecovery = balanceOf(seller);
 
     // An outbound row stuck at 'escrowed' — we took the beans and crashed before asking the peer.
     const R5 = 'k-out-stranded';
-    beginOutboundSettlement({ key: R5, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 6 });
+    beginOutboundSettlement({ key: R5, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(6) });
 
     // An outbound row stuck at 'committed' — the receipt went out and we never learned its fate.
     const R6 = 'k-out-unconfirmed';
-    beginOutboundSettlement({ key: R6, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 7 });
+    beginOutboundSettlement({ key: R6, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(7) });
     await commitOutboundSettlement(R6, OTHER, otherKey);
 
     // Captured last, so the delta below measures recovery alone and not the setup above it.
     const buyerBeforeRecovery = balanceOf(buyer);
     const rec = await recoverSettlements(async () => 'UNKNOWN');
-    assert(near(balanceOf(seller), sellerBeforeRecovery + 4), 'recovery replays the payment we already owed');
+    assert(balanceOf(seller) === sellerBeforeRecovery + hc(4), 'recovery replays the payment we already owed');
     assert(getSettlement(R4)!.state === 'settled', 'the held row is settled');
     assert(rec.paid === 1, 'and it is counted as paid');
     assert(getSettlement(R5)!.state === 'abandoned'
-        && near(balanceOf(buyer), buyerBeforeRecovery + 6 + crossNodeFee(6)),
+        && balanceOf(buyer) === buyerBeforeRecovery + hc(6) + crossNodeFee(hc(6)),
         'a hold interrupted before the ask is refunded in full rather than held hostage to a purchase nobody awaits');
     assert(getSettlement(R6)!.state === 'committed',
         'UNKNOWN leaves the committed row ALONE — reversing on ambiguity is how a settled trade gets silently undone');
@@ -441,13 +456,13 @@ async function main() {
     assert(getSettlement(R6)!.state === 'reversed', 'NOT_FOUND — and only NOT_FOUND — triggers the compensating reversal');
 
     const R7 = 'k-out-confirmed';
-    beginOutboundSettlement({ key: R7, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 2 });
+    beginOutboundSettlement({ key: R7, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(2) });
     await commitOutboundSettlement(R7, OTHER, otherKey);
     await recoverSettlements(async () => 'SETTLED');
     assert(getSettlement(R7)!.state === 'settled', 'SETTLED finalises: both bridges agree');
 
     const R8 = 'k-out-nopeer';
-    beginOutboundSettlement({ key: R8, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 2 });
+    beginOutboundSettlement({ key: R8, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(2) });
     await commitOutboundSettlement(R8, OTHER, otherKey);
     const noAsk = await recoverSettlements();
     assert(getSettlement(R8)!.state === 'committed' && noAsk.stillOpen >= 1,
@@ -463,7 +478,7 @@ async function main() {
     assert(stale.stuck.some(r => r.key === R8), 'recovery surfaces it for an operator');
     assert(getSettlement(R8)!.state === 'committed',
         'and does NOT auto-reverse it — an ambiguous crossing is a dispute between two communities, not a guess');
-    assert(stale.stuck[0].amount === 2 && !!stale.stuck[0].peerId,
+    assert(stale.stuck[0].amount_c === hc(2) && !!stale.stuck[0].peerId,
         'the report carries what an operator needs: the amount at stake and which community to talk to');
     finaliseOutboundSettlement(R8);
     assert(stuckSettlements().every(r => r.key !== R8), 'once resolved it stops being reported');
@@ -472,24 +487,24 @@ async function main() {
     // `reversed` is terminal, so latching a refusal during recovery would mean restoring the cap later
     // could never pay the seller — we would owe someone with no way left to pay them.
     const R9 = 'k-in-maintenance';
-    setConnectorCreditCap(BRIS_ADDR, 1000);
-    assert(ask(R9, 6).accepted === true, 'a reservation made while the cap is healthy');
-    const r9Receipt: SettlementReceipt = { ...lapseReceipt, key: R9, amount: 6 };
+    setConnectorCreditCap(BRIS_ADDR, hc(1000));
+    assert(ask(R9, hc(6)).accepted === true, 'a reservation made while the cap is healthy');
+    const r9Receipt: SettlementReceipt = { ...lapseReceipt, key: R9, amount_c: hc(6) };
     // Both the signature AND the payload: recovery re-verifies before paying, so a row carrying only a
     // signature is (correctly) not payable — `committedAt` would live nowhere and could not be rebuilt.
     db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
         .run(await signReceipt(r9Receipt, brisKey), JSON.stringify(r9Receipt), R9);
 
-    setConnectorCreditCap(BRIS_ADDR, 1);            // operator lowers it during maintenance
+    setConnectorCreditCap(BRIS_ADDR, hc(1));        // operator lowers it during maintenance
     const recoverUnderLowCap = await recoverSettlements();
     assert(getSettlement(R9)!.state === 'held',
         'recovery leaves it HELD rather than latching a temporary cap change into a terminal reversal');
     assert(recoverUnderLowCap.stillOpen >= 1, 'and reports it as still open, to retry');
 
-    setConnectorCreditCap(BRIS_ADDR, 1000);         // ...and restores it
+    setConnectorCreditCap(BRIS_ADDR, hc(1000));     // ...and restores it
     const sellerBeforeRestore = balanceOf(seller);
     await recoverSettlements();
-    assert(getSettlement(R9)!.state === 'settled' && near(balanceOf(seller), sellerBeforeRestore + 6),
+    assert(getSettlement(R9)!.state === 'settled' && balanceOf(seller) === sellerBeforeRestore + hc(6),
         'once the cap is restored the seller is paid — the receipt was never thrown away');
 
     // Live delivery is the opposite: a peer is waiting on an answer, so the refusal IS latched (§2.5) —
@@ -501,43 +516,46 @@ async function main() {
     // the latter. Without a resync the two disagree permanently and every later read is served the wrong
     // number. Forced here by making the state transition illegal at the moment the ledger has already moved.
     const R10 = 'k-rollback';
-    beginOutboundSettlement({ key: R10, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 3 });
+    beginOutboundSettlement({ key: R10, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: hc(3) });
     const buyerBeforeFailedCommit = balanceOf(buyer);
     const bridgeBeforeFailedCommit = getEnergyBalance(OTHER);
     db.prepare(`UPDATE settlements SET state='settled' WHERE key=?`).run(R10);   // commit is now illegal
     let threw = false;
     try { await commitOutboundSettlement(R10, OTHER, otherKey); } catch { threw = true; }
     assert(threw, 'committing into an illegal state throws rather than writing');
-    assert(near(balanceOf(buyer), buyerBeforeFailedCommit) && near(getEnergyBalance(OTHER), bridgeBeforeFailedCommit),
+    assert(balanceOf(buyer) === buyerBeforeFailedCommit && getEnergyBalance(OTHER) === bridgeBeforeFailedCommit,
         'and the DB rows are unchanged');
-    assert(near(ledger.getAccount(escrowFor(R10)).balance, balanceOf(escrowFor(R10))),
+    assert(ledger.getAccount(escrowFor(R10)).balance_c === balanceOf(escrowFor(R10)),
         'and the IN-MEMORY ledger agrees with them — a rollback resyncs memory instead of leaving it ahead');
 
     // ── 10e. A reservation actually REDUCES headroom (§2.5) ───────────────────────────────────────
     // "A reservation is a hint that reduces headroom" was prose only: capacity read the bridge balance and
     // ignored open reservations, so N concurrent purchases were each measured against the same full
     // headroom, all accepted, and their receipts then predictably lapsed AFTER their buyers had committed.
-    // Derived from the EXACT balance: headroom is now `cap + balance − reserved`, and the display helper
-    // rounds to 2dp, which would leave the target headroom slightly off.
-    setConnectorCreditCap(BRIS_ADDR, r4(-energyBalanceExact(BRIS)) + 10);   // exactly 10 of headroom
-    assert(ask('k-res-a', 7).accepted === true, 'the first purchase fits inside the headroom');
-    const second = ask('k-res-b', 7);
+    // Headroom is `cap + balance − reserved`, in whole hundredths, so the target headroom is exact.
+    setConnectorCreditCap(BRIS_ADDR, -energyBalanceExact(BRIS) + hc(10));   // exactly 10 of headroom
+    assert(ask('k-res-a', hc(7)).accepted === true, 'the first purchase fits inside the headroom');
+    const second = ask('k-res-b', hc(7));
     assert(second.accepted === false && (second as any).reason === 'cap_exhausted',
         'a second purchase that only fits if the first is ignored is REFUSED, not accepted then lapsed later');
-    assert(ask('k-res-c', 3).accepted === true, 'while one that fits in what actually remains is accepted');
+    assert(ask('k-res-c', hc(3)).accepted === true, 'while one that fits in what actually remains is accepted');
 
-    // ── 10f. The cap is enforced on the UNROUNDED balance ─────────────────────────────────────────
-    // getEnergyBalance rounds to 2dp but prices are carried at 4dp, so an exposure of 99.994 read as 99.99
-    // let another 0.01 through against a 100 cap — past the number the operator chose.
+    // ── 10f. The cap is enforced on the exact balance, to the last hundredth ──────────────────────
+    // Was: getEnergyBalance rounded to 2dp while prices were carried at 4dp, so an exposure of 99.994 read as
+    // 99.99 let another 0.01 through against a 100 cap. With whole hundredths there is nothing to round: the
+    // balance shown IS the stored one, and the cap admits exactly what fits, not one hundredth more.
     const FRAC = '12D3KooWFractionalPeer';
     addConnector(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 'peer', 'Frac', 'https://frac.beanpool.org');
     ensureBridgeAccount(FRAC);
-    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(-99.994, bridgeAccountId(FRAC));
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(-hc(99.99), bridgeAccountId(FRAC));
     reconcileLedgerFromDb();
-    setConnectorCreditCap(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 100);
-    assert(getEnergyBalance(FRAC) === -99.99, 'the DISPLAY balance rounds to 2dp, as it should');
-    assert(settlementCapacityForPeer(FRAC, 0.01).ok === false,
-        'but enforcement uses the stored value, so the last 0.01 against a 100 cap is refused');
+    setConnectorCreditCap(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, hc(100));
+    assert(getEnergyBalance(FRAC) === -hc(99.99) && getEnergyBalance(FRAC) === energyBalanceExact(FRAC),
+        `the balance shown is the stored one, whole hundredths, nothing rounded (${getEnergyBalance(FRAC)})`);
+    assert(settlementCapacityForPeer(FRAC, 1).ok === true,
+        'the last hundredth against a 100 cap fits exactly');
+    assert(settlementCapacityForPeer(FRAC, 2).ok === false,
+        'and one hundredth more is refused — past the number the operator chose');
 
     // ── 10g. The cap must not block the REBALANCING direction (§3.2) ──────────────────────────────
     // The cap bounds how far NEGATIVE the bridge may go. Measuring headroom from "credit extended so far"
@@ -548,18 +566,18 @@ async function main() {
     const REBAL_ADDR = `/dns4/rebal.beanpool.org/tcp/4001/p2p/${REBAL}`;
     addConnector(REBAL_ADDR, 'peer', 'Rebalance', 'https://rebal.beanpool.org');
     ensureBridgeAccount(REBAL);
-    db.prepare('UPDATE accounts SET balance_c = 5 WHERE public_key = ?').run(bridgeAccountId(REBAL));
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(5), bridgeAccountId(REBAL));
     reconcileLedgerFromDb();
     setConnectorCreditCap(REBAL_ADDR, 0);
 
-    const rebal = settlementCapacityForPeer(REBAL, 5);
+    const rebal = settlementCapacityForPeer(REBAL, hc(5));
     assert(rebal.ok === true, 'a +5 position with a ZERO cap still allows a 5-bean payment — it ends at zero');
-    assert(rebal.ok === true && rebal.headroom === 5, 'headroom is measured from the signed balance, not from zero');
-    assert(settlementCapacityForPeer(REBAL, 5.01).ok === false,
-        'but a hair beyond that WOULD extend credit past the cap, so it is refused');
-    setConnectorCreditCap(REBAL_ADDR, 10);
-    assert(settlementCapacityForPeer(REBAL, 15).ok === true, 'and a cap of 10 on a +5 position allows 15');
-    assert(settlementCapacityForPeer(REBAL, 15.01).ok === false, 'while 15.01 is one hair too far');
+    assert(rebal.ok === true && rebal.headroom === hc(5), 'headroom is measured from the signed balance, not from zero');
+    assert(settlementCapacityForPeer(REBAL, hc(5.01)).ok === false,
+        'but a hair beyond that (one hundredth) WOULD extend credit past the cap, so it is refused');
+    setConnectorCreditCap(REBAL_ADDR, hc(10));
+    assert(settlementCapacityForPeer(REBAL, hc(15)).ok === true, 'and a cap of 10 on a +5 position allows 15');
+    assert(settlementCapacityForPeer(REBAL, hc(15.01)).ok === false, 'while 15.01 is one hair too far');
 
     // ── 10h. A held receipt is re-verifiable after a reboot ───────────────────────────────────────
     // §2.6 says the persisted signature is the evidence authorising the payment and stays checkable in an
@@ -578,9 +596,9 @@ async function main() {
     // signature and no payload. Recovery now refuses to pay what it cannot re-verify — so without repair
     // that row would be rejected FOREVER, an in-flight trade made permanently unpayable by an upgrade.
     const LEGACY = 'k-legacy-held';
-    setConnectorCreditCap(BRIS_ADDR, 1000);
-    assert(ask(LEGACY, 3).accepted === true, 'a reservation to age into the legacy shape');
-    const legacyReceipt: SettlementReceipt = { ...lapseReceipt, key: LEGACY, amount: 3 };
+    setConnectorCreditCap(BRIS_ADDR, hc(1000));
+    assert(ask(LEGACY, hc(3)).accepted === true, 'a reservation to age into the legacy shape');
+    const legacyReceipt: SettlementReceipt = { ...lapseReceipt, key: LEGACY, amount_c: hc(3) };
     const legacySig = await signReceipt(legacyReceipt, brisKey);
     // Signature only — exactly what an older build persisted.
     db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=NULL WHERE key=?`)
@@ -595,24 +613,24 @@ async function main() {
     });
     assert(repaired.settled === true, 'a redelivery settles it');
     assert(!!getSettlement(LEGACY)!.receiptPayload, 'and repairs the missing payload while it has it in hand');
-    assert(near(balanceOf(seller), sellerBeforeRepair + 3), 'so the seller is finally paid');
+    assert(balanceOf(seller) === sellerBeforeRepair + hc(3), 'so the seller is finally paid');
 
     // ── 10h3. A stored receipt must match the ROW, not merely be signed ───────────────────────────
     // Payment is made from the ROW's amount and seller. A signature only proves who signed — so if the row
     // and its receipt disagree, a genuinely signed receipt authorises terms nobody agreed to.
     const DRIFT = 'k-drift';
-    assert(ask(DRIFT, 5).accepted === true, 'a reservation whose row we will then tamper with');
-    const driftReceipt: SettlementReceipt = { ...lapseReceipt, key: DRIFT, amount: 5 };
+    assert(ask(DRIFT, hc(5)).accepted === true, 'a reservation whose row we will then tamper with');
+    const driftReceipt: SettlementReceipt = { ...lapseReceipt, key: DRIFT, amount_c: hc(5) };
     db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
         .run(await signReceipt(driftReceipt, brisKey), JSON.stringify(driftReceipt), DRIFT);
     assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === true, 'row and receipt agree, so it verifies');
 
-    db.prepare(`UPDATE settlements SET amount_c = 500 WHERE key = ?`).run(DRIFT);   // row drifts from receipt
+    db.prepare(`UPDATE settlements SET amount_c = ? WHERE key = ?`).run(hc(500), DRIFT);   // row drifts from receipt
     assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === false,
         'but once the row says 500 and the signed receipt says 5, verification FAILS — the signature is still valid');
     const sellerBeforeDrift = balanceOf(seller);
     assert((await recoverSettlements()).paid === 0, 'so recovery does not pay it');
-    assert(near(balanceOf(seller), sellerBeforeDrift), 'and the seller is not paid 500 on a receipt for 5');
+    assert(balanceOf(seller) === sellerBeforeDrift, 'and the seller is not paid 500 on a receipt for 5');
 
     // ── 10h4. A cross-node buyer is never registered as a LOCAL member ────────────────────────────
     // registerVisitor(pk, callsign, undefined) writes home_node_url = NULL, which is indistinguishable from
@@ -622,7 +640,7 @@ async function main() {
     const orphanBuyer = crypto.randomBytes(32).toString('hex');
     const noHome = handlePurchaseRequest({
         key: NOHOME, peerId: BRIS, buyerPublicKey: orphanBuyer, buyerCallsign: 'No Home',
-        buyerHomeNode: '   ', sellerPublicKey: seller, postId: 'post-9', amount: 2,
+        buyerHomeNode: '   ', sellerPublicKey: seller, postId: 'post-9', amount_c: hc(2),
     });
     assert(noHome.accepted === true, 'a blank home node falls back to the peer\'s own configured URL');
     const orphanRow = db.prepare('SELECT home_node_url AS h FROM members WHERE public_key=?').get(orphanBuyer) as any;
@@ -638,9 +656,9 @@ async function main() {
     // A row deliberately left IN FLIGHT at snapshot time — the case that matters, since a settled row needs
     // nothing from the replica. (R1/R4 have since been resolved by the recovery sections above.)
     const INFLIGHT = 'k-snapshot-held';
-    setConnectorCreditCap(BRIS_ADDR, 1000);
-    assert(ask(INFLIGHT, 9).accepted === true, 'a reservation to leave in flight across the snapshot');
-    const snapReceipt: SettlementReceipt = { ...lapseReceipt, key: INFLIGHT, amount: 9 };
+    setConnectorCreditCap(BRIS_ADDR, hc(1000));
+    assert(ask(INFLIGHT, hc(9)).accepted === true, 'a reservation to leave in flight across the snapshot');
+    const snapReceipt: SettlementReceipt = { ...lapseReceipt, key: INFLIGHT, amount_c: hc(9) };
     db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
         .run(await signReceipt(snapReceipt, brisKey), JSON.stringify(snapReceipt), INFLIGHT);
 
@@ -653,10 +671,10 @@ async function main() {
     const snapHeld = snapshot.settlements!.find(s => s.key === INFLIGHT)!;
     assert(!!snapHeld.receiptPayload && !!snapHeld.receipt,
         'and carries the receipt a promoted node needs in order to pay its seller');
-    assert(snapHeld.state === 'held' && snapHeld.direction === 'inbound' && snapHeld.amount === 9,
+    assert(snapHeld.state === 'held' && snapHeld.direction === 'inbound' && snapHeld.amount_c === hc(9),
         'with the state, direction and amount that decide what recovery does with it');
-    assert(snapshot.commonsBalance === undefined || r4(snapshot.commonsBalance) === r4(balanceOf('COMMONS_POOL')),
-        'and the snapshot Commons figure is exact, so a replica can balance against the primary');
+    assert(snapshot.commonsBalance_c === undefined || snapshot.commonsBalance_c === balanceOf('COMMONS_POOL'),
+        `and the snapshot Commons figure is exact, so a replica can balance against the primary (${snapshot.commonsBalance_c} vs ${balanceOf('COMMONS_POOL')})`);
 
     // ── 11. The pair nets to zero (§2.1) ─────────────────────────────────────────────────────────
     // Both halves of one crossing, run against this single database. That proves the ARITHMETIC of the
@@ -666,38 +684,39 @@ async function main() {
     const b0 = balanceOf(buyer), s0 = balanceOf(seller), c0 = balanceOf('COMMONS_POOL');
     const outBridge0 = getEnergyBalance(OTHER), inBridge0 = getEnergyBalance(BRIS);
 
-    setConnectorCreditCap(BRIS_ADDR, 1000);
-    beginOutboundSettlement({ key: PAIR_OUT, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'p', amount: 5 });
+    setConnectorCreditCap(BRIS_ADDR, hc(1000));
+    beginOutboundSettlement({ key: PAIR_OUT, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'p', amount_c: hc(5) });
     await commitOutboundSettlement(PAIR_OUT, OTHER, otherKey);
 
-    assert(ask(PAIR_IN, 5).accepted === true, 'the mirror-image reservation on the other side');
+    assert(ask(PAIR_IN, hc(5)).accepted === true, 'the mirror-image reservation on the other side');
     const pairReceipt: SettlementReceipt = {
         key: PAIR_IN, issuerPeerId: BRIS, buyerPublicKey: remoteBuyer, buyerHomeNode: 'https://brisbane.beanpool.org',
-        sellerPublicKey: seller, postId: 'post-9', amount: 5, committedAt: new Date().toISOString(),
+        sellerPublicKey: seller, postId: 'post-9', amount_c: hc(5), committedAt: new Date().toISOString(),
     };
     assert((await handleReceiptDelivery({
         key: PAIR_IN, receipt: pairReceipt, signature: await signReceipt(pairReceipt, brisKey), peerId: BRIS,
     })).settled === true, 'and it settles');
 
-    const dBuyer = r4(balanceOf(buyer) - b0);
-    const dSeller = r4(balanceOf(seller) - s0);
-    const dCommons = r4(balanceOf('COMMONS_POOL') - c0);
-    const dOutBridge = r4(getEnergyBalance(OTHER) - outBridge0);
-    const dInBridge = r4(getEnergyBalance(BRIS) - inBridge0);
+    const dBuyer = balanceOf(buyer) - b0;
+    const dSeller = balanceOf(seller) - s0;
+    const dCommons = balanceOf('COMMONS_POOL') - c0;
+    const dOutBridge = getEnergyBalance(OTHER) - outBridge0;
+    const dInBridge = getEnergyBalance(BRIS) - inBridge0;
+    const pairFee = feeTxnAmount(PAIR_OUT);
 
-    assert(dBuyer === -5.075, `buyer −5.075 (got ${dBuyer})`);
-    assert(feeTxnAmount(PAIR_OUT) === 0.075, 'the fee entry is exactly +0.075 to the Commons');
-    assert(dOutBridge === 5, `bridge on the buyer's side +5.000 (got ${dOutBridge})`);
-    assert(dSeller === 5, `seller +5.000 (got ${dSeller})`);
-    assert(dInBridge === -5, `bridge on the seller's side −5.000 (got ${dInBridge})`);
+    assert(dBuyer === -(hc(5) + 7), `buyer −5.07 (got ${dBuyer} hundredths)`);
+    assert(pairFee === 7, `the fee entry is exactly +0.07 to the Commons (got ${pairFee})`);
+    assert(dOutBridge === hc(5), `bridge on the buyer's side +5 (got ${dOutBridge} hundredths)`);
+    assert(dSeller === hc(5), `seller +5 (got ${dSeller} hundredths)`);
+    assert(dInBridge === -hc(5), `bridge on the seller's side −5 (got ${dInBridge} hundredths)`);
     assert(dOutBridge + dInBridge === 0, 'the two bridge rows are equal and opposite — drift here is a reconciliation failure');
 
-    // The whole crossing nets to zero. Measured with the EXACT fee from its ledger entry rather than the
-    // Commons row's 2dp delta, so this asserts conservation of beans and not the persistence precision.
-    assert(r4(dBuyer + 0.075 + dOutBridge + dSeller + dInBridge) === 0,
+    // The whole crossing nets to zero. Measured with the EXACT fee from its ledger entry, so this asserts
+    // conservation of beans: three integers leave the buyer and land on the bridge, the seller and the Commons.
+    assert(dBuyer + (pairFee ?? NaN) + dOutBridge + dSeller + dInBridge === 0,
         'and the whole crossing nets to exactly zero — no beans created, none destroyed');
-    assert(exactly(dCommons, 0.075),
-        'with the persisted Commons figure agreeing exactly');
+    assert(dCommons === 7,
+        `with the persisted Commons figure agreeing exactly (${dCommons})`);
 
     // ── 12. Rule 4: foreign exposure is reported, and enforced by the escrow floor check ──────────
     const exposure = memberForeignExposure(buyer);

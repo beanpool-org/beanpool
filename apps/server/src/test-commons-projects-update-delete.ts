@@ -68,6 +68,9 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** The story's figures are Beans; a project's requested amount and goal are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 async function main() {
     console.log('Running commons projects update and delete integration tests...\n');
 
@@ -83,7 +86,7 @@ async function main() {
     const attacker = makeMember('attacker');
 
     // Create a commons project
-    const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', 500);
+    const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', hc(500));
     assert(project !== null, 'Project created successfully');
     const projectId = project!.id;
 
@@ -104,14 +107,14 @@ async function main() {
     const projectInTreasuries = memberTreasuriesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
     assert(!!projectInTreasuries, 'Another member sees live project in /api/treasuries');
     assert(projectInTreasuries?.lifecycle === 'bounded', 'Project has lifecycle bounded in /api/treasuries');
-    assert(projectInTreasuries?.goalAmount === 500, 'Project has goalAmount 500 in /api/treasuries');
+    assert(projectInTreasuries?.goalAmount_c === hc(500), `Project has goalAmount 500 in /api/treasuries (goalAmount_c ${projectInTreasuries?.goalAmount_c})`);
 
     const memberEnterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
     const projectInEnterprises = memberEnterprisesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
     assert(!!projectInEnterprises, 'Another member sees live project in /api/enterprises');
 
     // 0c. Suspended project shows only to its keepers, not other members
-    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', 200);
+    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', hc(200));
     assert(suspProj !== null, 'Suspended project created');
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspProj!.id);
 
@@ -126,7 +129,7 @@ async function main() {
     assert(keeperSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/enterprises');
 
     // 0c2. An admin-rejected project (adminRejectProject sets status 'rejected') shows only to its keepers, as a suspended one
-    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', 200);
+    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', hc(200));
     assert(rejProj !== null, 'Rejected project created');
     db.prepare("UPDATE members SET status = 'rejected', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(rejProj!.id);
     db.prepare("UPDATE members SET lat = -28.55, lng = 153.5 WHERE public_key = ?").run(suspProj!.id);
@@ -135,7 +138,7 @@ async function main() {
     assert((await signedFetch('GET', '/api/treasuries', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/treasuries');
     assert((await signedFetch('GET', '/api/enterprises', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/enterprises');
 
-    const disProj = createProject(proposer.pubKeyHex, 'Disabled Project', 'Dismissed as disabled', 200);
+    const disProj = createProject(proposer.pubKeyHex, 'Disabled Project', 'Dismissed as disabled', hc(200));
     assert(disProj !== null, 'Disabled project created');
     db.prepare("UPDATE members SET status = 'disabled', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(disProj!.id);
 
@@ -205,7 +208,7 @@ async function main() {
         projectId,
         title: 'Hacked Title',
         description: 'Hacked Description',
-        requestedAmount: 1000,
+        requestedAmount_c: hc(1000),
     });
     assert(nonOwnerUpdateRes.status === 400, `Non-owner update returns 400 (got ${nonOwnerUpdateRes.status})`);
 
@@ -213,7 +216,7 @@ async function main() {
     const missingFieldsUpdateRes = await signedFetch('POST', '/api/commons/projects/update', proposer, {
         proposerPubkey: proposer.pubKeyHex,
         projectId,
-        // missing title and requestedAmount
+        // missing title and requestedAmount_c
     });
     assert(missingFieldsUpdateRes.status === 400, `Missing fields update returns 400 (got ${missingFieldsUpdateRes.status})`);
 
@@ -223,7 +226,7 @@ async function main() {
         projectId,
         title: 'Library & Media Center Renovation',
         description: 'Updated funding for books, seats and digital displays',
-        requestedAmount: 600,
+        requestedAmount_c: hc(600),
     });
     assert(ownerUpdateRes.status === 200, `Owner update returns 200 (got ${ownerUpdateRes.status})`);
     assert(ownerUpdateRes.body?.success === true, 'Update response indicates success: true');
@@ -232,7 +235,7 @@ async function main() {
     const allProjectsAfterUpdate = getAllProjects();
     const updatedProj = allProjectsAfterUpdate.find(p => p.id === projectId);
     assert(updatedProj?.title === 'Library & Media Center Renovation', 'Project title updated in state engine');
-    assert(updatedProj?.requestedAmount === 600, 'Project requestedAmount updated in state engine');
+    assert(updatedProj?.requestedAmount_c === hc(600), 'Project requestedAmount updated in state engine');
 
     // 4. Test POST /api/commons/projects/delete: Rejects non-owner delete
     const nonOwnerDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', attacker, {

@@ -41,7 +41,7 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
+    inviteForNamesEntry, revokeEntryInvite, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow, type VouchersBlockBody,
 } from '../utils/names-list';
 import { VoucherCard } from '../components/VoucherCard';
@@ -54,7 +54,7 @@ import {
     DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
-import { formatNumber, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
+import { formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
@@ -132,6 +132,8 @@ export default function NamesListScreen() {
     const [scanning, setScanning] = useState(false);
     // Invites bound to entries (community modes slice 3): the node's list, and the one just made, shown as a QR code.
     const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
+    /** This admin's own unused codes by entry id (GET /api/invite/mine, theirs alone), for Share again on an entry's line (I2). */
+    const [myEntryCodes, setMyEntryCodes] = useState<ReadonlyMap<string, string>>(new Map());
     const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
     /** The opening paragraph: its first sentence, the rest behind More (the rehearsal's 320dp finding). */
@@ -207,6 +209,7 @@ export default function NamesListScreen() {
     const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened, vouchers) : []), [opened, vouchers]);
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
     const isCommittee = voucherBlock !== null;
+    const amOwner = !!state?.admins.some((a) => a.pubkey === identity?.publicKey && a.role === 'owner');
     const filteredRoleVouchers = useMemo(() => filterRoleVouchers(roleVouchersWithoutEntry(vouchers, entries), query), [vouchers, entries, query]);
     const filteredShown = useMemo(() => {
         if (filter === 'vouchers') {
@@ -432,6 +435,16 @@ export default function NamesListScreen() {
         if (!anchor || !identity) return;
         const r = await readBoundInvites(anchor, identity);
         if (r.ok) setBoundInvites(r.value.invites);
+        // The bound invites name no code, not even to their maker; the maker's own list does (Share again, I2).
+        try {
+            const res = await fetch(`${anchor}/api/invite/mine/${identity.publicKey}`);
+            const body = res.ok ? await res.json() : null;
+            const mine = new Map<string, string>();
+            for (const i of (body?.invites ?? []) as { code: string; usedBy?: string | null; namesEntryId?: string | null }[]) {
+                if (i.namesEntryId && !i.usedBy) mine.set(i.namesEntryId, i.code);
+            }
+            setMyEntryCodes(mine);
+        } catch { /* Share again waits for the next read */ }
     }, [anchor, identity]);
     useEffect(() => { if (opened) refreshBoundInvites(); }, [opened, refreshBoundInvites]);
 
@@ -509,6 +522,24 @@ export default function NamesListScreen() {
         if (!made.ok) { setError(made.message); return; }
         setInvited({ name: entry.text?.name ?? 'this person', code: made.code, offline: made.offline });
         if (!made.offline) refreshBoundInvites();
+    };
+
+    /** Revoke the invite out for this entry (I2): its maker or an owner, asked first with the design's words. */
+    const revokeOut = (entry: OpenedEntry) => {
+        if (!anchor || !identity) return;
+        const words = inviteRevokeAsk({ namesEntryId: entry.id }, entry.text?.name);
+        Alert.alert(words.title, words.body, [
+            { text: inviteRevokeWords.cancel(), style: 'cancel' },
+            {
+                text: inviteRevokeWords.revoke(), style: 'destructive', onPress: async () => {
+                    if (!begin()) return;
+                    const done = await revokeEntryInvite(anchor, identity, entry.id);
+                    finish();
+                    if (!done.ok) { setError(done.message); return; }
+                    await refreshBoundInvites();
+                },
+            },
+        ]);
     };
 
     const second = async (entry: OpenedEntry) => {
@@ -1060,6 +1091,12 @@ export default function NamesListScreen() {
                     const history = debtsOfEntry(debts, e.id);
                     const open = openDebtOf(debts, e.id);
                     const invite = invitesForEntry(boundInvites, e.id)[0];
+                    // An invite out for this entry (I2): who made it and the days it has left; Share again for its maker, Revoke
+                    // for its maker or an owner, and no second Invite this person while it lives (the node refuses one).
+                    const out = invite ? inviteOutLine(invite, callsignOf(invite.createdBy), Date.now()) : null;
+                    const mineOut = !!out && invite?.createdBy === identity?.publicKey;
+                    const shareAgainCode = mineOut ? myEntryCodes.get(e.id) : undefined;
+                    const mayRevokeOut = !!out && (mineOut || amOwner);
                     return (
                         <View key={e.id} style={styles.entry}>
                             {e.text ? (
@@ -1085,7 +1122,9 @@ export default function NamesListScreen() {
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : t('No member confirmed against it')}</Text>
                             {/* Its newest bound invite: on an unconfirmed entry, always; on a confirmed or waiting one, when the invite
                                 promised a voucher budget, so what became of it is seen (#2970's review, note 2). */}
-                            {invite && showsBoundInviteLine(invite, !!e.confirmation) ? (
+                            {out ? (
+                                <Text style={styles.entryMeta} testID="names-entry-invite-out">{out}</Text>
+                            ) : invite && showsBoundInviteLine(invite, !!e.confirmation) ? (
                                 <Text style={styles.entryMeta}>{boundInviteLine(invite, (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
                             ) : null}
                             {history.map((d) => (
@@ -1100,7 +1139,9 @@ export default function NamesListScreen() {
                                     }, 'small')
                                     : null}
                                 {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
-                                {!e.confirmation && e.text && !open ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
+                                {shareAgainCode && e.text ? btn(t('Share again'), () => setInvited({ name: e.text!.name, code: shareAgainCode, offline: false }), 'small') : null}
+                                {mayRevokeOut ? btn(inviteRevokeWords.revoke(), () => revokeOut(e), 'small') : null}
+                                {!e.confirmation && e.text && !open && !out ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
                                 {!e.confirmation && e.text && !open ? btn(t('Confirm a member'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {!e.confirmation && e.text && open && !open.repaying_pubkey
                                     ? btn(t('Work it off'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}

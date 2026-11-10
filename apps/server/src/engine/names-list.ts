@@ -553,7 +553,7 @@ function assertNoInviteOut(actor: string, entryId: string, replace: boolean): vo
         const maker = out[0].createdBy;
         const callsign = getMember(db, maker)?.callsign ?? '';
         const daysLeft = daysLeftOf(out[0].createdAt);
-        throw new NamesListError(409, 'invite_out', tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first, or replace it with a new one.', { callsign, days: daysLeft }),
+        throw new NamesListError(409, 'invite_out', tr('An invite for this person is out already, made by @{callsign}, with {days} days left. Revoke it first to make a new one.', { callsign, days: daysLeft }),
             { madeBy: maker, madeByCallsign: callsign, daysLeft });
     }
     if (out.some((o) => o.createdBy !== actor) && !isNodeOwner(actor)) {

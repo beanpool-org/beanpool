@@ -107,6 +107,48 @@ export function inviteMadeTitle(who: string | null | undefined): string {
     return name ? t('Invite for {name}', { name }) : t('Invite made');
 }
 
+/**
+ * Revoke's confirm (invites-vouching I2, DESIGN §3 ask 3): "Revoke this invite? Whoever has the link can't use it. Dee Dee's
+ * name stays on the names list, not confirmed." The names-list sentence only for an invite bound to an entry; its name where
+ * this device opened it, else "The name" (the web, which holds no list key).
+ */
+export function inviteRevokeAsk(inv: Pick<InviteRowSource, 'namesEntryId'>, name?: string | null): { title: string; body: string } {
+    const who = name?.trim();
+    const body = !inv.namesEntryId
+        ? t('Whoever has the link can’t use it.')
+        : who
+            ? t('Whoever has the link can’t use it. {name}’s name stays on the names list, not confirmed.', { name: who })
+            : t('Whoever has the link can’t use it. The name stays on the names list, not confirmed.');
+    return { title: t('Revoke this invite?'), body };
+}
+
+/** The words on Revoke's buttons and its outcome. */
+export const inviteRevokeWords = {
+    revoke: (): string => t('Revoke'),
+    cancel: (): string => t('Cancel'),
+    revoking: (): string => t('Revoking…'),
+    failed: (): string => t('Couldn’t revoke this invite. Check your connection and try again.'),
+};
+
+/**
+ * Whether Revoke is offered on an invite: one the community holds (a code it made), unused. An offline ticket (`BP-…`) is
+ * made on the phone and first reaches the community when someone joins with it, so the community has nothing to revoke.
+ */
+export function inviteRevocable(inv: Pick<InviteRowSource, 'code' | 'usedBy'>): boolean {
+    return !inv.usedBy && !inv.code.startsWith('BP-');
+}
+
+/**
+ * A names-list entry's line while an invite for it is out (invites-vouching I2): "Invite out by @marty · 23 days left".
+ * Null once it is used or past its 30 days. `maker` is the callsign, without the @.
+ */
+export function inviteOutLine(inv: Pick<InviteRowSource, 'createdAt' | 'expiresAt' | 'usedBy'>, maker: string | null | undefined, now: number): string | null {
+    if (inv.usedBy || inviteLapsed(inv, now)) return null;
+    const left = inviteTimeLeft(inv, now);
+    const by = maker?.trim() ? t('Invite out by @{callsign}', { callsign: maker.trim() }) : t('Invite out');
+    return left ? `${by} · ${left.text}` : by;
+}
+
 /** A folded section's heading: "Pending (3)", "Joined (2)". */
 export const pendingHeading = (count: number): string => t('Pending ({count})', { count: formatCount(count) });
 export const joinedHeading = (count: number): string => t('Joined ({count})', { count: formatCount(count) });

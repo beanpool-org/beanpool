@@ -50,7 +50,7 @@ export const {
     makeNamesVoucher, stopNamesVoucher, setVoucherBudget, deleteNamesEntry, setNamesSettings, namesTrustStoreKey,
     readNamesPinFrom, writeNamesPinTo, saveNamesCopiesBeforeLeaving, checkEachOther, unkeptRemovalsOf, removeOldKey,
     removeOldKeyAndOpen, openNamesList, makeKeyOnThisPhone, putHistoryBack, followServerHistory, startAfreshOnThisPhone,
-    sendKeysAgain, addNamesEntry, inviteForNamesEntry, readBoundInvites, editNamesEntry, pendingRemovals, saveNamesEntry,
+    sendKeysAgain, addNamesEntry, inviteForNamesEntry, revokeEntryInvite, readBoundInvites, editNamesEntry, pendingRemovals, saveNamesEntry,
 } = flows;
 
 export {

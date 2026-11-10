@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, getMyVouching, getVouchersBlock,
+    buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, revokeInvite, getInviteTree, getMyVouching, getVouchersBlock,
     myNodeRoleOnce, request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -27,7 +27,7 @@ import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, type InviteRowSource } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, VOUCH_PRESET_WORDS, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -230,6 +230,28 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         }
 
         setInvites(serverInvites);
+    }
+
+    /**
+     * Revoke one of this member's invites on the community (invites-vouching I2). Gone, it leaves Pending and the made card,
+     * and a vouch it held is back in the budget. A `no_invite` means the community holds no such unused code of theirs any
+     * more (lapsed and pruned): it goes from the list too. Otherwise the node's sentence is shown and the invite stays.
+     */
+    async function revokeMine(inv: InviteRowSource): Promise<string | null> {
+        try {
+            await revokeInvite(inv.code);
+        } catch (e) {
+            // Only the node's own `no_invite` means it is gone: a node older than Revoke answers 404 too, with no code.
+            if ((e as { code?: unknown })?.code !== 'no_invite') return (e as Error)?.message || inviteRevokeWords.failed();
+        }
+        const key = inv.code.toLowerCase();
+        setInvites((prev) => prev.filter((i) => i.code.toLowerCase() !== key));
+        if (newCode && newCode.toLowerCase() === key) {
+            setNewCode(null);
+            setMadeCard(null);
+        }
+        if (inv.vouchAmount) void loadMyVouching();
+        return null;
     }
 
     async function saveOfflineInviteLocally(invite: InviteCode) {
@@ -675,6 +697,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         </button>
                                 </>
                             }
+                            onRevoke={revokeMine}
                         />
                     )}
                     {!formOpen && (
@@ -789,6 +812,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         </button>
                                     </div>
                                 )}
+                                onRevoke={revokeMine}
                             />
                         </>
                     )}

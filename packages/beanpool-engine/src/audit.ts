@@ -8,7 +8,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { isHundredths } from '@beanpool/core';
+import { beans, isHundredths } from '@beanpool/core';
 import { getMemberTrustProfile, washTradingAnalysisStepsOnSnapshot, drainSteps, runStepsInSlices } from './trust.js';
 
 type Db = Database.Database;
@@ -269,12 +269,12 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
                 const balRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = ?").get(member.public_key) as any;
                 const bal = balRow ? balRow.balance_c : 0;
                 if (bal < 0) {
-                    // Near floor: balance within 10 beans of floor
-                    if (bal - floor <= 10) {
+                    // Near floor: balance within 10 Beans of floor (both whole hundredths, so 10 Beans is beans(10))
+                    if (bal - floor <= beans(10)) {
                         accountsNearFloor++;
                     }
-                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days
-                    if (bal <= floor * 0.8) {
+                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days (as 5 × bal <= 4 × floor: integers, exact)
+                    if (bal * 5 <= floor * 4) {
                         const txRow = db.prepare(`
                             SELECT 1 FROM transactions 
                             WHERE (from_pubkey = ? OR to_pubkey = ?) 

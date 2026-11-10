@@ -891,8 +891,8 @@ export function initStateEngine(): void {
     const commonsRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown } | undefined;
     const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance_c) : null;
     //
-    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
-    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // A row of ±Infinity, or any figure that isn't whole hundredths, is the unknown pot too (commonsPotFromRow: NaN) and no
+    // more usable: it gets the same 🛑 line, not "Restored" (and not "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
     // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
     if (restoredPot !== null && !Number.isFinite(restoredPot)) {
         setCommonsBalance(restoredPot);

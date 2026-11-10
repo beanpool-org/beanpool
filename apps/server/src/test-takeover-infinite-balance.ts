@@ -19,7 +19,8 @@
  * Five runs: a member's row at 9e999, and the Commons pot's own row at 9e999, -9e999, the text 'NaN', and NULL (on a table
  * from before NOT NULL). For the pot's row it also checks that nothing wrote over the row (the boot's flush, audit and
  * sweep, the routes, the timer's flush), that the pot in memory is unknown (NaN) for text or NULL, never 0, and that a
- * settled deal's dust stays in its escrow rather than going into a pot that isn't a number (confirmation of #1445, NB-1).
+ * settled deal's escrow puts nothing into a pot that isn't a number (confirmation of #1445, NB-1). Whole hundredths leave
+ * no dust: a settled escrow drains to exactly 0, and the boot's sweep only deletes it (state-engine sweepSettledEscrowAccounts).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-takeover-infinite-balance.ts
  */
@@ -54,7 +55,8 @@ async function child(): Promise<void> {
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
             db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             // A real grant, so the copy has a ledger with Beans in it.
-            const paid = !!se.payFromCommons(ben, 5, 'a commons grant', { allowDeficit: true });
+            // 5 Beans: whole hundredths.
+            const paid = !!se.payFromCommons(ben, 500, 'a commons grant', { allowDeficit: true });
             se.updateNodeConfig({ publicAddress: { name: 'primary', mode: 'direct', hostname: 'primary.beanpool.org', status: 'live' } } as any);
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();
@@ -84,14 +86,14 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             // As a string: the reply is JSON, where Infinity would come back as null.
             const read = () => {
-                const r = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
-                return { balance: String(r.balance), t: r.t };
+                const r = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown; t: string };
+                return { balance_c: String(r.balance_c), t: r.t };
             };
             const afterBoot = read();
-            const dust = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.dust) as { balance: number } | undefined;
+            const dust = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.dust) as { balance_c: number } | undefined;
             let flush = 'wrote';
             try { se.persistDecayAndCommons(); } catch (e: any) { flush = `refused: ${e?.message}`; }
-            return { afterBoot, memory: String(core.COMMONS_BALANCE), dust: dust?.balance ?? null, flush, afterFlush: read() };
+            return { afterBoot, memory: String(core.COMMONS_BALANCE), dust: dust === undefined ? null : dust.balance_c, flush, afterFlush: read() };
         },
         'ledger-audit': async () => {
             const se = await import('./state-engine.js');
@@ -134,13 +136,14 @@ const STORED: Record<Scenario['value'], { t: string; holds: string; drift: 'null
 };
 
 /**
- * A node whose `accounts.balance` predates NOT NULL (db.ts makeAccountBalanceNotNull): the only place a NULL can be
- * stored. Its boot finds the NULL row, refuses the rebuild, and keeps the old table, as a real old node would.
+ * A node whose `accounts` balance column takes NULL (a table from before NOT NULL): the only place a NULL can be stored.
+ * Since whole hundredths no boot makes one (schema.sql and db/hundredths-step.ts both add `balance_c INTEGER NOT NULL`), so
+ * the table is rewritten by hand, its balance_c nullable; the boot keeps it as it finds it.
  */
 function makeBalanceNullable(sdb: Database.Database): void {
     const sql = (sdb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'accounts'").get() as { sql: string }).sql;
-    const nullable = sql.replace(/\bbalance\s+REAL\s+NOT\s+NULL\b/i, 'balance REAL').replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?accounts"?/i, 'CREATE TABLE accounts_nullable');
-    if (nullable === sql || !/accounts_nullable/.test(nullable)) throw new Error(`can't make accounts.balance nullable from: ${sql}`);
+    const nullable = sql.replace(/\bbalance_c\s+INTEGER\s+NOT\s+NULL\b/i, 'balance_c INTEGER').replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?accounts"?/i, 'CREATE TABLE accounts_nullable');
+    if (nullable === sql || !/accounts_nullable/.test(nullable)) throw new Error(`can't make accounts.balance_c nullable from: ${sql}`);
     sdb.transaction(() => {
         sdb.exec(nullable);
         sdb.exec('INSERT INTO accounts_nullable SELECT * FROM accounts');
@@ -189,18 +192,19 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
 
         // While it is down for that restart, one of its own balances becomes ±9e999 (SQLite stores REAL ±Infinity), the
         // text 'NaN', or NULL (on a table from before NOT NULL). The Commons pot's row is restored into memory at boot: as
-        // ±Infinity, or as unknown (NaN) for a row holding no number. A pot run also gets a settled deal's escrow holding
-        // dust, which the boot's sweep would move into the pot with a raw `balance + ?` on its row.
+        // ±Infinity, or as unknown (NaN) for a row holding no number. A pot run also gets a settled deal's escrow, drained to
+        // exactly 0 as whole hundredths drain one (it once held dust, which the boot's sweep moved into the pot with a raw
+        // `balance + ?` on its row): the sweep now only deletes it, and puts nothing into the pot.
         const key = sc.account === 'ben' ? setup.ben : 'COMMONS_POOL';
         const sdb = new Database(path.join(dirs.standby, 'state.db'));
         if (sc.value === 'NULL') makeBalanceNullable(sdb);
         const changed = sdb.prepare(`UPDATE accounts SET balance_c = ${sc.value} WHERE public_key = ?`).run(key).changes;
-        if (potRow) sdb.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0.0000005, 0)').run(DUST);
-        const row = sdb.prepare('SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = ?').get(key) as { balance: unknown; t: string };
+        if (potRow) sdb.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(DUST);
+        const row = sdb.prepare('SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = ?').get(key) as { balance_c: unknown; t: string };
         sdb.pragma('wal_checkpoint(TRUNCATE)');
         sdb.close();
-        assert(changed === 1 && row.t === stored.t && String(row.balance) === (sc.value === 'NULL' ? 'null' : stored.holds.replace(/^text '(.*)'$/, '$1')),
-            `${sc.account}'s balance on the standby is now ${stored.holds} (${String(row.balance)}, ${row.t})`);
+        assert(changed === 1 && row.t === stored.t && String(row.balance_c) === (sc.value === 'NULL' ? 'null' : stored.holds.replace(/^text '(.*)'$/, '$1')),
+            `${sc.account}'s balance on the standby is now ${stored.holds} (${String(row.balance_c)}, ${row.t})`);
 
         console.log('\n— 3. it starts as the main server, and the take-over finishes —');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
@@ -262,15 +266,16 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
 
         if (potRow) {
             // The pot's own row: nothing wrote over it, not the boot's flush, its audit, its sweep, the routes above, nor
-            // the timer's flush; the pot in memory is what the row says (unknown for text or NULL); the dust stayed put.
+            // the timer's flush; the pot in memory is the unknown pot (NaN) for anything that isn't whole hundredths, ±Infinity
+            // included (state-engine commonsPotFromRow), never 0 and never the broken figure; the dust stayed put.
             const pot = await standby.send('pot-row', { dust: DUST });
-            const unchanged = (r: { balance: unknown; t: string }) => r.t === row.t && String(r.balance) === String(row.balance);
+            const unchanged = (r: { balance_c: unknown; t: string }) => r.t === row.t && String(r.balance_c) === String(row.balance_c);
             assert(unchanged(pot.afterBoot) && unchanged(pot.afterFlush),
                 `the pot's row still holds ${stored.holds} after the boot, the audits and the flush (${JSON.stringify(pot.afterBoot)} → ${JSON.stringify(pot.afterFlush)})`);
-            assert(pot.memory === (stored.t === 'real' ? String(row.balance) : 'NaN'),
-                `the pot in memory is ${stored.t === 'real' ? 'what the row holds' : 'unknown (NaN), never 0'} (${pot.memory})`);
+            assert(pot.memory === 'NaN',
+                `the pot in memory is unknown (NaN), never 0 and never the row's ${stored.holds} (${pot.memory})`);
             assert(/^refused: Payments are paused on this community/.test(pot.flush), `the timer's flush refuses it and writes nothing (${pot.flush})`);
-            assert(pot.dust === 0.0000005, `the settled deal's dust was not moved into a pot that isn't a number (${pot.dust})`);
+            assert(pot.dust === null, `the settled deal's escrow, holding exactly 0, was deleted by the boot's sweep, nothing moved into a pot that isn't a number (${pot.dust})`);
             // The boot says so, for ±Infinity as for text or NULL, and never "Restored" or "IN DEFICIT" (#1465 review, NB-2).
             const stop = (firstStart.match(/🛑 The Commons pot's row.*/) ?? [''])[0];
             assert(stop.includes(`holds ${stored.holds}, not a number of Beans`) && /no Beans move at all until it is mended/.test(stop)

@@ -16,6 +16,7 @@ import { askDoor, lookAroundUrl, setAccountHint, takeWelcomeDoor, ACCOUNT_HINT_C
 import { loadIdentity } from '../lib/identity';
 import { KNOCK_KEY_STORE } from '../lib/knock-key';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const CARD: CommunityCard = {
     name: 'Castlemaine BeanPool', host: 'castlemaine.beanpool.org', members: 9,
@@ -34,6 +35,9 @@ beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     localStorage.clear();
     calls = [];
+    // Every fetch is read: the communities are heard new enough, so the version gate's own read is not among them.
+    resetNodeVersionGateForTests();
+    for (const community of ['https://castlemaine.beanpool.org', 'https://pool.riverbend.example']) hearNodeVersionForTests(community);
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
         calls.push({ url: String(url), init });
         if (String(url).endsWith('/api/join/knock')) return new Response(JSON.stringify({ knock: { status: 'pending' } }), { status: 201 });

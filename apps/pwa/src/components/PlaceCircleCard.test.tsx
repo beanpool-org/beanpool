@@ -13,6 +13,7 @@ import { MarketCircleLine } from './MarketCircleLine';
 import { circleIntents, knockForCircle, setCircleIntent } from '../lib/circle-intent';
 import { cancelKnock, rememberKnock, rememberedKnocks } from '../lib/knock';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const OPEN: CircleCard = { people: 4, starting: null, doneAt: null, community: null };
@@ -23,6 +24,9 @@ function json(status: number, body: unknown): Response {
 }
 
 beforeEach(() => {
+    // Every fetch is read: the community is heard new enough, so the version gate's own read is not among them.
+    resetNodeVersionGateForTests();
+    hearNodeVersionForTests(THRISSUR.url);
     // 320 px, the text at 130%, as the small-screen floor asks.
     document.documentElement.style.fontSize = '130%';
     document.body.style.width = '320px';

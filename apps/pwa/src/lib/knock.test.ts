@@ -5,6 +5,7 @@ import {
 } from './knock';
 import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import { formatDate, KNOCK_ANSWERABLE_DAYS, t } from '@beanpool/core';
 
 const PUB = 'a'.repeat(64);
@@ -45,9 +46,16 @@ describe('readStatus', () => {
     });
 });
 
+/** These tests read every fetch: the communities are heard new enough, so the version gate's own read is not among them. */
+const hearCommunities = () => {
+    resetNodeVersionGateForTests();
+    for (const host of ['c', 'f', 'n', 's']) hearNodeVersionForTests(`https://${host}.example.org`);
+};
+
 describe('rememberedKnocks & storage on web', () => {
     beforeEach(() => {
         localStorage.clear();
+        hearCommunities();
     });
 
     it('remembers knocks, orders by newest first, and forgets on request', async () => {
@@ -171,6 +179,7 @@ describe('rememberedKnocks & storage on web', () => {
 describe('the status read and the cancel are signed for the community they name', () => {
     beforeEach(() => {
         localStorage.clear();
+        hearCommunities();
     });
 
     afterEach(() => {

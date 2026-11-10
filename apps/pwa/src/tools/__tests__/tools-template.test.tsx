@@ -27,6 +27,7 @@ import { patchToolSettings, writeToolRecord, readToolRecord, readToolSettings, r
 import type { ComposerDraft } from '../builder';
 import { memoryIndexedDB } from '../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../lib/account-epoch';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../../lib/node-version-gate';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../../words-xx.test-support';
 import { scaffoldTool, type ScaffoldTool } from './scaffold.test-support';
 
@@ -638,6 +639,9 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         server.rows.clear(); server.tombs.clear(); server.log.length = 0; server.mode = 'up'; server.sendsDeletedAt = false;
         server.refusesOff = false; server.before = null; server.max = undefined;
         localStorage.setItem('bp_node_url', 'https://mullum.example');
+        // The server's log is read: the node is heard new enough, so the version gate's own read is not in it.
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests('https://mullum.example');
         kept = { manifest: { ...scaffold.manifest, id: 'kept', permissions: ['node-copy'] }, fixtures: scaffold.fixtures, loader: scaffold.loader };
         vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
             const method = init?.method ?? 'GET';

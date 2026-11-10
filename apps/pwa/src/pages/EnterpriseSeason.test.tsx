@@ -317,6 +317,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
 
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue(mockPosts as any);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: mockTreasuries });
+            // The light statuses read is how the feed learns which enterprises are paused.
+            vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: mockTreasuries.map(({ publicKey, name, paused, status }) => ({ publicKey, name, paused, status })) } as any);
             vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, isBlockedFromTrading: false } as any);
             vi.spyOn(api, 'getMembers').mockResolvedValue([]);
             vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);

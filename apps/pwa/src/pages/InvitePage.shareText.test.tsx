@@ -33,7 +33,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 const community = vi.hoisted(() => ({ features: { invites: true, beans: true } as Record<string, unknown> }));
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: community.features,
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: community.features,
     })),
 }));
 

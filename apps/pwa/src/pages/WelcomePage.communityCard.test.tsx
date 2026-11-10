@@ -14,7 +14,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const LOCAL = { memberCount: 9, postCount: 3, transactionCount: 6, commonsBalance: 0, profile: 'local', features: { door: 'members' } };
+const LOCAL = { memberCount: 9, postCount: 3, transactionCount: 6, commonsBalance_c: 0, profile: 'local', features: { door: 'members' } };
 const CARD = {
     name: 'Castlemaine BeanPool', host: 'castlemaine.beanpool.org', members: 9, area: { name: 'Castlemaine and around', radiusKm: 15 },
     joining: 'requests', askUrl: 'https://global.beanpool.org/?ask=castlemaine.beanpool.org', globalUrl: 'https://global.beanpool.org',
@@ -126,7 +126,7 @@ describe("a local community's card on its welcome page", () => {
  * where the community confirms its members: the same sentence as the phone's card. Nothing to tick.
  */
 describe("the community's rule on its card's page", () => {
-    const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+    const RULE = { known: true, knownFloor: 10000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
     const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
 
     it('rule on: the card, then the sentence on the same page, and nothing to tick', async () => {

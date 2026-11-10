@@ -39,7 +39,7 @@ describe('the web profile’s button follows the person’s state', () => {
     });
 
     it('a voucher: "Voucher · 400 left ›" opens their card here', () => {
-        render(<ProfileVoucherButton button={{ state: 'voucher', left: 400, noLimit: false }} memberPubkey={PAM} />);
+        render(<ProfileVoucherButton button={{ state: 'voucher', left: 40000, noLimit: false }} memberPubkey={PAM} />);
         const button = screen.getByTestId('profile-voucher-button');
         expect(button).toHaveTextContent(/^Voucher · 400 left ›$/);
         expect(screen.queryByTestId('stub-voucher-card')).toBeNull();
@@ -51,7 +51,7 @@ describe('the web profile’s button follows the person’s state', () => {
     });
 
     it('an owner is "Voucher · No limit ›", with no figure', () => {
-        render(<ProfileVoucherButton button={{ state: 'voucher', left: 1000, noLimit: true }} memberPubkey={PAM} />);
+        render(<ProfileVoucherButton button={{ state: 'voucher', left: 100000, noLimit: true }} memberPubkey={PAM} />);
         expect(screen.getByTestId('profile-voucher-button')).toHaveTextContent(/^Voucher · No limit ›$/);
     });
 
@@ -64,7 +64,7 @@ describe('the web profile’s button follows the person’s state', () => {
     });
 
     it('no balance figure anywhere', () => {
-        for (const state of [{ state: 'add' }, { state: 'make' }, { state: 'voucher', left: 400, noLimit: false }]) {
+        for (const state of [{ state: 'add' }, { state: 'make' }, { state: 'voucher', left: 40000, noLimit: false }]) {
             const { container, unmount } = render(<ProfileVoucherButton button={state} memberPubkey={PAM} />);
             expect(container.textContent).not.toMatch(/balance/i);
             unmount();

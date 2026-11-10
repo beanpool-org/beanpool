@@ -274,7 +274,8 @@ export interface HomeCards {
         place?: { lat: number; lng: number };
         joined7d?: number;
         eventsSoon?: number;
-        commonsPot?: number;
+        /** The Commons pot, whole hundredths of a Bean (home-answer.ts memberFigures). */
+        commonsPot_c?: number;
     };
 }
 

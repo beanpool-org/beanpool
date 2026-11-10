@@ -7,7 +7,7 @@ import { getTreasuries, getDecisions, getCommonsBalance, getGroups } from '../li
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 100, profile: 'local',
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 10000, profile: 'local',
         features: { beans: true, enterprises: true, decisions: true },
     })),
 }));

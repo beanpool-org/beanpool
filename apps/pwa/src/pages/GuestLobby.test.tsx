@@ -98,7 +98,7 @@ const VISITOR_READS_PATTERNS = [
 const visitorMayRead = (path: string) => VISITOR_READS_EXACT.has(path) || VISITOR_READS_PATTERNS.some(re => re.test(path));
 
 const GLOBAL = {
-    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global',
+    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
     features: { openJoin: true, guestListingsOnly: true, beans: false },
 };
 const LOCAL = { ...GLOBAL, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
@@ -114,7 +114,7 @@ const IN_TWO_DAYS_LATER = new Date(Date.now() + 2 * 86_400_000 + 7_200_000).toIS
 const person = { authorPublicKey: 'hidden', authorCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0, authorFoundingNeeded: false };
 const OFFER = {
     id: 'p-offer', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Fresh on Saturdays. Happy to swap for eggs.',
-    credits: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false, audienceScope: 'public',
+    price_c: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false, audienceScope: 'public',
     photos: ['/api/marketplace/posts/p-offer/photos/0', '/api/marketplace/posts/p-offer/photos/1'],
     lat: -28.55, lng: 153.55, createdAt: NOW, updatedAt: NOW, ...person,
 };

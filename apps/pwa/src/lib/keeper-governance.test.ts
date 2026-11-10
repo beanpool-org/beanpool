@@ -15,7 +15,7 @@ const JUNIOR = { publicKey: 'jun', callsign: 'Ana', role: 'keeper', suspended: f
 const SUSP = { publicKey: 'sus', callsign: 'Ivo', role: 'keeper', suspended: true, grantedAt: '2025-12-01T00:00:00Z' };
 const KEEPERS = [LEAD, SENIOR, JUNIOR, SUSP];
 
-const ADD = { id: 'c1', kind: 'add' as const, memberPubkey: 'app', memberCallsign: 'Lee', proposedBy: 'lead', proposedByCallsign: 'Rosa', pledgedBacking: 20, appliesAt: new Date(NOW + 2 * DAY + 5 * HOUR).toISOString() };
+const ADD = { id: 'c1', kind: 'add' as const, memberPubkey: 'app', memberCallsign: 'Lee', proposedBy: 'lead', proposedByCallsign: 'Rosa', pledgedBacking: 2000, appliesAt: new Date(NOW + 2 * DAY + 5 * HOUR).toISOString() };
 const REMOVE = { ...ADD, id: 'c2', kind: 'remove' as const, memberPubkey: 'jun', memberCallsign: 'Ana', pledgedBacking: 0 };
 
 describe('countdowns', () => {
@@ -32,6 +32,8 @@ describe('pending keeper changes (answers A and M)', () => {
     it('says what the change is, in beans', () => {
         expect(keeperChangeTitle(ADD)).toBe('Adding Lee as a keeper, backing 20 beans');
         expect(keeperChangeTitle({ ...ADD, pledgedBacking: 0 })).toBe('Adding Lee as a keeper');
+        // The node's pledgedBacking is whole hundredths: a fractional pledge reads to the hundredth, never rounded.
+        expect(keeperChangeTitle({ ...ADD, pledgedBacking: 4925 })).toBe('Adding Lee as a keeper, backing 49.25 beans');
         // A keeper other than the lead is sent the named part only, and the words say so (no known part reads as missing).
         expect(keeperChangeTitle({ ...ADD, namedBackingOnly: true })).toBe('Adding Lee as a keeper, with 20 beans of named backing');
         expect(keeperChangeTitle({ ...ADD, pledgedBacking: 0, namedBackingOnly: true })).toBe('Adding Lee as a keeper');

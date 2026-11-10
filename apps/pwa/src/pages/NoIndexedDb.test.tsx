@@ -101,7 +101,7 @@ const VISITOR_READS_PATTERNS = [
 const visitorMayRead = (path: string) => VISITOR_READS_EXACT.has(path) || VISITOR_READS_PATTERNS.some(re => re.test(path));
 
 const GLOBAL = {
-    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global',
+    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
     features: { openJoin: true, guestListingsOnly: true, beans: false },
 };
 const LOCAL = { ...GLOBAL, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };

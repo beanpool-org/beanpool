@@ -10,12 +10,12 @@ import { VisitorCard, VisitorPostDetail, visitorCardName } from './VisitorListin
 
 const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
 const copy = {
-    id: 'c1', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Fresh', credits: 0, authorPublicKey: 'hidden', authorCallsign: '', active: true, status: 'active',
+    id: 'c1', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Fresh', price_c: 0, authorPublicKey: 'hidden', authorCallsign: '', active: true, status: 'active',
     createdAt: '2026-11-01T00:00:00.000Z', photos: [],
-    shownCopy: true, shownPrice: '20 fixed',
+    shownCopy: true, shownPrice: '2000 fixed',
     shownFrom: { host: 'mullum.example.org', postId: 'h1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' },
 } as any;
-const plain = { ...copy, authorPublicKey: 'abc', authorCallsign: 'Robin', shownCopy: undefined, shownFrom: undefined, shownPrice: undefined, credits: 5 };
+const plain = { ...copy, authorPublicKey: 'abc', authorCallsign: 'Robin', shownCopy: undefined, shownFrom: undefined, shownPrice: undefined, price_c: 500 };
 
 afterEach(cleanup);
 

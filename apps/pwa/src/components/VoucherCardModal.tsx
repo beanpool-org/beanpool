@@ -4,7 +4,7 @@
  * and 100-step stepper, raise or lower), Budget history, and See who they brought in.
  */
 import { useEffect, useState, useRef } from 'react';
-import { formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS, formatHundredths } from '@beanpool/core';
+import { formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS, formatHundredths, beans, wholeBeansOf, VOUCHER_BUDGET_MIN, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_STEP } from '@beanpool/core';
 import { getVoucherCard, setVoucherBudget, type VoucherCardData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -14,7 +14,8 @@ export interface VoucherCardModalProps {
     onUpdated?: () => void;
 }
 
-const QUICK_LEVELS = [500, 1000, 1500, 2000];
+/** The quick levels, whole hundredths of a Bean as the node takes a level (core isBudgetLevel): 500 · 1,000 · 1,500 · 2,000 Beans. */
+const QUICK_LEVELS = [500, 1000, 1500, 2000].map(beans);
 
 export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCardModalProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
@@ -22,7 +23,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
 
     const [card, setCard] = useState<VoucherCardData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [targetLevel, setTargetLevel] = useState<number>(1000);
+    const [targetLevel, setTargetLevel] = useState<number>(beans(1000));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'budget' | 'history' | 'people'>('budget');
@@ -59,8 +60,9 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
         }
     };
 
-    const minLevel = Math.max(100, Math.ceil((card?.held ?? 0) / 100) * 100);
-    const maxLevel = 2000;
+    // Whole hundredths, in the node's steps of 100 Beans (core VOUCHER_BUDGET_*): never below what is held.
+    const minLevel = Math.max(VOUCHER_BUDGET_MIN, Math.ceil((card?.held ?? 0) / VOUCHER_BUDGET_STEP) * VOUCHER_BUDGET_STEP);
+    const maxLevel = VOUCHER_BUDGET_MAX;
 
     return (
         <div
@@ -209,7 +211,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                     type="button"
                                                     onClick={() => setTargetLevel(lvl)}
                                                     disabled={lvl < minLevel}
-                                                    data-testid={`voucher-level-${lvl}`}
+                                                    data-testid={`voucher-level-${wholeBeansOf(lvl)}`}
                                                     className={`min-h-[44px] px-2 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-colors ${
                                                         targetLevel === lvl
                                                             ? 'bg-bp-commit-fill text-bp-commit-on border-transparent'
@@ -225,7 +227,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                         <div className="flex items-center gap-3 mb-4">
                                             <button
                                                 type="button"
-                                                onClick={() => setTargetLevel((prev) => Math.max(minLevel, prev - 100))}
+                                                onClick={() => setTargetLevel((prev) => Math.max(minLevel, prev - VOUCHER_BUDGET_STEP))}
                                                 disabled={targetLevel <= minLevel || saving}
                                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                                 aria-label={t(VOUCH_PRESET_WORDS.decreaseBudget)}
@@ -237,7 +239,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => setTargetLevel((prev) => Math.min(maxLevel, prev + 100))}
+                                                onClick={() => setTargetLevel((prev) => Math.min(maxLevel, prev + VOUCHER_BUDGET_STEP))}
                                                 disabled={targetLevel >= maxLevel || saving}
                                                 className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
                                                 aria-label={t(VOUCH_PRESET_WORDS.increaseBudget)}

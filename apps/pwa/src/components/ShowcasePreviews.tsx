@@ -189,7 +189,7 @@ export function sampleDecisions(): DecisionWithTally[] {
         touches: d.touches,
         effect: d.effect,
         subject: d.subject,
-        params: { amount: d.fromPool, subject: d.subject },
+        params: { amount_c: d.fromPool * 100, subject: d.subject },
         franchise: d.franchise,
         status: 'open',
         opensAt: new Date(now - 4 * DAY_MS).toISOString(),
@@ -229,9 +229,9 @@ export function samplePoolVoting(): MyPoolVoting {
     };
 }
 
-/** The Commons pool balance in Beans from Example Valley (640). */
+/** The Commons pool balance from Example Valley (640 Beans), as whole hundredths: what the Decide screen takes (64000). */
 export function sampleCommonsBalance(): number {
-    return S.pool;
+    return S.pool * 100;
 }
 
 /**
@@ -266,7 +266,7 @@ export function CommonsPreview({ enterprises = true, onOpenEnterprise, ...ways }
             <section className="mb-4" data-testid="sample-project">
                 <EnterpriseCard treasury={project} onOpen={onOpenEnterprise} sample />
             </section>
-            <CommonsInfoModal isOpen={commonsInfo} onClose={() => setCommonsInfo(false)} commonsBalance={S.pool} />
+            <CommonsInfoModal isOpen={commonsInfo} onClose={() => setCommonsInfo(false)} commonsBalance={S.pool * 100} />
         </div>
     );
 }

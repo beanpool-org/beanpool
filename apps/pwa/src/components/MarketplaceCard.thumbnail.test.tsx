@@ -13,7 +13,7 @@ import type { MarketplacePost } from '../lib/marketplace';
 
 const PHOTOS = ['/api/marketplace/posts/p1/photos/0?v=17&k=KEY0', '/api/marketplace/posts/p1/photos/1?v=17&k=KEY1'];
 const post = {
-    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', credits: 5,
+    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', price_c: 500,
     priceType: 'fixed', authorPublicKey: 'a'.repeat(64), authorCallsign: 'Rowan', active: true, status: 'active',
     createdAt: new Date().toISOString(), photos: PHOTOS,
 } as unknown as MarketplacePost;

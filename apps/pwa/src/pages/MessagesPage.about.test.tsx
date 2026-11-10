@@ -55,7 +55,7 @@ vi.mock('../lib/api', () => ({
 
 const me: BeanPoolIdentity = { publicKey: ana.publicKey, privateKey: ana.privateKey, callsign: 'Ana', createdAt: '2026-09-01T00:00:00Z' };
 
-const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', credits: 6, priceType: 'fixed', status: 'active' };
+const EGGS = { id: 'post-eggs-1', type: 'offer', title: 'Fresh eggs', price_c: 600, priceType: 'fixed', status: 'active' };
 let minute = 0;
 const stamp = () => new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString();
 
@@ -182,7 +182,7 @@ describe('the line that carries it', () => {
 
 describe('the card in a bubble', () => {
     it('shows the listing\'s own title, kind and price to the reader, and a tap opens the listing', async () => {
-        node.listings = [{ ...EGGS, title: 'Fresh eggs, a dozen', credits: 8 }];
+        node.listings = [{ ...EGGS, title: 'Fresh eggs, a dozen', price_c: 800 }];
         node.rows = [fromBen('Is this still available?', EGGS)];
         await openDm();
         const card = await screen.findByTestId('chat-about-card');

@@ -42,17 +42,17 @@ const TODAY = new Date().toISOString();
 
 /** Rob's Vehicle Storage, by the month, on the board while its deals run. */
 const storage = {
-    id: 'offer-storage', type: 'offer', category: 'services', title: 'Vehicle Storage', description: 'A dry shed', credits: 50,
+    id: 'offer-storage', type: 'offer', category: 'services', title: 'Vehicle Storage', description: 'A dry shed', price_c: 5000,
     priceType: 'monthly', status: 'active', active: true, repeatable: true, authorPublicKey: 'rob-pk', authorCallsign: 'Rob', createdAt: TODAY,
 };
 /** Mia's own Need, by the week. */
 const minding = {
-    id: 'need-minding', type: 'need', category: 'care', title: 'Dog minding', description: 'Tuesdays', credits: 0,
+    id: 'need-minding', type: 'need', category: 'care', title: 'Dog minding', description: 'Tuesdays', price_c: 0,
     priceType: 'weekly', status: 'active', active: true, repeatable: true, authorPublicKey: ME, authorCallsign: 'Mia', createdAt: TODAY,
 };
 const tx = (extra: Record<string, unknown>) => ({
     id: 'tx-1', postId: 'offer-storage', postTitle: 'Vehicle Storage', buyerPublicKey: ME, buyerCallsign: 'Mia', sellerPublicKey: 'rob-pk',
-    sellerCallsign: 'Rob', credits: 50, status: 'pending', createdAt: TODAY, ...extra,
+    sellerCallsign: 'Rob', amount_c: 5000, status: 'pending', createdAt: TODAY, ...extra,
 }) as unknown as api.MarketplaceTransaction;
 
 function stubNode(posts: unknown[]) {
@@ -64,7 +64,7 @@ function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);
@@ -90,8 +90,8 @@ afterEach(() => { cleanup(); });
 
 describe('finding 1: a free weekly or monthly listing is taken up as the one-off deal of 0 Beans it was', () => {
     it('a free monthly Offer: Accept opens the one-off box, never "Agree and pay 0 Beans", and the accept carries no standing deal', async () => {
-        stubNode([{ ...storage, credits: 0 }]);
-        const accept = vi.spyOn(api, 'acceptMarketplacePost').mockResolvedValue({ transaction: tx({ credits: 0 }) } as any);
+        stubNode([{ ...storage, price_c: 0 }]);
+        const accept = vi.spyOn(api, 'acceptMarketplacePost').mockResolvedValue({ transaction: tx({ amount_c: 0 }) } as any);
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-storage" onPostOpened={() => {}} transactions={[]} onRefreshTransactions={vi.fn()} />);
         await screen.findByRole('heading', { name: /Vehicle Storage/ });
         await settle();
@@ -119,7 +119,7 @@ describe('finding 1: a free weekly or monthly listing is taken up as the one-off
         stubNode([minding]);
         const approve = vi.spyOn(api, 'approveMarketplaceRequest').mockResolvedValue({ success: true } as any);
         const request = tx({ id: 'tx-req', postId: 'need-minding', postTitle: 'Dog minding', status: 'requested', buyerPublicKey: ME, buyerCallsign: 'Mia',
-            sellerPublicKey: 'kofi-pk', sellerCallsign: 'Kofi', credits: 0 });
+            sellerPublicKey: 'kofi-pk', sellerCallsign: 'Kofi', amount_c: 0 });
         render(<MarketplacePage identity={identity} isMember={true} openPostId="need-minding" onPostOpened={() => {}} transactions={[request]} onRefreshTransactions={vi.fn()} />);
         await screen.findByRole('heading', { name: /Dog minding/ });
         await settle();
@@ -132,7 +132,7 @@ describe('finding 1: a free weekly or monthly listing is taken up as the one-off
 describe('finding 3: a short standing deal opened from Your deals or Home is never "done"', () => {
     const SHORT = {
         id: 'tx-short', status: 'completed', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, sellerCallsign: 'Mia',
-        standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: null,
+        standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: null,
         standingNextDueAt: '2026-11-09T09:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z',
         standingStopped: false,
     };

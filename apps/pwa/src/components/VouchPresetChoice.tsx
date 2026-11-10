@@ -13,8 +13,9 @@
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
  */
 import { useId } from 'react';
-import { formatNumber, t, vouchPresetsFor, vouchMaxFor, vouchPresets } from '@beanpool/core';
+import { formatHundredths, t, vouchPresetsFor, vouchMaxFor, vouchPresets, wholeBeansOf } from '@beanpool/core';
 
+/** Every figure here is whole hundredths of a Bean: core's presets and caps, the node's budget (GET /api/vouchers/me). */
 export interface VouchPresetChoiceProps {
     value: number | null;
     onChange: (value: number | null) => void;
@@ -39,7 +40,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
         ? t(vouchPresets.fromBudgetNoLimit)
         : noneLeft
             ? t(vouchPresets.noneLeft)
-            : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
+            : t(vouchPresets.fromBudget, { left: formatHundredths(budgetLeft), total: formatHundredths(budgetTotal) });
 
     const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
         { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
@@ -48,12 +49,12 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
             const notEnoughBudget = !noLimit && p > budgetLeft;
             return {
                 amount: p,
-                label: String(p),
-                ariaLabel: t(vouchPresets.beans, { amount: p }),
+                label: formatHundredths(p),
+                ariaLabel: t(vouchPresets.beans, { amount: formatHundredths(p) }),
                 disabled: notEnoughBudget || wouldExceedMax,
                 // The cap first: more budget would not make this preset possible.
                 why: wouldExceedMax
-                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatNumber(vouchMax) })
+                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatHundredths(vouchMax) })
                     : notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
             };
         }),
@@ -85,7 +86,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                                 onChange={() => { if (!disabled) onChange(amount); }}
                                 aria-label={ariaLabel}
                                 aria-disabled={disabled}
-                                data-testid={`invite-vouch-${amount ?? 'none'}`}
+                                data-testid={`invite-vouch-${amount === null ? 'none' : wholeBeansOf(amount)}`}
                             />
                             <span
                                 className={`flex min-h-[44px] items-center justify-center rounded-xl border px-2 py-2 text-[14px] font-bold transition-colors ${

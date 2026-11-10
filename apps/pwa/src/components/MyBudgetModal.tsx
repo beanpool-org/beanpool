@@ -4,7 +4,7 @@
  * by its heading, focus in on open and back to what opened it on close, Escape and the ✕ (44 × 44 px) close it.
  */
 import { useRef } from 'react';
-import { formatDate, formatHistoryLine, formatNumber, t, tn, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { formatDate, formatHistoryLine, formatHundredths, t, tn, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import type { MyVouching } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -50,11 +50,11 @@ export function MyBudgetModal({ vouching, onClose }: MyBudgetModalProps) {
                         {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure and no held line. */}
                         {vouching.noLimit
                             ? t(VOUCH_PRESET_WORDS.noLimit)
-                            : t('{left} of {total} left', { left: formatNumber(budget.left), total: formatNumber(budget.level) })}
+                            : t('{left} of {total} left', { left: formatHundredths(budget.left), total: formatHundredths(budget.level) })}
                     </div>
-                    <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(budget.vouched), people: tn(budget.peopleVouched, '{n} person', '{n} people') })}</div>
+                    <div>{t('Vouched {amount} to {people} who joined', { amount: formatHundredths(budget.vouched), people: tn(budget.peopleVouched, '{n} person', '{n} people') })}</div>
                     {!vouching.noLimit && (
-                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(budget.held), invites: tn(budget.heldInvites, '{n} invite', '{n} invites') })}</div>
+                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatHundredths(budget.held), invites: tn(budget.heldInvites, '{n} invite', '{n} invites') })}</div>
                     )}
                 </div>
 

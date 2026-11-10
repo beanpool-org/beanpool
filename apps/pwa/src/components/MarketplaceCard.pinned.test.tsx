@@ -11,7 +11,7 @@ describe('MarketplaceCard pinned chip', () => {
         title: 'Homemade Jam',
         type: 'offer',
         category: 'food',
-        credits: 3,
+        price_c: 300,
         priceType: 'fixed',
         status: 'active',
         active: true,

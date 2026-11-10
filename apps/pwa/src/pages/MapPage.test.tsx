@@ -6,7 +6,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import type { MarketplacePost } from '../lib/api';
 import L from 'leaflet';
-import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, formatDate, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, formatDate, formatHundredths, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -157,7 +157,7 @@ describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)'
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({
             enterprises: [
@@ -344,7 +344,7 @@ describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)'
 describe('MapPage: guest balance and the pages that open over the map', () => {
     const post = {
         id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
-        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        price_c: 1200, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
         createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
         lat: -28.5495, lng: 153.5005,
     };
@@ -357,7 +357,7 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -418,7 +418,7 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
 
     it('a member\'s copy of a listing: its price at home in words, never "0B", and no author', async () => {
         vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{
-            ...post, credits: 0, authorPublicKey: 'hidden', authorCallsign: '', shownCopy: true, shownPrice: '20 fixed',
+            ...post, price_c: 0, authorPublicKey: 'hidden', authorCallsign: '', shownCopy: true, shownPrice: '2000 fixed',
             shownFrom: { host: 'mullum.example.org', postId: 'h1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' },
         }] as any);
         let view: ReturnType<typeof render> | undefined;
@@ -494,7 +494,8 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(within(previewWrapper).getByTestId('listing-list-title')).toHaveTextContent(post.title);
         // The price sits in the chip row (the card's first row), at its end, with the bean sign
         const head = within(previewWrapper).getByTestId('listing-list-head');
-        expect(within(head).getByTestId('listing-list-price')).toHaveTextContent(String(post.credits));
+        // The figure as every figure is written (formatHundredths: 1200 hundredths read "12"), never the hundredths count.
+        expect(within(head).getByTestId('listing-list-price')).toHaveTextContent(new RegExp(`^${formatHundredths(post.price_c)}(?!\\d)`));
         expect(within(head).getByRole('img', { name: 'B' })).toBeInTheDocument();
         // That row stops short of the ✕ (the box's room, pe-8), and the ✕ is positioned separately, labelled, and outside the
         // card's tap target
@@ -539,14 +540,14 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
     const HOUR = 60 * 60 * 1000;
     const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
     const ev = (id: string, title: string, startInHours: number, extra: Record<string, unknown> = {}) => ({
-        id, type: 'event', category: 'community', title, description: '', credits: 0, priceType: 'fixed',
+        id, type: 'event', category: 'community', title, description: '', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true,
         status: 'active', repeatable: false, lat: -28.55, lng: 153.5, eventStartAt: inHours(startInHours),
         eventState: 'scheduled', goingCount: 2, interestedCount: 1, myRsvp: null, ...extra,
     });
     const offer = {
         id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
-        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        price_c: 1200, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
         createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
         lat: -28.5495, lng: 153.5005,
     };
@@ -566,7 +567,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -1043,7 +1044,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0];
         expect(body).toMatchObject({
-            type: 'event', category: 'community', credits: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
+            type: 'event', category: 'community', price_c: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
             lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
             // The clock as typed, for the node to resolve in the pin's zone (DESIGN-event-times §2), and this device's
             // instant beside it, which a node from before clocks reads (review of #1952, finding 4).
@@ -1063,7 +1064,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
     describe('Post as', () => {
         const ENT = 'ent-pubkey-aaaa';
         const openAsKeeper = async () => {
-            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false, keeperOf: [ENT] } as any);
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false, keeperOf: [ENT] } as any);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [{ publicKey: ENT, name: 'Bindarrabi Hall' }] } as any);
             let view: ReturnType<typeof render> | undefined;
             await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
@@ -1245,14 +1246,14 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
     const HOUR = 60 * 60 * 1000;
     const at = (n: number) => ({ lat: -28.5 - n / 100, lng: 153.5 + n / 100 });
     const listing = (id: string, type: 'offer' | 'need', category: string, n: number) => ({
-        id, type, category, title: id, description: '', credits: 5, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        id, type, category, title: id, description: '', price_c: 500, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
         createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true, ...at(n),
     });
     const eggs = listing('eggs', 'offer', 'food', 1);
     const ladder = listing('ladder', 'offer', 'tools', 2);
     const lift = listing('lift', 'need', 'food', 3);
     const supper = {
-        id: 'supper', type: 'event', category: 'community', title: 'Supper', description: '', credits: 0, priceType: 'fixed',
+        id: 'supper', type: 'event', category: 'community', title: 'Supper', description: '', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: false,
         eventStartAt: new Date(Date.now() + 2 * HOUR).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...at(4),
     };
@@ -1277,7 +1278,7 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({
             enterprises: [{ publicKey: 'ent-pk', name: 'Tool Shed', callsign: 'Shed', avatar: '🔧', ...at(5), paused: false, status: 'active' }],
@@ -1460,7 +1461,7 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
 describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
     const pastEvent: any = {
         id: 'ev-past', type: 'event', category: 'community', title: 'Working bee at the hall',
-        description: 'Clearing the back garden', credits: 0, priceType: 'fixed',
+        description: 'Clearing the back garden', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'user-alice-pubkey', authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z',
         active: true, status: 'active', repeatable: false, lat: -28.55, lng: 153.5,
         eventStartAt: '2026-09-05T23:00:00.000Z', eventEndAt: '2026-09-06T02:00:00.000Z',
@@ -1475,7 +1476,7 @@ describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         // The feed list has no ended event in it; the by-id read is what finds one (§2.2).
@@ -1532,7 +1533,7 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
     const start = new Date(2030, 8, 28, 9, 0);
     const hosted: any = {
         id: 'ev-open', type: 'event', category: 'community', title: 'Working bee at the hall',
-        description: 'Clearing the back garden', credits: 0, priceType: 'fixed',
+        description: 'Clearing the back garden', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'user-alice-pubkey', authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z',
         active: true, status: 'active', repeatable: false, lat: -28.55, lng: 153.5,
         eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 3 * 3600_000).toISOString(),
@@ -1548,7 +1549,7 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => (filter?.id === byId.id ? [byId] : []) as any);
@@ -1733,7 +1734,7 @@ describe('MapPage: where the map opens (no hard-coded town)', () => {
         vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -1854,7 +1855,7 @@ describe('MapPage: where the map opens (no hard-coded town)', () => {
 // out in this file, so the change is routed exactly as lib/sync.ts routes it.
 describe('MapPage: a listing pushed over the live feed', () => {
     const pushed = {
-        id: 'post-lemons', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', credits: 5,
+        id: 'post-lemons', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', price_c: 500,
         priceType: 'fixed', authorPublicKey: 'author-erin', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
         updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
         lat: -28.5495, lng: 153.5005,
@@ -1870,7 +1871,7 @@ describe('MapPage: a listing pushed over the live feed', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -1899,13 +1900,13 @@ describe('MapPage: a listing pushed over the live feed', () => {
  */
 describe("an Elder's pin keeps its type colour (web-map-pins)", () => {
     const base = {
-        category: 'food', description: '', credits: 0, priceType: 'fixed', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
+        category: 'food', description: '', price_c: 0, priceType: 'fixed', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
         updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
         lat: -28.5495, lng: 153.5005,
     };
-    const elderOffer = { ...base, id: 'elder-offer', type: 'offer', title: 'Elder eggs', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
-    const elderNeed = { ...base, id: 'elder-need', type: 'need', title: 'Elder ladder', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
-    const newOffer = { ...base, id: 'new-offer', type: 'offer', title: 'New eggs', authorPublicKey: 'new-pk', authorEnergyCycled: 10 };
+    const elderOffer = { ...base, id: 'elder-offer', type: 'offer', title: 'Elder eggs', authorPublicKey: 'elder-pk', authorEnergyCycled: 500000 };
+    const elderNeed = { ...base, id: 'elder-need', type: 'need', title: 'Elder ladder', authorPublicKey: 'elder-pk', authorEnergyCycled: 500000 };
+    const newOffer = { ...base, id: 'new-offer', type: 'offer', title: 'New eggs', authorPublicKey: 'new-pk', authorEnergyCycled: 1000 };
     const offerPins = () => mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
 
     beforeEach(() => {
@@ -1916,7 +1917,7 @@ describe("an Elder's pin keeps its type colour (web-map-pins)", () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -1959,10 +1960,10 @@ describe("an Elder's pin keeps its type colour (web-map-pins)", () => {
  * a pin card of the listing alone.
  */
 describe('the global lobby on the map (G9b)', () => {
-    const GLOBAL_INFO = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+    const GLOBAL_INFO = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
     const guestPost = {
         id: 'post-bread', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Swap for eggs',
-        credits: 0, priceType: 'fixed', authorPublicKey: 'hidden', authorCallsign: '', authorEnergyCycled: 5000,
+        price_c: 0, priceType: 'fixed', authorPublicKey: 'hidden', authorCallsign: '', authorEnergyCycled: 500000,
         createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: false,
         lat: -28.55, lng: 153.55,
     };
@@ -1977,7 +1978,7 @@ describe('the global lobby on the map (G9b)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -2064,7 +2065,7 @@ describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)",
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         window.alert = vi.fn();
@@ -2137,7 +2138,7 @@ describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)",
 // A poll has no place: on a community that syncs by area it takes its author's area, and an author with none is told
 // members nearby won't see it in their list, only by searching (design DESIGN-global-sync-by-area §3.4, slice S4).
 describe("the poll form's note for a placeless listing (S4)", () => {
-    const BY_AREA = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, nearbyListings: { radiusKm: 250, max: 500 } } };
+    const BY_AREA = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, nearbyListings: { radiusKm: 250, max: 500 } } };
     beforeEach(() => {
         vi.restoreAllMocks();
         resetCommunityInfoOnce();
@@ -2147,7 +2148,7 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -2236,10 +2237,10 @@ describe("the poll form when the node says the next poll can't start yet", () =>
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
-        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } } as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } } as any);
         vi.spyOn(api, 'request').mockImplementation((async () => ({})) as any);
     });
     afterEach(() => { resetCommunityInfoOnce(); setLanguage('en'); });
@@ -2344,7 +2345,7 @@ describe("the poll form when the node says the next poll can't start yet", () =>
 describe('MapPage: where the pins are read from (S5)', () => {
     const post = {
         id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
-        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        price_c: 1200, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
         createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
         lat: -28.5495, lng: 153.5005,
     };
@@ -2368,7 +2369,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -2457,7 +2458,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
     // makes the real tap.
     it('online events never pin: with only those (the viewer\'s own) and nothing near, no event chips and the map says nothing is near', async () => {
         const online = {
-            ...post, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', credits: 0, repeatable: false, lat: undefined, lng: undefined,
+            ...post, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', price_c: 0, repeatable: false, lat: undefined, lng: undefined,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', eventOnline: true,
         };
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [online] : []) as any);
@@ -2476,7 +2477,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
     it('a local node: an online event in the plain read draws no pin and no event chips', async () => {
         vi.mocked(api.getCommunityInfo).mockResolvedValue({ profile: 'local', features: { beans: true } } as any);
         const online = {
-            ...post, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', credits: 0, repeatable: false, lat: undefined, lng: undefined,
+            ...post, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', price_c: 0, repeatable: false, lat: undefined, lng: undefined,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', eventOnline: true,
         };
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : [post, online]) as any);
@@ -2491,7 +2492,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
 
     it('after Show everywhere, the note sits under the filter bar, at every width', async () => {
         const event = {
-            ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
+            ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', price_c: 0, repeatable: false,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
         };
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post, event]) as any);
@@ -2567,7 +2568,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
         // at the drawn pins: the vi.restoreAllMocks of earlier describes leaves the leaflet mock with no cluster layer.)
         const ring = { ...post, id: 'post-ring', title: 'Ring', lat: -28.612345, lng: 153.652, distanceKm: 4.9 };
         const event = {
-            ...post, id: 'ev-near', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
+            ...post, id: 'ev-near', type: 'event', category: 'community', title: 'Seed swap', price_c: 0, repeatable: false,
             lat: -28.612345, lng: 153.62, distanceKm: 9.9, eventStartAt: new Date(Date.now() + 15 * 60_000).toISOString(),
             eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
         };
@@ -2702,7 +2703,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
  * an older node still says the member is blocked.
  */
 describe('a Need where Beans are off (B4/M2)', () => {
-    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: { openJoin: !beans, guestListingsOnly: !beans, beans } });
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: beans ? 'local' : 'global', features: { openJoin: !beans, guestListingsOnly: !beans, beans } });
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -2715,7 +2716,7 @@ describe('a Need where Beans are off (B4/M2)', () => {
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
         // As a node from before this change answers: blocked until an Offer is listed.
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: true } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: true } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -2773,7 +2774,7 @@ describe('Community Pricing Guide in the new-listing form', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
@@ -2849,7 +2850,7 @@ describe('Community Pricing Guide in the new-listing form', () => {
  * would ask for the photo on global again.
  */
 describe('sending a Need where Beans are off (review #1936 N3)', () => {
-    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -2868,7 +2869,7 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
     /** A Need with a title, a description and a pin, and no photo; the price too where there is a box. */
     async function fillNeed(beans: boolean, blocked: boolean) {
         vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(beans) as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: blocked } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: blocked } as any);
         const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'n1' } } as any);
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
@@ -2902,7 +2903,7 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0] as any;
         expect(body.type).toBe('need');
-        expect(body.credits).toBe(0);
+        expect(body.price_c).toBe(0);
         expect(body.photos).toHaveLength(1);
     });
 
@@ -2936,7 +2937,7 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
  * has not reached this first render yet; a member with no photo on the global node gets the form, not the photo gate.
  */
 describe('the post form opened from another tab (review #1936 N1)', () => {
-    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
     const gate = /likes to know who they're dealing with/;
 
     beforeEach(() => {
@@ -2949,7 +2950,7 @@ describe('the post form opened from another tab (review #1936 N1)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -2984,8 +2985,8 @@ describe('the post form opened from another tab (review #1936 N1)', () => {
 // about 100 m, and the member can still choose the exact spot (DESIGN-global-member-privacy-fable.md, director amendment 1
 // item 3; #1965). A local node: as before, the spot itself.
 describe('MapPage: a new pin starts Approximate where anyone can join', () => {
-    const OPEN_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false, openMembership: true } };
-    const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
+    const OPEN_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false, openMembership: true } };
+    const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
     const TAP = { lat: -28.55437, lng: 153.50261 };
 
     beforeEach(() => {
@@ -2998,7 +2999,7 @@ describe('MapPage: a new pin starts Approximate where anyone can join', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
     });
@@ -3101,7 +3102,7 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getEventZones').mockResolvedValue({ zones: [SYDNEY, LAGOS, ACCRA] });
@@ -3245,7 +3246,7 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         resetCommunityInfoOnce();
         vi.mocked(api.getCommunityInfo).mockResolvedValue({ profile: 'local', features: { beans: true } } as any);
         const hosted: any = {
-            id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', description: '', credits: 0, priceType: 'fixed',
+            id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', description: '', price_c: 0, priceType: 'fixed',
             authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
             status: 'active', repeatable: false, eventState: 'scheduled', eventOnline: true, eventLink: 'https://meet.example/a',
             eventStartAt: '2030-10-19T09:50:00.000Z', eventEndAt: '2030-10-19T11:50:00.000Z',
@@ -3264,7 +3265,7 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
 
     it("editing an event with a stored clock shows the place's clock and sends the clock, not an instant", async () => {
         const hosted: any = {
-            id: 'ev-lagos', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+            id: 'ev-lagos', type: 'event', category: 'community', title: 'Working bee', description: '', price_c: 0, priceType: 'fixed',
             authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
             status: 'active', repeatable: false, lat: 6.5244, lng: 3.3792, eventPlaceName: 'The hall', eventState: 'scheduled',
             eventStartAt: '2030-10-19T19:50:00.000Z', eventEndAt: '2030-10-19T21:50:00.000Z',
@@ -3293,7 +3294,7 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
     it("in the member's language: the line names the zone in it, and the picker names each place with no word for time", async () => {
         // An event in Kolkata, a zone the node's list (Sydney, Lagos, Accra) leaves out: its entry is the one this form named.
         const hosted: any = {
-            id: 'ev-kolkata', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+            id: 'ev-kolkata', type: 'event', category: 'community', title: 'Working bee', description: '', price_c: 0, priceType: 'fixed',
             authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
             status: 'active', repeatable: false, lat: 22.57, lng: 88.36, eventPlaceName: 'The hall', eventState: 'scheduled',
             eventStartAt: '2030-10-19T15:20:00.000Z', eventEndAt: '2030-10-19T17:20:00.000Z',
@@ -3345,7 +3346,7 @@ describe("the Map's enterprise list where the statuses read fails (review of #20
     });
 
     async function openMap(features: Record<string, unknown>, statusesError: Error) {
-        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: features.showcase ? 'global' : 'local', features } as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: features.showcase ? 'global' : 'local', features } as any);
         vi.spyOn(api, 'getEnterpriseStatuses').mockRejectedValue(statusesError);
         await act(async () => { render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(api.getEnterpriseStatuses).toHaveBeenCalled());
@@ -3377,7 +3378,7 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         window.alert = vi.fn();
@@ -3485,7 +3486,7 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
 
     it("the profile check still holds: a member with no photo is asked for one, and the composer doesn't open", async () => {
         vi.mocked(getProfileStatus).mockResolvedValueOnce({ complete: false, missingName: false, missingAvatar: true } as any);
-        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} } as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} } as any);
         resetCommunityInfoOnce();
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} />); });
@@ -3823,7 +3824,7 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
             status: 'active',
             active: true,
             repeatable: false,
-            credits: 0,
+            price_c: 0,
             priceType: 'fixed',
             lat: -28.5,
             lng: 153.5,
@@ -3844,7 +3845,7 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
             status: 'active',
             active: true,
             repeatable: false,
-            credits: 0,
+            price_c: 0,
             priceType: 'fixed',
             lat: -28.5,
             lng: 153.5,
@@ -3959,7 +3960,7 @@ describe("the New Post form's choices each say what they are (core post-type-lin
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         window.alert = vi.fn();

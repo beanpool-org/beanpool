@@ -17,7 +17,7 @@ const keepers = [
 ];
 const card = (over: Record<string, unknown> = {}) => ({
     id: 'd1', authorPubkey: 'a'.repeat(64), title: 'Pay Cat for the oven', description: 'Cat fixed the oven door.', effect: 'pay_out',
-    subject: 'c'.repeat(64), params: { amount: 40 }, status: 'open', opensAt: new Date().toISOString(),
+    subject: 'c'.repeat(64), params: { amount_c: 4000 }, status: 'open', opensAt: new Date().toISOString(),
     closesAt: new Date(Date.now() + 3 * 86400_000 + 60_000).toISOString(), tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 },
     myVote: null, ...over,
 });
@@ -31,7 +31,7 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
                 tally: { voted: 3, roll: 3, quorumRequired: 2, thresholdRequired: 0.6, yes: 2, no: 1 } })] as never,
             canPropose: true, rollSize: 3,
         });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="ongoing" />);
         const tallies = await screen.findAllByTestId('scoped-tally');
         expect(tallies[0]).toHaveTextContent('1 of 3 have voted. 2 must vote. Yes and No show when it closes.');
         expect(tallies[0].textContent).not.toMatch(/Yes \d|No \d/);
@@ -46,18 +46,18 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
 
     it('nothing for someone the node does not answer, and no propose button for a roll of one', async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue(null);
-        const { container, rerender } = render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} />);
+        const { container, rerender } = render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} />);
         await waitFor(() => expect(api.getEnterpriseDecisions).toHaveBeenCalled());
         expect(container.innerHTML).toBe('');
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: false, rollSize: 1 });
-        rerender(<EnterpriseDecisions treasuryKey="ent2" myPubkey={ME} keepers={keepers.slice(1, 2)} balance={120} />);
+        rerender(<EnterpriseDecisions treasuryKey="ent2" myPubkey={ME} keepers={keepers.slice(1, 2)} balance={12000} />);
         await waitFor(() => expect(api.getEnterpriseDecisions).toHaveBeenCalledTimes(2));
         expect(screen.queryByRole('button', { name: 'Propose a vote' })).toBeNull();
     });
 
     it('the pay-out form: the person from the roll (never yourself), the amount ≤ held, the 1.5% fee shown, then sent', async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="ongoing" />);
         fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
         expect(screen.queryByRole('radio', { name: /Bob/ })).toBeNull();
         expect(screen.getByRole('radio', { name: 'Make another keeper the lead' })).toBeInTheDocument();
@@ -65,25 +65,26 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
         fireEvent.change(screen.getByLabelText('How many Beans?'), { target: { value: '121' } });
         expect(screen.getByText("The enterprise holds 120 Beans, so it can't pay more than that.")).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('How many Beans?'), { target: { value: '40' } });
-        expect(screen.getByTestId('scoped-fee')).toHaveTextContent('Cat receives 39.4 Beans. The 1.5% trade fee (0.6 Beans) goes to the Commons.');
+        // feeOf(4000) = 60, so 3940 is theirs: figures as formatHundredths writes them.
+        expect(screen.getByTestId('scoped-fee')).toHaveTextContent('Cat receives 39.40 Beans. The 1.5% trade fee (0.60 Beans) goes to the Commons.');
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Pay Cat for the oven' } });
         fireEvent.change(screen.getByLabelText('Why?'), { target: { value: 'Cat fixed the oven door last week.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Open the vote' }));
         await waitFor(() => expect(api.proposeEnterpriseDecision).toHaveBeenCalledWith('ent', {
-            title: 'Pay Cat for the oven', description: 'Cat fixed the oven door last week.', effect: 'pay_out', params: { to: 'c'.repeat(64), amount: 40 },
+            title: 'Pay Cat for the oven', description: 'Cat fixed the oven door last week.', effect: 'pay_out', params: { to: 'c'.repeat(64), amount_c: 4000 },
         }));
     });
 
-    it('what it holds, rounded down to cents (review opus-1767 N8)', async () => {
+    it('what it holds, to the hundredth as the node counts it (review opus-1767 N8: never a rounded-up figure)', async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={112.3125} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={11231} lifecycle="ongoing" />);
         fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
         expect(screen.getByText('It holds 112.31 Beans now.')).toBeInTheDocument();
     });
 
     it("every recipient is a keeper, so a pay-out is capped at the earned surplus, in the node's words (review opus-1767 N5)", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={100} earnedSurplus={10} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={10000} earnedSurplus={1000} lifecycle="ongoing" />);
         fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
         expect(screen.getByText('Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 10 Beans now.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('radio', { name: 'Cat' }));
@@ -100,7 +101,7 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
 
     it('every choice chip is at least 44 px tall, and the small-roll line is in the secondary text colour (review opus-1767 N6, N7)', async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [card()] as never, canPropose: true, rollSize: 3 });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="ongoing" />);
         // The faintest line on the block was the one about ballot secrecy (3.28:1 in light): now the notes' colour.
         const small = await screen.findByText(/Nobody sees who voted how/);
         expect(small.className).toContain('text-nature-700');
@@ -117,7 +118,7 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
 
     it("a project: no vote takes it off its leader; the words are a project's", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="bounded" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="bounded" />);
         fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
         expect(screen.queryByRole('radio', { name: 'Make another keeper the lead' })).toBeNull();
         fireEvent.click(screen.getByRole('radio', { name: 'Remove a collaborator' }));

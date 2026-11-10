@@ -22,11 +22,11 @@ const RESIZED = ['data:image/jpeg;base64,SEVOUw==', 'data:image/jpeg;base64,RUdH
 function eggs() {
     return {
         publicKey: ENT, name: 'Community Eggs', purpose: 'Eggs for the street', status: 'active', paused: false, lifecycle: 'ongoing',
-        balance: 20, creditLine: 200, liveOffers: 1, earnedSurplus: 0, workingCapitalCeiling: null, deferredClaims: [],
+        balance_c: 2000, creditLine_c: 20000, liveOffers: 1, earnedSurplus_c: 0, workingCapitalCeiling_c: null, deferredClaims: [],
         pendingBids: [], activeDeals: [], keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null,
         keepers: [{ publicKey: BOB, callsign: 'Bob', role: 'lead', backing: 0 }],
         isLeadOrSoleKeeperOrAdmin: true,
-        posts: [{ id: 'p1', type: 'offer', title: 'Dozen eggs', credits: 6, price_type: 'fixed', repeatable: true }],
+        posts: [{ id: 'p1', type: 'offer', title: 'Dozen eggs', price_c: 600, price_type: 'fixed', repeatable: true }],
         flow: [], lat: -28.55, lng: 153.5,
     };
 }
@@ -34,7 +34,7 @@ function eggs() {
 beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, 'getTreasury').mockResolvedValue(eggs() as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [ENT] } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: [ENT] } as any);
     vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({ enterprise: { publicKey: ENT }, period: {}, summary: {}, entries: [] } as any);
     vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: null, readOnly: false, messages: [] } as any);
     let n = 0;
@@ -71,7 +71,8 @@ describe("an enterprise's Offer or Need, with photos while posting it, on the we
         fireEvent.change(within(form).getByPlaceholderText('20'), { target: { value: '8' } });
         await act(async () => { fireEvent.click(within(form).getByRole('button', { name: 'Publish Listing' })); });
         await waitFor(() => expect(post).toHaveBeenCalled());
-        expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Duck eggs', credits: 8, photos: [RESIZED[0]] }));
+        // 8 typed, sent as whole hundredths (price_c), as the node takes an enterprise's listing.
+        expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Duck eggs', price_c: 800, photos: [RESIZED[0]] }));
     });
 
     it('a Need: two photos, one taken off with ✕, the other sent with the Need', async () => {
@@ -87,7 +88,7 @@ describe("an enterprise's Offer or Need, with photos while posting it, on the we
         fireEvent.change(within(form).getByPlaceholderText('20'), { target: { value: '15' } });
         await act(async () => { fireEvent.click(within(form).getByRole('button', { name: 'Publish Listing' })); });
         await waitFor(() => expect(post).toHaveBeenCalled());
-        expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Mend the fence', credits: 15, photos: [RESIZED[1]] }));
+        expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Mend the fence', price_c: 1500, photos: [RESIZED[1]] }));
     });
 
     it("the tag sheet inside the form: Enter in its search posts nothing, and Escape leaves the keeper's form open", async () => {

@@ -702,7 +702,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
                                 <div className="text-xl sm:text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
-                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec / 100, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { n: formatHundredths(ec), level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
                                         ? <BoldIn text={tn(creditsToNext / 100, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { n: formatHundredths(creditsToNext), emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })} bold={(n) => <span className="font-black" style={{ color: tier.color }}>{n}</span>} />
@@ -759,7 +759,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         {/* A quarter of a 320 px screen: a longer language's tier name breaks inside its tile. */}
                                         <span className="w-full text-center text-[11px] font-black mt-2 leading-tight [overflow-wrap:anywhere]" style={{ color: lvl.color }}>{t(TIER_WORDS[lvl.name])}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
-                                            {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
+                                            {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min / 100, '{n} trust', '{n} trust', { n: formatHundredths(lvl.min) })}
                                         </span>
                                     </button>
                                 );

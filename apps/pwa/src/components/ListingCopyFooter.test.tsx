@@ -17,8 +17,8 @@ vi.mock('./ReportModal', () => ({ ReportModal: () => null }));
 const KEY = 'ef'.repeat(32);
 const ME = 'ab'.repeat(32);
 const FROM = { host: 'h', postId: null, name: 'Mullumbimby', url: 'https://h', door: 'ask' as const };
-const open = { from: FROM, price: { beans: 20, per: 'fixed' as const }, takesQuestions: true };
-const shut = { from: FROM, price: { beans: 20, per: 'fixed' as const } };
+const open = { from: FROM, price: { price_c: 2000, per: 'fixed' as const }, takesQuestions: true };
+const shut = { from: FROM, price: { price_c: 2000, per: 'fixed' as const } };
 const post = { id: 'c1', title: 'Loaves', authorPublicKey: KEY, authorCallsign: 'Robin' };
 
 beforeEach(() => {

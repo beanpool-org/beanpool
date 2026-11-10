@@ -24,14 +24,14 @@ vi.mock('../lib/api', async (importOriginal) => {
         buildOfflineInviteCode: vi.fn(async () => 'BP-offline-ticket'),
         getMyInvites: vi.fn(async () => ({ invites: INVITES.rows })),
         getInviteTree: vi.fn(async () => []),
-        getMyVouching: vi.fn(async () => ({ voucher: true, presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [], budget: { level: 1000, left: 900 } })),
+        getMyVouching: vi.fn(async () => ({ voucher: true, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000, vouchedBy: [], budget: { level: 100000, left: 90000 } })),
         getVouchersBlock: vi.fn(async () => null),
         getCommunityCard: vi.fn(async () => null),
         request: vi.fn(async () => ({ role: 'member' })),
     };
 });
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true } })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true } })),
 }));
 vi.mock('qrcode.react', () => ({ QRCodeSVG: ({ value }: { value: string }) => <svg data-testid="qr" data-value={value} /> }));
 
@@ -49,7 +49,7 @@ const base = (code: string, madeDaysAgo: number) => ({
 function fixture() {
     INVITES.rows = [
         // A bound invite: bound to a names-list entry, with a 200 vouch and a 1,000 voucher budget, made 7 days ago (23 left).
-        { ...base('INV-BOUND-0001', 7), namesEntryId: 'entry-1', vouchAmount: 200, voucherLevel: 1000 },
+        { ...base('INV-BOUND-0001', 7), namesEntryId: 'entry-1', vouchAmount: 20000, voucherLevel: 100000 },
         // A plain one with a note.
         { ...base('INV-NOTE-0002', 1), intendedFor: 'Kim' },
         // A plain one with nothing on it, 28 days old: 2 days left, so red.
@@ -59,7 +59,7 @@ function fixture() {
         // 31 days old: past its life, the node deletes it within the hour. Not pending.
         base('INV-LAPSED-0005', 31),
         // Used: Joined.
-        { ...base('INV-USED-0006', 10), usedBy: 'c'.repeat(64), usedAt: ago(9), usedByCallsign: 'joanne', vouchAmount: 100 },
+        { ...base('INV-USED-0006', 10), usedBy: 'c'.repeat(64), usedAt: ago(9), usedByCallsign: 'joanne', vouchAmount: 10000 },
     ];
 }
 

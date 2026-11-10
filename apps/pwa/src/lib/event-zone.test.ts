@@ -134,7 +134,7 @@ describe("the zone in the member's language: the place from core, never cut from
 
 describe('editing an event with a stored clock (§2 Edit)', () => {
     const post = {
-        id: 'ev', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+        id: 'ev', type: 'event', category: 'community', title: 'Working bee', description: '', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'host', authorCallsign: 'Host', createdAt: '', active: true, status: 'active', repeatable: false,
         lat: 6.5, lng: 3.4, eventStartAt: '2030-10-19T19:50:00.000Z', eventEndAt: '2030-10-19T21:50:00.000Z',
         eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50', eventTz: 'Africa/Lagos', eventOnline: false,

@@ -5,7 +5,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { formatNumber } from '@beanpool/core';
 import { VouchPresetChoice } from './VouchPresetChoice';
 
 const amounts = () => screen.getAllByRole('radio').map((r) => r.getAttribute('data-testid')?.replace('invite-vouch-', ''));
@@ -20,15 +19,16 @@ describe('VouchPresetChoice per role', () => {
     });
 
     it('shows an admin the four, greyed past what is left, with their budget', () => {
-        render(<VouchPresetChoice value={null} onChange={() => {}} budgetLeft={60} budgetTotal={1000} />);
+        // The node's budget is whole hundredths: 60 of 1,000 Beans left.
+        render(<VouchPresetChoice value={null} onChange={() => {}} budgetLeft={6000} budgetTotal={100000} />);
         expect(amounts()).toEqual(['none', '25', '50', '75', '100']);
         expect((screen.getByTestId('invite-vouch-75') as HTMLInputElement).disabled).toBe(true);
         expect((screen.getByTestId('invite-vouch-50') as HTMLInputElement).disabled).toBe(false);
-        expect(screen.getByText(`From your budget: 60 of ${formatNumber(1000)} left`)).toBeTruthy();
+        expect(screen.getByText('From your budget: 60 of 1,000 left')).toBeTruthy();
     });
 
     it("greys an owner's raise past 500 for one person, never past 100", () => {
-        render(<VouchPresetChoice value={null} onChange={() => {}} budgetLeft={0} budgetTotal={0} noLimit priorVouch={200} personName="sam" />);
+        render(<VouchPresetChoice value={null} onChange={() => {}} budgetLeft={0} budgetTotal={0} noLimit priorVouch={20000} personName="sam" />);
         expect((screen.getByTestId('invite-vouch-200') as HTMLInputElement).disabled).toBe(false);
         expect((screen.getByTestId('invite-vouch-500') as HTMLInputElement).disabled).toBe(true);
     });

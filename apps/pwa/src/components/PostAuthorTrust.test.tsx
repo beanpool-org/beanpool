@@ -11,13 +11,14 @@ import { resolveAvatarUrl } from '../lib/avatar';
 const coreTier = (credit: number) => getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit).name;
 
 describe('PostAuthorTrust tier', () => {
-    it.each([0, 199, 200, 599, 600, 1399, 1400, 2000])('credit %i gives the node\'s tier', (credit) => {
+    // Credits are whole hundredths (the node's authorEnergyCycled): each threshold and one hundredth below it.
+    it.each([0, 19999, 20000, 59999, 60000, 139999, 140000, 200000])('credit %i gives the node\'s tier', (credit) => {
         expect(getTrustTier(credit).name).toBe(coreTier(credit));
         expect(getTrustTier(credit).label).toBe(coreTier(credit));
     });
 
     it('starts each tier where the node does', () => {
-        expect([199, 200, 599, 600, 1399, 1400].map(c => getTrustTier(c).name))
+        expect([19999, 20000, 59999, 60000, 139999, 140000].map(c => getTrustTier(c).name))
             .toEqual(['Newcomer', 'Resident', 'Resident', 'Steward', 'Steward', 'Elder']);
     });
 
@@ -26,13 +27,13 @@ describe('PostAuthorTrust tier', () => {
         expect(getTrustTier(0).emoji).toBe('🌱');
     });
 
-    it('treats 1400 and up as Elder', () => {
-        expect(isElder(1399)).toBe(false);
-        expect(isElder(1400)).toBe(true);
+    it('treats 1,400 Beans (140000 hundredths) and up as Elder', () => {
+        expect(isElder(139999)).toBe(false);
+        expect(isElder(140000)).toBe(true);
     });
 
     it('labels the full card with the node\'s tier name', () => {
-        render(<PostAuthorTrust callsign="Rowan" energyCycled={600} />);
+        render(<PostAuthorTrust callsign="Rowan" energyCycled={60000} />);
         expect(screen.getByText('Steward')).toBeInTheDocument();
     });
 
@@ -54,7 +55,7 @@ describe('PostAuthorTrust tier', () => {
         const { setLanguage } = await import('@beanpool/core');
         try {
             setLanguage('pt', [{ 'Steward\u0004trust tier': 'Guardião', "View {name}'s profile": 'Ver o perfil de {name}' }]);
-            render(<PostAuthorTrust callsign="Rowan" energyCycled={600} publicKey={'b'.repeat(64)} onOpenProfile={() => {}} />);
+            render(<PostAuthorTrust callsign="Rowan" energyCycled={60000} publicKey={'b'.repeat(64)} onOpenProfile={() => {}} />);
             expect(screen.getByTestId('author-tier')).toHaveTextContent('Guardião');
             expect(screen.getByRole('button', { name: 'Ver o perfil de Rowan' })).toBeInTheDocument();
         } finally {

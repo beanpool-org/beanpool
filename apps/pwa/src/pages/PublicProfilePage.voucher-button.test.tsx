@@ -16,7 +16,7 @@ vi.mock('../lib/features', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/features')>()),
     useFeatureMode: vi.fn(() => beansMode),
 }));
-const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} };
+const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} };
 vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => LOCAL_INFO) }));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../components/ImageLightbox', () => ({ ImageLightbox: () => null }));

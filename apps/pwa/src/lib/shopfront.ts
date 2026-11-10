@@ -13,7 +13,7 @@
  *
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
-import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
 import { getMarketplacePosts, signedFetch } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
 import { readShop, type MyShop } from './shop';
@@ -166,7 +166,7 @@ export interface ShopfrontKeeper {
     tier: TierName | null;
     rating: { average: number; count: number } | null;
     trades: number | null;
-    /** What they back it with, in Beans (0 when the node says none). */
+    /** What they back it with, whole hundredths of a Bean (the node's backing_c; 0 when the node says none). */
     backing: number;
 }
 
@@ -197,7 +197,7 @@ export function readKeepers(raw: unknown): ShopfrontKeeper[] {
             tier: tierIndexForName(k.tier as string) >= 0 ? k.tier as TierName : null,
             rating: rating && typeof rating.average === 'number' && typeof rating.count === 'number' ? { average: rating.average, count: rating.count } : null,
             trades: typeof k.trades === 'number' && Number.isFinite(k.trades) ? k.trades : null,
-            backing: Number(k.backing) > 0 ? Number(k.backing) : 0,
+            backing: typeof k.backing_c === 'number' && Number.isSafeInteger(k.backing_c) && k.backing_c > 0 ? k.backing_c : 0,
         });
     }
     return rows.sort((a, b) => Number(b.isLead) - Number(a.isLead));
@@ -272,8 +272,9 @@ export function categorySinceLine(category: ShopCategory | null, since: string |
 }
 
 /** The money in one line (round 3 §0 row 9): its balance and its credit line. */
-export function moneyLine(balance: number, creditLine: number): string {
-    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatNumber(balance), credit: formatNumber(creditLine) });
+export function moneyLine(balance_c: number, creditLine_c: number): string {
+    // Whole hundredths each (the detail's balance_c and creditLine_c), written as every figure is.
+    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatHundredths(balance_c), credit: formatHundredths(creditLine_c) });
 }
 
 /** Whether an enterprise's detail is from a node with the shopfront (E2: it says `about` and `since`). */

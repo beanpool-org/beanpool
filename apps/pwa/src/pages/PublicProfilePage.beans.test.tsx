@@ -17,7 +17,7 @@ vi.mock('../lib/features', async (importOriginal) => ({
     useFeatureMode: vi.fn(() => beansMode),
 }));
 // The node's /api/community/info, read once per page load: a local node unless a test says otherwise.
-const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} };
+const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} };
 vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => LOCAL_INFO) }));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../components/ImageLightbox', () => ({ ImageLightbox: () => null }));
@@ -30,7 +30,7 @@ vi.mock('../lib/blocklist', () => ({
 }));
 
 const listing = {
-    id: 'p1', type: 'offer', category: 'food', title: 'Pottery lessons on Sundays', description: '', credits: 20,
+    id: 'p1', type: 'offer', category: 'food', title: 'Pottery lessons on Sundays', description: '', price_c: 2000,
     priceType: 'fixed', authorPublicKey: 'kofi-pubkey', authorCallsign: 'Kofi', active: true, status: 'active',
     createdAt: '2026-10-01T00:00:00.000Z',
 };

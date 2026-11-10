@@ -120,7 +120,7 @@ describe('the calendar entry (§4, director amendment 1.5)', () => {
         const { shareableEvent } = await import('../components/EventExtras');
         // As the detail builds it for a Going member, who holds the link.
         const online = shareableEvent({
-            id: 'ev-2', type: 'event', category: 'community', title: 'Vibe coding', description: '', credits: 0, priceType: 'fixed',
+            id: 'ev-2', type: 'event', category: 'community', title: 'Vibe coding', description: '', price_c: 0, priceType: 'fixed',
             authorPublicKey: 'host', authorCallsign: 'Host', createdAt: '', active: true, status: 'active', repeatable: false,
             ...ONLINE_SYDNEY, eventLink: 'https://meet.example/abc', myRsvp: 'going',
         } as MarketplacePost);

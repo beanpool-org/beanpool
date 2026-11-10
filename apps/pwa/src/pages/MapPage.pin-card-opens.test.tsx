@@ -107,7 +107,7 @@ const mockIdentity: BeanPoolIdentity = {
 
 const post = {
     id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
-    credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+    price_c: 1200, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
     createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
     lat: -28.5495, lng: 153.5005,
 };
@@ -122,7 +122,7 @@ beforeEach(() => {
     vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
     vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
 });
@@ -222,7 +222,7 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
     });
 
     it("a visitor's pin card opens the listing from anywhere on it too, and its ✕ opens nothing", async () => {
-        const GLOBAL = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+        const GLOBAL = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
         vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL as any);
         const onNavigate = vi.fn();
         let view: ReturnType<typeof render> | undefined;
@@ -250,7 +250,7 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
 describe("MapPage: the pin card is the Market's list card with a ✕ (M1)", () => {
     const HOUR = 60 * 60 * 1000;
     const bee = (extra: Record<string, unknown> = {}) => ({
-        id: 'ev-bee', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+        id: 'ev-bee', type: 'event', category: 'community', title: 'Working bee', description: '', price_c: 0, priceType: 'fixed',
         authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active',
         repeatable: false, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * HOUR).toISOString(),
         eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...extra,
@@ -330,7 +330,7 @@ describe("MapPage: the pin card is the Market's list card with a ✕ (M1)", () =
     });
 
     it("a visitor's card: the list card's slot and chips, the title and \"near here\", and no price, name or View button", async () => {
-        const GLOBAL = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+        const GLOBAL = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
         vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL as any);
         const onNavigate = vi.fn();
         let view: ReturnType<typeof render> | undefined;

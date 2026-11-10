@@ -8,7 +8,7 @@
  */
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
+import { LOCAL_COMMUNITY_SHEET, formatHundredths } from '@beanpool/core';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -44,7 +44,8 @@ const mockIdentity: BeanPoolIdentity = {
 
 // Example Valley as the Commons preview hands it over (only ShowcasePreviews names the sample itself).
 const [bakery, project] = sampleTreasuries();
-const BAKERY = { id: bakery.publicKey, name: bakery.name, balance: bakery.balance, listing: sampleTreasuryDetail(bakery.publicKey).posts[0].title as string };
+// Its balance as the page writes it: whole hundredths through formatHundredths.
+const BAKERY = { id: bakery.publicKey, name: bakery.name, balance: formatHundredths(bakery.balance_c), listing: sampleTreasuryDetail(bakery.publicKey).posts[0].title as string };
 const PROJECT = { id: project.publicKey, title: project.name };
 
 let calls: { url: string; method: string; body: string }[] = [];
@@ -88,7 +89,8 @@ describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
         expect(screen.getByTestId('sample-header')).toBeInTheDocument();
         expect(screen.getAllByText('a neighbour').length).toBeGreaterThanOrEqual(2);
         expect(screen.getByText(BAKERY.listing)).toBeInTheDocument();
-        expect(screen.getAllByText(new RegExp(String(BAKERY.balance))).length).toBeGreaterThan(0);
+        // The figure whole, never inside a longer number (a count of hundredths would read "340" inside "34000").
+        expect(screen.getAllByText(new RegExp(`(^|[^\\d,.])${BAKERY.balance.replace(/[.,]/g, '\\$&')}([^\\d,.]|$)`)).length).toBeGreaterThan(0);
         // Not drawn in preview: the keepers' votes, Report, the thread's composer.
         expect(screen.queryByTestId('enterprise-decisions')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Report/i })).not.toBeInTheDocument();
@@ -199,7 +201,7 @@ describe('TreasuryDetailPage: a real key', () => {
 
     it('on a local node: read as before, the detail, its ledger and its thread; no strip, no marker', async () => {
         const detail = vi.spyOn(api, 'getTreasury').mockResolvedValue({
-            publicKey: 'local-ent-1', name: 'Garden Bakery', purpose: 'Bread from the garden oven', balance: 50, creditLine: 100,
+            publicKey: 'local-ent-1', name: 'Garden Bakery', purpose: 'Bread from the garden oven', balance_c: 5000, creditLine_c: 10000,
             liveOffers: 0, lifecycle: 'ongoing', status: 'active', keepers: [{ publicKey: 'kofi-key', callsign: 'Kofi', role: 'lead' }], posts: [],
         } as any);
         const ledger = vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({ entries: [], summary: null } as any);
@@ -222,8 +224,8 @@ describe('TreasuryDetailPage: a real key', () => {
             publicKey: key,
             name: key === 'local-ent-1' ? 'First Bakery' : 'Second Bakery',
             purpose: 'Baking',
-            balance: 50,
-            creditLine: 100,
+            balance_c: 5000,
+            creditLine_c: 10000,
             liveOffers: 0,
             lifecycle: 'ongoing',
             status: 'active',

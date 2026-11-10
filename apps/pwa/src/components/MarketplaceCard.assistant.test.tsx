@@ -9,7 +9,7 @@ import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
 
 const post = {
-    id: 'p-assistant', type: 'offer', category: 'food', title: 'Quincefield sourdough loaves', description: 'Baked Saturday morning', credits: 6,
+    id: 'p-assistant', type: 'offer', category: 'food', title: 'Quincefield sourdough loaves', description: 'Baked Saturday morning', price_c: 600,
     priceType: 'fixed', authorPublicKey: 'a'.repeat(64), authorCallsign: 'Olive', active: true, status: 'active',
     createdAt: new Date().toISOString(), photos: ['/api/marketplace/posts/p-assistant/photos/0?v=1&k=KEY0'],
 } as unknown as MarketplacePost;

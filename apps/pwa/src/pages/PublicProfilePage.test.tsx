@@ -56,9 +56,9 @@ const mockProfile: MemberProfile = {
 } as any;
 
 const mockBalance: BalanceInfo = {
-    balance: 100,
-    floor: -500,
-    commonsBalance: 0,
+    balance_c: 10000,
+    floor_c: -50000,
+    commonsBalance_c: 0,
     callsign: 'Alice',
     tier: 'contributor' as any,
 };
@@ -67,7 +67,7 @@ const mockTreasuryDetail: any = {
     publicKey: 'treasury-pubkey-123',
     name: 'Community Bakery',
     description: 'Fresh bread for all',
-    balance: 500,
+    balance_c: 50000,
     avatar: null,
     created_at: '2026-09-01T00:00:00.000Z',
     signers: [

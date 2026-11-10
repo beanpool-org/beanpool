@@ -3216,7 +3216,8 @@ export interface KeeperRequestItem {
     id: string;
     enterprisePubkey: string;
     memberPubkey: string;
-    pledgedBacking_c: number;
+    /** The pledge, whole hundredths of a Bean: the node's answer keeps this key (a listed deviation); the request body sends pledgedBacking_c. */
+    pledgedBacking: number;
     status: 'pending' | 'approved' | 'declined';
     createdAt: string;
     decidedAt?: string | null;
@@ -3239,7 +3240,8 @@ export interface KeeperChangeItem {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
-    pledgedBacking_c: number;
+    /** The pledge, whole hundredths of a Bean (the node keeps this key, as on KeeperRequestItem). */
+    pledgedBacking: number;
     /** True when pledgedBacking is the pledge's named part only, as a keeper other than the lead reads it. */
     namedBackingOnly?: boolean;
     proposedBy: string;
@@ -3288,7 +3290,7 @@ export async function getEnterpriseKeeperRequests(treasury: string, status = 'pe
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
 }
 
-export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number; applied: boolean; change: KeeperChangeItem | null }> {
+export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing_c: number; applied: boolean; change: KeeperChangeItem | null }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`);
 }
 

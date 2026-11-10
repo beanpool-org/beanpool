@@ -16,7 +16,7 @@ const identityMocks = vi.hoisted(() => ({
 
 vi.mock('./lib/identity', async (orig) => ({ ...(await orig<typeof import('./lib/identity')>()), ...identityMocks }));
 vi.mock('./lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { shareOutside: true } })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { shareOutside: true } })),
     joinInFlight: vi.fn(async () => false),
 }));
 vi.mock('./lib/sync', () => ({

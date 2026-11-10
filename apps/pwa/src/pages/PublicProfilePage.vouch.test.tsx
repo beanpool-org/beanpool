@@ -13,7 +13,7 @@ vi.mock('../lib/api', async (importOriginal) => {
         })),
         getMemberRatings: vi.fn(async () => ({ average: 5, count: 1, ratings: [], asProvider: 1, asReceiver: 0 })),
         getMarketplacePosts: vi.fn(async () => []),
-        getBalance: vi.fn(async () => ({ balance: 100, earnedCredit: 50, allowance: 100 })),
+        getBalance: vi.fn(async () => ({ balance_c: 10000, earnedCredit_c: 5000, allowance: 100 })),
         getRatingsGiven: vi.fn(async () => []),
         getFriends: vi.fn(async () => []),
         getTrustProfile: vi.fn(async () => ({
@@ -24,19 +24,19 @@ vi.mock('../lib/api', async (importOriginal) => {
         })),
         getMyVouching: vi.fn(async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [],
         })),
         vouchForMember: vi.fn(async () => ({
             id: 'gift-1',
             memberPubkey: 'target-pk',
-            amount: 25,
-            total: 25,
-            budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 5, level: 1000 },
+            amount: 2500,
+            total: 2500,
+            budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 5, level: 100000 },
         })),
     };
 });
@@ -81,9 +81,9 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('does not render profile vouch when viewer is not a voucher', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: false,
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -131,15 +131,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('offers raise when voucher already vouched for that member', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'hold',
-                    amount: -50,
+                    amount_c: -5000,
                     actor: IDENTITY.publicKey,
                     actorCallsign: 'ana',
                     at: '2026-11-01T00:00:00.000Z',
@@ -168,7 +168,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('asks confirmation when server reports already_vouched and Cancel sends nothing', async () => {
         const error: any = new Error("You've already vouched for @sam.");
         error.code = 'already_vouched';
-        error.prior = 25;
+        error.prior = 2500;
         vi.mocked(vouchForMember).mockRejectedValueOnce(error);
 
         render(
@@ -199,15 +199,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('asks confirmation when server reports already_vouched and Raise sends raise', async () => {
         const error: any = new Error("You've already vouched for @sam.");
         error.code = 'already_vouched';
-        error.prior = 25;
+        error.prior = 2500;
         vi.mocked(vouchForMember)
             .mockRejectedValueOnce(error)
             .mockResolvedValueOnce({
                 id: 'gift-2',
                 memberPubkey: TARGET_PK,
-                amount: 25,
-                total: 50,
-                budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 5, level: 1000 },
+                amount: 2500,
+                total: 5000,
+                budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 5, level: 100000 },
             });
 
         render(
@@ -231,21 +231,21 @@ describe('PublicProfilePage Vouching (§9)', () => {
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toBeInTheDocument());
         expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 50 Beans.');
         expect(vouchForMember).toHaveBeenCalledTimes(2);
-        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, 25, true);
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, 2500, true);
     });
 
     it('greys out presets that would take total for that person past 100', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'hold',
-                    amount: -50,
+                    amount_c: -5000,
                     actor: IDENTITY.publicKey,
                     actorCallsign: 'ana',
                     at: '2026-11-01T00:00:00.000Z',
@@ -285,15 +285,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
         // The earlier vouch (50) is outside the history window: only the node's refusal knows it.
         const error: any = new Error('You’ve already vouched for @sam.');
         error.code = 'already_vouched';
-        error.prior = 50;
+        error.prior = 5000;
         vi.mocked(vouchForMember)
             .mockRejectedValueOnce(error)
             .mockResolvedValueOnce({
                 id: 'gift-2',
                 memberPubkey: TARGET_PK,
-                amount: 25,
-                total: 75,
-                budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 4, level: 1000 },
+                amount: 2500,
+                total: 7500,
+                budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 4, level: 100000 },
             });
 
         render(
@@ -327,9 +327,9 @@ describe('PublicProfilePage Vouching (§9)', () => {
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-1',
             memberPubkey: TARGET_PK,
-            amount: 75,
-            total: 75,
-            budget: { left: 475, held: 100, heldInvites: 1, vouched: 425, peopleVouched: 5, level: 1000 },
+            amount: 7500,
+            total: 7500,
+            budget: { left: 47500, held: 10000, heldInvites: 1, vouched: 42500, peopleVouched: 5, level: 100000 },
         });
 
         render(
@@ -356,7 +356,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('an already_vouched refusal whose raise would pass 100 offers no raise and greys that preset (#2915 round 4, self-check)', async () => {
         const error: any = new Error('You’ve already vouched for @sam.');
         error.code = 'already_vouched';
-        error.prior = 50;
+        error.prior = 5000;
         vi.mocked(vouchForMember).mockRejectedValueOnce(error);
 
         render(
@@ -412,15 +412,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('at 100 (the most a vouch can be) the person’s card hides Raise vouch', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'hold',
-                    amount: -100,
+                    amount_c: -10000,
                     actor: IDENTITY.publicKey,
                     actorCallsign: 'ana',
                     at: '2026-11-01T00:00:00.000Z',
@@ -450,7 +450,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('after an over_max refusal the refused preset is no longer selected', async () => {
         const error: any = new Error('Your vouches for @sam can’t go past 100 Beans.');
         error.code = 'over_max';
-        error.prior = 75;
+        error.prior = 7500;
         vi.mocked(vouchForMember).mockRejectedValueOnce(error);
 
         render(
@@ -479,15 +479,15 @@ describe('PublicProfilePage Vouching (§9)', () => {
     it('when raised to 100, success is shown and Raise vouch is no longer offered', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'hold',
-                    amount: -75,
+                    amount_c: -7500,
                     actor: IDENTITY.publicKey,
                     actorCallsign: 'ana',
                     at: '2026-11-01T00:00:00.000Z',
@@ -499,9 +499,9 @@ describe('PublicProfilePage Vouching (§9)', () => {
         vi.mocked(vouchForMember).mockResolvedValueOnce({
             id: 'gift-100',
             memberPubkey: TARGET_PK,
-            amount: 25,
-            total: 100,
-            budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 4, level: 1000 },
+            amount: 2500,
+            total: 10000,
+            budget: { left: 52500, held: 10000, heldInvites: 1, vouched: 37500, peopleVouched: 4, level: 100000 },
         });
 
         render(

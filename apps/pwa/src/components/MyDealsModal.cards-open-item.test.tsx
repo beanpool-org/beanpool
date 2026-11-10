@@ -36,13 +36,13 @@ const ME = 'user-pubkey-123';
 const identity = { publicKey: ME };
 
 const POSTS: MarketplacePost[] = [{
-    id: 'post-1', title: 'Organic Sourdough Bread', description: '', category: 'food', type: 'offer', credits: 15, priceType: 'fixed',
+    id: 'post-1', title: 'Organic Sourdough Bread', description: '', category: 'food', type: 'offer', price_c: 1500, priceType: 'fixed',
     photos: ['/api/marketplace/posts/post-1/photos/0', '/api/marketplace/posts/post-1/photos/1'], authorPublicKey: ME, authorCallsign: 'baker-alice',
     status: 'active', active: true, repeatable: false, createdAt: '2026-10-10T00:00:00Z',
 }];
 const heldDeal = {
     id: 'tx-held', postId: 'post-2', postTitle: 'Heirloom Tomato Seeds', buyerPublicKey: ME, buyerCallsign: 'gardener-bob',
-    sellerPublicKey: 'seller-pubkey-456', sellerCallsign: 'seed-keeper', credits: 10, status: 'pending', createdAt: '2026-10-15T12:00:00Z',
+    sellerPublicKey: 'seller-pubkey-456', sellerCallsign: 'seed-keeper', amount_c: 1000, status: 'pending', createdAt: '2026-10-15T12:00:00Z',
     coverImage: '/api/marketplace/posts/post-2/photos/0',
 } as MarketplaceTransaction;
 const doneDeal = {

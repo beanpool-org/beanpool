@@ -14,10 +14,10 @@ vi.mock('../lib/api', async (importOriginal) => {
         getInviteTree: vi.fn(async () => []),
         getMyVouching: vi.fn(async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         })),
         getVouchersBlock: vi.fn(async () => ({
@@ -32,15 +32,15 @@ vi.mock('../lib/api', async (importOriginal) => {
                     madeAt: '2026-11-01T00:00:00.000Z',
                     stoppedAt: null,
                     stopReason: null,
-                    left: 550,
-                    held: 100,
+                    left: 55000,
+                    held: 10000,
                     heldInvites: 1,
-                    vouched: 350,
+                    vouched: 35000,
                     peopleVouched: 4,
-                    level: 1000,
+                    level: 100000,
                     belowZero: 1,
                     writtenOff: 0,
-                    passedOn: { amount: 0, people: 0 },
+                    passedOn: { amount_c: 0, people: 0 },
                     invitesWithVouch: 4,
                     trading: { withOthers: 0, insideOnly: 0 },
                 },
@@ -52,7 +52,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true },
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true },
     })),
 }));
 
@@ -84,9 +84,9 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
     it('does not render presets when member is not a voucher', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: false,
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -98,10 +98,10 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
     it('greys out presets above what budget is left', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 40, held: 0, heldInvites: 0, vouched: 960, peopleVouched: 10, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 4000, held: 0, heldInvites: 0, vouched: 96000, peopleVouched: 10, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -122,10 +122,11 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
 
         await waitFor(() => {
+            // The vouch goes as whole hundredths, as the node takes it (core isVouchPreset): 50 Beans.
             expect(generateInvite).toHaveBeenCalledWith(
                 IDENTITY.publicKey,
                 undefined,
-                50,
+                5000,
             );
         });
     });

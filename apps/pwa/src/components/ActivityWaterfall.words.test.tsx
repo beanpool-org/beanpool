@@ -20,9 +20,9 @@ import { ActivityWaterfall } from './ActivityWaterfall';
 const now = new Date().toISOString();
 const FEED = [
     { id: 1, eventType: 'member_joined', actorPubkey: 'pk-bob', actorCallsign: 'Bob', createdAt: now },
-    { id: 2, eventType: 'trade_completed', actorPubkey: 'pk-sam', actorCallsign: 'Sam', targetPubkey: 'pk-bea', targetCallsign: 'Bea', metadata: { postId: 'post-2', postTitle: 'Bike repair', credits: 12 }, createdAt: now },
+    { id: 2, eventType: 'trade_completed', actorPubkey: 'pk-sam', actorCallsign: 'Sam', targetPubkey: 'pk-bea', targetCallsign: 'Bea', metadata: { postId: 'post-2', postTitle: 'Bike repair', amount_c: 1200 }, createdAt: now },
     { id: 3, eventType: 'rating_given', actorPubkey: 'pk-rae', actorCallsign: 'Rae', targetPubkey: 'pk-tia', targetCallsign: 'Tia', metadata: { stars: 3, comment: 'Fast and friendly' }, createdAt: now },
-    { id: 4, eventType: 'post_created', actorPubkey: 'pk-damo', actorCallsign: 'Damo', metadata: { postId: 'post-1', title: 'Record Fair', credits: 5 }, createdAt: now },
+    { id: 4, eventType: 'post_created', actorPubkey: 'pk-damo', actorCallsign: 'Damo', metadata: { postId: 'post-1', title: 'Record Fair', price_c: 500 }, createdAt: now },
     { id: 5, eventType: 'dispute_resolved', actorPubkey: 'pk-admin', actorCallsign: 'Admin', metadata: {}, createdAt: now },
 ];
 const others = ['Bob', 'Sam', 'Bea', 'Rae', 'Tia', 'Damo', 'Bike repair', 'Fast and friendly', 'Record Fair'];

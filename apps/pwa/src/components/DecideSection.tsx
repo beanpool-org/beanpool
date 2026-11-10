@@ -438,10 +438,11 @@ export function DecideSection({
                                 const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
                                 // The node sends the member's balance and debt only to those who can vote in it (and to the member):
                                 // balances are private (2026-09-28). Anyone else is told so, never shown a made-up 0.
-                                const knowsDebt = typeof item.params?.debt === 'number' || typeof item.params?.balance === 'number';
-                                const debtAmount = typeof item.params?.debt === 'number' ? Math.abs(item.params.debt) : (typeof item.params?.balance === 'number' ? Math.abs(Math.min(0, item.params.balance)) : 0);
+                                // The node's removal params are whole hundredths: debt_c, balance_c, commonsPool_c (decisions-engine.ts removalBalanceParams).
+                                const knowsDebt = typeof item.params?.debt_c === 'number' || typeof item.params?.balance_c === 'number';
+                                const debtAmount = typeof item.params?.debt_c === 'number' ? Math.abs(item.params.debt_c) : (typeof item.params?.balance_c === 'number' ? Math.abs(Math.min(0, item.params.balance_c)) : 0);
                                 // Whole hundredths, each (the Decision's figures and the pot): counted in Beans for the plural, written as every figure is.
-                                const poolAmount = Math.round(item.params?.commonsPool ?? commonsBalance ?? 0);
+                                const poolAmount = Math.round(item.params?.commonsPool_c ?? commonsBalance ?? 0);
                                 const debtWriteOffLine = !knowsDebt
                                     ? tn(poolAmount / 100, "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", "Balances are private: only the members who can vote in this see {name}'s balance and any debt. The Commons pool holds {n} beans.", { name: targetName, n: formatHundredths(poolAmount) })
                                     : debtAmount > 0

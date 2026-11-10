@@ -22,7 +22,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     };
 });
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
@@ -36,7 +36,7 @@ import {
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 const info = (features: Record<string, unknown>, profile: 'local' | 'global' = 'local') =>
-    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile, features }) as unknown as CommunityInfo;
+    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile, features }) as unknown as CommunityInfo;
 const ADMINS = info({ beans: true, knocks: true, invites: true, door: 'admins' });
 const ADMINS_NO_KNOCKS = info({ beans: true, knocks: false, invites: true, door: 'admins' });
 const MEMBERS = info({ beans: true, knocks: true, invites: true, door: 'members' });

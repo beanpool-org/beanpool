@@ -9,7 +9,7 @@ describe('CommunityShapeModal', () => {
         knocks: true,
         privatePreview: true,
         beans: true,
-        knownFloor: 1000,
+        knownFloor: 100000,
         dmRequests: true,
         decisions: true,
         probation: true,
@@ -69,7 +69,7 @@ describe('CommunityShapeModal', () => {
         afterEach(() => vi.unstubAllGlobals());
 
         it('states it right under the floor, in the numbers features carries, with nothing to tap', async () => {
-            stubRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
+            stubRule({ known: true, knownFloor: 100000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
             render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ ...FULL_FEATURES, debtLinePct: 50, quietDays: 60 }} />);
             const line = screen.getByText(SOURCE);
             expect(line.previousElementSibling?.textContent).toMatch(/\(the known floor\)/);
@@ -78,7 +78,7 @@ describe('CommunityShapeModal', () => {
         });
 
         it('a tightened line says when it applies, from the public route', async () => {
-            stubRule({ known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
+            stubRule({ known: true, knownFloor: 100000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
             render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ ...FULL_FEATURES, debtLinePct: 30, quietDays: 60 }} />);
             expect(await screen.findByText('The line of 30% applies from 16 November.')).toBeInTheDocument();
         });

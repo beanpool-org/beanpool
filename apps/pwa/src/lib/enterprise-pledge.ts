@@ -1,4 +1,4 @@
-import { formatDate, isPastDeadline, isPledgeReturnDue, keeperWords, pledgeReturnAt, t } from '@beanpool/core';
+import { formatDate, isHundredths, isPastDeadline, isPledgeReturnDue, keeperWords, pledgeReturnAt, t } from '@beanpool/core';
 
 export {
     isPastDeadline,
@@ -31,9 +31,10 @@ export function pledgeClosedLine(
 }
 
 export interface PledgeReturnInput {
-    goalAmount?: number | null;
-    /** What the page shows as raised. */
-    currentAmount?: number | null;
+    /** Whole hundredths of a Bean (the detail's goalAmount_c). */
+    goalAmount_c?: number | null;
+    /** What the page shows as raised, whole hundredths. */
+    currentAmount_c?: number | null;
     status?: string | null;
     deadlineAt?: string | null;
     /** When the node gave the backers their Beans back for this end date (GET /api/treasury/:id), else null. */
@@ -49,11 +50,12 @@ export interface PledgeReturnInput {
  * goal, a project with no end date or one that reached its goal, and one whose end date is over with nothing pledged.
  */
 export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now()): string | null {
-    const goal = Number(p.goalAmount ?? 0);
+    const goal = isHundredths(p.goalAmount_c) ? p.goalAmount_c : 0;
     if (!(goal > 0) || !p.deadlineAt) return null;
     const ends = new Date(p.deadlineAt);
     if (Number.isNaN(ends.getTime())) return null;
-    const raised = Number(p.currentAmount ?? 0);
+    // Whole hundredths only: anything else is no figure, so nothing raised.
+    const raised = isHundredths(p.currentAmount_c) ? p.currentAmount_c : 0;
     if (raised >= goal || p.status === 'funded' || p.status === 'completed') return null;
     const date = formatDate(ends, 'day-month-year');
     const returned = p.pledgesReturnedAt ? new Date(p.pledgesReturnedAt) : null;
@@ -64,8 +66,8 @@ export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now())
     if (!isPastDeadline(p.deadlineAt, now)) {
         return t('If the goal isn’t reached by {date}, everyone’s Beans go back on {returnDate}.', { date, returnDate });
     }
-    // In cents, as every pledge is: a float residue where all of them went back is nothing held (review of #2525).
-    if (!(Math.round(raised * 100) > 0)) return null;
+    // Whole hundredths, as every pledge is: nothing held is nothing to go back (review of #2525's float residue can't arise).
+    if (!(raised > 0)) return null;
     if (!isPledgeReturnDue(p.deadlineAt, now)) {
         return t('The goal wasn’t reached by {date}. Everyone’s Beans go back on {returnDate}, unless the end date moves before then.', { date, returnDate });
     }

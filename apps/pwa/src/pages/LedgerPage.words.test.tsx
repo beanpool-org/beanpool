@@ -17,7 +17,7 @@ import { LedgerPage } from './LedgerPage';
 import { getBalance, getMemberCards, getMembers, getTransactions, request, sendTransfer } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-w2.test-support';
-import { TIER_LEVELS } from '@beanpool/core';
+import { TIER_LEVELS, formatHundredths } from '@beanpool/core';
 import ruWords from '../../words/ru.json';
 
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
@@ -49,16 +49,16 @@ const RU = ruWords as Record<string, unknown>;
 const barBold = () => Array.from(document.querySelectorAll('[role="meter"] b')).map((b) => b.textContent ?? '');
 
 const TS = '2026-10-01T10:00:00.000Z';
-const line = (id: string, from: string, to: string, memo: string) => ({ id, from, to, amount: 3, taxFee: 0, memo, timestamp: TS });
+const line = (id: string, from: string, to: string, memo: string) => ({ id, from, to, amount_c: 300, fee_c: 0, memo, timestamp: TS });
 /** What members and the node wrote, shown as written: names and notes on lines. */
 const OTHERS = ['Visitor', 'Dana', 'thanks for the eggs', 'for the bread: '];
 
-/** A Newcomer with no credit line, nothing to send. */
-const NEWCOMER = { balance: 0, floor: 0, activated: false, commonsBalance: 12.5, callsign: 'Visitor', tier: { name: 'Newcomer' } };
+/** A Newcomer with no credit line, nothing to send. Every figure whole hundredths, as the node's balance answer. */
+const NEWCOMER = { balance_c: 0, floor_c: 0, activated: false, commonsBalance_c: 1250, callsign: 'Visitor', tier: { name: 'Newcomer' } };
 /** A Resident trading: Beans to send, part of the line unlocked by one live offer, spending paused, ratings. */
 const RESIDENT = {
-    balance: 450, floor: -1000, usableFloor: -200, liveOffers: 1, frozen: true, activated: true, earnedCredit: 300, tierCredit: 400,
-    commonsBalance: 1234.5, qualifiedValue: 2500, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 6 },
+    balance_c: 45000, floor_c: -100000, usableFloor_c: -20000, liveOffers: 1, frozen: true, activated: true, earnedCredit_c: 30000, tierCredit_c: 40000,
+    commonsBalance_c: 123450, qualifiedValue: 250000, avgRating: 4.5, reviewCount: 3, trustStats: { uniquePartners: 6 },
     callsign: 'Visitor', tier: { name: 'Resident' },
 };
 
@@ -104,17 +104,18 @@ describe('the Ledger in the pseudo-locale', () => {
         await open(RESIDENT);
         expect(screen.getByText(xx('WHAT BUILDS YOUR TRUST'))).toBeInTheDocument();
         expect(screen.getByText(xx('Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.').replace('{n}', '1').replace('{limit}', '200'))).toBeInTheDocument();
-        expect(screen.getByText(xx('{n} trust to go').replace('{n}', String(TIER_LEVELS[2].minCredit - RESIDENT.tierCredit)))).toBeInTheDocument();
+        expect(screen.getByText(xx('{n} trust to go').replace('{n}', formatHundredths(TIER_LEVELS[2].minCredit - RESIDENT.tierCredit_c)))).toBeInTheDocument();
         expect(barBold()).toHaveLength(2);
         expect(bypassing(document.body, { others: [...OTHERS, ...barBold()] })).toEqual([]);
     });
 
     it('a frozen line: the card, how far down a member in debit is, and the known part frozen under the bar', async () => {
         await showIn('xx');
-        await open({ ...NEWCOMER, balance: -12.25, creditFrozen: true });
+        await open({ ...NEWCOMER, balance_c: -1225, creditFrozen: true });
         expect(screen.getByText(xx('Your credit line is frozen'))).toBeInTheDocument();
         expect(screen.getByTestId('ledger-frozen-debit').textContent).toBe(
-            xx('You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.').replace('{n}', '12.3'),
+            // Exactly how far down, to the hundredth (no rounding up to the tenth).
+            xx('You are {n} Beans in debit. Selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.').replace('{n}', '12.25'),
         );
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         cleanup();
@@ -153,7 +154,7 @@ describe('the Ledger in the pseudo-locale', () => {
 
         // More than they hold: refused in words, before anything is sent.
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: xx('Confirm Transfer') })); });
-        expect(screen.getByText(xx('You can only send beans you hold — your balance is {balance}B.').replace('{balance}', '450.00'))).toBeInTheDocument();
+        expect(screen.getByText(xx('You can only send beans you hold — your balance is {balance}B.').replace('{balance}', '450'))).toBeInTheDocument();
         expect(sendTransfer).not.toHaveBeenCalled();
         // A send the node refused with no words of its own.
         fireEvent.change(screen.getByPlaceholderText(xx('Amount (B)')), { target: { value: '5' } });
@@ -211,7 +212,7 @@ describe('the Ledger in English', () => {
     it('nothing bracketed, and the words as they were', async () => {
         await open(RESIDENT);
         expect(bracketed()).toBe(0);
-        expect(screen.getByTestId('ledger-balance').textContent).toBe('+450.0B');
+        expect(screen.getByTestId('ledger-balance').textContent).toBe('+450B');
         expect(screen.getByText('Level 2 of 4 · 400 trust')).toBeInTheDocument();
         expect(document.body.textContent).toContain('more trust to');
         expect(screen.getByText('Spending paused — your balance is below what your 1 active offer unlock (−200). Post an Offer or trade back up to lift it. You can still receive and sell.')).toBeInTheDocument();
@@ -230,12 +231,13 @@ describe('the Ledger in English', () => {
 
     it('a confirmed member (floor -1,000, 0 Trust Points): sees no level promising a floor, and their own line once', async () => {
         await open({
-            balance: 0, floor: -1000, usableFloor: -1000, activated: true, knownGrant: 1000, tierCredit: 0, earnedCredit: 0,
+            balance_c: 0, floor_c: -100000, usableFloor_c: -100000, activated: true, knownGrant_c: 100000, tierCredit_c: 0, earnedCredit_c: 0,
             tier: { name: 'Newcomer' }, callsign: 'Visitor',
         });
         const detail = screen.getByTestId('level-detail');
         expect(within(detail).getByText('Your current floor')).toBeInTheDocument();
-        expect(within(detail).getByText('-1000')).toBeInTheDocument();
+        // Its own floor as every figure is written: a true minus, thousands grouped.
+        expect(within(detail).getByText('−1,000')).toBeInTheDocument();
         expect(screen.queryByText('Floor starts at')).toBeNull();
         expect(screen.queryByText('Floor from this tier')).toBeNull();
         // Their line is open already: no 'your first completed trade … opens your credit line' above it
@@ -249,18 +251,18 @@ describe('the Ledger in English', () => {
         expect(within(detail).getByText('from 200 trust')).toBeInTheDocument();
         expect(within(detail).queryByText('Floor starts at')).toBeNull();
         expect(within(detail).queryByText('Floor from this tier')).toBeNull();
-        expect(within(detail).queryByText('-200')).toBeNull();
+        expect(within(detail).queryByText(/^[-−]200$/)).toBeNull();
 
         // Click Steward
         fireEvent.click(buttons[2]);
         expect(within(detail).getByText('from 600 trust')).toBeInTheDocument();
         expect(within(detail).queryByText('Floor starts at')).toBeNull();
         expect(within(detail).queryByText('Floor from this tier')).toBeNull();
-        expect(within(detail).queryByText('-600')).toBeNull();
+        expect(within(detail).queryByText(/^[-−]600$/)).toBeNull();
 
         // Click Elder
         fireEvent.click(buttons[3]);
-        expect(within(detail).getByText('from 1400 trust')).toBeInTheDocument();
+        expect(within(detail).getByText('from 1,400 trust')).toBeInTheDocument();
         expect(within(detail).queryByText('Floor starts at')).toBeNull();
         expect(within(detail).queryByText('Floor from this tier')).toBeNull();
     });

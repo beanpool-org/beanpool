@@ -21,12 +21,12 @@ describe('CreditBar: the known floor', () => {
     });
 
     it('tells a known member with no offer that one offer unlocks it all', () => {
-        render(<CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} knownGrant={1000} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toMatch(/1 offer unlocks your\s*full\s*−1000/);
+        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} knownGrant_c={100000} />);
+        expect(screen.getByText(/to open your credit line/).textContent).toMatch(/1 offer unlocks your\s*full\s*−1,000/);
     });
 
     it('an older node (no knownGrant) still gets the band count', () => {
-        render(<CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toMatch(/3 offers unlock your\s*full\s*−1000/);
+        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} />);
+        expect(screen.getByText(/to open your credit line/).textContent).toMatch(/3 offers unlock your\s*full\s*−1,000/);
     });
 });

@@ -12,7 +12,7 @@ import type { CommunityInfo } from '../lib/api';
 
 vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn() }));
 
-const base: CommunityInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0 };
+const base: CommunityInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0 };
 const moved = (over: Partial<CommunityInfo> = {}): CommunityInfo => ({
     ...base,
     addresses: ['newname.beanpool.org'],

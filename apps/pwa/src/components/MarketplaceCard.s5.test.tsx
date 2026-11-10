@@ -10,7 +10,7 @@ const basePost: MarketplacePost = {
     category: 'food',
     title: 'Fresh organic sourdough bread baked daily for the whole neighbourhood',
     description: 'Crispy crust and soft inside.',
-    credits: 10,
+    price_c: 1000,
     priceType: 'fixed',
     authorPublicKey: 'a'.repeat(64),
     authorCallsign: 'Alice',

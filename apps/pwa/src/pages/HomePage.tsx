@@ -1102,7 +1102,7 @@ function CommunityBody({
     const shapeSummary = isVisitor ? null : communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
-        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
+        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot_c === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
         : typeof cm.listings === 'number';
 
     const globalTiles = [
@@ -1115,7 +1115,7 @@ function CommunityBody({
         { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
         ...(typeof cm.joined7d === 'number' ? [{ figure: formatCount(cm.joined7d), label: t('joined this week') }] : []),
         ...(typeof cm.tradesThisMonth === 'number' ? [{ figure: formatCount(cm.tradesThisMonth), label: t('trades this month') }] : []),
-        ...(typeof cm.commonsPot === 'number' ? [{ figure: beansAmount(cm.commonsPot), label: t('Commons pot') }] : []),
+        ...(typeof cm.commonsPot_c === 'number' ? [{ figure: beansAmount(cm.commonsPot_c), label: t('Commons pot') }] : []),
         ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
         ...(typeof cm.eventsSoon === 'number' ? [{ figure: formatCount(cm.eventsSoon), label: tn(cm.eventsSoon, 'event coming up', 'events coming up') }] : []),
     ];
@@ -1136,7 +1136,7 @@ function CommunityBody({
 
     const localLine2 = [
         typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
-        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
+        typeof cm.commonsPot_c === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot_c) }) : null,
     ].filter(Boolean).join(' · ');
 
     const localLine3 = [

@@ -18,19 +18,20 @@ const bracketed = (s: string | null) => expect(s).toMatch(/^\[.*\]$/s);
 
 describe('paying the Commons', () => {
     it('in English as before, in Portuguese from a catalog, bracketed in the pseudo-locale', () => {
-        expect(REPAYMENT_WORDS.payConfirm(12.5, false)).toBe('Pay 12.50 Beans to the Commons? This can’t be undone.');
-        expect(REPAYMENT_WORDS.paid(300, 'tx-1', true, { settled: true })).toBe('Paid 300 Beans to the Commons. Your debt is paid off and settled.');
+        // Whole hundredths in (1250 is 12.50 Beans).
+        expect(REPAYMENT_WORDS.payConfirm(1250, false)).toBe('Pay 12.50 Beans to the Commons? This can’t be undone.');
+        expect(REPAYMENT_WORDS.paid(30000, 'tx-1', true, { settled: true })).toBe('Paid 300 Beans to the Commons. Your debt is paid off and settled.');
         expect(payFailureWords(null)).toBe(PAY_WORDS.unanswered);
         setLanguage('pt', [{
             '{amount} Beans|{amount} Beans': { one: '{amount} Bean', other: '{amount} Beans' },
             'Pay {amount} to the Commons? This can’t be undone.': 'Pagar {amount} aos Comuns? Isto não pode ser desfeito.',
             [PAY_WORDS.unanswered]: 'O servidor da sua comunidade não respondeu, por isso este pagamento pode ter sido feito. Veja o seu Livro antes de pagar de novo.',
         }]);
-        expect(REPAYMENT_WORDS.payConfirm(12, false)).toBe('Pagar 12 Beans aos Comuns? Isto não pode ser desfeito.');
+        expect(REPAYMENT_WORDS.payConfirm(1200, false)).toBe('Pagar 12 Beans aos Comuns? Isto não pode ser desfeito.');
         expect(payFailureWords(null)).toMatch(/^O servidor da sua comunidade não respondeu/);
         setLanguage('xx');
-        for (const s of [REPAYMENT_WORDS.banner({ amount: 300, repaid: 0, left: 300 }), REPAYMENT_WORDS.linkLeft(5), REPAYMENT_WORDS.paid(5, 'r', false, {}, true),
-            REPAYMENT_WORDS.payConfirm(5, true, 9)]) bracketed(s);
+        for (const s of [REPAYMENT_WORDS.banner({ amount_c: 30000, repaid_c: 0, left_c: 30000 }), REPAYMENT_WORDS.linkLeft(500), REPAYMENT_WORDS.paid(500, 'r', false, {}, true),
+            REPAYMENT_WORDS.payConfirm(500, true, 900)]) bracketed(s);
     });
 });
 

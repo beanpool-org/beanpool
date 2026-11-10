@@ -173,7 +173,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
 
         // Simulate server sending snapshot (standard server behavior on connect)
         socket.onmessage({
-            data: JSON.stringify({ type: 'state_snapshot', memberCount: 5, postCount: 2, commonsBalance: 100 })
+            data: JSON.stringify({ type: 'state_snapshot', memberCount: 5, postCount: 2, commonsBalance_c: 10000 })
         });
 
         expect(getWatchdogArmedForTest()).toBe(false);

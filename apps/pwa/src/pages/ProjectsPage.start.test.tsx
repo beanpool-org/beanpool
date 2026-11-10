@@ -110,7 +110,7 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
     it('dialog rows follow community shape (Beans off, Enterprises off, Decisions off)', async () => {
         // Beans off
         vi.mocked(communityInfoOnce).mockResolvedValue({
-            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local',
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local',
             features: { beans: false, decisions: true },
         } as any);
 
@@ -372,7 +372,7 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
     it('decision refusal alert: indicates node admins when beans off', async () => {
         const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
         vi.mocked(communityInfoOnce).mockResolvedValue({
-            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local',
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local',
             features: { beans: false, decisions: true },
         } as any);
         vi.mocked(getDecisions).mockResolvedValue({ decisions: [], myPoolVoting: null, canPropose: false } as any);
@@ -391,7 +391,7 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
 
     it('decision row in preview mode opens LocalCommunitySheet and switches to Decide section', async () => {
         const info = {
-            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const,
             features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
         };
         vi.mocked(communityInfoOnce).mockResolvedValue(info as any);

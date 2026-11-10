@@ -38,7 +38,7 @@ function stubNode(info: unknown | Error, handlers: Record<string, Handler> = {})
     return calls;
 }
 
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
 
 function b64url(s: string): string {
     return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -123,7 +123,7 @@ describe('which welcome a visitor gets', () => {
     });
 
     it("an older node that says nothing about itself: the invite form", async () => {
-        stubNode({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0 });
+        stubNode({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0 });
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByText(/Join with Invite Code/);
         expect(await screen.findByTestId('welcome-no-invite')).toBeTruthy();

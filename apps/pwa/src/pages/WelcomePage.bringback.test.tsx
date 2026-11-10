@@ -21,7 +21,7 @@ const WORDS = 'abandon ability able about above absent absorb abstract absurd ab
 const MEMBER_SEED = sha256(sha256(utf8ToBytes(WORDS.join(' '))));
 const MEMBER_KEY = bytesToHex(ed25519.getPublicKey(MEMBER_SEED));
 const CODE = 'BB-AB12-CD34';
-const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} };
+const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} };
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

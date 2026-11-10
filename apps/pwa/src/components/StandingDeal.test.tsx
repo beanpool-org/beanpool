@@ -19,7 +19,7 @@ const NOW = Date.parse('2026-11-09T08:00:00.000Z');
 
 describe('Take this up? (design §3)', () => {
     const show = (onAgree = vi.fn()) => {
-        render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} />);
+        render(<StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} />);
         return onAgree;
     };
     it('says what is paid now, for which month, and how it runs; Agree hands on until-stopped from today', () => {
@@ -35,13 +35,13 @@ describe('Take this up? (design §3)', () => {
     });
     it("without room for the first month, Agree is disabled with a plain line; with room, or room not known, it stays (design §3)", () => {
         const onAgree = vi.fn();
-        const { rerender } = render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={30} />);
+        const { rerender } = render(<StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={3000} />);
         expect(screen.getByTestId('standing-no-room').textContent).toBe('You need 50 Beans of room; you have 30');
         expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(screen.getByTestId('standing-agree'));
         expect(onAgree).not.toHaveBeenCalled();
-        for (const room of [50, null]) {
-            rerender(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={room} />);
+        for (const room of [5000, null]) {
+            rerender(<StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} now={NOW} room={room} />);
             expect(screen.queryByTestId('standing-no-room')).toBeNull();
             expect((screen.getByTestId('standing-agree') as HTMLButtonElement).disabled).toBe(false);
         }
@@ -63,7 +63,7 @@ describe('Take this up? (design §3)', () => {
     it('Agree tapped 11 minutes after the screen opened: the start is the tap, today or a day later', () => {
         const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
         const onAgree = vi.fn();
-        render(<StandingTakeUp unit="month" beans={50} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} />);
+        render(<StandingTakeUp unit="month" beans={5000} title="Vehicle Storage" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={onAgree} />);
         clock.mockReturnValue(NOW + 11 * 60_000);
         fireEvent.click(screen.getByTestId('standing-agree'));
         expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 11 * 60_000 });
@@ -77,8 +77,8 @@ describe('Take this up? (design §3)', () => {
 // Month 2 of a deal started 9 Oct, paid on 9 Nov; month 3 due 9 Dec. Every row of a standing deal is a finished deal.
 const row = (o: Partial<MarketplaceTransaction> = {}): MarketplaceTransaction => ({
     id: 'tx-3', postId: 'post-1', postTitle: 'Vehicle Storage', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
-    credits: 50, status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
-    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    amount_c: 5000, status: 'completed', createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 });
@@ -167,7 +167,7 @@ describe('Your deals: one card per standing deal', () => {
 
 describe('Your deals, My listings: a one-off listing a standing deal took is 🔁 STANDING, never Held in Trust (U2)', () => {
     // The node keeps the listing off the board ('pending') while the standing deal runs; nothing is held in trust (design §1, §3).
-    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', authorPublicKey: PAYEE, credits: 50, createdAt: '2026-10-01T08:00:00.000Z', photos: [] } as any;
+    const taken = { id: 'post-1', title: 'Vehicle Storage', type: 'offer', status: 'pending', authorPublicKey: PAYEE, price_c: 5000, createdAt: '2026-10-01T08:00:00.000Z', photos: [] } as any;
     for (const standingPhase of ['paid', 'short'] as const) {
         it(`a running standing deal (${standingPhase}) says 🔁 STANDING`, () => {
             render(<MyDealsModal visible identity={{ publicKey: PAYEE }} onClose={vi.fn()} posts={[taken]} initialTab="active"
@@ -208,7 +208,7 @@ describe('at 320 px with the text at 130 %, in light and in dark', () => {
     const COLOUR = /^(bg|text|border)-(nature|emerald|amber|oat)-/;
     it('every colour has its dark partner, the words wrap, and every target is 44 px', () => {
         render(<>
-            <StandingTakeUp unit="week" beans={12.5} title="A very long listing title for a garden plot by the creek" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={vi.fn()} now={NOW} />
+            <StandingTakeUp unit="week" beans={1250} title="A very long listing title for a garden plot by the creek" payeeName="Rob" busy={false} onCancel={vi.fn()} onAgree={vi.fn()} now={NOW} />
             <StandingPanel tx={row(SHORT)} actingAs={PAYER} busy={false} onStop={vi.fn()} onMessage={vi.fn()} messageLabel="Message Rob" />
         </>);
         const all = [screen.getByTestId('standing-take-up'), screen.getByTestId('standing-panel-tx-3')]

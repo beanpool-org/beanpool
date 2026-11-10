@@ -56,7 +56,7 @@ const IDENTITY: BeanPoolIdentity = {
 };
 
 const info = (features: Record<string, unknown>, profile: 'local' | 'global' = 'local') =>
-    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile, features }) as unknown as CommunityInfo;
+    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile, features }) as unknown as CommunityInfo;
 
 describe('PeoplePage: requests to join gating (front doors S2)', () => {
     beforeEach(() => {

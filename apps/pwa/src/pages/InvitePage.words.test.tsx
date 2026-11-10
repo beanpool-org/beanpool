@@ -32,7 +32,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     };
 });
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: INFO.features })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: INFO.features })),
 }));
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 

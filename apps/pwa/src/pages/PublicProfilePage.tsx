@@ -471,9 +471,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 {isRaise && (
                                     <p className="m-0 mb-3 text-xs text-nature-600 dark:text-nature-300">
                                         {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
-                                            prior: effectivePriorVouch,
+                                            prior: formatHundredths(effectivePriorVouch),
                                             name: profile?.callsign || '',
-                                            max: pairMax,
+                                            max: formatHundredths(pairMax),
                                         })}
                                     </p>
                                 )}
@@ -505,9 +505,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="mt-3 p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50 dark:bg-nature-950 space-y-2" data-testid="profile-vouch-raise-confirm">
                                 <p className="m-0 text-sm font-bold text-nature-950 dark:text-white">
                                     {t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
-                                        prior: raisePrompt.prior,
+                                        prior: formatHundredths(raisePrompt.prior),
                                         name: profile?.callsign || '',
-                                        newTotal: raisePrompt.newTotal,
+                                        newTotal: formatHundredths(raisePrompt.newTotal),
                                     })}
                                 </p>
                                 <div className="flex gap-2 justify-end">
@@ -532,7 +532,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 const res = await api.vouchForMember(pubkey, amount, true);
                                                 // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
                                                 if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
-                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res?.total }));
+                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: formatHundredths(res?.total) }));
                                                 setProfileVouchPreset(null);
                                                 void getMyVouching().then(setMyVouching).catch(() => {});
                                             } catch (e: any) {
@@ -566,8 +566,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
                                         if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
                                         setVouchSuccess(isRaise
-                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res?.total })
-                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: profileVouchPreset }));
+                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: formatHundredths(res?.total) })
+                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: formatHundredths(profileVouchPreset) }));
                                         setProfileVouchPreset(null);
                                         void getMyVouching().then(setMyVouching).catch(() => {});
                                     } catch (err: any) {

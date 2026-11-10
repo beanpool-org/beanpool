@@ -18,7 +18,7 @@ type Call = { path: string; body: Record<string, unknown>; headers: Record<strin
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
-const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
+const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
 const YES = { invite: 'BP-KN0C-K1NV', name: 'Castlemaine BeanPool' };
 
 let calls: Call[];

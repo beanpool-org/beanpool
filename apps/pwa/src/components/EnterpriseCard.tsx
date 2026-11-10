@@ -195,8 +195,9 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                             />
                         </div>
 
-                        {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
-                        {takesPledges(treasury) && (
+                        {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges. Core's rule reads the old
+                            names; it only compares raised with goal, so the hundredths go in as they are. */}
+                        {takesPledges({ goalAmount: treasury.goalAmount_c, currentAmount: treasury.currentAmount_c, balance: treasury.balance_c, status: treasury.status, lifecycle: treasury.lifecycle, deadlineAt: treasury.deadlineAt }) && (
                             <div
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"

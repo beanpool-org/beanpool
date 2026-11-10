@@ -23,7 +23,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 // The node's /api/community/info, read once per page load. By default it says nothing about invites, as every node
 // before the switch.
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 // The QR code spy: verifies what value is encoded.
 vi.mock('qrcode.react', () => ({ QRCodeSVG: vi.fn(() => null) }));
@@ -36,14 +36,14 @@ import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 const info = (features: Record<string, boolean>, profile: 'local' | 'global' = 'global') =>
-    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile, features });
+    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile, features });
 const GLOBAL = info({ beans: false, openJoin: true, guestListingsOnly: true, decisions: false, invites: false });
 const WORDS = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
 
 beforeEach(() => {
     inviteFolds.clear();
     vi.clearAllMocks();
-    vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never);
+    vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} }) as never);
     localStorage.clear();
 });
 

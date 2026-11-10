@@ -52,7 +52,7 @@ const ME = 'me-pk';
 const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: 'Mia', createdAt: '2026-09-17T00:00:00.000Z' };
 
 const plain = {
-    id: 'plain-1', type: 'offer', category: 'food', title: 'Plain loaves', description: 'Fresh this morning', credits: 12, priceType: 'fixed',
+    id: 'plain-1', type: 'offer', category: 'food', title: 'Plain loaves', description: 'Fresh this morning', price_c: 1200, priceType: 'fixed',
     status: 'active', active: true, repeatable: false, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', createdAt: new Date().toISOString(),
 };
 
@@ -65,7 +65,7 @@ function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);

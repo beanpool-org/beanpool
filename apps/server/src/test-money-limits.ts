@@ -663,14 +663,15 @@ async function main(): Promise<void> {
         assert(applications() === 0, 'and no application is stored');
         const noPledge = await call('POST', fay, `/api/treasury/${loom}/keepers/request`, { pledgedBacking_c: 0 });
         assert(noPledge.status === 200 && applications() === 1, `applying with no pledge still goes: it pledges nothing (${show(noPledge)})`);
-        // At her limit still, an application carrying only the old names (pledgedBacking, amount, backing) pledges nothing and
-        // is not counted against her 20 (to another of Lea's enterprises: her request to Lea Loom is pending).
+        // At her limit still, an application carrying the pledge under its old name (pledgedBacking, in Beans) is an app from
+        // before whole hundredths: refused 400 amount_c_required (money-body.ts carriesOldMoneyKey), nothing stored, and not
+        // counted against her 20 (to another of Lea's enterprises: her request to Lea Loom is pending).
         const loomTwo = await enterprise(lea, 'Lea Loom Two');
         const actsBeforeOldNames = actsOf(fay.pk);
         const oldNames = await call('POST', fay, `/api/treasury/${loomTwo}/keepers/request`, { pledgedBacking: 5, amount: 5, backing: 5 });
         const oldNamesRow = db.prepare('SELECT pledged_backing_c AS p FROM enterprise_keeper_requests WHERE member_pubkey = ? AND enterprise_pubkey = ?').get(fay.pk, loomTwo) as { p: number } | undefined;
-        assert(oldNames.status === 200 && oldNamesRow?.p === 0 && actsOf(fay.pk) === actsBeforeOldNames,
-            `an old name for the pledge is no pledge: that application goes, pledging nothing, and is not counted (${show(oldNames)}, ${JSON.stringify(oldNamesRow)}, acts ${actsBeforeOldNames} → ${actsOf(fay.pk)})`);
+        assert(oldNames.status === 400 && oldNames.body?.code === 'amount_c_required' && oldNamesRow === undefined && actsOf(fay.pk) === actsBeforeOldNames,
+            `an old name for the pledge is refused, amount_c_required: nothing stored, and it is not counted (${show(oldNames)}, ${JSON.stringify(oldNamesRow)}, acts ${actsBeforeOldNames} → ${actsOf(fay.pk)})`);
         const gilPledges = await crowdfund(gil, project);
         assert(gilPledges.status === 200, `another member still pledges (${show(gilPledges)})`);
     }

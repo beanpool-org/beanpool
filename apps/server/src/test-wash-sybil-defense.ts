@@ -105,8 +105,9 @@ async function main() {
         const { result: health, sql: washSql } = preparedSql(() => getCommunityHealth());
         const washFlag = health.flags.find(f => f.type === 'wash_trading' && f.members.includes(wash1));
         assert(!!washFlag, 'Wash trading alert was raised in community health flags');
-        // The gross in Beans, 1,200 (whole hundredths inside: 120000), however a figure is written ("1200.0", "1200", "1,200").
-        assert(/for pair (WashOne ↔ WashTwo|WashTwo ↔ WashOne) \(gross: (1200|1,200)(\.0+)?\)$/.test(washFlag?.description ?? ''),
+        // The gross in Beans, 1,200 (whole hundredths inside: 120000), however a figure is written ("1200.0", "1200", "1,200"),
+        // with or without the unit after it; never the hundredths (120000).
+        assert(/for pair (WashOne ↔ WashTwo|WashTwo ↔ WashOne) \(gross: (1200|1,200)(\.0+)?( Beans)?\)$/.test(washFlag?.description ?? ''),
             `Wash flag names the pair by callsign, and its gross in Beans (got ${washFlag?.description})`);
         assert(!readsAllCallsigns(washSql), 'Wash pair flagged: health does not read the whole members table');
 

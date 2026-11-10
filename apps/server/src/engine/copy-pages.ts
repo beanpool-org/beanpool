@@ -11,7 +11,7 @@
  * keeps what is written meanwhile; readers and writers are never held up.
  *
  * **The pages.** The opening page (n 0, the POST's answer) carries what today's payload carries beside the tables (the
- * copy's id, `cursor`, `generatedAt`, `since`, `stateHash`, `commonsBalance`, the node_config records, the community's
+ * copy's id, `cursor`, `generatedAt`, `since`, `stateHash`, `commonsBalance_c`, the node_config records, the community's
  * settings), the keepers (`treasuryOperators`, a whole set the importer applies as a difference, so in one piece) and how
  * many rows each category and plain table of this copy holds (`rowCounts`). Then every page, the opening one included,
  * carries the next rows: the payload's categories in the payload's order (engine sync.ts EXPORT_CATEGORIES), the plain
@@ -95,7 +95,8 @@ export interface CopyPageHeader {
     generatedAt?: string;
     since?: string | null;
     stateHash?: string;
-    commonsBalance?: number;
+    /** The Commons pot, whole hundredths: the payload's own key (engine sync.ts), which the whole-copy audit reads. */
+    commonsBalance_c?: number;
     rowCounts?: CopyRowCounts;
     pageBytes?: number;
     pageRows?: number;
@@ -526,8 +527,9 @@ export async function openCopy(opts: { nodeId: string; since: string | null; com
         }
         const opening: [string, unknown][] = [
             ['cursor', cursor], ['generatedAt', generatedAt], ['since', opts.since], ['stateHash', stateHash],
-            // EXACT, not rounded (engine sync.ts exportSyncState).
-            ['commonsBalance', commonsBalance],
+            // EXACT whole hundredths, under the payload's own key (engine sync.ts exportSyncState: commonsBalance_c), so a copy
+            // merged from pages carries the pot the whole-copy audit checks (engine audit.ts reads payload.commonsBalance_c).
+            ['commonsBalance_c', commonsBalance],
             ...Object.entries(records), ['treasuryOperators', treasuryOperators],
         ];
         copy.opening = opening.filter(([, v]) => v !== undefined).map(([k, v]) => [k, JSON.stringify(v)]);

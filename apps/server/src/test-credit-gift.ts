@@ -302,10 +302,12 @@ async function main(): Promise<void> {
     spendBelowZero(sam, mel, 20);
     const p = getMemberTrustProfile(sam.pk);
     const debt = -getBalance(sam.pk).balance_c;
-    // Whole hundredths throughout: what his line still covers past his debt, at most his room.
-    const free = Math.min(roomHeldOf(db, sam.pk), Math.floor(p.knownGrant + p.roomHeld + p.otherAllowance - debt));
+    // Whole hundredths throughout, and a gift is whole Beans: what his line still covers past his debt, floored to a whole
+    // Bean (a multiple of 100), at most his room.
+    const wholeBeansDown = (c: number) => c - (((c % 100) + 100) % 100);
+    const free = Math.min(roomHeldOf(db, sam.pk), wholeBeansDown(p.knownGrant + p.roomHeld + p.otherAllowance - debt));
     require_(free > 0 && free < hc(25), `Sam owes ${words(debt)}: ${words(free)} of his 25 is free (earned ${words(p.earnedCredit)})`);
-    const tooMuch = await gift(sam, kim, free + 1);
+    const tooMuch = await gift(sam, kim, free + 100); // one whole Bean more than is free
     assert(tooMuch.status === 409 && tooMuch.body?.code === 'in_use'
         && tooMuch.body?.error === `You’re using part of your credit line, so you can give ${words(free)} Beans of it at most now.`,
         `5. a gift that would leave his line short of his debt is refused, with what is free (${show(tooMuch)})`);

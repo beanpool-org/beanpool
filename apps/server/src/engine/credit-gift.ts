@@ -100,6 +100,11 @@ function openPieces(pk: string): Piece[] {
         FROM room_gifts g WHERE g.to_pubkey = ? ORDER BY g.at ASC, g.rowid ASC`).all(pk) as Piece[]).filter((p) => p.open > 0);
 }
 
+/** Hundredths floored to a whole Bean, toward minus infinity (a multiple of HUNDREDTHS_PER_BEAN): 883 is 800, -50 is -100. */
+function wholeBeansDown(c: number): number {
+    return c - (((c % HUNDREDTHS_PER_BEAN) + HUNDREDTHS_PER_BEAN) % HUNDREDTHS_PER_BEAN);
+}
+
 /** The giver's side: what they may give now, and why not, before any recipient is named. */
 interface GiverState { setting: number; room: number; free: number; canGive: number; why: string | null; code: string | null }
 
@@ -125,8 +130,9 @@ function giverState(giver: string): GiverState {
  * The line is the one the spending gate reads (state-engine usableFloor, core usableAllowance), never the whole floor: one
  * live offer unlocks the known grant and the room whole, the offer bands meter earned and granted credit (one offer: 200).
  * With no live offer the line unlocks nothing, so only a giver who owes nothing gives (it changes no spend of theirs).
- * Whole Beans. Round 2 of #2912: the floor counted earned and granted credit past the band, and a gift the tab offered
- * left the giver owing more than their offers unlock, "Spending paused".
+ * Whole Beans (a gift is one, planGift): the figures are hundredths, so the most is floored to a multiple of 100. Round 2
+ * of #2912: the floor counted earned and granted credit past the band, and a gift the tab offered left the giver owing more
+ * than their offers unlock, "Spending paused".
  */
 function freeRoom(giver: string, p: ReturnType<typeof getMemberTrustProfile>, room: number): number {
     const b = getBalance(giver);
@@ -134,9 +140,9 @@ function freeRoom(giver: string, p: ReturnType<typeof getMemberTrustProfile>, ro
     const cap = creditCap(db);
     const usableAfter = (g: number) => usableAllowance({ knownGrant: p.knownGrant, roomHeld: p.roomHeld - g, otherAllowance: p.otherAllowance, cap, liveOffers: b.liveOffers });
     const most = b.liveOffers >= 1
-        ? Math.floor(p.knownGrant + p.roomHeld + Math.min(p.otherAllowance, offerCapForCount(b.liveOffers)) - debt)
+        ? wholeBeansDown(p.knownGrant + p.roomHeld + Math.min(p.otherAllowance, offerCapForCount(b.liveOffers)) - debt)
         : (debt > 0 ? 0 : room);
-    const free = Math.max(0, Math.min(room, most));
+    const free = wholeBeansDown(Math.max(0, Math.min(room, most)));
     // Past the cap no part of the room covers anything more: the same line, read whole, must still cover the debt.
     return free > 0 && usableAfter(free) >= debt ? free : 0;
 }

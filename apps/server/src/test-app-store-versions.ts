@@ -83,11 +83,11 @@ async function main() {
 
     // ── The floor ────────────────────────────────────────────────────────────────
     delete process.env.MIN_APP_VERSION;
-    assert(getMinAppVersion() === '1.0.75', 'the default floor is unchanged and below anything in the field');
+    assert(getMinAppVersion() === '1.4.0', 'the default floor is 1.4.0, the cutover: in code, so every node holds old apps off');
     process.env.MIN_APP_VERSION = 'v1.1.0';
     assert(getMinAppVersion() === '1.1.0', 'an operator can raise the floor, leading v and all');
     process.env.MIN_APP_VERSION = 'nonsense';
-    assert(getMinAppVersion() === '1.0.75', 'an unparseable floor falls back to the default, not to a banner');
+    assert(getMinAppVersion() === '1.4.0', 'an unparseable floor falls back to the default');
     delete process.env.MIN_APP_VERSION;
 
     // ── The health payload the app actually reads ────────────────────────────────
@@ -99,7 +99,7 @@ async function main() {
     const res = await fetch(`${BASE}/api/community/health`);
     assert(res.status === 200, 'GET /api/community/health returns 200');
     const body = await res.json() as any;
-    assert(body.minAppVersion === '1.0.75', 'health serves the node floor');
+    assert(body.minAppVersion === '1.4.0', 'health serves the node floor');
     assert(!!body.appVersions, 'health serves appVersions');
     assert(body.appVersions.android === '1.2.31', 'health serves the cached Play version');
     assert(body.appVersions.ios === '1.2.32', 'health serves the cached App Store version');

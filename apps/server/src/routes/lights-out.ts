@@ -29,6 +29,7 @@ import { ANDROID_ON_NODE_WORDS, brandCssVariableMap, timestampOfSignedText, word
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { FRESH_PROOF_WINDOW_MS } from '../admin-key-auth.js';
 import { isNodeOwner } from '../engine/node-roles.js';
+import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR } from '../engine/member-signature.js';
 import { primaryAddress } from '../engine/own-addresses.js';
 import { lightsOutStatus, setLightsOut, type LightsOutStatus } from '../services/lights-out.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
@@ -88,16 +89,23 @@ export function createLightsOutRoutes(deps: RouteDeps): Router {
     });
 
     router.post(LIGHTS_OUT_OWNER_PATH, async (ctx) => {
-        const authSig = (ctx.state as any)?.authSig as { signer?: string; payload?: string } | undefined;
+        const authSig = (ctx.state as any)?.authSig as { signer?: string; payload?: string; format?: number } | undefined;
         const signer = authSig?.signer;
         if (!signer) {
             ctx.status = 401;
             ctx.body = { error: word('Sign this request with your member key.') };
             return;
         }
-        // Only a request signed for this community (format 2) reaches here: the signature middleware answers one in the
-        // old format, which names no community and could be replayed from another community the owner runs, 426
-        // app_too_old before any route (CUT4, engine/member-signature.ts; design §2.3, "the format-1 problem").
+        // Only a request signed for this community (format 2), as break-glass (routes/node-admin.ts, AUTH-01): an old-format
+        // request names no community, so one an owner sent to another community they own could be replayed here within its
+        // window and flip this hall (design §2.3, "the format-1 problem"). No app that has this switch signs the old format:
+        // the route is newer than format 2 (#1219).
+        if (authSig?.format !== 2) {
+            ctx.set('Cache-Control', 'no-store');
+            ctx.status = 426;
+            ctx.body = { error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE };
+            return;
+        }
         if (!isNodeOwner(signer)) {
             ctx.status = 403;
             ctx.body = { error: OWNER_ONLY };

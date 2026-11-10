@@ -268,9 +268,8 @@ export function verifyAndSolveChallenge(params: {
     // Request binding (decision 4a, 2026-09-27): the app builds `0xFF ‖ beanpool-admin-signin/2\n<host>\n<challengeId>`
     // from the challenge id alone and says which host (`signedFor`); it never signs the node's text. Before this the app
     // signed whatever `challenge` text the node sent, so a hostile community could make its Manage button sign a
-    // complete request for another. The old forms (the challenge text, or the bare id) are no longer checked: a sign-in
-    // without `signedFor` is answered 426 app_too_old (CUT4, engine/member-signature.ts), and a format-2 sign-in for
-    // another community's host is refused (421).
+    // complete request for another. The old forms (the challenge text, or the bare id) are accepted only until the
+    // switch (engine/member-signature.ts), and a format-2 sign-in for another community's host never.
     let statement: ReturnType<typeof verifyStatementSignature> | null = null;
     const signer = authorizeKeySigner({
         memberPubkey,
@@ -280,7 +279,7 @@ export function verifyAndSolveChallenge(params: {
                 pubKeyHex: memberPubkey,
                 boundText: (host) => adminSigninText(host, challenge.challengeId),
                 signedFor: params.signedFor,
-                oldShapeTooOld: true,
+                oldTexts: [challenge.challenge, challenge.challengeId],
             });
             return statement.ok;
         },

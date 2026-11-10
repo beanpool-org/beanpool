@@ -215,13 +215,16 @@ services:
       - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
       - TURNSTILE_PAGE_URL=${TURNSTILE_PAGE_URL:-}
-      # Request binding (apps/server/src/engine/own-addresses.ts, engine/member-signature.ts). EMPTY by default.
+      # Request binding (apps/server/src/engine/own-addresses.ts, engine/member-signature.ts). Both EMPTY by default.
       # BEANPOOL_ADDRESSES: extra names members' apps may sign for here, comma-separated (a domain of your own, a
       # proxy's name). EMPTY = the public address and the owner-confirmed ones only. A server WITH an address refuses
       # localhost: to open its web app through an SSH tunnel, list localhost here. A server with none accepts
-      # localhost already, and listing it doesn't give it an address. (ACCEPT_UNBOUND_SIGNATURES_UNTIL went in 1.4.0:
-      # old apps' signatures are refused outright.)
+      # localhost already, and listing it doesn't give it an address.
+      # ACCEPT_UNBOUND_SIGNATURES_UNTIL: the day this node stops accepting old apps' signatures, or `never`.
+      # EMPTY = the release's date. Neither was passed through here before, so a node's .env could set them and the
+      # node never saw either.
       - BEANPOOL_ADDRESSES=${BEANPOOL_ADDRESSES:-}
+      - ACCEPT_UNBOUND_SIGNATURES_UNTIL=${ACCEPT_UNBOUND_SIGNATURES_UNTIL:-}
       # The Pulse OAuth Credentials
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY:-}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET:-}

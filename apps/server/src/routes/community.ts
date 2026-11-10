@@ -1754,6 +1754,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
         pubKeyHex: cleanNew,
         boundText: (host) => reEnrollText(host, cleanCode),
         signedFor: body.signedFor,
+        oldTexts: [],
     });
     if (!proof.ok) {
         const bound = proof.status === 421 || proof.status === 426;
@@ -2201,6 +2202,7 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         pubKeyHex: key,
         boundText: (host) => pushLeaveText(host, key, token, leftAt),
         signedFor,
+        oldTexts: [],
     });
     if (!proof.ok) {
         // Another community's statement (421) may still be this one's under a name it doesn't know yet: kept by the phone.

@@ -102,6 +102,10 @@ const createBuckets = new Map<string, { count: number; resetAt: number }>();
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest();
 
+export function pairingMessage(action: 'approve' | 'decline', pairingId: string, shortCode: string): string {
+    return `beanpool-settings-signin:v1:${action}:${pairingId}:${shortCode}`;
+}
+
 export const isPairingId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{64}$/.test(id);
 
 /** The cookie that binds a pairing to the browser that asked for it. One per pairing, so two tabs don't clash. */
@@ -275,10 +279,9 @@ function who(pubkey: string): string {
 
 /**
  * The phone's signature over this pairing's approval or decline (request binding, engine/member-signature.ts): the
- * format-2 text naming the host the phone reached this node at (`signedFor`), which must be this community's; one
- * without it is an app from before request binding, answered 426 app_too_old (CUT4). A pairing shown by community A and
- * approved there is never an approval at B: a hostile A could otherwise show a QR carrying B's pairing id and its own
- * address, and sign in to B's Settings as the member.
+ * format-2 text naming the host the phone reached this node at (`signedFor`), which must be this community's, or the old
+ * v1 text until the switch. A pairing shown by community A and approved there is never an approval at B: a hostile A
+ * could otherwise show a QR carrying B's pairing id and its own address, and sign in to B's Settings as the member.
  */
 function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubkey: string, signature: string, signedFor: unknown) {
     return verifyStatementSignature({
@@ -286,7 +289,7 @@ function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubke
         pubKeyHex: memberPubkey,
         boundText: (host) => settingsSigninText(host, action, p.id, p.shortCode),
         signedFor,
-        oldShapeTooOld: true,
+        oldTexts: [pairingMessage(action, p.id, p.shortCode)],
     });
 }
 

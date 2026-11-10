@@ -213,7 +213,7 @@ import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSa
 // timestamp, and each nonce may be used once within that window (engine/member-signature.ts `requestNonces`, spent only
 // once everything else about the request has checked out). A request also names the community it was signed for
 // (request binding): verifyMemberSignature refuses one signed for another community's host (421), and one in the old
-// format, bound to none, as too old (426, unchecked: CUT4).
+// format, bound to none, once the switch has passed (426).
 
 // SRV-2 / SRV-4: read (GET) authorization.
 //
@@ -274,7 +274,7 @@ type WsConnectResult =
  * SRV-4: verify the signed connect token on a /ws upgrade. The client signs the replay-proof scheme with method=WS and
  * an empty body, and passes pubkey/ts/nonce/sig as query params; a current app also passes `for=<host>&v=2` and signs
  * format 2 (@beanpool/core request-signing.ts). `unsigned` when none of them is present, and for a token signed for
- * another community or one in the old format, without `for=` (engine/member-signature.ts, CUT4): no member feed, public
+ * another community or, after the switch, one in the old format (engine/member-signature.ts): no member feed, public
  * doorbells in the default mode and 401 under ENFORCE_WS_AUTH=true, and the app still opens. `invalid` for a partial,
  * stale, replayed or forged token; `busy` for a good one from a key with a row (an established member's or a newcomer's)
  * with a new nonce its region of the nonce store has no room for (a stranger's reads as `unsigned`, as one for another
@@ -1744,11 +1744,12 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
-        // Request binding (engine/member-signature.ts): a request without X-Signed-For is the old format, 426
-        // app_too_old, unchecked (CUT4); else freshness, then the signature over the format-2 bytes, then the community
-        // it was signed for (421 wrong_community for another's host), and only then the nonce is spent: a forged request
-        // can't burn a real one, and a request refused for naming another community leaves its nonce unspent. Outside the
-        // try below, so the route that runs after an answer-as-unsigned is never inside it.
+        // Request binding (engine/member-signature.ts): freshness, then the signature over the bytes the request's
+        // format names (format 2 when it carries X-Signed-For, the old bytes when not), then the community it was
+        // signed for (421 wrong_community for another's host; 426 app_too_old for the old format after the
+        // switch), and only then the nonce is spent: a forged request can't burn a real one, and a request refused
+        // for naming another community leaves its nonce unspent. Outside the try below, so the route that runs after
+        // an answer-as-unsigned is never inside it.
         const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
         const signedFor = typeof signedForHeader === 'string' ? signedForHeader : Array.isArray(signedForHeader) ? signedForHeader.join(',') : null;
         const verdict = verifyMemberSignature({
@@ -1772,7 +1773,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         const roomRefused = !verdict.ok && verdict.code === STORE_FULL_CODE;
         const actsHere = roomRefused && !!verdict.scope && verdict.scope !== 'stranger';
         if (roomRefused && !gatewayRefusedForRoom(ctx, verdict.signer, actsHere, ctx.state.gatewayPerMinute ?? 120)) return;
-        // An old app's signature on a PUBLIC read is answered as that read unsigned, which anyone
+        // An old app's signature on a PUBLIC read after the switch is answered as that read unsigned, which anyone
         // may send: every app before binding signs its GETs to its node (native node-request-signing.ts), and it
         // reads its "update BeanPool" banner's minimum version from /api/community/health. A 426 there would hide
         // the one message that tells the member what to do. Its gated reads and writes are refused (426) below.
@@ -1829,9 +1830,11 @@ export async function startHttpsServer(port: number): Promise<number> {
             // SRV-20: stash the verified signing material so a route that creates a
             // transaction can persist it on the row (auth_signer/signature/payload),
             // making the transaction's authorship re-verifiable by any importing node.
-            // `payload` is the text signed, always format 2 (bound to this host): the signed bytes are 0xFF then that text
-            // (engine/sync.ts verifyTransactionAuthorship puts it back).
-            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
+            // `payload` is the text signed; in format 2 the signed bytes are 0xFF then that text (engine/sync.ts
+            // verifyTransactionAuthorship puts it back); @beanpool/core parseSignedText reads either format.
+            // `format`: 1 for the old text bound to no community, 2 for one bound to this host (a route that hands back a
+            // credential refuses 1: routes/node-admin.ts break-glass).
+            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage, format: verdict.format };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the

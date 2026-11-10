@@ -7,9 +7,9 @@ related: updates-and-health, what-the-server-sees, troubleshooting
 
 ## What the floor does
 
-Your server tells every phone app the oldest version it should run: the floor. An app below it shows a banner that cannot be closed while it is in use. Once the grace date has passed, it also stops with a full-screen **Update required** and one **Update** button that opens the store. It does that only at a safe moment: when the app starts, or when someone comes back to it after 5 minutes or more away. It never covers a screen while someone is using it.
+Your server tells every phone app the oldest version it should run: the floor. An app below it shows a banner that cannot be closed while it is in use. Once the grace date has passed, it also stops with a full-screen **Update required** and one **Update** button that opens the store. On its own the app does that only at a safe moment: when it starts, or when someone comes back to it after 5 minutes or more away. Your server refusing it (below) puts the screen up at once.
 
-The server never refuses an app because of its version. Whatever a member was doing when their app fell below the floor still reaches the server. Only the app stops, and only until it is updated.
+Once a floor stops apps, your server also refuses them: an app below it can't send anything or read anything private, and it puts up **Update required** at once, even mid-use, because nothing it does would work. Public reads, such as your community's name and the floor itself, still answer, so the app can say what to do. Before the floor stops apps (its store has no version that meets it yet, or its grace date is still ahead), your server refuses nothing for an app's version.
 
 A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone.
 
@@ -17,7 +17,7 @@ A floor never stops anyone the store cannot help. Your server reads Google Play'
 
 In .env:
 
-- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.2.60. Unset, it is 1.0.75, below every app in use.
+- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.4.2. Unset, it is 1.4.0: apps older than that can't work with this server, so it holds them off without anything set.
 - **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.
 - **MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.
 - **MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone.

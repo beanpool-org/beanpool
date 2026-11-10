@@ -53,7 +53,6 @@
  "test-blocks-on-messaging": 12.7,
  "test-boot-drift-count-moves-nothing": 8.1,
  "test-boot-file-safety": 20.1,
- "test-boot-opening-line-count": 4,
  "test-break-glass-code": 0.5,
  "test-breakglass-and-backup-codes": 9.5,
  "test-bring-back": 4.3,

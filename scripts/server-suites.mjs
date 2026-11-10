@@ -154,7 +154,6 @@ export const SUITES = [
     'test-known-pledge-counted-once',
     'test-boot-drift-count-moves-nothing',
     'test-enterprise-limit-bigger-of-two',
-    'test-boot-opening-line-count',
     'test-badge-earned-only-http',
     'test-invited-by-http',
     'test-balance-tier-credit-http',

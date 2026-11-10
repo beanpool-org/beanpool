@@ -108,6 +108,12 @@ const FIXED: Readonly<Record<string, WordKey>> = {
 
 /** Sentences with a number in them, by their English pattern. */
 const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => string }> = [
+    // utils/node-version-gate.ts NodeTooOldError: a request this phone did not send, because the community's server is older
+    // than this app talks to (a join, a Settings read): the server card's sentence, with its version and the minimum.
+    {
+        pattern: /^This community's server runs BeanPool (\S+)\. This app needs (\S+) or newer\. Its operator must update\.$/,
+        words: (m) => t("This community's server runs BeanPool {version}. This app needs {minimum} or newer. Its operator must update.", { version: m[1], minimum: m[2] }),
+    },
     // utils/names-list.ts NAMES_COPY.signOutOnlyCopy / signOutMaybeOnlyCopy: the names list's key by its number.
     {
         pattern: /^This phone holds the only copy of the names list’s key (\d+), and the server didn’t confirm its copy\. If you sign out now, the names written under it can’t be opened again\.$/,

@@ -109,8 +109,21 @@ describe('the minimum, baked in', () => {
         }
     });
 
-    it('the card says the server\'s version, the minimum, and who must act', () => {
+    it('the card says the server\'s version, the minimum, and who must act; a refused request says it in the member\'s language', async () => {
         expect(nodeTooOldText('1.2.37')).toBe("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");
+        // Shown where a refused request's message is (a join, Settings: components/settings/settings-lines.ts), worded again.
+        const { settingsLineWords } = await import('../../components/settings/settings-lines');
+        const { setLanguage } = await import('@beanpool/core');
+        expect(settingsLineWords(nodeTooOldText('1.2.37'))).toBe(nodeTooOldText('1.2.37'));
+        setLanguage('xx');
+        try {
+            const said = settingsLineWords(nodeTooOldText('1.2.37'));
+            expect(said).not.toBe(nodeTooOldText('1.2.37'));
+            expect(said).toContain('1.2.37');
+            expect(said).toContain('1.4.0');
+        } finally {
+            setLanguage('en');
+        }
         const e = new NodeTooOldError('1.2.37');
         expect(isNodeTooOldError(e)).toBe(true);
         expect(e.message).toBe(nodeTooOldText('1.2.37'));

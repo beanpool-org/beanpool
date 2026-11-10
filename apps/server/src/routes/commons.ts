@@ -39,7 +39,7 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
-import { AMOUNT_C_REQUIRED, requirePositiveHundredths } from '../money-body.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
 import { isHundredths, isPastDeadline, word } from '@beanpool/core';
@@ -92,6 +92,13 @@ router.post('/api/commons/projects', async (ctx) => {
         ctx.body = { error: word('A signed request is required') };
         return;
     }
+    // The amount asked is `requestedAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code every money
+    // body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['requestedAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+        return;
+    }
     if (!title || !requestedAmount) {
         ctx.status = 400;
         ctx.body = { error: 'proposerPubkey, title, and requestedAmount are required' };
@@ -124,6 +131,13 @@ router.post('/api/commons/projects/update', async (ctx) => {
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    // The amount asked is `requestedAmount_c`: an app from before whole hundredths sends it in Beans under its old name,
+    // refused with the code every money body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['requestedAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
         return;
     }
     if (!projectId || !title || !requestedAmount) {
@@ -466,6 +480,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: word('A signed request is required') };
         return;
     }
+    // The goal is `goalAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code every money
+    // body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['goalAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+        return;
+    }
     // A project's id is its enterprise's key, its account's and its escrow's (`escrow_<id>`), so the server makes it and
     // never takes one: an id that named a member's key, an enterprise, the Commons or a deal's escrow had pledges paid
     // into that account, its status changed to funded, and its edits and deletion rename or prune it (db.ts
@@ -556,6 +577,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    // The goal is `goalAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code
+    // every money body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['goalAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
         return;
     }
     if (!id || !title || !goalAmount) {

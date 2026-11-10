@@ -56,6 +56,7 @@ import { payFromCommons, getCommonsBalanceExact } from './state-engine.js';
 import { crossNodeFee } from './federation-settlement-exchange.js';
 import { logger } from './logger.js';
 import { COMMONS_POT_PAUSED } from './engine/audit.js';
+import { formatHundredths } from '@beanpool/core';
 
 
 export interface CommissionCapacity {
@@ -171,7 +172,7 @@ export function checkCommissionAllowance(peerId: string, amount: number): Commis
             // somebody set. "Allowance exceeded" tells them a number moved without telling them which one.
             message: capacity.ceiling === 0 && capacity.redeemable === 0
                 ? `${link.name} is square with us — there is no credit to call in, and no commissioning ceiling has been set for it. An operator can set one in Settings.`
-                : `That is more than ${link.name} can commission right now (${total} needed, ${capacity.allowance} available — ${capacity.redeemable} of credit owed to us plus a ceiling of ${capacity.ceiling}).`,
+                : `That is more than ${link.name} can commission right now (${formatHundredths(total, 'en')} Beans needed, ${formatHundredths(capacity.allowance, 'en')} available — ${formatHundredths(capacity.redeemable, 'en')} of credit owed to us plus a ceiling of ${formatHundredths(capacity.ceiling, 'en')}).`,
         };
     }
     return { ok: true, total, amount_c: amount, fee_c: fee, capacity };
@@ -234,7 +235,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
             // NOT `allowDeficit`. A commission is a discretionary act by one person; pushing the community's
             // Commons into deficit for it is not theirs to decide, and unlike a reversal's stranded fee there
             // is no worse outcome on the other side of refusing. The pot is what the community has collected.
-            message: `${link.name} needs ${shortfall} more than the Commons pot holds (${(getCommonsBalanceExact())}). The pot fills from fees and demurrage; nothing has been moved.`,
+            message: `${link.name} needs ${formatHundredths(shortfall, 'en')} Beans more than the Commons pot holds (${formatHundredths(getCommonsBalanceExact(), 'en')}). The pot fills from fees and demurrage; nothing has been moved.`,
         };
     }
 
@@ -252,7 +253,7 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
                 reason: 'commons_short',
                 shortfall: shortfall,
                 commonsBalance: (getCommonsBalanceExact()),
-                message: `The Commons pot could not cover ${shortfall} just now. Nothing has been moved.`,
+                message: `The Commons pot could not cover ${formatHundredths(shortfall, 'en')} Beans just now. Nothing has been moved.`,
             };
         }
         drawnFromCommons = shortfall;

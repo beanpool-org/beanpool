@@ -19,7 +19,7 @@
  */
 
 import { t, word } from './words.js';
-import { beans, formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
+import { beans, formatHundredths, isHundredths, HUNDREDTHS_PER_BEAN, type Hundredths } from './hundredths.js';
 
 export const VOUCH_PRESETS: readonly Hundredths[] = [beans(25), beans(50), beans(75), beans(100)];
 export type VouchPreset = Hundredths;
@@ -83,9 +83,9 @@ export function isBudgetLevel(n: unknown): n is Hundredths {
     return isHundredths(n) && n >= VOUCHER_BUDGET_MIN && n <= VOUCHER_BUDGET_MAX && n % VOUCHER_BUDGET_STEP === 0;
 }
 
-/** Whether `n` is a member's credit-line gift setting: whole hundredths from 0 (off) to MEMBER_GIFT_MAX. */
+/** Whether `n` is a member's credit-line gift setting: a whole number of Beans (in hundredths) from 0 (off) to MEMBER_GIFT_MAX. */
 export function isMemberGiftSetting(n: unknown): n is Hundredths {
-    return isHundredths(n) && n >= 0 && n <= MEMBER_GIFT_MAX;
+    return isHundredths(n) && n >= 0 && n <= MEMBER_GIFT_MAX && n % HUNDREDTHS_PER_BEAN === 0;
 }
 
 export const VOUCH_PRESET_WORDS = {

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -3405,8 +3405,9 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
- * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
- * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's whole hundredths, or NaN, the unknown pot, for a row
+ * holding anything else (NULL, text, a fraction of a hundredth, an infinity). Never 0: a guessed 0 was flushed over the
+ * row and the pot's Beans left the books (NB-1).
  */
 function commonsPotFromRow(balance: unknown): number {
     return isHundredths(balance) ? balance : NaN;
@@ -4450,8 +4451,9 @@ export function pledgeEnterpriseBacking(
             throw new Error(word('You are not an authorized keeper of this enterprise'));
         }
 
-        const parsedAmount = Number(amount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        // Whole hundredths above 0 (every boundary asks isHundredths; the routes read it through money-body.ts).
+        const parsedAmount = amount;
+        if (!isHundredths(parsedAmount) || parsedAmount <= 0) {
             throw new Error(word('Pledge amount must be a positive number'));
         }
 
@@ -5919,8 +5921,9 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
 
 /**
  * A post's Beans price, on a node whose `beans` switch is off: none. Refused rather than quietly dropped, so an
- * author never believes they posted a price nobody will see; anything that isn't a price is stored as 0. Every
- * route that makes or edits a post comes through createPost/updatePost (marketplace, treasury, events).
+ * author never believes they posted a price nobody will see; a price of 0 (or none) is stored as 0. A price that isn't
+ * whole hundredths never gets here: engine/post-fields.ts isListingPrice refuses it first. Every route that makes or
+ * edits a post comes through createPost/updatePost (marketplace, treasury, events).
  */
 function beansOffPrice(credits: unknown): number {
     if (getProfileSwitches().beans) return credits as number;
@@ -6024,7 +6027,7 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         claimId: claim.id,
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
-                        amount: claim.amount_c,
+                        amount_c: claim.amount_c,
                     }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
                 // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
@@ -8357,7 +8360,7 @@ export function getCommunityHealth(): CommunityHealth {
             flags.push({
                 type: 'wash_trading',
                 severity: 'alert',
-                description: `Wash trading detected: reciprocal flow ratio ${r.toFixed(3)} < 0.15 for pair ${callsignA} ↔ ${callsignB} (gross: ${gross.toFixed(1)})`,
+                description: `Wash trading detected: reciprocal flow ratio ${r.toFixed(3)} < 0.15 for pair ${callsignA} ↔ ${callsignB} (gross: ${formatHundredths(gross, 'en')} Beans)`,
                 members: [a, b]
             });
         }
@@ -8501,12 +8504,13 @@ export function getCommunityHealth(): CommunityHealth {
             const previous = previousMetricRow.metric_value;
             if (previous > 0) {
                 const growthRatio = (current - previous) / previous;
+                // The metric is whole hundredths (engine audit.ts: SUM(balance_c)), so the 500-Bean floor is beans(500).
                 const absoluteGrowth = current - previous;
-                if (growthRatio > 0.20 && absoluteGrowth >= 500) {
+                if (growthRatio > 0.20 && absoluteGrowth >= beans(500)) {
                     flags.push({
                         type: 'aggregate_spike',
                         severity: 'alert',
-                        description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${absoluteGrowth.toFixed(1)}B) in 24h`,
+                        description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${formatHundredths(absoluteGrowth, 'en')} Beans) in 24h`,
                         members: []
                     });
                 }
@@ -9485,10 +9489,10 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
  * What an owner's prune of this branch would do, for its confirmation (GET /api/local/admin/branches/:pubkey/prune): the
  * whole subtree adminPruneBranch walks (inviteBranchOf), not the console's pages. `members` counts the rows it would mark
  * pruned (each one not pruned already). Each one's balance as the prune settles it (adminPruneUser): a debt the Commons
- * pays (`badDebt`), a surplus it takes back (`surplus`), and what the Commons gains or pays overall (`net`), each to the
- * cent. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
+ * pays (`badDebt_c`), a surplus it takes back (`surplus_c`), and what the Commons gains or pays overall (`net_c`), each in
+ * whole hundredths. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
  */
-export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt: number; surplus: number; net: number; keys: string[] } {
+export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt_c: number; surplus_c: number; net_c: number; keys: string[] } {
     const status = db.prepare('SELECT status FROM members WHERE public_key = ?');
     const keys = inviteBranchOf(rootPublicKey).filter((pubkey) => {
         const row = status.get(pubkey) as { status: string } | undefined;
@@ -9501,8 +9505,7 @@ export function branchPrunePreview(rootPublicKey: string): { members: number; ba
         if (balance < 0) badDebt += -balance;
         else if (balance > 0) surplus += balance;
     }
-    const cents = (n: number) => n;
-    return { members: keys.length, badDebt: cents(badDebt), surplus: cents(surplus), net: cents(surplus - badDebt), keys };
+    return { members: keys.length, badDebt_c: badDebt, surplus_c: surplus, net_c: surplus - badDebt, keys };
 }
 
 /**

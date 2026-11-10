@@ -37,7 +37,7 @@
  * conservingTransaction. One plain db.transaction; its one read of a balance is the giver's own, for their debt.
  */
 import crypto from 'node:crypto';
-import { formatHundredths, word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
+import { formatHundredths, isHundredths, HUNDREDTHS_PER_BEAN, word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey, getBalance, getMemberTrustProfile } from '../state-engine.js';
 import { creditCap } from '@beanpool/engine';
@@ -168,7 +168,8 @@ function memberKey(raw: unknown): string {
 function planGift(giver: string, to: string, amount: unknown): { amount_c: number; takes: { piece: Piece; take: number }[]; callsign: string } {
     const setting = memberGiftSetting();
     if (setting <= 0) throw new CreditGiftError(403, 'gift_off', CREDIT_GIFT_WORDS.off);
-    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1) throw new CreditGiftError(400, 'bad_amount', CREDIT_GIFT_WORDS.badAmount);
+    // A whole number of Beans, 1 or more, as before whole hundredths: 100, 200, … in hundredths; 12.50 Beans is refused.
+    if (!isHundredths(amount) || amount < HUNDREDTHS_PER_BEAN || amount % HUNDREDTHS_PER_BEAN !== 0) throw new CreditGiftError(400, 'bad_amount', CREDIT_GIFT_WORDS.badAmount);
     if (amount > setting) throw new CreditGiftError(400, 'over_setting', overSetting(setting));
     // The giver first, so a key that may give nothing learns nothing about the member it names.
     const g = giverState(giver);

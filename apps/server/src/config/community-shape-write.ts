@@ -68,7 +68,7 @@
  * was set). The open door, the private preview, visitors
  * and connections are the server's: 400.
  */
-import { formatHundredths, word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
+import { formatHundredths, isHundredths, word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { VOUCHER_WORDS, writeMemberGiftSetting, saveVoucherBudgetSetting } from '../engine/vouchers.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
@@ -368,7 +368,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
     // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
     if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
     const shape = readShape();
-    if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${c.from} → ${c.to}`).join(', ')}, set by ${by.actor}.`);
+    if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${shownValue(c.setting, c.from)} → ${shownValue(c.setting, c.to)}`).join(', ')}, set by ${by.actor}.`);
     if (plan.lock) console.log(`🔒 Core settings confirmed and locked by ${by.actor}.`);
     noteSecurityEvent({
         key: 'sec.settings',
@@ -417,12 +417,23 @@ function namesOf(lines: readonly PlannedChange[]): string {
     return [...new Set(lines.map((c) => SETTING_NAMES[c.setting.split('.')[0] as ShapeSettingName]))].join(', ');
 }
 
+/** The settings whose values are whole hundredths of a Bean: a change carries them as that integer's text ('100000'). */
+const MONEY_SETTINGS: ReadonlySet<string> = new Set(['knownFloor.floor', 'knownFloor.cap', 'voucherBudget', 'memberGift']);
+
+/** A change's value as a person reads it: a money setting's hundredths in Beans ('100000' reads 1,000), any other as it is. */
+function shownValue(setting: string, v: string | null | undefined): string {
+    if (v === null || v === undefined) return 'not set';
+    if (!MONEY_SETTINGS.has(setting)) return v;
+    const n = Number(v);
+    return isHundredths(n) ? formatHundredths(n, 'en') : v;
+}
+
 /** One Core change as the owners' alert says it: the setting, and from what to what (a known-floor line names its part). */
 function lineWords(c: PlannedChange): string {
     const [base, part] = c.setting.split('.');
     const name = SETTING_NAMES[base as ShapeSettingName];
     const what = part === 'on' ? 'the dial' : part === 'floor' ? 'the floor' : part === 'cap' ? 'the cap' : null;
-    return `${name}${what ? `, ${what}` : ''} (${c.from ?? 'not set'} → ${c.to})`;
+    return `${name}${what ? `, ${what}` : ''} (${shownValue(c.setting, c.from)} → ${shownValue(c.setting, c.to)})`;
 }
 
 /** The request read and checked whole, as applyShapeChanges writes it: every refusal thrown, nothing written. */

@@ -42,6 +42,16 @@ export function optionalHundredthsOf(body: unknown, key: string): { ok: true; va
 }
 
 /**
+ * Whether a body carries a money field under its name from before whole hundredths (`goalAmount` for `goalAmount_c`,
+ * `amount` for `amount_c`): an app from before them, whose figure in Beans would otherwise be read as ABSENT, which on an
+ * optional field means something else entirely (no goal, a ceiling cleared, a whole pledge released). The caller answers
+ * 400 amount_c_required before reading anything, as for any figure that isn't whole hundredths.
+ */
+export function carriesOldMoneyKey(body: unknown, oldKeys: readonly string[]): boolean {
+    return !!body && typeof body === 'object' && oldKeys.some((k) => Object.prototype.hasOwnProperty.call(body, k));
+}
+
+/**
  * A price an owner's AI assistant gives in Beans (its tools speak Beans, agent/owner-posts.ts): a JSON number, 0 or more,
  * read as whole hundredths by the same string work a member's typed amount is (core parseHundredths), so 12.5 is 1250 and
  * a figure finer than a cent (0.1 + 0.2) is refused, never rounded. Null for anything else.

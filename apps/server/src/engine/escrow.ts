@@ -1453,7 +1453,10 @@ export function completePostTransaction(
             throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. `
                 + 'Cancel the deal, and the Beans held for it go back.');
         }
-        releaseCredits = shareOf(row.amount_c, quantityHundredths(finalHours), quantityHundredths(bookedHours));
+        // A product past what a number holds exactly (a hand-edited row near the largest amount) is no amount at all: NaN,
+        // so the refusal below says what happened, never shareOf's RangeError surfacing as "Escrow release failed".
+        const confirmed = quantityHundredths(finalHours);
+        releaseCredits = Number.isSafeInteger(row.amount_c * confirmed) ? shareOf(row.amount_c, confirmed, quantityHundredths(bookedHours)) : NaN;
     }
     // A row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits near the
     // largest number). Its escrow holds what was really paid, which can't cover what the row says, so a cancel is refused

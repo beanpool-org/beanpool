@@ -57,7 +57,7 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlOf, isPastDeadline, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
-import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, optionalHundredthsOf, requirePositiveHundredths } from '../money-body.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey, optionalHundredthsOf, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
 import { answerPotPaused } from '../engine/audit.js';
@@ -620,9 +620,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, purpose, description, lifecycle, deadlineAt, lat, lng } = body;
         // Money in the body is whole hundredths, `*_c` (money-body.ts): a goal or a ceiling of anything else is refused.
+        // The old names (`goalAmount`, `workingCapitalCeiling`) are refused too, never read as "no goal" or "no ceiling".
         const goalIn = optionalHundredthsOf(body, 'goalAmount_c');
         const ceilingIn = optionalHundredthsOf(body, 'workingCapitalCeiling_c');
-        if (!goalIn.ok || !ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        if (!goalIn.ok || !ceilingIn.ok || carriesOldMoneyKey(body, ['goalAmount', 'workingCapitalCeiling'])) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         const goalAmount = goalIn.value;
         const workingCapitalCeiling = ceilingIn.value;
         const enterpriseName = replaceLoneSurrogates(String(name || title || '').trim());
@@ -767,7 +768,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         const lineIn = optionalHundredthsOf(adminBody, 'creditLine_c');
         const ceilingIn = optionalHundredthsOf(adminBody, 'workingCapitalCeiling_c');
-        if (!lineIn.ok || !ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        if (!lineIn.ok || !ceilingIn.ok || carriesOldMoneyKey(adminBody, ['creditLine', 'workingCapitalCeiling'])) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above (#2082: own only).
         const avatarRefusal = routePhotoValueRefusal(String(avatar));
         if (avatarRefusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) }; return; }
@@ -794,9 +795,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        // Whole hundredths, 0 or more, or null for none (money-body.ts).
-        const ceilingIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'ceiling_c');
-        if (!ceilingIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        // Whole hundredths, 0 or more, or null for none (money-body.ts). The old `ceiling` (Beans) is refused: read as absent
+        // it would clear the ceiling.
+        const ceilingBody = (ctx as any).requestBody || {};
+        const ceilingIn = optionalHundredthsOf(ceilingBody, 'ceiling_c');
+        if (!ceilingIn.ok || carriesOldMoneyKey(ceilingBody, ['ceiling'])) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         const parsedCeiling = ceilingIn.value ?? null;
         db.prepare('UPDATE members SET working_capital_ceiling_c = ? WHERE public_key = ?').run(parsedCeiling, treasury);
         sweepEnterpriseCeiling(treasury);
@@ -1476,9 +1479,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        // Optional: whole hundredths above 0, or absent for all of it (money-body.ts).
-        const releaseIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'amount_c');
-        if (!releaseIn.ok || releaseIn.value === 0) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        // Optional: whole hundredths above 0, or absent for all of it (money-body.ts). The old `amount` (Beans) is refused:
+        // read as absent it would release the whole pledge.
+        const releaseBody = (ctx as any).requestBody || {};
+        const releaseIn = optionalHundredthsOf(releaseBody, 'amount_c');
+        if (!releaseIn.ok || releaseIn.value === 0 || carriesOldMoneyKey(releaseBody, ['amount'])) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         const parsedAmount = releaseIn.value ?? undefined;
         try {
             const res = releaseEnterpriseBacking(treasury, actor, parsedAmount);
@@ -1525,8 +1530,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         // The backing they offer: whole hundredths, 0 or more (money-body.ts); none is 0.
-        const pledgeIn = optionalHundredthsOf((ctx as any).requestBody || {}, 'pledgedBacking_c');
-        if (!pledgeIn.ok) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
+        const pledgeBody = (ctx as any).requestBody || {};
+        const pledgeIn = optionalHundredthsOf(pledgeBody, 'pledgedBacking_c');
+        if (!pledgeIn.ok || carriesOldMoneyKey(pledgeBody, ['pledgedBacking'])) { ctx.status = 400; ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED }; return; }
         const pledge = pledgeIn.value ?? 0;
         try {
             const req = requestToJoinEnterprise(treasury, actor, pledge);

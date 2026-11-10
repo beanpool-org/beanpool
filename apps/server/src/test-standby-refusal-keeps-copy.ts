@@ -184,7 +184,7 @@ async function child(): Promise<void> {
                 tables, format: cfg('replica_format'), held: cfg('replica_held_sum'), savedCursor: cursor,
                 triggers: { count: triggers.length, hash: crypto.createHash('sha256').update(JSON.stringify(triggers)).digest('hex').slice(0, 16) },
                 cursor: (getBackupStatus() as any).cursor ?? null,
-                ledgerSum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+                ledgerSum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
             };
         },
         /** This standby's record of its copies, and the report its next pull sends (services/standby-copy-record.ts). */
@@ -216,7 +216,7 @@ async function child(): Promise<void> {
                         db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp, updated_at) VALUES (?, ?, ?, ?, ?, 'text', ?, ?)`)
                             .run(id, a.conversationId, a.author, words.toString('base64'), crypto.randomBytes(24).toString('base64'), now(), now());
                     } else if (a.kind === 'posts') {
-                        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
+                        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
                             .run(id, `Flood ${i}`, a.author, now(), now());
                     } else if (a.kind === 'invites') {
                         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)`).run(id, a.author, now(), now());
@@ -225,7 +225,7 @@ async function child(): Promise<void> {
                         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`)
                             .run(id, `v-${id.slice(6, 22)}`, now(), now());
                     } else if (a.kind === 'wages') {
-                        db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, amount, status, created_at, updated_at) VALUES (?, ?, ?, 1, 'pending', ?, ?)`)
+                        db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, amount_c, status, created_at, updated_at) VALUES (?, ?, ?, 1, 'pending', ?, ?)`)
                             .run(id, a.author, a.author, now(), now());
                     } else {
                         db.prepare(`INSERT INTO tombstones (table_name, row_key, deleted_at) VALUES ('messages', ?, ?)`).run(id, now());
@@ -599,8 +599,8 @@ async function main(): Promise<void> {
         console.log('\n— 5. the held force-resync (not a seed), refused: S\'s ledger as it was, and nothing held —');
         const resumed5 = await restart();
         assert(resumed5 === s4a.savedCursor && !!resumed5, `S restarts, and its puller resumes from the cursor it saved (${resumed5})`);
-        await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 4 WHERE public_key = ?', args: [ann.pk] });
-        await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 4 WHERE public_key = ?', args: [bo.pk] });
+        await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 4 WHERE public_key = ?', args: [ann.pk] });
+        await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c - 4 WHERE public_key = ?', args: [bo.pk] });
         await plantUnclassified(standby);
         const s5a: Snap = await standby.send('snapshot', { tables: HASHED });
         const check5 = await standby.send('check-copy');
@@ -755,13 +755,13 @@ async function main(): Promise<void> {
         const s11c: Snap = await standby.send('snapshot', { tables: HASHED });
         assert(jam11.ok === true && jam11.mode === 'delta' && s11c.tables.posts.count === s11b.tables.posts.count + 1,
             `its deltas carry on meanwhile: a listing Gwen made reaches S (${JSON.stringify(jam11)}; ${counts(s11c, 'posts')})`);
-        await main.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
+        await main.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 7 WHERE public_key = ?', args: [ann.pk] });
         const mint11 = await standby.send('pull', {});
         const s11d: Snap = await standby.send('snapshot', { tables: HASHED });
         assert(mint11.ok === false && mint11.mode === 'delta' && /conservation/i.test(mint11.error ?? '') && s11d.tables.accounts.hash === s11c.tables.accounts.hash
             && Math.abs(s11d.ledgerSum - s11c.ledgerSum) < 1e-9,
             `7 Beans planted on M's ledger come in a delta, which the ledger check refuses: S's total stays ${s11c.ledgerSum} (${JSON.stringify(mint11)}; total ${s11d.ledgerSum}; before: taken as a seed, unchecked, and S's total went up 7)`);
-        await main.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
+        await main.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c - 7 WHERE public_key = ?', args: [ann.pk] });
         await unplantUnclassified(standby);
         await sleep(RETRY_MS + 300);
         const land11 = await pullAndSwap({});

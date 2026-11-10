@@ -58,7 +58,7 @@ function plantMember(callsign: string, balance: number): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`)
         .run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, EPOCH_NOW);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, EPOCH_NOW);
     return pk;
 }
 
@@ -71,18 +71,18 @@ function plantLatePledge(projectId: string, backer: string, amount: number): str
     const id = crypto.randomUUID();
     const escrow = `escrow_${projectId}`;
     db.transaction(() => {
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(escrow);
-        db.prepare(`UPDATE accounts SET balance = balance - ? WHERE public_key = ?`).run(amount, backer);
-        db.prepare(`UPDATE accounts SET balance = balance + ? WHERE public_key = ?`).run(amount, escrow);
-        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id) VALUES (?, ?, ?, ?, 'Project Pledge', ?)`)
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES (?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(escrow);
+        db.prepare(`UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?`).run(amount, backer);
+        db.prepare(`UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?`).run(amount, escrow);
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id) VALUES (?, ?, ?, ?, 'Project Pledge', ?)`)
             .run(id, backer, escrow, amount, projectId);
-        db.prepare(`UPDATE projects SET current_amount = current_amount + ? WHERE id = ?`).run(amount, projectId);
+        db.prepare(`UPDATE projects SET current_amount_c = current_amount_c + ? WHERE id = ?`).run(amount, projectId);
     })();
     return id;
 }
 
-const rowBalance = (pk: string): number => Number((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
-const sumBalances = (): number => r4(Number((db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s));
+const rowBalance = (pk: string): number => Number((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+const sumBalances = (): number => r4(Number((db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s));
 const projectStatus = (id: string): string | undefined => (db.prepare('SELECT status FROM projects WHERE id = ?').get(id) as { status: string } | undefined)?.status;
 const ledgerRowsFor = (pk: string): number => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?').get(pk, pk) as { n: number }).n;
 
@@ -99,7 +99,7 @@ function makeMember(callsign: string, beans: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
     createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
     return id;
@@ -127,7 +127,7 @@ async function signedFetch(method: 'POST', path: string, id: Id, body: unknown) 
 
 const bal = (pk: string): number => r4(getBalance(pk).balance);
 const refusedWith = (res: { status: number; body: any }, words: RegExp): boolean => res.status === 400 && words.test(String(res.body?.error));
-const postCredits = (id: string): number => Number((db.prepare('SELECT credits FROM posts WHERE id = ?').get(id) as { credits: number }).credits);
+const postCredits = (id: string): number => Number((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(id) as { credits: number }).credits);
 
 async function main(): Promise<void> {
     console.log('Money: a late pledge is never stranded; an open deal\'s price is frozen\n');
@@ -169,8 +169,8 @@ async function main(): Promise<void> {
     createCrowdfundProject(oven, creator, 'Bread oven', 'For the market', [], 50, null);
     pledgeToProject(crypto.randomUUID(), oven, cal, 50, 'Project Pledge');
     plantLatePledge(oven, cal, 10);
-    db.prepare('UPDATE accounts SET balance = balance - 3 WHERE public_key = ?').run(cal);
-    db.prepare('UPDATE accounts SET balance = balance + 3 WHERE public_key = ?').run(`escrow_${oven}`);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - 3 WHERE public_key = ?').run(cal);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + 3 WHERE public_key = ?').run(`escrow_${oven}`);
 
     // Bench: funded, one late pledge from a member since pruned.
     const bench = crypto.randomUUID();
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     assert(rowBalance(`escrow_${roof}`) === 0, `the roof's escrow is empty (${rowBalance(`escrow_${roof}`)})`);
     assert(rowBalance(roof) === 100, `the roof's own account is untouched (${rowBalance(roof)})`);
     assert(sumBalances() === totalBefore, `the node's total is unchanged (${sumBalances()} vs ${totalBefore})`);
-    const returns = db.prepare(`SELECT to_pubkey, amount, memo, project_id, tax_fee FROM transactions WHERE from_pubkey = ? ORDER BY to_pubkey`)
+    const returns = db.prepare(`SELECT to_pubkey, amount_c, memo, project_id, fee_c FROM transactions WHERE from_pubkey = ? ORDER BY to_pubkey`)
         .all(`escrow_${roof}`) as { to_pubkey: string; amount: number; memo: string; project_id: string; tax_fee: number }[];
     const toAnn = returns.find(r => r.to_pubkey === ann);
     const toBen = returns.find(r => r.to_pubkey === ben);
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
         `the well reaches its goal through the project door (${funding.status}, ${projectStatus(well)}, ${bal(well)})`);
 
     const snapshot = () => ({ late: bal(late.pk), escrow: rowBalance(`escrow_${well}`), well: bal(well), rows: ledgerRowsFor(`escrow_${well}`),
-        raised: Number((db.prepare('SELECT current_amount FROM projects WHERE id = ?').get(well) as any).current_amount) });
+        raised: Number((db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(well) as any).current_amount) });
     const before = snapshot();
     const byProjectDoor = await signedFetch('POST', `/api/crowdfund/projects/${well}/pledge`, late, { amount: 5 });
     assert(refusedWith(byProjectDoor, FUNDED_REFUSAL),
@@ -297,7 +297,7 @@ async function main(): Promise<void> {
         `an edit that sends the same price back goes through (${wording.status} ${JSON.stringify(wording.body?.error)})`);
 
     // Forced anyway: the price in the database doubled under the held deal.
-    db.prepare('UPDATE posts SET credits = 20 WHERE id = ?').run(tutoring.id);
+    db.prepare('UPDATE posts SET price_c = 20 WHERE id = ?').run(tutoring.id);
     const buyerBeforeA = bal(buyer.pk), sellerBeforeA = bal(seller.pk);
     completePostTransaction(dealA.id, buyer.pk, 3);
     assert(bal(buyer.pk) === buyerBeforeA, `the buyer pays nothing more at completion (${bal(buyer.pk)} vs ${buyerBeforeA})`);
@@ -307,12 +307,12 @@ async function main(): Promise<void> {
     // (b) More hours than booked, still at the deal's rate: 2 booked at 10, 3 worked, the rate forced to 25.
     const gardening = createPost('offer', 'garden', 'Gardening', 'By the hour', 10, 'hourly', seller.pk)!;
     const dealB = acceptPost(gardening.id, buyer.pk, 2);
-    db.prepare('UPDATE posts SET credits = 25 WHERE id = ?').run(gardening.id);
+    db.prepare('UPDATE posts SET price_c = 25 WHERE id = ?').run(gardening.id);
     const buyerBeforeB = bal(buyer.pk), sellerBeforeB = bal(seller.pk);
     completePostTransaction(dealB.id, buyer.pk, 3);
     assert(bal(buyer.pk) === buyerBeforeB - 10, `the extra hour costs the buyer the deal's 10, not 25 × 3 − 20 (${bal(buyer.pk)} vs ${buyerBeforeB})`);
     assert(bal(seller.pk) === r4(sellerBeforeB + 30 * 0.985), `the seller is paid 3 hours at 10 (${bal(seller.pk)})`);
-    const rowB = db.prepare('SELECT credits, hours FROM marketplace_transactions WHERE id = ?').get(dealB.id) as { credits: number; hours: number };
+    const rowB = db.prepare('SELECT amount_c, hours FROM marketplace_transactions WHERE id = ?').get(dealB.id) as { credits: number; hours: number };
     assert(rowB.credits === 30 && rowB.hours === 3, `the deal records 30 for 3 hours (${JSON.stringify(rowB)})`);
 
     // (c) A Need at 10 an hour, 2 hours. Its author (who pays) tries to lower the rate: refused once asked for, and
@@ -330,7 +330,7 @@ async function main(): Promise<void> {
     assert(refusedWith(lowerHeld, PRICE_FROZEN), `nor while it is held (${lowerHeld.status})`);
     assert(postCredits(fence.id) === 10, 'the listing still says 10');
 
-    db.prepare('UPDATE posts SET credits = 5 WHERE id = ?').run(fence.id);
+    db.prepare('UPDATE posts SET price_c = 5 WHERE id = ?').run(fence.id);
     const authorBeforeC = bal(author.pk), helperBeforeC = bal(helper.pk);
     completePostTransaction(dealC.id, author.pk, 2);
     assert(bal(helper.pk) === r4(helperBeforeC + 20 * 0.985), `the helper is paid the agreed 20, less the fee (${bal(helper.pk)})`);

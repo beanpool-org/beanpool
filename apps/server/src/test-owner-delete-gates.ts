@@ -145,12 +145,12 @@ async function main(): Promise<void> {
         const callsign = `${name}${++added}`;
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         return pk;
     };
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin, 'Adam', new Date().toISOString(), owner, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     grantNodeRole(admin, 'admin', owner);
 
     /** A key session: a computer's ("Sign in with your phone"), or the phone's Manage hand-off (its 15-minute idle limit). */

@@ -52,18 +52,18 @@ function insertMember(id: Identity, callsign: string, balance = 1000): void {
     ).run(id.pub, callsign);
     setMemberPhoto(db, id.pub, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(
-        `INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`
+        `INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`
     ).run(id.pub, balance);
 }
 
 function completedTrade(buyer: string, seller: string, credits: number) {
     const pid = `mlg-post-${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
          VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`
     ).run(pid, credits, seller);
     db.prepare(
-        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
          VALUES (?, ?, ?, ?, ?, 'completed')`
     ).run(`mlg-mtx-${crypto.randomBytes(4).toString('hex')}`, pid, buyer, seller, credits);
 }

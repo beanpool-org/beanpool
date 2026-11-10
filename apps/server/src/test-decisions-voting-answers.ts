@@ -140,18 +140,18 @@ const DAY = 24 * HOUR;
 function makeMember(callsign: string, opts: { joinedAt?: string; lastActiveAt?: string | null; earnedCredit?: number; frozen?: boolean; status?: string } = {}): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, earned_credit, last_active_at)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, earned_credit_c, last_active_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(pk, callsign, opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active',
         opts.frozen ? 1 : 0, opts.earnedCredit ?? 100, opts.lastActiveAt ?? null);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
     return pk;
 }
 
 function completedTrade(buyer: string, seller: string, credits: number, at = new Date()): void {
     const iso = at.toISOString();
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
     `).run('mt-' + crypto.randomUUID(), 'post-' + crypto.randomUUID(), buyer, seller, credits, iso, iso);
 }
@@ -376,18 +376,18 @@ async function run() {
     const restoredTrader = makeMember('RestoredTrader', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
     completedTrade(restoredTrader, signedOnly[0], 5, new Date(kNow - 3 * DAY));
     const restoredPoster = makeMember('RestoredPoster');
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at) VALUES (?, 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?, ?)`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at) VALUES (?, 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?, ?)`)
         .run('post-' + crypto.randomUUID(), restoredPoster, new Date(kNow - 3 * DAY).toISOString());
     assert(getActiveMembersCount30d() === 12, `a stale last_active_at is backed by the trade and post records a backup carries (got ${getActiveMembersCount30d()})`);
     // The node writes the daily circulation fee as a ledger row FROM the member (engine/audit.ts), unsigned by
     // them. A member whose only recent row is that fee did nothing and is not active.
     const demurrageOnly = makeMember('DemurrageOnly');
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 0.05, 0, 'Circulation fee (demurrage, 1d)', ?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 0.05, 0, 'Circulation fee_c (demurrage, 1d)', ?)`)
         .run(`demurrage_${demurrageOnly.slice(0, 16)}_1_2`, demurrageOnly, new Date(kNow - DAY).toISOString());
     assert(getActiveMembersCount30d() === 12, `a member whose only ledger row is the node's circulation fee is not active (got ${getActiveMembersCount30d()})`);
     // A payment the member signed (auth_signer = them) is activity even with a stale last_active_at.
     const signedSender = makeMember('SignedSender', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, 2, 0, 'Thanks for the eggs', ?, ?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer) VALUES (?, ?, ?, 2, 0, 'Thanks for the eggs', ?, ?)`)
         .run('tx-' + crypto.randomUUID(), signedSender, signedOnly[0], new Date(kNow - DAY).toISOString(), signedSender);
     assert(getActiveMembersCount30d() === 13, `a payment the member signed counts (got ${getActiveMembersCount30d()})`);
     db.prepare('DELETE FROM transactions WHERE from_pubkey = ?').run(signedSender);

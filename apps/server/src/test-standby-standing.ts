@@ -230,7 +230,7 @@ async function child(): Promise<void> {
         'plant-pledge': async (a: { keeper: string; enterprise: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { clearEnterpriseFloorCache } = await import('./state-engine.js');
-            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                         VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL)`).run(crypto.randomUUID(), a.keeper, a.enterprise, a.amount);
             clearEnterpriseFloorCache(a.enterprise);
             return true;
@@ -282,7 +282,7 @@ async function child(): Promise<void> {
         /** A goal as an older build wrote it: POST /api/treasury passed Number(goalAmount) on unchecked. */
         'plant-goal': async (a: { pk: string; goal: number }) => {
             const { db } = await import('./db/db.js');
-            return db.prepare('UPDATE members SET goal_amount = ? WHERE public_key = ?').run(a.goal, a.pk).changes === 1;
+            return db.prepare('UPDATE members SET goal_amount_c = ? WHERE public_key = ?').run(a.goal, a.pk).changes === 1;
         },
         /** This node's record that its members rows keep the fresh schema's rules (db.ts bringMembersToSchemaRules). */
         marker: async () => {
@@ -581,8 +581,8 @@ async function main(): Promise<void> {
         withDb(dir('old'), (db) => {
             // What the old import wrote: no standing; nothing of member_preferences, treasury_operators or enterprise_pledges.
             for (const t of ['members_touch_updated_at', 'members_touch_board_standing']) db.exec(`DROP TRIGGER IF EXISTS ${t}`);
-            db.prepare(`UPDATE members SET is_treasury = 0, credit_frozen = 0, earned_credit = 0, earned_surplus = 0,
-                        working_capital_ceiling = NULL, legacy_credit_floor = NULL, purpose = NULL, goal_amount = NULL, deadline_at = NULL,
+            db.prepare(`UPDATE members SET is_treasury = 0, credit_frozen = 0, earned_credit_c = 0, earned_surplus_c = 0,
+                        working_capital_ceiling_c = NULL, legacy_credit_floor = NULL, purpose = NULL, goal_amount_c = NULL, deadline_at = NULL,
                         lifecycle = 'ongoing', paused = 0, lat = NULL, lng = NULL`).run();
             db.prepare('DELETE FROM member_preferences').run();
             db.prepare('DELETE FROM treasury_operators').run();
@@ -632,7 +632,7 @@ async function main(): Promise<void> {
             ['by /pledge/release', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge/release`, { as: kip2, body: { amount: 1 } })],
             ['by /backing/release', await api(sb, 'POST', `/api/enterprise/${probe.publicKey}/backing/release`, { as: kip2, body: { amount: 1 } })],
             ['by DELETE /pledge', await api(sb, 'DELETE', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: {} })],
-            ['by DELETE /backing', await api(sb, 'DELETE', `/api/enterprise/${probe.publicKey}/backing`, { as: kip2, body: {} })],
+            ['by DELETE /backing_c', await api(sb, 'DELETE', `/api/enterprise/${probe.publicKey}/backing`, { as: kip2, body: {} })],
             ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount: 1 } })],
             ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount: 1 } })],
             ['Kip steps down, which releases his pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/keepers/step-down`, { as: kip2, body: {} })],

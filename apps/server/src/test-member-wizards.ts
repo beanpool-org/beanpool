@@ -144,7 +144,7 @@ async function throwsAsync(fn: () => Promise<unknown>, re: RegExp, msg: string):
 }
 
 const nodeTotal = () => {
-    const accRows = db.prepare("SELECT SUM(balance) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
+    const accRows = db.prepare("SELECT SUM(balance_c) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
     const accSum = accRows?.total || 0;
     return Math.round((accSum + getCommonsBalanceExact()) * 10000) / 10000;
 };
@@ -168,7 +168,7 @@ function makeMember(callsign: string, pubkey?: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pk, uniqueCallsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
 
@@ -249,7 +249,7 @@ async function main() {
     db.prepare("INSERT OR REPLACE INTO treasury_operators (member_pubkey, treasury_pubkey, granted_by) VALUES (?, ?, ?)").run(oldAliceKey, treasuryPub, operatorPubkey);
 
     // 10. Deferred wage claims
-    db.prepare("INSERT INTO deferred_wage_claims (id, keeper_pubkey, enterprise_pubkey, amount) VALUES (?, ?, ?, 40)").run(
+    db.prepare("INSERT INTO deferred_wage_claims (id, keeper_pubkey, enterprise_pubkey, amount_c) VALUES (?, ?, ?, 40)").run(
         'dwc_' + crypto.randomBytes(6).toString('hex'),
         oldAliceKey,
         bobKey
@@ -261,7 +261,7 @@ async function main() {
     db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support) VALUES (?, ?, 1)").run(decId, oldAliceKey);
 
     // 12. Enterprise pledges
-    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES (?, ?, ?, 50)").run(
+    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, 50)").run(
         'plg_' + crypto.randomBytes(6).toString('hex'),
         oldAliceKey,
         bobKey
@@ -284,7 +284,7 @@ async function main() {
     // 15. Transaction with immutable cryptographic authorship
     const txSignedId = 'tx_' + crypto.randomBytes(6).toString('hex');
     db.prepare(`
-        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer, auth_signature, auth_payload)
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp, auth_signer, auth_signature, auth_payload)
         VALUES (?, ?, ?, 5, 'coffee', datetime('now'), ?, 'sig_bytes', 'payload_bytes')
     `).run(txSignedId, oldAliceKey, bobKey, oldAliceKey);
 
@@ -307,7 +307,7 @@ async function main() {
         .run(strangerKey, knockStamp, oldAliceKey, knockStamp, knockStamp);
 
     // 19. Bob addressed a post to Alice alone, and gave her a task: who may read it (engine/posts.ts) and who does it
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to)
                 VALUES ('bob-to-alice', 'request', 'produce', 'Spare jars?', 'For the honey', 0, ?, 'direct', ?, ?)`)
         .run(bobKey, oldAliceKey, oldAliceKey);
 
@@ -699,7 +699,7 @@ async function main() {
     const eveKey = generateValidPubkey();
     makeMember('eve', eveKey);
     // Seed Eve in debt of -45 beans balanced by Commons pool
-    db.prepare('UPDATE accounts SET balance = -45 WHERE public_key = ?').run(eveKey);
+    db.prepare('UPDATE accounts SET balance_c = -45 WHERE public_key = ?').run(eveKey);
     setCommonsBalance(getCommonsBalanceExact() + 45);
     persistCommonsBalance();
     reconcileLedgerFromDb();
@@ -750,7 +750,7 @@ async function main() {
     makeMember('escrow_buyer', escrowBuyerKey);
     const escrowTxId = 'mptx_' + crypto.randomBytes(6).toString('hex');
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, 'dummy_post', ?, ?, 15, 'pending', datetime('now'))
     `).run(escrowTxId, escrowBuyerKey, bobKey);
 
@@ -769,7 +769,7 @@ async function main() {
     // Also assert requested trade status blocks offboarding
     const requestedTxId = 'escrow_tx_req_' + Date.now();
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, 'dummy_post_req', ?, ?, 20, 'requested', datetime('now'))
     `).run(requestedTxId, escrowBuyerKey, bobKey);
 
@@ -826,7 +826,7 @@ async function main() {
     // whole offboarding aborted (#1099 made the refusal throw), and a gift was refused the same way. Every
     // balance offboarded above is a whole number, which is how it went unseen.
     const exact = (pk: string) => ledger.getAccount(pk).balance;
-    const rowSum = () => (db.prepare('SELECT SUM(balance) AS total FROM accounts').get() as any).total as number;
+    const rowSum = () => (db.prepare('SELECT SUM(balance_c) AS total FROM accounts').get() as any).total as number;
     const offboardError = (fn: () => unknown): string => {
         try { fn(); return ''; } catch (e: any) { return e.message || String(e); }
     };
@@ -857,11 +857,11 @@ async function main() {
     assert(jamDonorRes!.balanceSettled === jamDonorExact, `balanceSettled is the exact 6.895 (got ${jamDonorRes!.balanceSettled})`);
     assert(getMember(jamDonorKey)?.status === 'pruned', 'the half-cent donor is pruned');
     assert(exact(jamDonorKey) === 0, `the half-cent donor holds exactly 0 afterwards (got ${exact(jamDonorKey)})`);
-    const jamDonorRow = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(jamDonorKey) as any;
+    const jamDonorRow = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(jamDonorKey) as any;
     assert(jamDonorRow?.balance === 0, `and so does their account row (got ${jamDonorRow?.balance})`);
     assert(Math.abs(getCommonsBalanceExact() - commonsBeforeJamDonor - jamDonorExact) < 1e-9,
         `the Commons rose by exactly 6.895 (rose by ${getCommonsBalanceExact() - commonsBeforeJamDonor})`);
-    const jamDonorMoves = db.prepare("SELECT amount, memo FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'").all(jamDonorKey) as any[];
+    const jamDonorMoves = db.prepare("SELECT amount_c, memo FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'").all(jamDonorKey) as any[];
     assert(jamDonorMoves.length === 1 && jamDonorMoves[0].amount === jamDonorExact && /^Donation to Commons/.test(jamDonorMoves[0].memo),
         `the whole 6.895 went as ONE donation, not a donation plus a confiscated remainder (got ${JSON.stringify(jamDonorMoves)})`);
     assert(Math.abs(rowSum() - rowSumBeforeJamDonor) < 1e-9, 'SUM(balances) is unchanged by the half-cent donation');

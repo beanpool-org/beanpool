@@ -88,6 +88,11 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
     db.prepare(`INSERT INTO accounts (public_key, last_demurrage_epoch) VALUES ('m1', 0), ('m2', 0), ('COMMONS_POOL', 0)`).run();
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('known_floor', '1000'), ('credit_cap', '3000'), ('voucher_budget', '500'), ('member_gift', '50'), ('ledger_audit_baseline', '12.3456')`).run();
     db.prepare(`INSERT INTO money_requests (payer_pubkey, request_id, route, fingerprint, answer, created_at) VALUES ('m1', 'r1', 'pay', 'f', '{"amount":49.25}', datetime('now'))`).run();
+    // Old figures in words: an exception that was only its amount, a frozen one, two log lines, and a copy's home price.
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES ('m2', 'Frozen', datetime('now'), 'genesis', 'Y', 'active')`).run();
+    db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, frozen, set_by) VALUES ('m1', 0, 'x'), ('m2', 1, 'x')`).run();
+    db.prepare(`INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at) VALUES ('l1', 'x', 'exception_raised', 'm1', 'default', '1800', datetime('now')), ('l2', 'x', 'known_floor', NULL, '500', '1000', datetime('now'))`).run();
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, shown_price) VALUES ('copy1', 'offer', 'other', 'A copy', 'A copy', 'm1', '20 fixed')`).run();
     for (const { table, old, add } of MONEY_COLUMNS) {
         const cols = columns(db, table);
         if (cols.length === 0) continue;
@@ -105,9 +110,11 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
     const line = up.output.split('\n').find((l) => l.includes('Old money was dropped')) ?? '';
     assert(line.includes('transactions 3') && line.includes('standing_deals 3') && line.includes('names_debts 3'),
         `one log line names the rows it dropped (${line.slice(0, 200)})`);
-    assert(line.includes('accounts.balance 3') && line.includes('posts.credits 1') && line.includes('stored payment answers removed: 1'),
+    assert(line.includes('accounts.balance 3') && line.includes('posts.credits 2') && line.includes('stored payment answers removed: 1'),
         'and the figures it set to 0 or none, and the stored answers');
     assert(line.includes('known_floor') && line.includes('ledger_audit_baseline'), 'and the money settings it put back to their defaults');
+    assert(line.includes('known-floor exceptions that were only an amount 1') && line.includes('known-floor log lines 2') && line.includes("copies' home prices 1"),
+        `and the old figures in words it cleared (${line.slice(-400)})`);
     const a = new Database(path.join(dir, 'state.db'));
     for (const { table, old } of MONEY_RECORD_TABLES) {
         assert(!columns(a, table).includes(old), `${table}: no ${old}`);
@@ -130,6 +137,12 @@ runSchemaSuite('the schema step to whole hundredths', '⭐️ Hundredths step PA
         assert(key === 'ledger_audit_baseline' ? row === undefined || /^-?\d+$/.test(row.value) : row === undefined, `${key}: back to its default`);
     }
     assert((a.prepare('SELECT COUNT(*) AS n FROM money_requests').get() as { n: number }).n === 0, 'no stored payment answer with an old figure is left to replay');
+    const exceptions = a.prepare('SELECT member_pubkey, frozen, amount_c FROM known_floor_exceptions ORDER BY member_pubkey').all() as { member_pubkey: string; frozen: number; amount_c: number | null }[];
+    assert(exceptions.length === 1 && exceptions[0].member_pubkey === 'm2' && exceptions[0].frozen === 1 && exceptions[0].amount_c === null,
+        `an exception that was only an amount is gone; a frozen one stays frozen, with no amount kept (${JSON.stringify(exceptions)})`);
+    assert((a.prepare('SELECT COUNT(*) AS n FROM known_floor_log').get() as { n: number }).n === 0, 'no known-floor log line with a Beans figure is left to read as hundredths');
+    assert((a.prepare(`SELECT shown_price FROM posts WHERE id = 'copy1'`).get() as { shown_price: string | null }).shown_price === null,
+        "a copy's home price in Beans ('20 fixed') is cleared, not read as 20 hundredths");
     const audit = runConservationCheck(a);
     assert(audit.ok && audit.sumBalances === 0 && audit.drift === 0 && audit.badBalances === 0, `LedgerAudit passes on it, all zero (${JSON.stringify(audit)})`);
     a.close();

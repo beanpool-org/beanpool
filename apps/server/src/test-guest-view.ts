@@ -322,7 +322,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, ?, ?, 'seed', ?)`)
             .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('SentinelAlice');
@@ -390,7 +390,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET paused_by = ?, wind_up_initiated_by = ? WHERE public_key = ?').run(alice.pk, bob.pk, enterprise);
     // Bob backs it. A pledge is ledger history, which keeps the money switches on (node-profile lockToLedger), so only
     // where they are on already: the global node as it ships stays as it ships.
-    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-sentinel', ?, ?, 5)").run(bob.pk, enterprise);
+    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-sentinel', ?, ?, 5)").run(bob.pk, enterprise);
     const crowdfund = newId().pk;
     createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
     const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 50)!;
@@ -1098,7 +1098,7 @@ async function main(): Promise<void> {
             ['mt-pruned-pending', bobOffer.id, pruned.pk, bob.pk, 'pending'],     // it is buying from Bob
             ['mt-pruned-done', trade.id, pruned.pk, alice.pk, 'completed'],       // it bought from Alice
         ]) {
-            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                         VALUES (?, ?, ?, ?, 1, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
         }
         const tradeStatuses = () => (db.prepare("SELECT id, status FROM marketplace_transactions WHERE id LIKE 'mt-pruned-%' ORDER BY id").all() as { id: string; status: string }[])
@@ -1302,7 +1302,7 @@ async function main(): Promise<void> {
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
             'POST /api/crowdfund/projects/delete', 'POST /api/crowdfund/projects/update',
             'GET /api/directory/info',
-            'POST /api/enterprise', 'GET /api/enterprise/:treasury', 'DELETE /api/enterprise/:treasury/backing',
+            'POST /api/enterprise', 'GET /api/enterprise/:treasury', 'DELETE /api/enterprise/:treasury/backing_c',
             'POST /api/enterprise/:treasury/backing', 'POST /api/enterprise/:treasury/backing/release',
             'POST /api/enterprise/:treasury/keepers/:pubkey/remove', 'POST /api/enterprise/:treasury/keepers/changes/:changeId/object',
             'POST /api/enterprise/:treasury/keepers/request', 'GET /api/enterprise/:treasury/keepers/requests',
@@ -1501,7 +1501,7 @@ async function main(): Promise<void> {
             // One of a shop's Offers on its shelf (routes/shops.ts), and an enterprise's face by a keeper (routes/treasury.ts, E2).
             'PUT /api/marketplace/posts/:id/feature', 'PUT /api/treasury/:treasury/profile', 'PUT /api/enterprise/:treasury/profile',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
-            'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
+            'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing_c',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
             'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
             'POST /api/treasury/:treasury/keepers/changes/:changeId/object', 'POST /api/treasury/:treasury/keepers/request',

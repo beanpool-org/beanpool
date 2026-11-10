@@ -63,17 +63,17 @@ async function child(): Promise<void> {
             se.seedGenesisMember(k.anna, 'Anna');
             const epoch = ledger.getCurrentEpoch();
             for (const name of NAMES.slice(1)) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, invited_by, invite_code)
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c, invited_by, invite_code)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 500, ?, 'TEST')`).run(k[name], name, k.anna);
                 setMemberPhoto(db, k[name], AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(k[name], epoch);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(k[name], epoch);
             }
             se.reconcileLedgerFromDb();
             // Fay proposes below. Her standing is a trade (her earned_credit badge is none), from before this month: this
             // month's trades between members who all joined today are an insular cluster the wash rule counts for nothing.
             const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
             db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(daysAgo(60), k.fay);
-            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                         VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k.fay, k.cara, daysAgo(40), daysAgo(40));
             se.transfer('genesis', k.ben, 30, 'seed Ben', 'direct', true);
             se.transfer('genesis', k.dan, 3, 'seed Dan', 'direct', true);
@@ -136,11 +136,11 @@ async function child(): Promise<void> {
                 .map((r) => [r.id, { status: r.status, error: r.execution_error, reason: r.execution_reason, graceEnds: r.grace_period_ends_at }]));
             const members = Object.fromEntries(NAMES.map((n) => [n, db.prepare('SELECT status, credit_frozen AS frozen FROM members WHERE public_key = ?').get(k[n])]));
             const balances = Object.fromEntries([...NAMES.map((n) => [n, k[n]]), ...(a.setup ? [['treasury', a.setup.treasury]] : [])].map(([n, pk]) => [n,
-                String((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: unknown } | undefined)?.balance ?? 'none')]));
+                String((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: unknown } | undefined)?.balance ?? 'none')]));
             const posts = a.setup ? Object.fromEntries([...a.setup.posts, a.setup.heldPost].map((id) => [id,
                 (db.prepare('SELECT active, status FROM posts WHERE id = ?').get(id) as any)])) : {};
             const report = a.setup ? (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(a.setup.report) as any)?.status : null;
-            const row = db.prepare("SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
+            const row = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
             const audit = se.runLedgerAudit();
             return {
                 decisions, members, balances, posts, report,
@@ -194,7 +194,7 @@ const live = (p: any) => p?.active === 1;
 
 function setPotRow(dir: string, sql: string): void {
     const sdb = new Database(path.join(dir, 'state.db'));
-    sdb.prepare(`UPDATE accounts SET balance = ${sql} WHERE public_key = 'COMMONS_POOL'`).run();
+    sdb.prepare(`UPDATE accounts SET balance_c = ${sql} WHERE public_key = 'COMMONS_POOL'`).run();
     sdb.pragma('wal_checkpoint(TRUNCATE)');
     sdb.close();
 }
@@ -349,7 +349,7 @@ async function main(): Promise<void> {
         console.log('\n— 6. mended, but 30 days of inflow that is not a number: the grant refusal says so plainly —');
         await node.kill('SIGTERM');
         const idb = new Database(path.join(dir, 'state.db'));
-        idb.prepare("INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1e999, 'inf', strftime('%Y-%m-%dT%H:%M:%fZ','now'))").run(crypto.randomUUID(), k.ben);
+        idb.prepare("INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1e999, 'inf', strftime('%Y-%m-%dT%H:%M:%fZ','now'))").run(crypto.randomUUID(), k.ben);
         idb.pragma('wal_checkpoint(TRUNCATE)');
         idb.close();
         node = await spawnNode(SCRIPT, dir, env);

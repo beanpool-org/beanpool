@@ -89,7 +89,7 @@ async function runTests() {
     const txId = 'tx_test_escrow_123';
     db.prepare(`
         INSERT INTO marketplace_transactions (
-            id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at
+            id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
     `).run(txId, post.id, bob.pubKeyHex, alice.pubKeyHex, 10);
 
@@ -152,11 +152,11 @@ async function runTests() {
     // Put Bob into deficit and Charlie into credit (simulating trade credit)
     const bobAcc = ledger.getAccount(bob.pubKeyHex);
     bobAcc.balance = -30;
-    db.prepare("UPDATE accounts SET balance = -30 WHERE public_key = ?").run(bob.pubKeyHex);
+    db.prepare("UPDATE accounts SET balance_c = -30 WHERE public_key = ?").run(bob.pubKeyHex);
 
     const charlieAcc = ledger.getAccount(charlie.pubKeyHex);
     charlieAcc.balance = 30;
-    db.prepare("UPDATE accounts SET balance = 30 WHERE public_key = ?").run(charlie.pubKeyHex);
+    db.prepare("UPDATE accounts SET balance_c = 30 WHERE public_key = ?").run(charlie.pubKeyHex);
 
     assert(getBalance(bob.pubKeyHex).balance < 0, 'Bob has negative balance (debt)');
     const bobDebt = Math.abs(getBalance(bob.pubKeyHex).balance);

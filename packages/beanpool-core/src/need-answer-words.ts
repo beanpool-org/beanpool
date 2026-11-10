@@ -18,6 +18,7 @@
  */
 import { t, word } from './words.js';
 import { beansPriceWords } from './event-copy.js';
+import { isHundredths } from './hundredths.js';
 
 export const NEED_ANSWER_WORDS = {
     /** The button that opens the confirm; the hand is the Need's mark, as on "✋ Fulfillment Requests". */
@@ -31,14 +32,15 @@ export const NEED_ANSWER_WORDS = {
 } as const;
 
 /**
- * The sentence under "I can do this". `total` is what the deal would pay in Beans (the Need's price times the quantity the
- * helper typed, if it is priced by the hour, day, week or month); `name` is the one who asked, as the Need shows them.
- * Rounded to two decimals as every other Beans amount is on these screens. Not a finite positive number reads as free.
+ * The sentence under "I can do this". `total` is what the deal would pay, in whole hundredths of a Bean (the Need's price
+ * times the quantity the helper typed when it is priced by the hour, day, week or month: dealAmountFor, the figure the
+ * node holds); `name` is the one who asked, as the Need shows them. Anything but a positive whole number of hundredths
+ * reads as free.
  */
 export function needAnswerLine(total: number, name?: string | null): string {
-    const beans = Number.isFinite(total) && total > 0 ? Math.round(total * 100) / 100 : 0;
+    const c = isHundredths(total) && total > 0 ? total : 0;
     const who = typeof name === 'string' ? name.trim() : '';
-    if (!beans) return who ? t(NEED_ANSWER_WORDS.free, { name: who }) : t(NEED_ANSWER_WORDS.freeNameless);
-    const price = beansPriceWords({ beans, per: 'fixed' });
+    if (!c) return who ? t(NEED_ANSWER_WORDS.free, { name: who }) : t(NEED_ANSWER_WORDS.freeNameless);
+    const price = beansPriceWords({ price_c: c, per: 'fixed' });
     return who ? t(NEED_ANSWER_WORDS.paid, { price, name: who }) : t(NEED_ANSWER_WORDS.paidNameless, { price });
 }

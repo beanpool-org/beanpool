@@ -28,16 +28,16 @@ let txc = 0;
 function seedMember(pk: string, joinedAtDaysAgo = 0) {
     const joinedAt = new Date(Date.now() - joinedAtDaysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(pk, pk.slice(0, 8), joinedAt);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 function mtx(buyer: string, seller: string, credits: number, completedDaysAgo = 0) {
     const pid = 'wsp-' + (txc++);
-    db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+    db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
         .run(pid, credits, seller);
 
     const completedAt = new Date(Date.now() - completedDaysAgo * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?,?,?,?,?, 'completed', ?)`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?,?,?,?,?, 'completed', ?)`)
         .run('wmtx-' + (txc++), pid, buyer, seller, credits, completedAt);
 }
 

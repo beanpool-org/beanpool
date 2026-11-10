@@ -70,7 +70,7 @@ function makeIdentity(callsign: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -96,20 +96,20 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 /** An admin's binding with the keeper's pledge of `amount` beside it: the pledge row is the backing every floor reads. */
 function assignWithPledge(enterprise: string, keeper: string, grantedBy: string, amount: number) {
     adminAssignTreasuryOperator(enterprise, keeper, grantedBy);
-    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
         .run(crypto.randomUUID(), keeper, enterprise, amount, new Date().toISOString());
     clearEnterpriseFloorCache(db, enterprise);
 }
 
 function verifyConservation(): number {
     const sumAccounts = (db.prepare(
-        "SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
+        "SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
     ).get() as any).s;
     return Math.abs(sumAccounts + getCommonsBalanceExact());
 }
@@ -312,7 +312,7 @@ async function main() {
     try {
         const dummyReqId = 'tx-dummy-req-1';
         db.prepare(`
-            INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, credits, created_at)
+            INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, amount_c, created_at)
             VALUES (?, ?, ?, ?, 'requested', 5, ?)
         `).run(dummyReqId, existingOffer.id, ordinaryMember, farm, eightDaysAgo);
         approvePostRequest(dummyReqId, farm, { authSigner: leadKeeper });
@@ -323,9 +323,9 @@ async function main() {
     assert(approveWindingUpThrew, 'approvePostRequest blocked when author is winding up');
 
     // Create an active backing pledge, set pause/legacy floor, and insert a pending wage claim to verify release/cleanup upon finalise
-    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
-    db.prepare("UPDATE members SET legacy_credit_floor = 200, paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = -200 WHERE public_key = ?").run(eightDaysAgo, leadKeeper, farm);
-    db.prepare("INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run('dwc-farm-1', farm, leadKeeper, existingOffer.id, txDeal.id, 15, eightDaysAgo);
+    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
+    db.prepare("UPDATE members SET legacy_credit_floor = 200, paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot_c = -200 WHERE public_key = ?").run(eightDaysAgo, leadKeeper, farm);
+    db.prepare("INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run('dwc-farm-1', farm, leadKeeper, existingOffer.id, txDeal.id, 15, eightDaysAgo);
 
     // Finalise blocked while open transaction exists
     let openEscrowFinaliseThrew = false;
@@ -354,7 +354,7 @@ async function main() {
     const activePledgesPost = db.prepare("SELECT COUNT(*) as c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL").get(farm) as any;
     assert(activePledgesPost.c === 0, 'Active pledges released upon wind-up finalisation');
 
-    const mPost = db.prepare("SELECT legacy_credit_floor, paused, paused_at, paused_by, paused_floor_snapshot FROM members WHERE public_key = ?").get(farm) as any;
+    const mPost = db.prepare("SELECT legacy_credit_floor, paused, paused_at, paused_by, paused_floor_snapshot_c FROM members WHERE public_key = ?").get(farm) as any;
     assert(mPost.legacy_credit_floor === null, 'legacy_credit_floor cleared upon wind-up finalisation');
     assert(mPost.paused === 0, 'paused reset to 0 upon wind-up finalisation');
     assert(mPost.paused_at === null, 'paused_at cleared upon wind-up finalisation');
@@ -501,7 +501,7 @@ async function main() {
 
     // Verify getEnterpriseUnderlyingFloor with legacy floor and pledges
     const { publicKey: eggsTestEnt } = createTreasury('EggsTestLifecycle', AVATAR, 0);
-    db.prepare("UPDATE members SET legacy_credit_floor = 200, earned_credit = 0 WHERE public_key = ?").run(eggsTestEnt);
+    db.prepare("UPDATE members SET legacy_credit_floor = 200, earned_credit_c = 0 WHERE public_key = ?").run(eggsTestEnt);
     const uFloorWithLegacy = getEnterpriseUnderlyingFloor(eggsTestEnt);
     assert(uFloorWithLegacy.floor === -200, `getEnterpriseUnderlyingFloor accounts for legacy_credit_floor (-200, got ${uFloorWithLegacy.floor})`);
 

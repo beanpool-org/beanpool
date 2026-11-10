@@ -185,10 +185,11 @@ describe("listingDealLines.heldRow: a deal's own amount, and nothing held on a f
     const fr = JSON.parse(readFileSync(new URL('../../words/fr.json', import.meta.url), 'utf8')) as Catalog;
     afterEach(() => setLanguage('en'));
     it('the Beans held, in the language’s way', () => {
-        expect(listingDealLines.heldRow('Mo', 20, '24 Oct')).toBe('Mo · 20 Beans held · since 24 Oct');
-        expect(listingDealLines.heldRow('Mo', 12.5, '24 Oct')).toBe('Mo · 12.5 Beans held · since 24 Oct');
+        expect(listingDealLines.heldRow('Mo', 2000, '24 Oct')).toBe('Mo · 20 Beans held · since 24 Oct');
+        expect(listingDealLines.heldRow('Mo', 1250, '24 Oct')).toBe('Mo · 12.50 Beans held · since 24 Oct');
+        expect(listingDealLines.heldRow('Mo', 1, '24 Oct')).toBe('Mo · 0.01 Beans held · since 24 Oct');
         setLanguage('fr', [fr]);
-        expect(listingDealLines.heldRow('Mo', 12.5, '24 oct.')).toBe('Mo · 12,5 Haricots retenus · depuis le 24 oct.');
+        expect(listingDealLines.heldRow('Mo', 1250, '24 oct.')).toBe('Mo · 12,50 Haricots retenus · depuis le 24 oct.');
     });
     it('a free loan (or any deal for nothing) never reads "0 Beans held"', () => {
         expect(listingDealLines.heldRow('Mo', 0, '24 Oct')).toBe('Mo · no Beans held · since 24 Oct');
@@ -201,10 +202,10 @@ describe("listingDealLines.helping: a helper's deal by its own amount, and nothi
     const fr = JSON.parse(readFileSync(new URL('../../words/fr.json', import.meta.url), 'utf8')) as Catalog;
     afterEach(() => setLanguage('en'));
     it('the Beans held for them, in the language’s way', () => {
-        expect(listingDealLines.helping(20)).toBe("You're helping with this · 20 Beans held for you");
-        expect(listingDealLines.helping(12.5)).toBe("You're helping with this · 12.5 Beans held for you");
+        expect(listingDealLines.helping(2000)).toBe("You're helping with this · 20 Beans held for you");
+        expect(listingDealLines.helping(1250)).toBe("You're helping with this · 12.50 Beans held for you");
         setLanguage('fr', [fr]);
-        expect(listingDealLines.helping(12.5)).toBe('Vous aidez pour ceci · 12,5 Haricots retenus pour vous');
+        expect(listingDealLines.helping(1250)).toBe('Vous aidez pour ceci · 12,50 Haricots retenus pour vous');
     });
     it('a free Need never reads "0 Beans held for you"', () => {
         expect(listingDealLines.helping(0)).toBe("You're helping with this · no Beans held");
@@ -218,22 +219,22 @@ describe("releaseAmount and releaseLine: what a payer's Release moves, as the no
     afterEach(() => setLanguage('en'));
     const daily = { priceType: 'daily' };
     // A daily Need at 20 Beans a day, struck for 3 days: 60 held.
-    const held3 = { credits: 60, hours: 3 };
+    const held3 = { amount_c: 6000, hours: 3 };
     it('a deal struck for a time pays its own rate for the time confirmed: 3 days changed to 5 releases 100, not the 60 held', () => {
-        expect(releaseAmount(held3, 5, daily)).toBe(100);
-        expect(releaseAmount(held3, 3, daily)).toBe(60);
-        expect(releaseAmount(held3, 1.5, daily)).toBe(30);
+        expect(releaseAmount(held3, 5, daily)).toBe(10000);
+        expect(releaseAmount(held3, 3, daily)).toBe(6000);
+        expect(releaseAmount(held3, 1.5, daily)).toBe(3000);
         expect(releaseLine(held3, daily, parseAmount('5', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 100 B to Helper');
         expect(releaseLine(held3, daily, parseAmount('2', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 40 B to Helper');
     });
     it('its own rate, never the listing price: a deal struck at 15 a day pays 15 a day', () => {
-        expect(releaseAmount({ credits: 45, hours: 3 }, 4, daily)).toBe(60);
+        expect(releaseAmount({ amount_c: 4500, hours: 3 }, 4, daily)).toBe(6000);
     });
     it('a fixed price, a loan for one fee, or a deal with no time on it pays what it holds, whatever is typed', () => {
-        expect(releaseAmount({ credits: 45, hours: null }, undefined, { priceType: 'fixed' })).toBe(45);
-        expect(releaseLine({ credits: 45, hours: null }, { priceType: 'fixed' }, null, 'Damo')).toBe('Transferring 45 B to Damo');
-        expect(releaseAmount({ credits: 10, hours: 7 }, 9, { priceType: 'fixed', lendable: 1 })).toBe(10);
-        expect(releaseAmount({ credits: 30, hours: null }, 4, daily)).toBe(30);
+        expect(releaseAmount({ amount_c: 4500, hours: null }, undefined, { priceType: 'fixed' })).toBe(4500);
+        expect(releaseLine({ amount_c: 4500, hours: null }, { priceType: 'fixed' }, null, 'Damo')).toBe('Transferring 45 B to Damo');
+        expect(releaseAmount({ amount_c: 1000, hours: 7 }, 9, { priceType: 'fixed', lendable: 1 })).toBe(1000);
+        expect(releaseAmount({ amount_c: 3000, hours: null }, 4, daily)).toBe(3000);
     });
     it('a time that is not above 0 releases nothing (Release is off for it); one that could mean two numbers says why', () => {
         expect(releaseLine(held3, daily, parseAmount('', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 0 B to Helper');
@@ -241,10 +242,12 @@ describe("releaseAmount and releaseLine: what a payer's Release moves, as the no
         expect(releaseLine(held3, daily, parseAmount('1,000', 'en', ANY_DECIMALS), 'Helper')).toBe('Type the amount without thousands separators, like 1000.5.');
     });
     it("to the cent, in the language's way", () => {
-        const thirds = { credits: 100, hours: 3 };
-        expect(releaseLine(thirds, daily, parseAmount('2', 'en', ANY_DECIMALS), 'Mo')).toBe('Transferring 66.67 B to Mo');
+        // Two of three days of 100 Beans: 6666.66… hundredths, truncated once as the node pays it (shareOf), never rounded up.
+        const thirds = { amount_c: 10000, hours: 3 };
+        expect(releaseAmount(thirds, 2, daily)).toBe(6666);
+        expect(releaseLine(thirds, daily, parseAmount('2', 'en', ANY_DECIMALS), 'Mo')).toBe('Transferring 66.66 B to Mo');
         setLanguage('fr', [fr]);
-        expect(releaseLine(thirds, daily, parseAmount('2', 'fr', ANY_DECIMALS), 'Mo')).toBe('Transfert de 66,67 B à Mo');
+        expect(releaseLine(thirds, daily, parseAmount('2', 'fr', ANY_DECIMALS), 'Mo')).toBe('Transfert de 66,66 B à Mo');
     });
 });
 

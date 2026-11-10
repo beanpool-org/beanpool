@@ -27,8 +27,8 @@ db.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, ?)`).run(creat
 db.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, ?)`).run(backer, 'backer_' + crypto.randomUUID().slice(0, 8));
 
 const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(creator, INITIAL_BALANCE, nowEpoch);
-db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(backer, INITIAL_BALANCE, nowEpoch);
+db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(creator, INITIAL_BALANCE, nowEpoch);
+db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(backer, INITIAL_BALANCE, nowEpoch);
 db.prepare(`UPDATE node_config SET value = '1000' WHERE key = 'ledger_audit_baseline'`).run();
 reconcileLedgerFromDb();
 
@@ -105,13 +105,13 @@ function check(cond: boolean, msg: string): void {
 }
 const refusal = (f: () => void): string | null => { try { f(); return null; } catch (e) { return e instanceof Error ? e.message : String(e); } };
 const balanceOf = (key: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
-const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
+const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 function makeMember(name: string): string {
     const pk = `${name}_pubkey_` + crypto.randomUUID();
     db.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, ?)`).run(pk, `${name}_` + crypto.randomUUID().slice(0, 8));
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)`).run(pk, nowEpoch);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)`).run(pk, nowEpoch);
     return pk;
 }
 
@@ -143,7 +143,7 @@ check(madeBy === uma, 'its projects row still names Uma, who made it');
 
 reconcileLedgerFromDb();
 const before = { ann: balanceOf(ann), ben: balanceOf(ben), uma: balanceOf(uma), kim: balanceOf(kim), sum: sumBalances(), drift: runLedgerAudit().drift };
-const outRows = () => db.prepare('SELECT id, to_pubkey, amount FROM transactions WHERE from_pubkey = ? ORDER BY rowid').all(gateEscrow) as { id: string; to_pubkey: string; amount: number }[];
+const outRows = () => db.prepare('SELECT id, to_pubkey, amount_c FROM transactions WHERE from_pubkey = ? ORDER BY rowid').all(gateEscrow) as { id: string; to_pubkey: string; amount: number }[];
 const untouched = () => near(balanceOf(gateEscrow), 18) && near(balanceOf(ann), before.ann) && near(balanceOf(ben), before.ben)
     && outRows().length === 0 && !!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(gate);
 
@@ -339,7 +339,7 @@ function cancelsAndRefundsOnce(p: Pledged, who: string, label: string): void {
     const was = { ann: balanceOf(ann), ben: balanceOf(ben), who: balanceOf(who), sum: sumBalances(), drift: runLedgerAudit().drift };
     const why = refusal(() => deleteCrowdfundProject(p.id, who));
     check(why === null, `${label} cancels it (${why ?? 'cancelled'})`);
-    const out = db.prepare('SELECT id, to_pubkey, amount FROM transactions WHERE from_pubkey = ? ORDER BY rowid')
+    const out = db.prepare('SELECT id, to_pubkey, amount_c FROM transactions WHERE from_pubkey = ? ORDER BY rowid')
         .all(p.escrow) as { id: string; to_pubkey: string; amount: number }[];
     check(near(balanceOf(ann), was.ann + p.a) && near(balanceOf(ben), was.ben + p.b) && near(balanceOf(who), was.who),
         `Ann gets back her ${p.a} and Ben his ${p.b} (${balanceOf(ann) - was.ann}, ${balanceOf(ben) - was.ben}); the canceller's own balance doesn't move`);
@@ -455,7 +455,7 @@ cancelsAndRefundsOnce(fence, ada, 'Ada, an admin, over a lead who may act,');
 console.log('\n── A backer whose account has closed: the cancel sends their share to the Commons ──');
 const commonsRow = () => balanceOf('COMMONS_POOL');
 const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
-const escrowRows = (escrow: string) => db.prepare('SELECT id, to_pubkey, amount, tax_fee, memo FROM transactions WHERE from_pubkey = ? ORDER BY rowid')
+const escrowRows = (escrow: string) => db.prepare('SELECT id, to_pubkey, amount_c, fee_c, memo FROM transactions WHERE from_pubkey = ? ORDER BY rowid')
     .all(escrow) as { id: string; to_pubkey: string; amount: number; tax_fee: number | null; memo: string }[];
 const lou = makeMember('lou');
 const ivy = makeMember('ivy'); // backs 7, then the community removes her
@@ -531,9 +531,9 @@ pledgeToProject('pledge_' + crypto.randomUUID(), pantry, jon, 2, 'For the pantry
 const nedRemoved = refusal(() => adminPruneUser(ned, ada));
 // The dust comes from Jon, so the node's total doesn't move.
 function moveDust(amount: number): void {
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(pantry, nowEpoch);
-    db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(amount, pantry);
-    db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(amount, jon);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(pantry, nowEpoch);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(amount, pantry);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(amount, jon);
     reconcileLedgerFromDb();
 }
 moveDust(0.00005);

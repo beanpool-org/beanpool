@@ -63,9 +63,9 @@ let seeded = 0;
 function seedMembers(n: number, postsEach = 0) {
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, bio)
         VALUES (?, ?, 'active', ?, ?, 'seed', ?)`);
-    const insertAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`);
+    const insertAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`);
     const insertToken = db.prepare(`INSERT OR IGNORE INTO push_tokens (public_key, token_id, token_box, platform) VALUES (?, ?, 'box', ?)`);
-    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at)
+    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at)
         VALUES (?, 'offer', 'misc', ?, ?, 10, ?, 'active', 1, ?, ?)`);
     db.transaction(() => {
         for (let i = 0; i < n; i++) {
@@ -225,7 +225,7 @@ async function main() {
     // Posts enough to fill their last page of 50 exactly.
     const fill = (50 - (postKeys.length % 50)) % 50;
     const author = whole.json.members[0].publicKey;
-    const insertFill = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at)
+    const insertFill = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at)
         VALUES (?, 'offer', 'misc', ?, 'Fills the last page.', 5, ?, 'active', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')`);
     for (let i = 0; i < fill; i++) insertFill.run(`fillpost-${i}`, `Fill ${i}`, author);
     const fullPages = (postKeys.length + fill) / 50;
@@ -306,7 +306,7 @@ async function main() {
         const pub = crypto.randomBytes(32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?, 'seed')`)
             .run(pub, callsign, status, joined, invitedBy);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(pub, balance, epoch);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`).run(pub, balance, epoch);
         return pub;
     };
     // The root joined before every seeded member, so it is on page 1; the members it brought in joined after them all, so

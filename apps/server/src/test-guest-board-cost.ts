@@ -76,7 +76,7 @@ async function main() {
     const insertMemberRow = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', ?, 'seed', 'seed')`);
     const insertMember = { run: (pk: string, callsign: string, joinedAt: string, avatar: string) => { insertMemberRow.run(pk, callsign, joinedAt); setMemberPhoto(db, pk, avatar); } };
-    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
+    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)');
     // A photo as the apps store one: a JPEG data URL of about 20 KB.
     const photo = () => `data:image/jpeg;base64,/9j/${crypto.randomBytes(15_000).toString('base64')}`;
     const authors: Id[] = [];
@@ -93,10 +93,10 @@ async function main() {
     for (let i = 0; i < 50; i += 5) se.adminSetTier(authors[i].pubKeyHex, i % 10 === 0 ? 'Resident' : 'Steward');
     db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[3].pubKeyHex);
 
-    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at,
+    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at,
                 active, status, lat, lng, accepted_by, accepted_at, pending_transaction_id, poll_options, poll_closes_at,
                 event_start_at, event_end_at, event_place_name, event_private_note, event_state, hidden_by_reports_at)
-                VALUES (@id, @type, @category, @title, @description, @credits, @author, @at, @at, 1, @status, @lat, @lng, @acceptedBy,
+                VALUES (@id, @type, @category, @title, @description, @price_c, @author, @at, @at, 1, @status, @lat, @lng, @acceptedBy,
                         @acceptedAt, @pendingTx, @pollOptions, @pollClosesAt, @eventStart, @eventEnd, @eventPlace, @eventNote, @eventState, @hidden)`);
     const base = { credits: 0, status: 'active', acceptedBy: null, acceptedAt: null, pendingTx: null, pollOptions: null, pollClosesAt: null,
         eventStart: null, eventEnd: null, eventPlace: null, eventNote: null, eventState: null, hidden: null };
@@ -112,7 +112,7 @@ async function main() {
     const insertPhoto = db.prepare('INSERT INTO post_photos (post_id, order_num, photo_data) VALUES (?, ?, ?)');
     for (let i = 0; i < 60; i += 7) { insertPhoto.run(postIds[i], 0, 'data:image/jpeg;base64,/9j/AAAA'); insertPhoto.run(postIds[i], 1, 'data:image/jpeg;base64,/9j/BBBB'); }
     // Completed trades, so authors have a trade count and a trust profile with value in it.
-    const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`);
     for (let i = 0; i < 40; i++) insertTrade.run(`gbc-trade-${i}`, postIds[i], authors[(i + 1) % 50].pubKeyHex, authors[i % 50].pubKeyHex, 10 + i, iso(-86_400_000), iso(-86_400_000));
     // One spoken for, a poll with votes, an event with RSVPs, one hidden by reports, an enterprise paused.

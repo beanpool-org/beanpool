@@ -110,7 +110,7 @@ async function child(): Promise<void> {
             for (const [name, pk, invitedBy] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
                             VALUES (?, ?, ?, ?, 'TEST', 'active', ?)`).run(pk, name, new Date(Date.now() - 30 * DAY_MS).toISOString(), invitedBy, new Date().toISOString());
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             return true;
         },
@@ -121,9 +121,9 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const now = new Date().toISOString();
             db.transaction(() => {
-                db.prepare('UPDATE accounts SET balance = balance - ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.from);
-                db.prepare('UPDATE accounts SET balance = balance + ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.to);
-                db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+                db.prepare('UPDATE accounts SET balance_c = balance_c - ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.from);
+                db.prepare('UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.to);
+                db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
                     .run(crypto.randomUUID(), a.from, a.to, a.amount, 'standby re-key test', now);
             })();
             se.reconcileLedgerFromDb();
@@ -136,13 +136,13 @@ async function child(): Promise<void> {
             const { sealRecoveryFields, shareRowAad } = await import('./services/recovery-seal-key.js');
             const now = new Date().toISOString();
             const t = a.tag;
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at)
                         VALUES (?, 'offer', 'general', 'Firewood', 'Split and dry', 5, ?, ?, ?)`).run(`post-${t}`, a.pk, now, now);
             // A post the peer addressed to them alone, and a task the peer gave them: who may read it and who does it.
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
                         VALUES (?, 'request', 'general', 'Kindling', 'For you', 0, ?, 'direct', ?, ?, ?, ?)`).run(`post-${t}-for`, a.peer, a.pk, a.pk, now, now);
             // Their copy of an event from their own community: a re-key leaves its stamp, so only the standby's own move reaches it.
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, shown_from_host, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, shown_from_host, created_at, updated_at)
                         VALUES (?, 'event', 'community', 'Street party', 'Bring a plate', 0, ?, '', ?, ?)`).run(`post-${t}-copy`, a.pk, now, now);
             db.prepare(`INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at) VALUES (?, ?, 'going', '', ?)`).run(`post-${t}`, a.pk, now);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?), (?, ?, ?)').run(a.pk, a.peer, now, a.peer, a.pk, now);
@@ -238,8 +238,8 @@ async function child(): Promise<void> {
             return {
                 keyRows,
                 members,
-                accounts: db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all(),
-                sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+                accounts: db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all(),
+                sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
                 invalidated: db.prepare('SELECT public_key, reason, rekeyed_to FROM invalidated_keys ORDER BY public_key').all(),
                 marker: (db.prepare("SELECT value FROM node_config WHERE key = 'replicated_invalidated_keys_v1'").get() as { value: string } | undefined)?.value ?? null,
             };

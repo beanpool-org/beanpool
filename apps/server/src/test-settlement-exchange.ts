@@ -66,7 +66,7 @@ function throws(fn: () => unknown, re: RegExp, msg: string) {
 /** The ledger keeps raw floats, so every arithmetic comparison here rounds to 4dp on both sides. */
 const r4 = (n: number): number => Math.round(n * 10000) / 10000;
 const balanceOf = (pk: string): number =>
-    r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
 const near = (a: number, b: number): boolean => r4(a) === r4(b);
 const escrowFor = (key: string): string => `escrow_${key}`;
 
@@ -76,7 +76,7 @@ const txnsFor = (key: string): number =>
 
 /** The exact amount of a settlement's fee entry, straight from the ledger row that recorded it. */
 const feeTxnAmount = (key: string): number | null =>
-    (db.prepare(`SELECT amount FROM transactions WHERE to_pubkey='COMMONS_POOL' AND memo LIKE ?`)
+    (db.prepare(`SELECT amount_c FROM transactions WHERE to_pubkey='COMMONS_POOL' AND memo LIKE ?`)
         .get(`%fee (${key})%`) as any)?.amount ?? null;
 
 /**
@@ -92,12 +92,12 @@ const exactly = (a: number, b: number): boolean => r4(a) === r4(b);
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
         .run(pk, callsign, homeNodeUrl ?? null);
     // Seed the epoch at NOW, not 0. Epoch 0 is 1970, so the first transfer would apply ~56 years of
     // compound demurrage and every balance assertion below would be measuring decay instead of settlement.
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
@@ -532,7 +532,7 @@ async function main() {
     const FRAC = '12D3KooWFractionalPeer';
     addConnector(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 'peer', 'Frac', 'https://frac.beanpool.org');
     ensureBridgeAccount(FRAC);
-    db.prepare('UPDATE accounts SET balance = ? WHERE public_key = ?').run(-99.994, bridgeAccountId(FRAC));
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(-99.994, bridgeAccountId(FRAC));
     reconcileLedgerFromDb();
     setConnectorCreditCap(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 100);
     assert(getEnergyBalance(FRAC) === -99.99, 'the DISPLAY balance rounds to 2dp, as it should');
@@ -548,7 +548,7 @@ async function main() {
     const REBAL_ADDR = `/dns4/rebal.beanpool.org/tcp/4001/p2p/${REBAL}`;
     addConnector(REBAL_ADDR, 'peer', 'Rebalance', 'https://rebal.beanpool.org');
     ensureBridgeAccount(REBAL);
-    db.prepare('UPDATE accounts SET balance = 5 WHERE public_key = ?').run(bridgeAccountId(REBAL));
+    db.prepare('UPDATE accounts SET balance_c = 5 WHERE public_key = ?').run(bridgeAccountId(REBAL));
     reconcileLedgerFromDb();
     setConnectorCreditCap(REBAL_ADDR, 0);
 
@@ -607,7 +607,7 @@ async function main() {
         .run(await signReceipt(driftReceipt, brisKey), JSON.stringify(driftReceipt), DRIFT);
     assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === true, 'row and receipt agree, so it verifies');
 
-    db.prepare(`UPDATE settlements SET amount = 500 WHERE key = ?`).run(DRIFT);   // row drifts from receipt
+    db.prepare(`UPDATE settlements SET amount_c = 500 WHERE key = ?`).run(DRIFT);   // row drifts from receipt
     assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === false,
         'but once the row says 500 and the signed receipt says 5, verification FAILS — the signature is still valid');
     const sellerBeforeDrift = balanceOf(seller);

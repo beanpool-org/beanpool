@@ -31,7 +31,7 @@ function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(32).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 50)
     `).run(pubkey, uniqueCallsign);
     setMemberPhoto(db, pubkey, 'bundled://sprout');

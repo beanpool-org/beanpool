@@ -113,7 +113,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(lower(made.res.headers.get('access-control-expose-headers')).join() === 'retry-after', 'and so is the wait a 429 asks for, and no other header');
     assert(made.res.headers.get('access-control-allow-credentials') === null, 'with no credentials');
     assert(!made.body?.post?.shownFrom, 'a community the directory does not show has no line');
-    const stored = db.prepare('SELECT shown_from_host, shown_from_post_id, credits, lat, lng FROM posts WHERE id = ?').get(id) as any;
+    const stored = db.prepare('SELECT shown_from_host, shown_from_post_id, price_c, lat, lng FROM posts WHERE id = ?').get(id) as any;
     assert(stored?.shown_from_host === '' && stored?.shown_from_post_id === null, `nothing of where it came from is kept (${JSON.stringify(stored)})`);
     assert(stored?.credits === 0, 'money stays refused: it holds 0 Beans');
     const seen = await signed(member, 'GET', `${POSTS}?id=${id}`);
@@ -122,7 +122,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(some.res.status === 200 && acao(some.res) === '*' && some.body?.length === 1, `the read by ids (${some.res.status}, ${acao(some.res)})`);
     const edited = await signed(member, 'POST', `${POSTS}/update`, { id, title: 'Ripe tomatoes', credits: 500, authorPublicKey: member.pk });
     assert(edited.res.status === 200 && acao(edited.res) === '*' && edited.body?.post?.title === 'Ripe tomatoes', `the edit (${edited.res.status} ${JSON.stringify(edited.body?.error ?? '')})`);
-    assert((db.prepare('SELECT credits FROM posts WHERE id = ?').get(id) as any)?.credits === 0, 'an edit from another origin moves no money');
+    assert((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(id) as any)?.credits === 0, 'an edit from another origin moves no money');
     const again = await signed(member, 'POST', POSTS, copyBody(id, member));
     assert(again.res.status === 400 && again.body?.code === 'post_id_taken' && acao(again.res) === '*', `a create on an id global holds says so in a code a browser can read (${again.res.status} ${again.body?.code}, ${acao(again.res)})`);
     const standing = await signed(member, 'GET', `/api/community/membership/${member.pk}`);

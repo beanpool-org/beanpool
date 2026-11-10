@@ -88,6 +88,25 @@ export function halves(total: Hundredths): [Hundredths, Hundredths] {
     return [first, total - first];
 }
 
+/**
+ * A deal quantity (hours, days, weeks, months, units) in whole hundredths of a unit: 1.5 hours is 150. A quantity is a
+ * count, not money; counting it in hundredths keeps a deal's arithmetic in integers (dealAmountFor, an hourly deal's
+ * re-rate on the node and its release line in the apps).
+ */
+export function quantityHundredths(quantity: number): number {
+    return Math.round(quantity * 100);
+}
+
+/**
+ * What `quantity` units at `perUnit` (whole hundredths of a Bean) come to, in whole hundredths, by exact integer
+ * arithmetic: the product truncated once (shareOf), so the payer keeps a part below a hundredth. The node holds this for a
+ * deal (engine/escrow.ts) and the apps show the same figure before it is asked for. A price or quantity out of range
+ * throws, as shareOf does.
+ */
+export function dealAmountFor(perUnit: Hundredths, quantity: number): Hundredths {
+    return shareOf(perUnit, quantityHundredths(quantity), 100);
+}
+
 export type ParsedHundredths = { ok: true; value: Hundredths } | { ok: false; refusal: AmountRefusal };
 
 /**

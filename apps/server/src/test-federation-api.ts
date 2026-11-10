@@ -42,14 +42,14 @@ async function main() {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubHex2, 'Bob');
 
     // Add some posts (active ones should be counted)
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
         'post-1', 'offer', 'general', 'Active Post 1', 'desc', 5, 'fixed', pubHex1, 1, 'active', 0, ''
     );
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
         'post-2', 'need', 'general', 'Active Post 2', 'desc', 10, 'fixed', pubHex2, 1, 'active', 0, ''
     );
     // Paused post shouldn't be counted
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status, repeatable, search_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, ?)`).run(
         'post-3', 'offer', 'general', 'Paused Post', 'desc', 5, 'fixed', pubHex1, 0, 'paused', 0, ''
     );
 

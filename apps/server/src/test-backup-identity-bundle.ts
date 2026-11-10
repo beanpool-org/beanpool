@@ -175,7 +175,7 @@ async function runSuite() {
     seedGenesisMember(owner.pubKeyHex, 'Olive'); // the genesis member is the owner
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin.pubKeyHex, 'Adam', new Date().toISOString(), owner.pubKeyHex, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pubKeyHex);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pubKeyHex);
     grantNodeRole(admin.pubKeyHex, 'admin', 'owner:password');
     // An owner and still no code: nothing that ships could open a file locked to the owner alone, so still readable.
     await readableNoCode('an owner, no code');

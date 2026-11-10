@@ -103,22 +103,22 @@ function makeMember(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
     return { pubKeyHex, privateKey, callsign };
 }
 
 const balanceOf = (key: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
 const escrowOf = (projectId: string) => balanceOf(`escrow_${projectId}`);
 const raisedOf = (projectId: string): number =>
-    (db.prepare('SELECT current_amount FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? NaN;
-const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+    (db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? NaN;
+const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 interface OutRow { id: string; to_pubkey: string; amount: number; tax_fee: number | null; memo: string; project_id: string | null; timestamp: string }
 /** Every ledger row paid out of a project's escrow. */
 const rowsOutOf = (projectId: string): OutRow[] => db.prepare(`
-    SELECT id, to_pubkey, amount, tax_fee, memo, project_id, timestamp FROM transactions WHERE from_pubkey = ? ORDER BY timestamp, rowid
+    SELECT id, to_pubkey, amount_c, fee_c, memo, project_id, timestamp FROM transactions WHERE from_pubkey = ? ORDER BY timestamp, rowid
 `).all(`escrow_${projectId}`) as OutRow[];
 
 /** A project's deadline on both its rows: the enterprise's (members) and the crowdfund project's (projects). */
@@ -441,10 +441,10 @@ async function main(): Promise<void> {
     assert(wellStatus === 'FUNDED' && near(balanceOf(well), 20) && escrowOf(well) <= DUST, `the well reached its goal: FUNDED, 20 swept to it (${wellStatus}, ${balanceOf(well)})`);
     // A pledge planted after the goal, as the old pledgeToProject took them: the stranded-pledges boot step's, never this.
     const late = crypto.randomUUID();
-    db.prepare('UPDATE accounts SET balance = balance - 4 WHERE public_key = ?').run(cal.pubKeyHex);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(`escrow_${well}`);
-    db.prepare('UPDATE accounts SET balance = balance + 4 WHERE public_key = ?').run(`escrow_${well}`);
-    db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id) VALUES (?, ?, ?, 4, ?, ?)').run(late, cal.pubKeyHex, `escrow_${well}`, 'Project Pledge', well);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - 4 WHERE public_key = ?').run(cal.pubKeyHex);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(`escrow_${well}`);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + 4 WHERE public_key = ?').run(`escrow_${well}`);
+    db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id) VALUES (?, ?, ?, 4, ?, ?)').run(late, cal.pubKeyHex, `escrow_${well}`, 'Project Pledge', well);
     reconcileLedgerFromDb();
     const open = await makeProject(max, 'Open Solar', 500, new Date(Date.now() + 10 * DAY).toISOString());
     await pledge(cal, open, 6, 'treasury');
@@ -458,8 +458,8 @@ async function main(): Promise<void> {
     assert(near(balanceOf(ann.pubKeyHex), wellBefore.ann) && near(balanceOf(ben.pubKeyHex), wellBefore.ben) && near(balanceOf(cal.pubKeyHex), wellBefore.cal),
         'and no backer is paid anything');
     // The planted pledge goes back to Cal by hand, so the node's books are as they were.
-    db.prepare('UPDATE accounts SET balance = balance + 4 WHERE public_key = ?').run(cal.pubKeyHex);
-    db.prepare('UPDATE accounts SET balance = balance - 4 WHERE public_key = ?').run(`escrow_${well}`);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + 4 WHERE public_key = ?').run(cal.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = balance_c - 4 WHERE public_key = ?').run(`escrow_${well}`);
     db.prepare('DELETE FROM transactions WHERE id = ?').run(late);
     reconcileLedgerFromDb();
 

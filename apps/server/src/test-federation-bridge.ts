@@ -39,14 +39,14 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const balanceOf = (pk: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
 
 function makeMember(callsign: string, balance: number) {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
     return pk;
 }
 
@@ -77,7 +77,7 @@ async function main() {
     // ledger, rather than routing through member send-gates that are irrelevant here.
     const memberCtl = makeMember('ControlHolder', 1000);
     const funder = makeMember('Funder', 3000);
-    db.prepare('UPDATE accounts SET balance=?, last_demurrage_epoch=? WHERE public_key=?')
+    db.prepare('UPDATE accounts SET balance_c=?, last_demurrage_epoch=? WHERE public_key=?')
         .run(1000, ledger.getCurrentEpoch(), bridge);
     reconcileLedgerFromDb();
     assert(balanceOf(bridge) === 1000, 'the bridge really holds 1000 before the decay run');
@@ -105,14 +105,14 @@ async function main() {
     assert(getEnergyBalance(UNSEEDED) === 25, 'and the balance is readable from SQLite — no memory/DB desync');
 
     // ── 3. Sign convention ──────────────────────────────────────────────────────
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(0, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(0, bridge);
     assert(getEnergyBalance(PEER_ID) === 0, 'a fresh energy balance is 0 — square');
 
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(40, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(40, bridge);
     assert(getEnergyBalance(PEER_ID) === 40, 'positive = value taken from our member, owed outward');
     assert(creditExtendedTo(PEER_ID) === 0, 'owing outward is NOT credit extended');
 
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(-40, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(-40, bridge);
     assert(getEnergyBalance(PEER_ID) === -40, 'negative = we minted locally against a claim');
     assert(creditExtendedTo(PEER_ID) === 40, 'the negative magnitude IS the credit we have extended');
 
@@ -137,11 +137,11 @@ async function main() {
 
     // ── 6. The cap is ONE-WAY — the cure is never blocked ───────────────────────
     // Drive the balance to the cap, then confirm movement back toward zero is unaffected.
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(-100, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(-100, bridge);
     assert(settlementCapacity(PEER_ID, PEER, 1).ok === false, 'at the cap, extending more is refused');
 
     // Now the peer's members buy from us: our bridge moves POSITIVE, past zero.
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(250, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(250, bridge);
     const wayPositive = settlementCapacity(PEER_ID, PEER, 50);
     assert(wayPositive.ok === true, 'a large POSITIVE balance does not trip the cap — it is not abs(balance)');
     assert(wayPositive.ok && wayPositive.extended === 0, 'credit extended is 0 while the balance is positive');

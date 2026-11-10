@@ -21,13 +21,13 @@ let seq = 0;
 function seedMember(pk: string, balance = 0, joinedAtDaysAgo = 0) {
     const joinedAt = new Date(Date.now() - joinedAtDaysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(pk, pk.slice(0, 8), joinedAt);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
 }
 
 // A direct peer-to-peer transfer (gift) to establish transaction timestamps
 function tx(from: string, to: string, amount: number, daysAgo = 0) {
     const ts = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('btx' + (seq++), from, to, amount, 'gift', ts);
 }
 
@@ -61,7 +61,7 @@ async function main() {
         assert(metrics1.accountsNearFloor === 0, `No accounts near floor yet (got ${metrics1.accountsNearFloor})`);
 
         // Move user1 closer to their floor (-195, floor is -200)
-        db.prepare("UPDATE accounts SET balance = -195 WHERE public_key = ?").run(user1);
+        db.prepare("UPDATE accounts SET balance_c = -195 WHERE public_key = ?").run(user1);
         reconcileLedgerFromDb();
         const metrics2 = runWashSybilMetricsAudit()!;
         assert(metrics2.accountsNearFloor === 1, `1 account near floor detected (got ${metrics2.accountsNearFloor})`);

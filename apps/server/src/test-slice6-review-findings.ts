@@ -68,7 +68,7 @@ function seedMember(callsign: string, balance = 0, extra: { status?: string } = 
                 VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
         .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active');
     setMemberPhoto(db, id.pub, AVATAR);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(id.pub, balance, ledger.getCurrentEpoch());
     return id;
 }
@@ -216,13 +216,13 @@ async function main() {
         adminSetOperator(switchedOff.pub, false);
 
         const snapshot = () => JSON.stringify({
-            ent: db.prepare('SELECT status, paused, lat, lng, working_capital_ceiling FROM members WHERE public_key = ?').get(ent),
+            ent: db.prepare('SELECT status, paused, lat, lng, working_capital_ceiling_c FROM members WHERE public_key = ?').get(ent),
             posts: count('SELECT COUNT(*) c FROM posts WHERE author_pubkey = ?', ent),
-            ops: db.prepare('SELECT member_pubkey, role, backing FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY member_pubkey').all(ent),
+            ops: db.prepare('SELECT member_pubkey, role, backing_c FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY member_pubkey').all(ent),
             pledges: count('SELECT COUNT(*) c FROM enterprise_pledges WHERE enterprise = ?', ent),
             proposals: count('SELECT COUNT(*) c FROM enterprise_succession_proposals WHERE enterprise_pubkey = ?', ent),
             msg: db.prepare('SELECT type, ciphertext FROM messages WHERE id = ?').get(threadMsg),
-            balance: (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ent) as any)?.balance,
+            balance: (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(ent) as any)?.balance,
         });
         const routes: Array<[string, string, any]> = [
             ['POST', `/api/treasury/${ent}/offer`, { title: 'x', category: 'food', credits: 1, photos: TEST_PHOTOS }],

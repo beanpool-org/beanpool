@@ -37,21 +37,21 @@ function assert(cond: boolean, msg: string): void {
 const voiceCredits = (pk: string) => getDecisionVoiceCredits('no-such-decision', pk).totalCredits;
 function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 let txc = 0;
 // A direct peer-to-peer transfer (gift) — must NOT grant governance credit.
 function tx(from: string, to: string, amount: number) {
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('etx' + (txc++), from, to, amount, 'm', new Date().toISOString());
 }
 // A COMPLETED marketplace (escrow) trade — the qualified value that backs trust AND votes.
 // FK enforcement is on, so back each trade with a real post (authored by the seller).
 function mtx(buyer: string, seller: string, credits: number) {
     const pid = 'ehp-' + (txc++);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
         .run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?,?,?,?,?, 'completed')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?,?,?,?,?, 'completed')`)
         .run('emtx-' + (txc++), pid, buyer, seller, credits);
 }
 
@@ -101,9 +101,9 @@ async function main() {
 
         // F1 (review FABLE-sec-input, 2026-10-01): a copied account whose balance is NULL (a NaN, as JSON carries it) or
         // text is refused, never imported: the row here keeps the balance it had, and no row is made for a new one.
-        const heldHere = db.prepare('SELECT public_key AS publicKey, balance, last_updated_at AS lastUpdatedAt, last_demurrage_epoch AS lastDemurrageEpoch FROM accounts').all() as any[];
+        const heldHere = db.prepare('SELECT public_key AS publicKey, balance_c, last_updated_at AS lastUpdatedAt, last_demurrage_epoch AS lastDemurrageEpoch FROM accounts').all() as any[];
         const victim = 'giftee';
-        const before = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(victim) as any).balance;
+        const before = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(victim) as any).balance;
         const brokenCopy: SyncPayload = await signSyncPayload({
             nodeId,
             accounts: [
@@ -113,9 +113,9 @@ async function main() {
         } as any);
         let imported: any = null;
         try { imported = await importRemoteState(brokenCopy); } catch (e: any) { imported = { error: e?.message || String(e) }; }
-        const after = db.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(victim) as any;
+        const after = db.prepare('SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = ?').get(victim) as any;
         const texted = db.prepare(`SELECT 1 FROM accounts WHERE public_key = 'texted-account'`).get();
-        const nulls = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE balance IS NULL OR typeof(balance) NOT IN ('integer', 'real')`).get() as any).c;
+        const nulls = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE balance_c IS NULL OR typeof(balance_c) NOT IN ('integer', 'real')`).get() as any).c;
         assert(!imported?.error && imported.conflictsSkipped >= 2 && after.t === 'real' && after.balance === before && !texted && nulls === 0,
             `F1: a copied NULL or text balance is refused, not imported: ${victim} keeps ${before}, no row for the text one, no NULL anywhere (${JSON.stringify({ imported: imported?.error ?? { conflictsSkipped: imported?.conflictsSkipped, accountChanges: imported?.accountChanges }, after, texted: !!texted, nulls })})`);
         // A standby only for that import: A2-18 is the main server's send route. A standby refuses every send before it

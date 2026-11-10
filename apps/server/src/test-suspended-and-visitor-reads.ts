@@ -199,7 +199,7 @@ async function main() {
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
             .run(id.pubKeyHex, callsign, gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         se.transfer('genesis', id.pubKeyHex, 50, `seed ${callsign}`, 'direct', true);
         return id;
     };
@@ -596,9 +596,9 @@ async function main() {
         // hid it, by keeping a zero account the members import made for Zed over the main server's).
         const OLD = '2000-01-01T00:00:00.000Z';
         db.prepare('DELETE FROM members WHERE public_key = ?').run(zed.pubKeyHex);
-        const zedHeld = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(zed.pubKeyHex) as { balance: number }).balance;
+        const zedHeld = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(zed.pubKeyHex) as { balance: number }).balance;
         db.prepare('DELETE FROM accounts WHERE public_key = ?').run(zed.pubKeyHex);
-        db.prepare("UPDATE accounts SET balance = balance + ? WHERE public_key = 'genesis'").run(zedHeld);
+        db.prepare("UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = 'genesis'").run(zedHeld);
         db.prepare('UPDATE members SET is_visitor = 0, updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
         db.prepare('UPDATE members SET is_visitor = 1, invited_by = NULL, invite_code = NULL, updated_at = ? WHERE public_key = ?').run(OLD, dee.pubKeyHex);
         se.setNodeRole('backup');

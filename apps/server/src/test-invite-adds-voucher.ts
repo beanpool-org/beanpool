@@ -132,12 +132,12 @@ const codeRow = (code: string) => db.prepare('SELECT * FROM invite_codes WHERE c
 const liveConfirmation = (pk: string) => db.prepare('SELECT entry_id, confirmed_by, needs_second, id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(pk) as
     { entry_id: string; confirmed_by: string; needs_second: number; id: string } | undefined;
 const voucherRow = (pk: string) => db.prepare('SELECT * FROM vouchers WHERE member_pubkey = ?').get(pk) as Record<string, any> | undefined;
-const linesOf = (pk: string) => db.prepare('SELECT kind, amount, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
+const linesOf = (pk: string) => db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
 const floorLog = (action: string) => db.prepare('SELECT * FROM known_floor_log WHERE action = ? ORDER BY rowid').all(action) as Record<string, any>[];
-const roomOf = (pk: string) => count(`SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'`, pk);
+const roomOf = (pk: string) => count(`SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'`, pk);
 const voucherNotices = (pk: string) => listKeptNotices(pk).filter((n) => n.data.kind === 'voucher_budget');
-const sumBalances = () => count('SELECT COALESCE(SUM(balance), 0) AS n FROM accounts');
+const sumBalances = () => count('SELECT COALESCE(SUM(balance_c), 0) AS n FROM accounts');
 
 async function main(): Promise<void> {
     const COMMUNITY = (await ensureGenesis()).communityId;

@@ -93,14 +93,14 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, ?, ?, 'active')`)
             .run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk, `INV-${name.toUpperCase()}`);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         if (beans > 0 && !(se as any).transfer('genesis', id.pk, beans, 'Seed grant', 'direct', true)) throw new Error('seed grant failed');
         const token = `ExponentPushToken[${name}-${crypto.randomBytes(8).toString('hex')}]`;
         putPushTokenRow(id.pk, token, 'android');
         tokenOwner.set(token, id);
         return id;
     };
-    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
     const realNow = Date.now;
 
     try {

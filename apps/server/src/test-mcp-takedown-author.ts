@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(admin, 'Adele Admin');
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     clearEnterpriseFloorCache(db);
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
         clearRecord();
         const samOffer = post('Cheap watches', sam.pub), samNeed = post('Need your bank details', sam.pub, 'need'), samEvent = event('Crypto seminar', sam.pub);
         const samDeal = post('Watches with a deal on', sam.pub);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(crypto.randomUUID(), samDeal, rae.pub, sam.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(crypto.randomUUID(), samDeal, rae.pub, sam.pub);
         const samAway = post('Shown here from another community', sam.pub);
         db.prepare("UPDATE posts SET origin_node = 'peer-node-key' WHERE id = ?").run(samAway);
         const miaPost = post('Lemons from my tree', mia.pub);

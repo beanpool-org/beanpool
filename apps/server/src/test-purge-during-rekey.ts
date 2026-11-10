@@ -78,9 +78,9 @@ function keySession(kp: Keypair): string {
     return ex.sessionId!;
 }
 
-const sumOfAccounts = () => (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as any).s as number;
+const sumOfAccounts = () => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as any).s as number;
 const memberRows = (pk: string) => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE public_key = ? COLLATE NOCASE').get(pk) as any).c as number;
-const accountBalance = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance ?? 0;
+const accountBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance ?? 0;
 
 async function runTests() {
     console.log('--- TEST: a removal or deletion during a pending re-key does not bring the member back ---');

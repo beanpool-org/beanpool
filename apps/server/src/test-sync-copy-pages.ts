@@ -166,8 +166,8 @@ async function child(): Promise<void> {
             const member = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`);
             const { setMemberPhoto } = await import('@beanpool/engine');
             const stamp = db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
-            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`);
-            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 0.01, 'a flood', ?)`);
+            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`);
+            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, 0.01, 'a flood', ?)`);
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
                     const u = crypto.randomUUID();
@@ -527,7 +527,7 @@ async function main(): Promise<void> {
         // ── 2. Pages under writes hold the snapshot; the delta after carries the writes ──
         console.log('\n— 2. a copy\'s pages under writes on M hold the snapshot; the delta from its cursor carries the writes —');
         const before = await main.send('state');
-        const ledgerAtOpen = await main.send('rows', { sql: 'SELECT public_key, balance FROM accounts ORDER BY public_key' });
+        const ledgerAtOpen = await main.send('rows', { sql: 'SELECT public_key, balance_c FROM accounts ORDER BY public_key' });
         const during: { messages: string[]; members: string[] } = { messages: [], members: [] };
         let dealDuring = '';
         const deleted = lines[0];
@@ -582,7 +582,7 @@ async function main(): Promise<void> {
         const d = merged(delta.pages);
         const dIds = new Set((d.messages ?? []).map((r: any) => r.id));
         const dKeys = new Set((d.members ?? []).map((r: any) => r.publicKey));
-        const ledgerNow = await main.send('rows', { sql: 'SELECT public_key, balance FROM accounts ORDER BY public_key' });
+        const ledgerNow = await main.send('rows', { sql: 'SELECT public_key, balance_c FROM accounts ORDER BY public_key' });
         const deltaLedger = (d.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance: a.balance })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
         assert(during.messages.every((id) => dIds.has(id)) && during.members.every((k) => dKeys.has(k)),
             `the delta copy from its cursor carries every line and member written during it (${during.messages.filter((id) => dIds.has(id)).length}/${during.messages.length}, ${during.members.filter((k) => dKeys.has(k)).length}/${during.members.length})`);

@@ -70,9 +70,9 @@ function keypair(): Id {
 function makeMember(callsign: string, balance = 50): Id {
     const id = keypair();
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
                 VALUES (?, ?, ?, 'active', 100)`).run(id.pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
     return id;
 }
 

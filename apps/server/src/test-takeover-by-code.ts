@@ -83,7 +83,7 @@ async function child(): Promise<void> {
             for (const [key, callsign] of [[ben, 'Ben'], [cara, 'Cara']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                     .run(key, callsign, new Date().toISOString(), anna, 'TEST');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             se.grantNodeRole(ben, 'admin', anna);
             let transferred = false;

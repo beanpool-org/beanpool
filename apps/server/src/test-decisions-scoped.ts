@@ -51,9 +51,9 @@ function keypair(): Id {
 function makeMember(callsign: string, balance = 50): Id {
     const id = keypair();
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
                 VALUES (?, ?, ?, 'active', 100)`).run(id.pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(id.pubKeyHex, balance);
     return id;
 }
 
@@ -61,10 +61,10 @@ function makeMember(callsign: string, balance = 50): Id {
 function makeEnterprise(name: string, keepers: Id[], balance: number, opts: { paused?: boolean; lifecycle?: 'ongoing' | 'bounded'; surplus?: number } = {}): string {
     const ent = keypair().pubKeyHex;
     const created = new Date(Date.now() - 20 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, lifecycle, paused, purpose)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, lifecycle, paused, purpose)
                 VALUES (?, ?, ?, 'active', 1, 0, ?, ?, ?, 'A test enterprise')`)
         .run(ent, name, created, opts.surplus ?? 0, opts.lifecycle ?? 'ongoing', opts.paused ? 1 : 0);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(ent, balance);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(ent, balance);
     keepers.forEach((k, i) => {
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, ?, ?)`)
             .run(ent, k.pubKeyHex, i === 0 ? 'lead' : 'keeper', new Date(Date.now() - (10 - i) * DAY).toISOString());
@@ -100,9 +100,9 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, 
     return { ...first, error: first.body?.error, replay: send };
 }
 
-const balanceOf = (pk: string) => Number((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? NaN);
+const balanceOf = (pk: string) => Number((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? NaN);
 const row = (id: string) => db.prepare('SELECT * FROM decisions WHERE id = ?').get(id) as any;
-const totalSupply = () => Number((db.prepare("SELECT SUM(balance) AS s FROM accounts").get() as any).s);
+const totalSupply = () => Number((db.prepare("SELECT SUM(balance_c) AS s FROM accounts").get() as any).s);
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 function propose(ent: string, by: Id, body: Record<string, unknown>) {
@@ -243,7 +243,7 @@ async function main(): Promise<void> {
     const freeze = { title: 'Freeze a credit line', description: 'A community proposal from a keeper with a bakery vote open', touches: 'member', effect: 'freeze_credit', subject: outsider.pubKeyHex };
     // A completed trade is Kim's standing to propose one (the earned_credit badge makeMember gives is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k2.pubKeyHex, outsider.pubKeyHex, tradedAt, tradedAt);
     const byKeeper = await signedFetch('POST', '/api/commons/decisions', freeze, k2);
     assert(row(d4).status === 'open' && byKeeper.status === 200,

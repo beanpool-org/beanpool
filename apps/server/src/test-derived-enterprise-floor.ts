@@ -57,7 +57,7 @@ let seq = 0;
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 function assignKeeper(treasury: string, keeper: string) {
@@ -68,9 +68,9 @@ function assignKeeper(treasury: string, keeper: string) {
 // A completed marketplace trade that builds genuine earned credit for both parties
 function mtx(buyer: string, seller: string, credits: number) {
     const pid = 'post-trade-' + (seq++);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`)
         .run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
         .run('mtx-trade-' + (seq++), pid, buyer, seller, credits);
 }
 
@@ -89,7 +89,7 @@ async function main() {
     seedMember(K1, 'Alice');
 
     // Give Alice admin granted credit (150)
-    db.prepare("UPDATE members SET earned_credit = 150 WHERE public_key = ?").run(K1);
+    db.prepare("UPDATE members SET earned_credit_c = 150 WHERE public_key = ?").run(K1);
 
     const aliceProfile = getMemberTrustProfile(K1);
     assert(aliceProfile.grantedCredit === 150, 'Alice has 150 granted credit in granted-credit lane');

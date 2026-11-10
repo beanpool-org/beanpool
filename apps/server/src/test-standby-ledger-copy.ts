@@ -167,9 +167,9 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             const cfg = (k: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(k) as { value: string } | undefined)?.value ?? null;
             return {
-                accounts: db.prepare('SELECT public_key, balance, last_updated_at, last_demurrage_epoch FROM accounts ORDER BY public_key').all(),
-                sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
-                transactions: db.prepare('SELECT id, from_pubkey, to_pubkey, amount, tax_fee, project_id, memo, timestamp FROM transactions ORDER BY id').all(),
+                accounts: db.prepare('SELECT public_key, balance_c, last_updated_at, last_demurrage_epoch FROM accounts ORDER BY public_key').all(),
+                sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
+                transactions: db.prepare('SELECT id, from_pubkey, to_pubkey, amount_c, fee_c, project_id, memo, timestamp FROM transactions ORDER BY id').all(),
                 beanpool: db.prepare("SELECT public_key, callsign FROM members WHERE callsign LIKE 'BeanPool%' ORDER BY public_key").all(),
                 members: (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c,
                 posts: (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c,
@@ -195,7 +195,7 @@ async function child(): Promise<void> {
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.amount, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.amount, a.publicKey);
             reconcileLedgerFromDb();
             return true;
         },
@@ -288,7 +288,7 @@ async function child(): Promise<void> {
         /** A raw write on this server's own ledger, as a bug would make it. */
         'plant-balance': async (a: { publicKey: string; add: number }) => {
             const { db } = await import('./db/db.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.add, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.add, a.publicKey);
             return true;
         },
         /**
@@ -300,7 +300,7 @@ async function child(): Promise<void> {
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
             const today = Math.floor(Date.now() / 86_400_000);
             for (const m of a.moves) {
-                db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(m.add, m.publicKey);
+                db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(m.add, m.publicKey);
                 if (typeof m.epochsAgo === 'number') db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?').run(today - m.epochsAgo, m.publicKey);
             }
             reconcileLedgerFromDb();
@@ -348,7 +348,7 @@ async function child(): Promise<void> {
         /** A trade as this server holds it. */
         trade: async (a: { id: string }) => {
             const { db } = await import('./db/db.js');
-            return db.prepare('SELECT id, status, credits FROM marketplace_transactions WHERE id = ?').get(a.id) ?? null;
+            return db.prepare('SELECT id, status, amount_c FROM marketplace_transactions WHERE id = ?').get(a.id) ?? null;
         },
         /**
          * The whole-copy check, on M's current whole copy fetched with the replication token and not imported: what the
@@ -792,8 +792,8 @@ async function main(): Promise<void> {
             // The old members import: a zero account for each member, stamped with the standby's clock, SYSTEM's too; the
             // accounts import then kept those over the main server's older rows. And no record of the importer's format.
             const now = new Date().toISOString();
-            db.prepare('UPDATE accounts SET balance = 0, last_updated_at = ?, last_demurrage_epoch = 0').run(now);
-            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('SYSTEM', 0, 0)").run();
+            db.prepare('UPDATE accounts SET balance_c = 0, last_updated_at = ?, last_demurrage_epoch = 0').run(now);
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('SYSTEM', 0, 0)").run();
             db.prepare("DELETE FROM node_config WHERE key IN ('replica_format', 'replica_ledger_mismatch')").run();
         });
         const old = await spawnNode(SCRIPT, dir('old'), env(PW_STANDBY, 'backup'));
@@ -825,7 +825,7 @@ async function main(): Promise<void> {
         const ok9 = await promote('promoted-ok');
         assert(ok9.ran && ok9.rec?.copy?.match === true,
             `on the copy as it is, the audit finds the ledger is M's as last copied (${JSON.stringify(ok9.rec)})`);
-        const zero9 = await promote('promoted-zero', (db) => db.prepare('UPDATE accounts SET balance = 0').run());
+        const zero9 = await promote('promoted-zero', (db) => db.prepare('UPDATE accounts SET balance_c = 0').run());
         assert(zero9.ran && zero9.rec?.ok === false && zero9.rec?.copy?.match === false,
             `with every balance 0 it does not say ok: the ledger is not M's (${JSON.stringify(zero9.rec)})`);
         const empty9 = await promote('promoted-empty', (db) => db.prepare('DELETE FROM accounts').run());
@@ -1127,7 +1127,7 @@ async function main(): Promise<void> {
         withDb(dir('format1'), (db) => {
             // Format 2 (#1272's listings): the last one whose standby still flushed demurrage of its own.
             db.prepare("UPDATE node_config SET value = '2' WHERE key = 'replica_format'").run();
-            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1.5, 0, 'Circulation fee (demurrage, 40d)', ?)`)
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1.5, 0, 'Circulation fee_c (demurrage, 40d)', ?)`)
                 .run(`demurrage_${yan2.pk.slice(0, 16)}_1_41`, yan2.pk, new Date().toISOString());
         });
         const format1 = await spawnNode(SCRIPT, dir('format1'), env(PW_STANDBY, 'backup'));

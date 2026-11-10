@@ -339,7 +339,7 @@ async function main(): Promise<void> {
         const conn = new Database(path.join(b.dir, 'state.db'));
         conn.pragma('busy_timeout = 10000');
         conn.prepare('INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)').run(memberKey, 'RealName', new Date().toISOString());
-        conn.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
+        conn.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
         conn.close();
         const existing = await cli(b, ['--key', memberKey, '--callsign', 'Typed']);
         check(existing.code === 0 && /@RealName is now the owner/.test(existing.out) && !/@Typed/.test(existing.out),

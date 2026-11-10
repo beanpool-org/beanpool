@@ -85,7 +85,7 @@ function makeKey(): Key {
 function addMember(pk: string, callsign: string, invitedBy: string): void {
     db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
         .run(pk, callsign, new Date().toISOString(), invitedBy, 'TEST');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
 }
 function keySession(k: Key): string | undefined {
     const chal = createAdminChallenge();

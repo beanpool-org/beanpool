@@ -24,8 +24,11 @@ import {
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
-    beans, isHundredths, shareOf,
+    beans, isHundredths,
 } from '@beanpool/core';
+
+// The deal arithmetic is core's, so the apps show the figure the node holds (packages/beanpool-core/src/hundredths.ts).
+export { dealAmountFor, quantityHundredths } from '@beanpool/core';
 
 // A refusal with values in it, in English, its sentence marked for the way out to find again in the member's language
 // (member-words.ts), as engine/posts.ts writes them.
@@ -66,21 +69,6 @@ export interface PostFieldsIn {
 /** A number of units for a deal: finite, from POST_HOURS_MIN to POST_HOURS_MAX. */
 export function isDealQuantity(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && v >= POST_HOURS_MIN && v <= POST_HOURS_MAX;
-}
-
-/**
- * What `quantity` units at `perUnit` (whole hundredths of a Bean) come to, in whole hundredths, by exact integer arithmetic:
- * the quantity counted in hundredths of a unit (1.5 hours is 150; a quantity is 0.01 to 10,000, so this is a count, not
- * money), the product truncated once (@beanpool/core shareOf), so the payer keeps a part below a hundredth. A quantity or
- * price out of range throws, as shareOf does.
- */
-export function dealAmountFor(perUnit: number, quantity: number): number {
-    return shareOf(perUnit, quantityHundredths(quantity), 100);
-}
-
-/** A deal quantity in whole hundredths of a unit, for dealAmountFor and an hourly deal's re-rate (engine/escrow.ts). */
-export function quantityHundredths(quantity: number): number {
-    return Math.round(quantity * 100);
 }
 
 /** The refusal for a quantity that is given but isn't one (isDealQuantity), at a door where a fixed price ignores it. */

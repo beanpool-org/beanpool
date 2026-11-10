@@ -81,7 +81,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, name, new Date(Date.now() - 60 * DAY).toISOString());
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.stars) setPref(pubKeyHex, 'interests', JSON.stringify(opts.stars));
         if (opts.phone !== false) putPushTokenRow(pubKeyHex, `ExponentPushToken[${name}]`, 'android');
         return { pubKeyHex, privateKey, name };

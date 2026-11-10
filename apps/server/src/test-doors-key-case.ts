@@ -93,7 +93,7 @@ function makeMember(name: string, beans = 100): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -450,7 +450,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor) VALUES (?, ?, ?, ?, ?, 'active', ?)
                     ON CONFLICT(public_key) DO UPDATE SET callsign = excluded.callsign, joined_at = excluded.joined_at, status = 'active', is_visitor = excluded.is_visitor`)
             .run(pk, callsign, joined, invitedBy, invitedBy ? 'OLD-DOOR' : null, visitor);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     };
     insertStray(PIA, 'Stray Pia', 1, ago(10 * DAY), null);
     transfer('genesis', PIA, 3, 'sent to the capitals', 'direct', true);

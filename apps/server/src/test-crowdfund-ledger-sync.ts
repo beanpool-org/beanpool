@@ -61,11 +61,11 @@ function assert(cond: boolean, msg: string): void {
 
 function seedMember(pk: string, balance: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
-    db.prepare(`UPDATE accounts SET balance=? WHERE public_key=?`).run(balance, pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
+    db.prepare(`UPDATE accounts SET balance_c=? WHERE public_key=?`).run(balance, pk);
 }
-const dbBalance = (pk: string): number => (db.prepare(`SELECT balance FROM accounts WHERE public_key=?`).get(pk) as { balance: number }).balance;
-const sumBalances = (): number => (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts`).get() as { s: number }).s;
+const dbBalance = (pk: string): number => (db.prepare(`SELECT balance_c FROM accounts WHERE public_key=?`).get(pk) as { balance: number }).balance;
+const sumBalances = (): number => (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts`).get() as { s: number }).s;
 
 async function run() {
     console.log('Running A2-1 crowdfund ledger-sync regression test...\n');

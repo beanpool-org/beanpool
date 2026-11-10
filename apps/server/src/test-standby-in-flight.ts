@@ -215,9 +215,9 @@ async function child(): Promise<void> {
         links: async () => {
             const { db } = await import('./db/db.js');
             return {
-                treasuries: db.prepare(`SELECT m.public_key, m.callsign, a.balance FROM members m LEFT JOIN accounts a ON a.public_key = m.public_key
+                treasuries: db.prepare(`SELECT m.public_key, m.callsign, a.balance_c FROM members m LEFT JOIN accounts a ON a.public_key = m.public_key
                                         WHERE m.callsign LIKE '%Link%' ORDER BY m.rowid`).all(),
-                rows: db.prepare('SELECT peer_id, treasury_pubkey, commission_ceiling FROM federation_links ORDER BY peer_id').all(),
+                rows: db.prepare('SELECT peer_id, treasury_pubkey, commission_ceiling_c FROM federation_links ORDER BY peer_id').all(),
                 markers: db.prepare('SELECT treasury_pubkey, peer_id, created_at FROM federation_link_treasuries ORDER BY treasury_pubkey').all(),
             };
         },
@@ -409,7 +409,7 @@ async function child(): Promise<void> {
                 convenor: one("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'", id.group)?.member_pubkey ?? null,
                 claim: one('SELECT status, paid_at FROM deferred_wage_claims WHERE id = ?', id.claim) ?? null,
                 payouts: (one("SELECT COUNT(*) AS n FROM transactions WHERE memo LIKE 'Deferred wage claim payout%' AND to_pubkey = ?", id.kip) as any).n,
-                kipBalance: one('SELECT balance FROM accounts WHERE public_key = ?', id.kip)?.balance ?? null,
+                kipBalance: one('SELECT balance_c FROM accounts WHERE public_key = ?', id.kip)?.balance ?? null,
             };
         },
         checkpoint: async () => {

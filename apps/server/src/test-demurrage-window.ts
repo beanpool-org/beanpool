@@ -76,14 +76,14 @@ function seedMember(pk: string, balance: number, staleDays: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pk, pk.slice(0, 10));
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET balance=excluded.balance, last_demurrage_epoch=excluded.last_demurrage_epoch
+        ON CONFLICT(public_key) DO UPDATE SET balance_c=excluded.balance_c, last_demurrage_epoch=excluded.last_demurrage_epoch
     `).run(pk, balance, nowEpoch() - staleDays);
 }
 
 const row = (pk: string) =>
-    db.prepare(`SELECT balance, last_demurrage_epoch AS epoch FROM accounts WHERE public_key=?`).get(pk) as
+    db.prepare(`SELECT balance_c, last_demurrage_epoch AS epoch FROM accounts WHERE public_key=?`).get(pk) as
         { balance: number; epoch: number } | undefined;
 
 /**
@@ -92,7 +92,7 @@ const row = (pk: string) =>
  * Demurrage moves value between an account and the Commons, so this figure must not move at all.
  */
 const nodeTotal = (): number => {
-    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
+    const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
     return Math.round((s + getCommonsBalanceExact()) * 10000) / 10000;
 };
@@ -238,7 +238,7 @@ async function main() {
     reconcileLedgerFromDb();
     // Count only what was actually credited, so the arithmetic is the same whether or not the refund landed.
     const refunded = (db.prepare(
-        `SELECT COALESCE(SUM(amount),0) AS s FROM transactions WHERE to_pubkey=? AND id LIKE 'refund_%'`,
+        `SELECT COALESCE(SUM(amount_c),0) AS s FROM transactions WHERE to_pubkey=? AND id LIKE 'refund_%'`,
     ).get(refundee) as { s: number }).s;
     const refundCharge = OPENING + refunded - getBalance(refundee).balance;
     assert(Math.abs(refundCharge - fairCharge) < SAME_CHARGE,
@@ -290,7 +290,7 @@ async function main() {
     // The live COMMONS_BALANCE is thrown away and rebuilt from the COMMONS_POOL row, exactly as
     // initStateEngine does on boot. Any decay debit that was committed to an account row while its
     // matching Commons movement stayed in memory reappears here as drift.
-    const commonsRow = (db.prepare(`SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'`)
+    const commonsRow = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key='COMMONS_POOL'`)
         .get() as { balance: number }).balance;
     setCommonsBalance(commonsRow);
     reconcileLedgerFromDb();

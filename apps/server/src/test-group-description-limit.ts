@@ -359,7 +359,7 @@ async function rulesOnLocal(): Promise<void> {
 
     // A completed trade is R's standing to propose (a trust badge, earned_credit, is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), R.pk, Q.pk, tradedAt, tradedAt);
     const propose = (title: string, description: string) => call(base, 'POST', '/api/commons/decisions', R, { title, description, touches: 'member', effect: 'freeze_credit', subject: Q.pk });
     const titleOver = await propose('t'.repeat(201), 'Ten or more characters of reasons');

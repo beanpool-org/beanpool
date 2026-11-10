@@ -77,7 +77,7 @@ const cachedFor = (originNode: string): any[] =>
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
     setMemberPhoto(db, pk, TINY_PNG);
     return pk;

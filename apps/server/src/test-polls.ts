@@ -535,7 +535,7 @@ async function main() {
         const pollOptionsJson = rp.pollOptions != null
             ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
             : null;
-        replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote)
+        replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits, rp.authorPublicKey, rp.createdAt,
             rp.active ? 1 : 0, rp.status, rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null, rp.originNode || 'node',

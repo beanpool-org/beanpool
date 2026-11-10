@@ -85,7 +85,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?, ?, ?, ?)`)
             .run(pubKeyHex, callsign, joined, `INV-${callsign.toUpperCase()}`, area?.lat ?? null, area?.lng ?? null, area ? joined : null);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
     const host = memberAt('HostHana', LAGOS);

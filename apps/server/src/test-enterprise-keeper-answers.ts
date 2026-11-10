@@ -57,10 +57,10 @@ function giveEarnedCredit(pubkey: string, targetEarned: number) {
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
         setMemberPhoto(db, peerKey, 'avatar');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
         const pid = `post-ec-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
         vNeeded -= tradeAmount;
     }
 }
@@ -75,7 +75,7 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
         VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, `${callsign}${++seq}`, now, now);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
     if (earnedCredit > 0) giveEarnedCredit(pubKeyHex, earnedCredit);
     return { pubKeyHex, privateKey };
 }
@@ -100,13 +100,13 @@ function role(ent: string, member: string): string | null {
 }
 
 function activePledge(ent: string, keeper: string): number {
-    return Number((db.prepare("SELECT COALESCE(SUM(amount),0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL").get(ent, keeper) as any).t);
+    return Number((db.prepare("SELECT COALESCE(SUM(amount_c),0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL").get(ent, keeper) as any).t);
 }
 
 /** Set the enterprise's balance directly, in the ledger and its row (a test fixture, not a ledger path). */
 function setEnterpriseBalance(ent: string, balance: number) {
     ledger.getAccount(ent).balance = balance;
-    db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0) ON CONFLICT(public_key) DO UPDATE SET balance = excluded.balance").run(ent, balance);
+    db.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0) ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c").run(ent, balance);
 }
 
 async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: any) {
@@ -176,7 +176,7 @@ async function main() {
         const r3 = requestToJoinEnterprise(ent, app3.pubKeyHex, 30);
         const res3 = approveKeeperRequest(r3.id, lead.pubKeyHex);
         const { publicKey: elsewhere } = createTreasury(`AElsewhere${++seq}`, 'avatar', 0);
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, 20, ?, NULL)")
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, 20, ?, NULL)")
             .run(crypto.randomUUID(), app3.pubKeyHex, elsewhere, new Date().toISOString());
         assert(getAvailableBacking(app3.pubKeyHex) === 10, 'A: applicant pledged elsewhere during the window (10 left)');
         tickEnterpriseKeepers(AFTER_WINDOW());

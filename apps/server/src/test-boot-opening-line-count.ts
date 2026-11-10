@@ -49,14 +49,14 @@ function guardFetch(): void {
 /** The stored rows the suite compares, read from the database only. */
 async function storedRows(w: World) {
     const { db } = await import('./db/db.js');
-    const row = (pk: string) => db.prepare('SELECT balance, last_demurrage_epoch AS lastRead FROM accounts WHERE public_key = ?').get(pk) as { balance: number; lastRead: number } | undefined;
+    const row = (pk: string) => db.prepare('SELECT balance_c, last_demurrage_epoch AS lastRead FROM accounts WHERE public_key = ?').get(pk) as { balance: number; lastRead: number } | undefined;
     const line = (pk: string) => (db.prepare('SELECT legacy_credit_floor AS l FROM members WHERE public_key = ?').get(pk) as { l: number | null }).l;
     return {
         lostCo: row(w.lostCo), pat: row(w.pat),
         lines: { lostCo: line(w.lostCo), keptCo: line(w.keptCo), earnedCo: line(w.earnedCo), oldCo: line(w.oldCo) },
         commonsRow: row('COMMONS_POOL')?.balance ?? null,
-        sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
-        fees: (db.prepare("SELECT COUNT(*) AS c FROM transactions WHERE memo LIKE 'Circulation fee%'").get() as { c: number }).c,
+        sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
+        fees: (db.prepare("SELECT COUNT(*) AS c FROM transactions WHERE memo LIKE 'Circulation fee_c%'").get() as { c: number }).c,
     };
 }
 
@@ -66,22 +66,22 @@ async function child(): Promise<void> {
         setup: async (w: World) => {
             const { db } = await import('./db/db.js');
             const member = (pk: string, name: string, treasury = 0, line = 0, legacy: number | null = null) => db.prepare(`
-                INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury, earned_credit, legacy_credit_floor)
+                INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury, earned_credit_c, legacy_credit_floor)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days'), ?, ?, 'active', ?, ?, ?)`).run(pk, name, w.owner, `INV-${name}`, treasury, line, legacy);
             const keeper = (enterprise: string, pk: string, figure: number) => {
-                db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+                db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing_c)
                             VALUES (?, ?, 'keeper', ?, ?)`).run(enterprise, pk, w.owner, figure);
                 db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(pk);
             };
             const pledge = (enterprise: string, pk: string, amount: number, known: boolean) => db.prepare(`
-                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                 VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-80 days'), NULL)`)
                 .run(`${known ? 'known:' : ''}${crypto.randomUUID()}`, pk, enterprise, amount);
             // The day each account was last read: 60 days ago, as the ledger counts days (LedgerManager.getCurrentEpoch).
             const lastRead = Math.floor(Date.now() / DAY_MS) - 60;
             const account = (pk: string, balance: number) => db.prepare(`
-                INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)
-                ON CONFLICT(public_key) DO UPDATE SET balance = excluded.balance, last_demurrage_epoch = excluded.last_demurrage_epoch`).run(pk, balance, lastRead);
+                INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)
+                ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c, last_demurrage_epoch = excluded.last_demurrage_epoch`).run(pk, balance, lastRead);
             db.transaction(() => {
                 member(w.owner, 'Owen');
                 member(w.ivy, 'Ivy');

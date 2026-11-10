@@ -109,7 +109,7 @@ function member(name: string, daysAgo: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -985,7 +985,7 @@ async function main(): Promise<void> {
     const hens = crypto.randomUUID();
     createCrowdfundProject(hens, kim.pk, 'Hen house', 'Wire and timber', [], 50, null);
     const barn = member('Barn', 60); // a bounded enterprise raising Beans, which takes pledges (Hub doesn't)
-    db.prepare(`UPDATE members SET is_treasury = 1, lifecycle = 'bounded', purpose = 'A new barn', goal_amount = 50 WHERE public_key = ?`).run(barn.pk);
+    db.prepare(`UPDATE members SET is_treasury = 1, lifecycle = 'bounded', purpose = 'A new barn', goal_amount_c = 50 WHERE public_key = ?`).run(barn.pk);
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', bob.pk);
     const digits = 412345678;
     const numeric: [string, Res][] = [

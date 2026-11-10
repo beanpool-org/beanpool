@@ -110,7 +110,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury, updated_at)
                     VALUES (?, ?, 'active', ?, 'genesis', 'TEST', 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, name, joinedAt);
         setMemberPhoto(db, id.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const robin = member('RobinSeller');
@@ -265,7 +265,7 @@ async function main() {
 
     // ── 3. The price is words ──
     console.log('\n── 3. The price is words ──');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM posts WHERE id = ? AND credits > 0').get(copyId) as { c: number }).c === 0, 'the pricing guide reads `credits > 0`, and so never reads a copy');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM posts WHERE id = ? AND price_c > 0').get(copyId) as { c: number }).c === 0, 'the pricing guide reads `credits > 0`, and so never reads a copy');
     const refusedPrice = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Priced loaves', description: 'x', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS, credits: 20 });
     assert(refusedPrice.status === 403, `a plain post with a price is refused here as ever (${refusedPrice.status})`);
     const smuggled = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Smuggled words', description: 'x', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS, shownPrice: PRICE });
@@ -274,7 +274,7 @@ async function main() {
     // ── 4. No way to pay ──
     console.log('\n── 4. No way to pay ──');
     const deals = () => (db.prepare('SELECT COUNT(*) AS c FROM marketplace_transactions').get() as { c: number }).c;
-    const balance = () => (db.prepare('SELECT SUM(balance) AS b FROM accounts').get() as { b: number }).b;
+    const balance = () => (db.prepare('SELECT SUM(balance_c) AS b FROM accounts').get() as { b: number }).b;
     const before = { deals: deals(), balance: balance() };
     const doors = [
         ['take it up', '/api/marketplace/posts/accept', { postId: copyId, buyerPublicKey: sam.pubKeyHex }],
@@ -286,7 +286,7 @@ async function main() {
         leaks(off.text, `Beans off, ${what}`);
     }
     // A request row put there by hand, as an older server might have left one. A made-up id would be refused by anything.
-    const handMadeRequest = (id: string, seller: string, postId = copyId) => db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+    const handMadeRequest = (id: string, seller: string, postId = copyId) => db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                 VALUES (?, ?, ?, ?, 20, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, postId, sam.pubKeyHex, seller);
     const requestState = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as { status: string }).status;
     const dropRequest = (id: string) => db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(id);

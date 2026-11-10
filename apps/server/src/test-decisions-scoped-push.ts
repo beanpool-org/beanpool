@@ -36,18 +36,18 @@ const DAY = 86400_000;
 
 function makeMember(callsign: string): string {
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`)
         .run(pk, callsign, new Date(Date.now() - 30 * DAY).toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)').run(pk);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)').run(pk);
     return pk;
 }
 
 function makeEnterprise(name: string, keepers: string[], balance: number): string {
     const ent = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, lifecycle, paused, purpose)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, lifecycle, paused, purpose)
                 VALUES (?, ?, ?, 'active', 1, 0, 0, 'ongoing', 0, 'A test enterprise')`)
         .run(ent, name, new Date(Date.now() - 20 * DAY).toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(ent, balance);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(ent, balance);
     keepers.forEach((k, i) => {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, ?, ?)')
             .run(ent, k, i === 0 ? 'lead' : 'keeper', new Date(Date.now() - (10 - i) * DAY).toISOString());

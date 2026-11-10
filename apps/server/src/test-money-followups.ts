@@ -68,7 +68,7 @@ function makeMember(callsign: string, beans: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
     createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
     return id;
@@ -113,8 +113,8 @@ async function adminPost(urlPath: string, body: unknown, as: Record<string, stri
 }
 
 const bal = (pk: string): number => r4(getBalance(pk).balance);
-const rowBalance = (pk: string): unknown => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: unknown } | undefined)?.balance;
-const txRow = (id: string) => db.prepare('SELECT status, credits, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: unknown; hours: number | null } | undefined;
+const rowBalance = (pk: string): unknown => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: unknown } | undefined)?.balance;
+const txRow = (id: string) => db.prepare('SELECT status, amount_c, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: unknown; hours: number | null } | undefined;
 const dealsOn = (postId: string): number => (db.prepare('SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ?').get(postId) as { n: number }).n;
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 220)}`;
 const QUANTITY_REFUSAL = /^The (final )?quantity must be a number from 0\.01 to 10000$/;
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     approvePostRequest(kaleDeal.id, seller.pk, { authSigner: seller.pk });
     const buyerBefore = bal(buyer.pk);
     assert(bal(`escrow_${kaleDeal.id}`) === 6 && buyerBefore === 94, `the buyer's 6 Beans are held (${bal(`escrow_${kaleDeal.id}`)}, buyer ${buyerBefore})`);
-    db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(kaleDeal.id);
+    db.prepare(`UPDATE marketplace_transactions SET amount_c = 'abc' WHERE id = ?`).run(kaleDeal.id);
 
     const removal = await adminPost(`/api/local/admin/posts/${kale.id}/delete`, {});
     assert(removal.status === 200 && removal.body?.success === true, `the moderator's removal goes through (${brief(removal)})`);
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     assert(bal(buyer.pk) === 100 && rowBalance(buyer.pk) === 100, `the buyer gets the 6 Beans the escrow held back, in memory and on disk (${bal(buyer.pk)}, row ${rowBalance(buyer.pk)})`);
     assert(bal(`escrow_${kaleDeal.id}`) === 0 && rowBalance(`escrow_${kaleDeal.id}`) === 0,
         `the escrow is empty (${bal(`escrow_${kaleDeal.id}`)}, row ${rowBalance(`escrow_${kaleDeal.id}`)})`);
-    const refundRow = db.prepare('SELECT amount FROM transactions WHERE from_pubkey = ? AND to_pubkey = ?').get(`escrow_${kaleDeal.id}`, buyer.pk) as { amount: number } | undefined;
+    const refundRow = db.prepare('SELECT amount_c FROM transactions WHERE from_pubkey = ? AND to_pubkey = ?').get(`escrow_${kaleDeal.id}`, buyer.pk) as { amount: number } | undefined;
     assert(refundRow?.amount === 6, `one ledger row moves the 6 from the escrow to the buyer (${JSON.stringify(refundRow)})`);
     const report = removal.body?.refundShortfalls?.[0];
     assert(removal.body?.refundShortfalls?.length === 1 && report?.transactionId === kaleDeal.id && report?.owed === null && report?.refunded === 6,
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     const loan = createPost('offer', 'tools', 'Trailer hire', 'By the day', 2, 'daily', seller.pk)!;
     const loanDeal = acceptPost(loan.id, buyer.pk, 2);
     assert(bal(`escrow_${loanDeal.id}`) === 4, `2 days at 2 are held (${bal(`escrow_${loanDeal.id}`)})`);
-    db.prepare('UPDATE marketplace_transactions SET credits = 1e308 WHERE id = ?').run(loanDeal.id);
+    db.prepare('UPDATE marketplace_transactions SET amount_c = 1e308 WHERE id = ?').run(loanDeal.id);
     const beforeLoan = { buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${loanDeal.id}`) };
     const overflow = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: loanDeal.id, confirmerPublicKey: buyer.pk, finalHours: 4 });
     const words = String(overflow.body?.error);
@@ -362,7 +362,7 @@ async function main(): Promise<void> {
         // The row as the old accept wrote it at 5e-324 hours: credits price × 5e-324, which can only be a whole multiple
         // of 5e-324 (5e-324 at 1.49, 0 at 0.4, 1e-323 at 2.5). No rate is worked out from it.
         const rowBefore = txRow(dealId)!;
-        db.prepare('UPDATE marketplace_transactions SET hours = 5e-324, credits = ? WHERE id = ?').run(price * 5e-324, dealId);
+        db.prepare('UPDATE marketplace_transactions SET hours = 5e-324, amount_c = ? WHERE id = ?').run(price * 5e-324, dealId);
         const beforeConfirm = JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${dealId}`) });
         const tenHours = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: dealId, confirmerPublicKey: buyer.pk, finalHours: 10 });
         assert(tenHours.status === 400 && /rate per hour can't be worked out from what it holds, so nothing has moved/.test(String(tenHours.body?.error))
@@ -370,7 +370,7 @@ async function main(): Promise<void> {
             && JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${dealId}`) }) === beforeConfirm,
             `${price} Beans/h: such a row confirmed at 10 hours is refused and nothing moves, never paid at a rounded rate (${brief(tenHours)})`);
         ledgerAddsUp(`the refused confirmation at ${price}`);
-        db.prepare('UPDATE marketplace_transactions SET hours = ?, credits = ? WHERE id = ?').run(rowBefore.hours, rowBefore.credits, dealId);   // put it back
+        db.prepare('UPDATE marketplace_transactions SET hours = ?, amount_c = ? WHERE id = ?').run(rowBefore.hours, rowBefore.credits, dealId);   // put it back
 
         // A good final quantity, " 3 " as text, pays 3 hours at the deal's own rate.
         const buyerBefore = bal(buyer.pk), sellerBefore = bal(seller.pk);
@@ -445,7 +445,7 @@ async function main(): Promise<void> {
 
     // N3: a standby with a broken balance of its own takes over. Its audit and journal say so, with the count.
     const broken = makeMember('BrokenRow', 0);
-    db.prepare(`UPDATE accounts SET balance = 'abc' WHERE public_key = ?`).run(broken.pk);
+    db.prepare(`UPDATE accounts SET balance_c = 'abc' WHERE public_key = ?`).run(broken.pk);
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     /** A take-over's journal at `restarting`, and its audit pending, as the restart leaves them. */
     const restartingTakeover = () => {
@@ -477,7 +477,7 @@ async function main(): Promise<void> {
     // null. The audit's words called null.toFixed and the take-over stopped at `restarting`. (A real two-process
     // take-over: test-takeover-infinite-balance.)
     const infinite = makeMember('InfiniteRow', 0);
-    db.prepare('UPDATE accounts SET balance = 9e999 WHERE public_key = ?').run(infinite.pk);
+    db.prepare('UPDATE accounts SET balance_c = 9e999 WHERE public_key = ?').run(infinite.pk);
     restartingTakeover();
     const boot2 = resumeTakeoverAtBoot();
     const record2 = getLocalConfig().lastPromotionAudit as any;

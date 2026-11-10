@@ -48,16 +48,16 @@ function makeIdentity(callsign: string, balance: number, homeNodeUrl?: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     // earned_credit > 0 ⇒ activated (granted-credit lane), so the send gate is open.
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url)
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 200, ?)`
     ).run(pubKeyHex, callsign, homeNodeUrl ?? null);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`)
         .run(pubKeyHex, balance);
     return { pubKeyHex, privateKey };
 }
 
 const balanceOf = (pk: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
 
 async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex: string; privateKey: crypto.KeyObject }, body?: any) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);

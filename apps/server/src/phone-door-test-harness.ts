@@ -171,13 +171,13 @@ async function main(): Promise<void> {
             const hex = (n: number) => crypto.randomBytes(n).toString('hex');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
                 .run(pk, `Working ${pk.slice(0, 4)}`, new Date(Date.now() - 30 * 86_400_000).toISOString());
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             if (Number(beans) > 0) transfer('genesis', pk, Number(beans), 'seed', 'direct', true);
             const entry = hex(16);
             const debtId = hex(16);
             db.prepare('INSERT INTO names_entries (id, ciphertext, key_id, created_by) VALUES (?, ?, ?, ?)').run(entry, 'sealed:' + hex(24), hex(32), 'fixture');
             db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)').run(hex(16), pk, entry, 'fixture');
-            db.prepare(`INSERT INTO names_debts (id, entry_id, amount, reason, removed_at, repaying_pubkey) VALUES (?, ?, ?, 'account_deleted', ?, ?)`)
+            db.prepare(`INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at, repaying_pubkey) VALUES (?, ?, ?, 'account_deleted', ?, ?)`)
                 .run(debtId, entry, Number(owed), new Date().toISOString(), pk);
             return debtId;
         },
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
         },
         debt: ({ key, debtId }: { key?: string; debtId?: string }) => ({
             balance: getBalance(String(key)).balance,
-            record: db.prepare('SELECT amount, repaid, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
+            record: db.prepare('SELECT amount_c, repaid_c, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
             links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),
         members: ({ members }: { members?: { key: string; callsign: string }[] }) => {
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
             for (const m of members ?? []) {
                 db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
                     .run(String(m.key), String(m.callsign), joined);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(String(m.key));
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(String(m.key));
             }
             return (members ?? []).length;
         },
@@ -222,13 +222,13 @@ async function main(): Promise<void> {
             const pk = String(key);
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
                 .run(pk, String(callsign ?? `Member ${pk.slice(0, 4)}`), new Date(Date.now() - 30 * 86_400_000).toISOString());
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             return area ? setMemberArea(pk, area) : null;
         },
         area: ({ key, area }: { key?: string; area?: { lat: number; lng: number } | null }) => setMemberArea(String(key), area ?? null),
         listings: ({ rows }: { rows?: Array<{ id: string; author: string; lat: number | null; lng: number | null; type?: string; at?: string }> }) => {
             const now = new Date().toISOString();
-            const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+            const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active,
                                        created_at, updated_at, lat, lng) VALUES (?, ?, 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
             db.transaction(() => {
                 for (const r of rows ?? []) insert.run(r.id, r.type ?? 'offer', `Listing ${r.id}`, r.author, r.at ?? now, r.at ?? now, r.lat, r.lng);
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
             return true;
         },
         deal: ({ post, buyer, seller, status, at }: { post?: string; buyer?: string; seller?: string; status?: string; at?: string }) => {
-            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                         VALUES (?, ?, ?, ?, 5, ?, ?)`).run(`deal-${String(post)}`, String(post), String(buyer), String(seller), String(status), at ?? new Date().toISOString());
             bumpPostsVersion();
             return true;

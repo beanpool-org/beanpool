@@ -133,7 +133,7 @@ async function main(): Promise<void> {
     for (const [k, name] of [[owner2, 'Ottilie'], [owner3, 'Moss']] as const) {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'inv-test')`).run(k.pub, name, owner.pub);
-        db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         grantNodeRole(k.pub, 'owner', 'SYSTEM');
     }
 

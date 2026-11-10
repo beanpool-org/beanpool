@@ -110,7 +110,7 @@ async function main() {
     for (const [kp, callsign] of [[adam, 'Adam'], [mo, 'Mo'], [dee, 'Dee']] as const) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(kp.pubKeyHex, callsign, new Date().toISOString(), olive.pubKeyHex, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
     }
     assert(nodeRoleOf(olive.pubKeyHex) === 'owner' && nodeRoleOf(adam.pubKeyHex) === null, 'Olive is the owner; Adam starts with no role');
     grantNodeRole(adam.pubKeyHex, 'admin', 'owner:password');

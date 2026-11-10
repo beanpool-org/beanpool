@@ -74,10 +74,10 @@ function giveEarnedCredit(pubkey: string, targetEarned: number) {
         const now = new Date().toISOString();
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, now);
         setMemberPhoto(db, peerKey, 'avatar');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
         const pid = `post-ec-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-ec-${crypto.randomUUID()}`, pid, pubkey, peerKey, tradeAmount);
         vNeeded -= tradeAmount;
     }
 }
@@ -91,7 +91,7 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
         VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, callsign, now, now);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
     if (earnedCredit > 0) {
         giveEarnedCredit(pubKeyHex, earnedCredit);
     }
@@ -256,7 +256,7 @@ async function main() {
     adminAssignTreasuryOperator(entOther, applicant2.pubKeyHex, 'admin');
     // Directly insert pledge for applicant2 in entOther
     db.prepare(`
-        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
         VALUES (?, ?, ?, ?, ?, NULL)
     `).run(crypto.randomUUID(), applicant2.pubKeyHex, entOther, 30, new Date().toISOString());
 
@@ -438,10 +438,10 @@ async function main() {
     const oldLead = makeIdentity('OldLead', 100);
     adminAssignTreasuryOperator(succEnt, oldLead.pubKeyHex, 'admin');
     // The figure they joined with (bindApprovedKeeper writes it beside the pledge rows), as when they joined pledging 30.
-    db.prepare("UPDATE treasury_operators SET role = 'lead', backing = 30 WHERE treasury_pubkey = ? AND member_pubkey = ?").run(succEnt, oldLead.pubKeyHex);
+    db.prepare("UPDATE treasury_operators SET role = 'lead', backing_c = 30 WHERE treasury_pubkey = ? AND member_pubkey = ?").run(succEnt, oldLead.pubKeyHex);
     // Add backing pledge for oldLead
     db.prepare(`
-        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
         VALUES (?, ?, ?, 30, ?, NULL)
     `).run(crypto.randomUUID(), oldLead.pubKeyHex, succEnt, new Date().toISOString());
 
@@ -536,11 +536,11 @@ async function main() {
     assert(voteRes.proposal.votesCount === 2, '2 votes recorded');
 
     // 2.5 Verify old lead becomes ordinary keeper AND keeps their backing
-    const updatedOldLead = db.prepare("SELECT role, backing FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(succEnt, oldLead.pubKeyHex) as any;
+    const updatedOldLead = db.prepare("SELECT role, backing_c FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(succEnt, oldLead.pubKeyHex) as any;
     assert(updatedOldLead.role === 'keeper', 'Old lead role is now ordinary keeper');
     assert(updatedOldLead.backing === 30, 'Old lead keeps backing amount in treasury_operators');
 
-    const oldLeadPledge = db.prepare("SELECT amount, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ?").get(succEnt, oldLead.pubKeyHex) as any;
+    const oldLeadPledge = db.prepare("SELECT amount_c, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ?").get(succEnt, oldLead.pubKeyHex) as any;
     assert(oldLeadPledge.amount === 30 && oldLeadPledge.released_at === null, 'Old lead pledge is still active in enterprise_pledges');
 
     // Verify candidate became lead keeper

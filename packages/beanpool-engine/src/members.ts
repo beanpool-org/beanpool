@@ -355,7 +355,7 @@ export interface DirectoryRow {
     photo_inline?: number;
 }
 
-const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, archetype, is_treasury';
+const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit_c, archetype, is_treasury';
 
 /** DIRECTORY_COLUMNS, and photo_inline while the old `avatar_url` column is there (DirectoryRow). */
 function directoryColumns(db: Db): string {

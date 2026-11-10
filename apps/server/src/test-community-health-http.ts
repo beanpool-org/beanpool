@@ -76,7 +76,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(200 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
     const vic = makeMember('Vicenza');    // confirmed long ago, steps back in the 14 days, 800 in debit on a 200 line
     const zed = makeMember('Zephyrine');  // confirmed, steps back after the start, 800 in debit on a 200 line
     const wes = makeMember('Wesley');     // confirmed, steps back within their line, 100 in debit on a 200 line
-    const ordinaryLine = (m: Id, beans: number) => db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(beans, m.pk);
+    const ordinaryLine = (m: Id, beans: number) => db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(beans, m.pk);
     for (const m of [vic, zed, wes]) ordinaryLine(m, 200);
     for (const m of [kim, una, lea, neo, ned, ugo, rex, tia, vic, zed, wes]) createPost('offer', 'produce', `${m.name} mends things`, 'Repairs', 10, 'fixed', m.pk);
     const kimEntry = confirm(kim, ada);
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
     confirm(wes, ada);
     // A member who left owing 300: the open record on their entry (engine/names-debts.ts).
     const goneEntry = crypto.randomBytes(16).toString('hex');
-    db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at) VALUES (?, ?, 300, 'removed', ?)").run('debt-gone', goneEntry, ago(10 * DAY));
+    db.prepare("INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at) VALUES (?, ?, 300, 'removed', ?)").run('debt-gone', goneEntry, ago(10 * DAY));
     const owner = ownerSessionHeaders();
     const health = (who: Id | null) => call('GET', who, '/api/names/health');
     const exceptions = (who: Id | null) => call('GET', who, '/api/names/health/exceptions');
@@ -403,7 +403,7 @@ async function main(): Promise<void> {
     assert(getBalance(vic.pk).floor === -1200, `confirmed again, she holds the known floor (${getBalance(vic.pk).floor})`);
     assert((await call('GET', vic, '/api/community/me')).body?.confirmedAt === confirmedRow(vic).seconded_at, 'her confirmedAt is new, so her app shows the card again');
     // Her limit set under what she owes, so that "back within it" can't take the old step-back off the list on its own.
-    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 100, 0, ?)").run(vic.pk, ada.pk);
+    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, 100, 0, ?)").run(vic.pk, ada.pk);
     const vicLines = ((await exceptions(ada)).body?.exceptions ?? []).filter((e: any) => e.memberPubkey === vic.pk);
     assert(getBalance(vic.pk).floor === -300 && vicLines.length === 1 && !vicLines[0].reasons.includes('stepped_back_owing'),
         `owing past even that, she is one line, read as confirmed: the step-back before it is over (${JSON.stringify(vicLines)})`);
@@ -415,7 +415,7 @@ async function main(): Promise<void> {
     const louEntry = confirm(lou, ada);
     assert((await stepBack(lou)).status === 200, 'Louisa steps back');
     dropNamesListHoldOf(lou.pk, 'account_deleted', -350);
-    assert((db.prepare("SELECT amount, reason FROM names_debts WHERE entry_id = ? AND status = 'open'").get(louEntry) as any)?.amount === 350,
+    assert((db.prepare("SELECT amount_c, reason FROM names_debts WHERE entry_id = ? AND status = 'open'").get(louEntry) as any)?.amount === 350,
         'and leaves owing 350: the debt note goes on the entry she stepped back from, as if she had stayed confirmed');
     const mae = makeMember('Maelys');
     const maeEntry = confirm(mae, ada);
@@ -428,7 +428,7 @@ async function main(): Promise<void> {
     // A work-off ends with the step-back, as with an admin's revoke: the debt stays open on the entry, with nobody repaying.
     const wyn = makeMember('Wynifred');
     const wynEntry = confirm(wyn, ada);
-    db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at, repaying_pubkey, work_off_confirmation_id) VALUES ('debt-wyn', ?, 40, 'removed', ?, ?, ?)")
+    db.prepare("INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at, repaying_pubkey, work_off_confirmation_id) VALUES ('debt-wyn', ?, 40, 'removed', ?, ?, ?)")
         .run(wynEntry, ago(DAY), wyn.pk, confirmedRow(wyn).id);
     assert((await stepBack(wyn)).status === 200, 'Wynifred, working a debt off, steps back');
     const wynDebt = db.prepare("SELECT status, repaying_pubkey, work_off_confirmation_id FROM names_debts WHERE id = 'debt-wyn'").get() as any;
@@ -710,8 +710,8 @@ async function main(): Promise<void> {
     const washB9 = makeMember('Washertwo');
     for (const [buyer, seller] of [[washA9.pk, washB9.pk], [washB9.pk, washA9.pk]]) {
         const postId = 'wash9-post-' + crypto.randomBytes(4).toString('hex');
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', 600, ?, 'completed')").run(postId, seller);
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 600, 'completed', ?)")
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', 600, ?, 'completed')").run(postId, seller);
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, 600, 'completed', ?)")
             .run('wash9-' + crypto.randomBytes(4).toString('hex'), postId, buyer, seller, new Date().toISOString());
     }
     clearWashTradingCache();
@@ -788,7 +788,7 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM abuse_reports WHERE id = ?').run(reportId9);
     // An escrow left stuck by a member's removal on an older node: reading the list is a look, logged like the disputes.
     // It gets a line of its own (stranded_escrows_read), so the log says which view the admin opened.
-    db.prepare("INSERT INTO accounts (public_key, balance) VALUES ('escrow_t9-stranded', -5)").run();
+    db.prepare("INSERT INTO accounts (public_key, balance_c) VALUES ('escrow_t9-stranded', -5)").run();
     const strandedBefore9 = logRows();
     const stranded9 = await call('GET', null, '/api/local/admin/stranded-escrows', undefined, adaSession);
     const strandedLine9 = lastLines(1)[0];
@@ -801,7 +801,7 @@ async function main(): Promise<void> {
     assert(Object.keys(stats9).length > 0 && Object.values(stats9).every((s) => !('deals' in s) && !('volume' in s) && !('cancelled' in s))
         && typeof stats9[kim.pk]?.posts === 'number' && typeof stats9[kim.pk]?.messages === 'number',
         `member stats carry no member's trades (deals, volume, cancelled), only their posts and messages (${JSON.stringify(stats9[kim.pk])})`);
-    const sums9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+    const sums9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_c ELSE 0 END), 0), 2) AS volume,
         SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
     const totals9 = data9.body?.tradeTotals;
     assert(totals9 && totals9.deals === (sums9.deals ?? 0) && totals9.volume === sums9.volume && totals9.cancelled === (sums9.cancelled ?? 0),
@@ -848,7 +848,7 @@ async function main(): Promise<void> {
         && ((panel9.body?.log ?? []) as any[]).every((l) => ['exceptions_opened', 'offboard_preview', 'offboard_settled'].includes(l.action)),
         `the looks at trades and alerts are in their own list beside the balance looks, in the panel the owner and admins read (${panel9.status})`);
     // 100 alert reads by different admins can't push a balance look out of the balance list (review r4177560410).
-    db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey, at) VALUES ('t9-balance-look', ?, 'offboard_preview', ?, ?)").run(ada.pk, una.pk, ago(DAY));
+    db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey, at) VALUES ('t9-balance_c-look', ?, 'offboard_preview', ?, ?)").run(ada.pk, una.pk, ago(DAY));
     const flood9 = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, 'alerts_read', ?)");
     for (let i = 0; i < 100; i++) flood9.run(`t9-flood-${i}`, `actor-${i}`, bea.pk);
     await call('POST', null, '/api/local/admin/data', {}, adaSession);
@@ -879,7 +879,7 @@ async function main(): Promise<void> {
     const ivy = makeMember('Ivy');
     const jon = makeMember('Jonquil');
     const stall = createPost('offer', 'produce', 'Jonquil\'s jam', 'Preserves', 5, 'fixed', jon.pk)!;
-    const trade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, dispute_resolution)
+    const trade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, dispute_resolution)
                               VALUES (?, ?, ?, ?, 5, ?, ?, ?)`);
     trade.run('t9-done', stall.id, ivy.pk, jon.pk, 'completed', ago(20 * DAY), null);
     trade.run('t9-cancelled', stall.id, ivy.pk, jon.pk, 'cancelled', ago(20 * DAY), null);
@@ -901,7 +901,7 @@ async function main(): Promise<void> {
     // With finished and cancelled trades on the books (Ivy and Jonquil's), the totals still count each trade once, and
     // neither member's stats carry them.
     const dataT9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
-    const sumsT9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+    const sumsT9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_c ELSE 0 END), 0), 2) AS volume,
         SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
     const totT9 = dataT9.body?.tradeTotals;
     const statsT9 = (dataT9.body?.memberStats ?? {}) as Record<string, Record<string, unknown>>;

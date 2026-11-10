@@ -51,7 +51,7 @@ async function child(): Promise<void> {
             se.seedGenesisMember(anna, 'Anna');
             db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             se.grantNodeRole(ben, 'admin', anna);
             // Paid as a real grant is (payFromCommons): transfer() out of COMMONS_POOL made the Beans from nowhere, its row
             // written back from the pot, which a standby's faithful copy now shows its audit.

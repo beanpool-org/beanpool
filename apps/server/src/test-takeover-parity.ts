@@ -268,10 +268,10 @@ async function child(): Promise<void> {
          * An old bug's drift, as a raw write, so the community can accept a non-zero audit baseline (the test node's -9.82
          * kind). The in-memory ledger is re-read after it, as db.ts's raw writes do.
          */
-        drift: async (a: { publicKey: string; amount: number }) => {
+        drift: async (a: { publicKey: string; amount_c: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.amount, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.amount_c, a.publicKey);
             reconcileLedgerFromDb();
             return true;
         },

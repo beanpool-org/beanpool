@@ -261,7 +261,7 @@ async function main(): Promise<void> {
         });
 
         await step('6. a balance planted on S: a copy that is no seed is refused by the conservation guard, S unchanged', async () => {
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 7 WHERE public_key = ?', args: [ann.pk] });
             await standby.send('checkpoint');
             const before = await snapS();
             const opened = px.opened.length;
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
                 `a whole copy started the moment the last one was stopped, before that one's stager is seen gone: its staging is its own once that `
                 + `stager has exited, and its first page reaches its stager; stopped in turn, it goes (${JSON.stringify(again)}; before: the stopped `
                 + 'copy\'s exit deleted the next one\'s staging, which failed at its first page, ENOENT)');
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c - 7 WHERE public_key = ?', args: [ann.pk] });
             const p6b = await wholeCopy();
             assert(p6b.ok === true && p6b.staged === true && (await exactNow()).length === 0, `the plant gone, the next lands (${JSON.stringify(p6b)})`);
         });
@@ -604,7 +604,7 @@ async function main(): Promise<void> {
                 sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${many})
                       INSERT INTO members (public_key, callsign, updated_at) SELECT lower(hex(randomblob(32))), 'Many ' || i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
             });
-            await main.send('sql', { sql: `INSERT INTO accounts (public_key, balance) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'` });
+            await main.send('sql', { sql: `INSERT INTO accounts (public_key, balance_c) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'` });
             const w16 = await wholeCopy();
             const st16 = await standby.send('staging');
             require_(w16.ok === true && w16.staged === true && st16.previous, `S takes a whole copy of M's ${many} more members, swapped in, the old database kept (${JSON.stringify({ w16, st16 })})`);

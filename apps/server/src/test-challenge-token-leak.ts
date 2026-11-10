@@ -43,7 +43,7 @@ const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 async function call(method: 'GET' | 'POST', path: string, body?: unknown) {

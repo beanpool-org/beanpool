@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     check(boot(dir) === stamp, '15. and a boot of a process of its own, on the same data dir');
 
     // ── 4. nothing but node_config ──
-    db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 123.45, 1)").run(A);
+    db.prepare("INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 123.45, 1)").run(A);
     const accounts = () => JSON.stringify(db.prepare('SELECT * FROM accounts ORDER BY public_key').all());
     const wereAccounts = accounts();
     const changesBefore = (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;

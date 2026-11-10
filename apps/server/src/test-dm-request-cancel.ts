@@ -89,7 +89,7 @@ function member(name: string): Id {
                 VALUES (?, ?, ?, ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, iso(Date.now() - 30 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     putPushTokenRow(id.pk, tokenOf(id), 'android');
     return id;
 }

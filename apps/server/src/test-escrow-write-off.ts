@@ -76,12 +76,12 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
 function sumBalances(): number {
-    return (db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s as number;
+    return (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s as number;
 }
 
 /** Everything a refused write-off must leave exactly as it was. */
 function ledgerState(): string {
-    const rows = db.prepare(`SELECT public_key, balance FROM accounts ORDER BY public_key`).all();
+    const rows = db.prepare(`SELECT public_key, balance_c FROM accounts ORDER BY public_key`).all();
     const txCount = (db.prepare(`SELECT COUNT(*) AS c FROM transactions`).get() as any).c;
     const memory = (db.prepare(`SELECT public_key FROM accounts WHERE public_key LIKE 'escrow_%' ORDER BY public_key`).all() as any[])
         .map(r => [r.public_key, ledger.getAccount(r.public_key).balance]);
@@ -98,7 +98,7 @@ type Keypair = ReturnType<typeof makeKeypair>;
 function addMember(pubkey: string, callsign: string, invitedBy: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(pubkey, callsign, new Date().toISOString(), invitedBy, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     ledger.initializeGenesisAccount(pubkey);
 }
 
@@ -123,15 +123,15 @@ function seedEscrow(balance: number, counterparty: string, tradeStatus: string |
     const escrowId = `escrow_${tradeId}`;
     db.transaction(() => {
         if (tradeStatus) {
-            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                         VALUES (?, ?, ?, ?, ?, ?, '2026-05-14T09:30:00.000Z', ?)`)
                 .run(tradeId, `legacy-post-${tradeId.slice(0, 8)}`, counterparty, seller, Math.abs(balance), tradeStatus,
                     tradeStatus === 'cancelled' ? '2026-09-20T11:06:43.000Z' : null);
         }
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(escrowId, balance);
-        db.prepare(`UPDATE accounts SET balance = balance - ? WHERE public_key = ?`).run(balance, counterparty);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(escrowId, balance);
+        db.prepare(`UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?`).run(balance, counterparty);
         if (balance < 0) {
-            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, 0, ?, ?)`)
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, 0, ?, ?)`)
                 .run(crypto.randomUUID(), escrowId, counterparty, -balance, 'Escrow refund for removed post', '2026-09-20T11:06:43.000Z');
         }
     })();
@@ -153,7 +153,7 @@ function setCommonsTo(target: number, funder: string, sink: string): void {
 }
 
 function escrowRow(escrowId: string): number | null {
-    const row = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(escrowId) as any;
+    const row = db.prepare(`SELECT balance_c FROM accounts WHERE public_key = ?`).get(escrowId) as any;
     return row ? row.balance : null;
 }
 
@@ -240,7 +240,7 @@ async function main() {
     assert(ledger.getAccount(ten.escrowId).balance === 0 && escrowRow(ten.escrowId) === 0, 'the -10 escrow is at exactly 0, in memory and on disk');
 
     assert(near(getCommonsBalanceExact(), -26.68), `the Commons dropped by exactly 15, to -26.68 (${getCommonsBalanceExact()})`);
-    const commonsRow = (db.prepare(`SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'`).get() as any).balance;
+    const commonsRow = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'`).get() as any).balance;
     assert(near(commonsRow, -26.68), `and its persisted row agrees (${commonsRow})`);
     assert(near(sumBalances(), sumBefore), `SUM(balances) is unchanged (${sumBefore} → ${sumBalances()})`);
 
@@ -379,12 +379,12 @@ async function main() {
     }
     // Memory and disk disagreeing: paying |memory| would land the row elsewhere than 0, so it is refused.
     {
-        db.prepare(`UPDATE accounts SET balance = -6.5 WHERE public_key = ?`).run(hole.escrowId);
+        db.prepare(`UPDATE accounts SET balance_c = -6.5 WHERE public_key = ?`).run(hole.escrowId);
         const before = ledgerState();
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
         assert(!res.ok && res.status === 409 && res.code === 'ledger_mismatch', `memory and disk disagreeing: refused (${!res.ok && res.code})`);
         assert(ledgerState() === before, 'the ledger is untouched');
-        db.prepare(`UPDATE accounts SET balance = -6 WHERE public_key = ?`).run(hole.escrowId);
+        db.prepare(`UPDATE accounts SET balance_c = -6 WHERE public_key = ?`).run(hole.escrowId);
     }
     // Control characters in a reason are flattened before they reach the memo.
     {

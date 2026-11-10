@@ -172,7 +172,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[admin, 'Adam'], [moderator, 'Mo']]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
@@ -520,7 +520,7 @@ async function main(): Promise<void> {
             } },
         { what: 'a state.db carrying a trigger this server does not have', status: 400, words: /does not have \(trigger "mint_on_every_update"\)/,
             archive: () => plainArchive(databaseCopy((h) => h.exec(
-                `CREATE TRIGGER mint_on_every_update AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END;`))) },
+                `CREATE TRIGGER mint_on_every_update AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END;`))) },
     ];
     for (const c of refusals) {
         const archive = c.archive();
@@ -542,7 +542,7 @@ async function main(): Promise<void> {
     // ── 5. An owner's restore; a rewritten trigger does not survive it ───────────────────────────────────────────
     console.log("\n— 5. an owner's restore —");
     const realTrigger = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(TRIGGER) as { sql: string }).sql;
-    const rewritten = `CREATE TRIGGER ${TRIGGER} AFTER UPDATE ON posts BEGIN UPDATE accounts SET balance = balance + 1000; END`;
+    const rewritten = `CREATE TRIGGER ${TRIGGER} AFTER UPDATE ON posts BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END`;
     const backup = plainArchive(databaseCopy((h) => {
         h.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'RestoredMarker', ?, ?, 'TEST')`)
             .run(pubkey(), new Date().toISOString(), owner);

@@ -134,7 +134,7 @@ async function runChild(): Promise<void> {
             insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
             setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
             // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
         }
         reconcileLedgerFromDb();
     }
@@ -150,11 +150,11 @@ async function runChild(): Promise<void> {
     const link = ensureFederationLink(seed.peer.peerId, 'Faraway', createTreasury, seed.link.keeper)!;
     if (first) {
         setCommissionCeiling(seed.peer.peerId, 500);
-        db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), link.treasuryPubkey);
+        db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), link.treasuryPubkey);
         // The seller is a member of the other community (a visitor's row with its home), and the listing came from there.
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, home_node_url, is_visitor) VALUES (?, 'Far Seller', ?, ?, 1)`)
             .run(seed.link.seller, ago(7 * DAY), seed.peer.url);
-        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, origin_node)
+        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, origin_node)
                     VALUES (?, 'offer', 'other', 'A far thing', 'test', 1, ?, 'active', 1, ?)`).run(seed.link.postId, seed.link.seller, seed.peer.url);
         reconcileLedgerFromDb();
     }
@@ -211,7 +211,7 @@ function startNode(dataDir: string, seed: Seed): Promise<Node> {
 
 /** Outbound settlements under a key this node did not make (`xn-` or `xc-` and a 36-character UUID). */
 const SQL_FOREIGN_KEYS = `
-SELECT s.key, s.state, s.buyer_pubkey, s.amount, s.fee, s.failure_reason, s.created_at
+SELECT s.key, s.state, s.buyer_pubkey, s.amount_c, s.fee_c, s.failure_reason, s.created_at
 FROM settlements s
 WHERE s.direction = 'outbound'
   AND NOT (length(s.key) = 39 AND substr(s.key, 1, 3) IN ('xn-', 'xc-'))
@@ -219,7 +219,7 @@ ORDER BY s.created_at`;
 
 /** What each of those moved, and from or to whose escrow: every ledger row naming its key, or its escrow. */
 const SQL_FOREIGN_KEY_MOVES = `
-SELECT s.key, t.id, t.from_pubkey, t.to_pubkey, t.amount, t.memo, t.timestamp
+SELECT s.key, t.id, t.from_pubkey, t.to_pubkey, t.amount_c, t.memo, t.timestamp
 FROM settlements s
 JOIN transactions t ON t.from_pubkey = 'escrow_' || s.key OR t.to_pubkey = 'escrow_' || s.key
 WHERE s.direction = 'outbound'
@@ -228,7 +228,7 @@ ORDER BY s.key, t.timestamp`;
 
 /** A projects row under an enterprise's key whose creator is not one of that enterprise's keepers (#1329's last clause). */
 const SQL_PROJECT_ON_ANOTHERS_ENTERPRISE = `
-SELECT p.id, p.creator_pubkey, p.status, p.current_amount
+SELECT p.id, p.creator_pubkey, p.status, p.current_amount_c
 FROM projects p JOIN members m ON m.public_key = p.id AND m.is_treasury = 1
 WHERE p.creator_pubkey IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM treasury_operators o WHERE o.treasury_pubkey = p.id AND o.member_pubkey = p.creator_pubkey)`;
@@ -238,8 +238,8 @@ WHERE p.creator_pubkey IS NOT NULL
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /** Every account row but the COMMONS_POOL shadow, plus the live Commons. */
-const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
-const bal = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
+const bal = (pk: string) => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
 const hasAccount = (pk: string) => !!db.prepare('SELECT 1 FROM accounts WHERE public_key = ?').get(pk);
 
 function seedMember(name: string, balance: number, isTreasury = false): string {
@@ -247,7 +247,7 @@ function seedMember(name: string, balance: number, isTreasury = false): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury) VALUES (?, ?, ?, 'active', ?)`)
         .run(pk, name, ago(7 * DAY), isTreasury ? 1 : 0);
     setMemberPhoto(db, pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
     return pk;
 }
 
@@ -264,18 +264,18 @@ async function engineChecks(): Promise<void> {
     const holder = seedMember('Holder', 0);
     const shop = seedMember('Shop', 20, true);
     const project = uuid();
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Orchard', 'test', '[]', 1000, 'ACTIVE')`).run(project, holder);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, ?)').run(`escrow_${project}`, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Orchard', 'test', '[]', 1000, 'ACTIVE')`).run(project, holder);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, ?)').run(`escrow_${project}`, ledger.getCurrentEpoch());
     const bareProject = uuid();     // a project nobody has pledged to yet: no escrow account
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Hall', 'test', '[]', 1000, 'ACTIVE')`).run(bareProject, holder);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Hall', 'test', '[]', 1000, 'ACTIVE')`).run(bareProject, holder);
     const deal = uuid();
     const dealPost = uuid();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'other', 'Mowing', 'test', 4, ?, 'pending')`).run(dealPost, holder);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 4, 'pending', ?)`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'other', 'Mowing', 'test', 4, ?, 'pending')`).run(dealPost, holder);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 4, 'pending', ?)`)
         .run(deal, dealPost, buyer, holder, new Date().toISOString());
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 4, ?)').run(`escrow_${deal}`, ledger.getCurrentEpoch());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 4, ?)').run(`escrow_${deal}`, ledger.getCurrentEpoch());
     const emptyEscrow = uuid();     // an escrow account at 0: one that held Beans and paid them out
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(`escrow_${emptyEscrow}`, ledger.getCurrentEpoch());
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(`escrow_${emptyEscrow}`, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
 
     const baseline = nodeTotal();
@@ -325,7 +325,7 @@ async function engineChecks(): Promise<void> {
     // An inbound settlement's key is the peer's choice and names no account here, so it takes no id the node makes itself.
     const pulseDay = new Date('2026-08-16T05:00:00Z');
     const pulseKey = `pulse_${new Date(pulseDay.getTime() - pulseDay.getTimezoneOffset() * 60_000).toISOString().split('T')[0]}`;
-    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state)
+    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount_c, fee_c, state)
                 VALUES (?, 'inbound', ?, ?, ?, 1, 0, 'reserved')`).run(pulseKey, PEER, crypto.randomBytes(32).toString('hex'), holder);
     let pulsePost: any = null;
     let pulseError = '';
@@ -339,10 +339,10 @@ async function engineChecks(): Promise<void> {
     // A settlement made the old way, under a project's id, and the release it paid out of that project's escrow. Planted:
     // this build refuses to make one, which is the point.
     const legacy = uuid();
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Pool', 'test', '[]', 1000, 'ACTIVE')`).run(legacy, holder);
-    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state, failure_reason)
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Pool', 'test', '[]', 1000, 'ACTIVE')`).run(legacy, holder);
+    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount_c, fee_c, state, failure_reason)
                 VALUES (?, 'outbound', ?, ?, ?, 40, 0.6, 'abandoned', 'ASK_UNREACHABLE')`).run(legacy, PEER, holder, seller);
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 40.6, ?, ?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, 40.6, ?, ?)`)
         .run(uuid(), `escrow_${legacy}`, holder, `Released cross-community hold (${legacy})`, new Date().toISOString());
     const foreign = db.prepare(SQL_FOREIGN_KEYS).all() as { key: string }[];
     assert(foreign.length === 1 && foreign[0].key === legacy,
@@ -351,7 +351,7 @@ async function engineChecks(): Promise<void> {
     assert(moves.length === 1 && moves[0].from_pubkey === `escrow_${legacy}` && moves[0].amount === 40.6,
         `7. the second lists what it moved: 40.6 out of that project's escrow (${JSON.stringify(moves)})`);
     // A projects row under an enterprise's key, made by someone who does not keep it (the old crowdfund route took ids).
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Taken', 'test', '[]', 10, 'ACTIVE')`).run(shop, holder);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status) VALUES (?, ?, 'Taken', 'test', '[]', 10, 'ACTIVE')`).run(shop, holder);
     const taken = db.prepare(SQL_PROJECT_ON_ANOTHERS_ENTERPRISE).all() as { id: string }[];
     assert(taken.length === 1 && taken[0].id === shop,
         `7. the third lists a projects row made under another's enterprise (${JSON.stringify(taken.map(t => t.id))})`);
@@ -380,9 +380,9 @@ async function httpChecks(): Promise<void> {
     };
     let node = await startNode(dir, seed);
     let their = new Database(path.join(dir, 'state.db'), { readonly: true, fileMustExist: true });
-    const balOf = (pk: string) => r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+    const balOf = (pk: string) => r4((their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
     // Every row's balance, the Commons row included: nothing below moves Beans into or out of the node.
-    const total = () => r4((their.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s);
+    const total = () => r4((their.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s);
     const outbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound'`).get() as { n: number }).n;
     const postsBy = (pk: string) => (their.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(pk) as { n: number }).n;
     const call = (who: Id, urlPath: string, body: unknown) => callAt(node.base, 'POST', who, urlPath, body);
@@ -517,8 +517,8 @@ async function httpChecks(): Promise<void> {
         // whose escrow is empty (an escrow drained as in step 3, before this fix).
         const w = new Database(path.join(dir, 'state.db'));
         const pendingDeal = uuid();
-        w.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'other', 'Planted', 'test', 5, ?, 'pending')`).run(projectB, vic.pk);
-        w.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)`)
+        w.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'other', 'Planted', 'test', 5, ?, 'pending')`).run(projectB, vic.pk);
+        w.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)`)
             .run(pendingDeal, projectB, mallory.pk, vic.pk, new Date().toISOString());
         w.close();
         node = await startNode(dir, seed);

@@ -113,18 +113,18 @@ async function main() {
             .run(id.pubKeyHex, callsign, opts.status ?? 'active', `INV-${callsign.toUpperCase()}`,
                 opts.contact?.value ?? null, opts.contact?.visibility ?? null);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const listing = (owner: Id, type: 'offer' | 'need', title: string): string => {
         const id = `post-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey) VALUES (?, ?, 'other', ?, '', 0, ?)`)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES (?, ?, 'other', ?, '', 0, ?)`)
             .run(id, type, title, owner.pubKeyHex);
         return id;
     };
     /** A trade row between `buyer` and `seller` in `status`, as the escrow engine writes one. */
     const trade = (postId: string, buyer: Id, seller: Id, status: string): void => {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                     VALUES (?, ?, ?, ?, 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(crypto.randomUUID(), postId, buyer.pubKeyHex, seller.pubKeyHex, status);
     };
@@ -155,7 +155,7 @@ async function main() {
     trade(otherOffer, tradedElsewhere, owners.community, 'completed');
     // A direct Bean transfer is not a trade.
     const beansOnly = member('beansOnly');
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo) VALUES (?, ?, ?, 1, 'thanks')`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo) VALUES (?, ?, ?, 1, 'thanks')`)
         .run(crypto.randomUUID(), beansOnly.pubKeyHex, owners.tradePartners.pubKeyHex);
     // A pruned member keeps their row and can still sign, and this one did trade with the owner and was added as a
     // friend: they are no longer in the community, so they see nobody's contact.

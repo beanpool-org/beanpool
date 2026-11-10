@@ -28,20 +28,20 @@ function assert(cond: boolean, msg: string): void {
 let seq = 0;
 function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 // A COMPLETED marketplace (escrow) trade — the only thing that builds trust; credits both sides.
 // FK enforcement is on, so we back each trade with a real post (authored by the seller).
 function mtx(buyer: string, seller: string, credits: number) {
     const pid = 'post-' + (seq++);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
         .run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?,?,?,?,?, 'completed')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?,?,?,?,?, 'completed')`)
         .run('mtx-' + (seq++), pid, buyer, seller, credits);
 }
 // A direct peer-to-peer transfer (gift) — must NOT build trust.
 function tx(from: string, to: string, amount: number) {
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('t' + (seq++), from, to, amount, 'm', new Date().toISOString());
 }
 const profile = (pk: string) => getMemberTrustProfile(pk);
@@ -98,7 +98,7 @@ function main() {
 
     // ── 7. Grant lane: deepens floor (a grant activates), earnedCredit stays 0 ──
     seedMember('granted');
-    db.prepare(`UPDATE members SET earned_credit = ? WHERE public_key = ?`).run(520, 'granted');
+    db.prepare(`UPDATE members SET earned_credit_c = ? WHERE public_key = ?`).run(520, 'granted');
     const gp = profile('granted');
     assert(gp.floor === -520, `grant of 520 → floor −520 (the grant is the whole floor), got ${gp.floor}`);
     assert(gp.earnedCredit === 0 && gp.grantedCredit === 520, `grant is a separate lane (earned 0, granted 520), got earned=${gp.earnedCredit} granted=${gp.grantedCredit}`);
@@ -110,7 +110,7 @@ function main() {
     // ── 9. Send gate keys off EARNED trust (a real trade): no completed trade → can't gift; after a
     //       trade → can (and no velocity cap) ──
     seedMember('noTrade'); seedMember('rcpt');
-    db.prepare(`UPDATE accounts SET balance = 100 WHERE public_key = ?`).run('noTrade');
+    db.prepare(`UPDATE accounts SET balance_c = 100 WHERE public_key = ?`).run('noTrade');
     assert(transfer('noTrade', 'rcpt', 10, 'gift', 'direct') === null,
         'no completed trade → direct send blocked (even holding 100 beans)');
     seedMember('didTrade'); seedMember('aSeller');

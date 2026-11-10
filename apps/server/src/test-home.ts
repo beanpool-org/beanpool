@@ -204,12 +204,12 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - 90 * DAY).toISOString(), owner.pk);
     const member = (name: string, opts: { status?: string; balance?: number; earned?: number; joinedAt?: string; area?: { lat: number; lng: number } } = {}): Id => {
         const id = newId(name);
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng, earned_credit_c)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id.pk, name, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(), owner.pk,
                 `INV-${name.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null, opts.earned ?? 0);
         setMemberPhoto(db, id.pk, TINY_PNG); // the photo goes where every writer puts it (member_photos, the row's avatar_ref)
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, MONEY ? opts.balance ?? 0 : 0);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, MONEY ? opts.balance ?? 0 : 0);
         return id;
     };
     const BYRON = { lat: -28.6, lng: 153.6 };
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
 
     // Deals: Bob asks for Alice's drill (waits on her); Bob and Carol have one of their own, in progress.
     const deal = (id: string, postId: string, buyer: Id, seller: Id, status: string) =>
-        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 5, ?)')
+        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 5, ?)')
             .run(id, postId, buyer.pk, seller.pk, status);
     if (MONEY) deal('tx-home-alice', alicesOffer.id, bob, alice, 'requested');
     if (MONEY) deal('tx-home-carol', carolsBread.id, bob, carol, 'pending');
@@ -1436,9 +1436,9 @@ async function main(): Promise<void> {
             `no Beans and no deals where they are off (${cardsOf(a).join(',')})`);
         // H0b, with something to hide: a balance and a deal written behind the switches' back (the ledger "never moved"
         // is kept while Beans are configured off, config/node-profile.ts), so only the cards' own gates keep them out.
-        db.prepare('UPDATE accounts SET balance = 42.5 WHERE public_key = ?').run(alice.pk);
+        db.prepare('UPDATE accounts SET balance_c = 42.5 WHERE public_key = ?').run(alice.pk);
         se.reconcileLedgerFromDb();
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES ('tx-home-global', ?, ?, ?, 0, 'requested')")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES ('tx-home-global', ?, ?, ?, 0, 'requested')")
             .run(alicesOffer.id, bob.pk, alice.pk);
         const s = getProfileSwitches();
         const gated = await get(`/api/home?${ALL}`, alice);

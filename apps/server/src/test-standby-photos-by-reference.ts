@@ -1009,7 +1009,7 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         const { db } = await import('./db/db.js');
         db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
                     INSERT INTO members (public_key, callsign, updated_at) SELECT lower(hex(randomblob(32))), 'Many ' || i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`).run(a.n);
-        db.prepare(`INSERT INTO accounts (public_key, balance) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'`).run();
+        db.prepare(`INSERT INTO accounts (public_key, balance_c) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'`).run();
         return true;
     },
     /** Each listing photo's URL as this server hands it out with its listing (its key included). */

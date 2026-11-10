@@ -61,7 +61,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, callsign, new Date(Date.now() - 60 * DAY).toISOString());
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     }
     async function signed(method: 'GET' | 'POST', pathAndQuery: string, body: unknown, id: Id) {

@@ -48,7 +48,7 @@ function throws(fn: () => unknown, re: RegExp, msg: string) {
 }
 
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
-const bal = (k: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key=?').get(k) as any)?.balance ?? 0);
+const bal = (k: string) => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key=?').get(k) as any)?.balance ?? 0);
 
 /**
  * The whole node, as one number.
@@ -59,7 +59,7 @@ const bal = (k: string) => r4((db.prepare('SELECT balance FROM accounts WHERE pu
  */
 const nodeTotal = () => {
     const accounts = (db.prepare(
-        `SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
+        `SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
     ).get() as any).t;
     return r4(accounts + getCommonsBalanceExact());
 };
@@ -77,7 +77,7 @@ const nodeTotal = () => {
  */
 const reboot = () => {
     setCommonsBalance(0);
-    const row = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
+    const row = db.prepare("SELECT balance_c FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
     if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
     reconcileLedgerFromDb();
 };
@@ -87,7 +87,7 @@ function makeMember(callsign: string, balance: number, opts?: { treasury?: boole
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
         .run(pk, callsign, opts?.treasury ? 1 : 0);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
@@ -225,7 +225,7 @@ function main() {
     // more statements afterwards, so a failure in either is the reachable case. A trigger makes the posts
     // cancellation abort — the last statement in the transaction, and the one furthest from the ledger move.
     const stubborn = makeMember('Cannot Be Pruned', -75);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                 VALUES ('post-prune-fail', 'offer', 'food', 'Eggs', '', 1, ?, 'active')`).run(stubborn);
     db.exec(`CREATE TRIGGER t_fail_posts BEFORE UPDATE ON posts
              BEGIN SELECT RAISE(ABORT, 'simulated failure after the ledger move'); END;`);

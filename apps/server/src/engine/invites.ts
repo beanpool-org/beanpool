@@ -352,7 +352,7 @@ export function redeemInvite(
         if (earnedCredit > 0) {
             db.prepare("UPDATE members SET earned_credit_c = ? WHERE public_key = ?").run(earnedCredit, publicKey);
             const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - earnedCredit);
-            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit: ${earnedCredit})`);
+            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit_c: ${earnedCredit})`);
         }
     }
 

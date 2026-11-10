@@ -76,11 +76,14 @@ const asksForCopy = (raw: unknown): boolean => raw !== undefined && raw !== null
 
 const isListing = (type: unknown): boolean => type === 'offer' || type === 'need';
 
-/** A price as sent, in the one form it is kept: `{ beans, per }`, held as a listing's own price is. Anything else is refused. */
+/**
+ * A price as sent, in the one form it is kept: `{ price_c, per }`, whole hundredths held as a listing's own price is.
+ * Anything else (an old `{ beans }`, a float) is refused.
+ */
 function storedPrice(raw: unknown): string {
-    const { beans, per } = (raw ?? {}) as { beans?: unknown; per?: unknown };
-    if (!isListingPrice(beans) || !(POST_PRICE_TYPES as readonly unknown[]).includes(per)) throw new Error(COPY_PRICE_REFUSED);
-    return copyPriceText({ beans, per: per as (typeof POST_PRICE_TYPES)[number] });
+    const { price_c, per } = (raw ?? {}) as { price_c?: unknown; per?: unknown };
+    if (!isListingPrice(price_c) || !(POST_PRICE_TYPES as readonly unknown[]).includes(per)) throw new Error(COPY_PRICE_REFUSED);
+    return copyPriceText({ price_c, per: per as (typeof POST_PRICE_TYPES)[number] });
 }
 
 /**

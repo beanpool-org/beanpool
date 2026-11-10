@@ -25,7 +25,7 @@ async function main() {
         VALUES ('pubkey-alice', 'Alice'), ('pubkey-bob', 'Bob')
     `).run();
     db.prepare(`
-        INSERT OR IGNORE INTO accounts (public_key, balance)
+        INSERT OR IGNORE INTO accounts (public_key, balance_c)
         VALUES ('pubkey-alice', 15.5), ('pubkey-bob', 20.0)
     `).run();
 
@@ -44,13 +44,13 @@ async function main() {
 
     // 4. Set up mock pending marketplace transaction for escrow
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, credits)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, amount_c)
         VALUES ('tx-escrow-1', 'post-1', 'pubkey-bob', 'pubkey-alice', 'pending', 12.5)
     `).run();
 
     // 5. Set up mock transactions for history
     db.prepare(`
-        INSERT INTO transactions (id, timestamp, from_pubkey, to_pubkey, amount, memo)
+        INSERT INTO transactions (id, timestamp, from_pubkey, to_pubkey, amount_c, memo)
         VALUES
         ('tx-1', '2024-01-01T12:00:00Z', 'pubkey-alice', 'pubkey-bob', 5.5, 'Test, memo\nwith newline'),
         ('tx-2', '2024-01-02T12:00:00Z', 'pubkey-bob', 'pubkey-alice', 2.0, 'Second memo')

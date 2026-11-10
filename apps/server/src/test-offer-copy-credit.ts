@@ -98,10 +98,10 @@ async function main() {
     const longAgo = new Date(Date.now() - 400 * 24 * HOUR).toISOString();
     const member = (name: string, earned = 0, joinedAt = longAgo): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury, earned_credit, updated_at)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury, earned_credit_c, updated_at)
                     VALUES (?, ?, 'active', ?, 'genesis', 'TEST', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, name, joinedAt, earned);
         setMemberPhoto(db, id.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const row = (url: string, name: string) => normaliseRegistryRow({ node_id: url, shown_name: name, node_url: url, last_seen_at: new Date().toISOString(), accepting_knocks: true })!;

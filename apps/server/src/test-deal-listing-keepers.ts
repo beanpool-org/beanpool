@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury) VALUES (?, ?, ?, ?, ?, 'active', ?)`)
             .run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk, `INV-${name.toUpperCase().replace(/\W/g, '')}`, opts.treasury ? 1 : 0);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         if (beans > 0 && !(se as any).transfer('genesis', id.pk, beans, 'Seed grant', 'direct', true)) throw new Error('seed grant failed');
         if (!opts.treasury) {
             const token = `ExponentPushToken[${name}-${crypto.randomBytes(8).toString('hex')}]`;
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     for (const k of [kai, lee, sid]) keep(farm, k);
     keep(other, oli);
     db.prepare('UPDATE members SET can_operate = 0 WHERE public_key = ?').run(sid.pk);
-    db.prepare('UPDATE members SET earned_surplus = 300 WHERE public_key = ?').run(farm.pk);
+    db.prepare('UPDATE members SET earned_surplus_c = 300 WHERE public_key = ?').run(farm.pk);
     const readers = [kai, lee, mo, zoe, oli, sid];
     const keeperOf = new Map<string, string[]>();
     for (const r of readers) keeperOf.set(r.pk, await keeperOfRead(r));

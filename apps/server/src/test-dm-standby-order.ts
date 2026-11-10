@@ -58,7 +58,7 @@ function member(callsign: string): Person {
     const publicKey = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(publicKey, callsign);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(publicKey);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(publicKey);
     return { seedHex: Buffer.from(seed).toString('hex'), publicKey };
 }
 

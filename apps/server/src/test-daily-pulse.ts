@@ -138,7 +138,7 @@ async function main() {
     const peerPubkey = 'peer_test_pubkey_1234567890123456';
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
     setMemberPhoto(db, peerPubkey, 'https://example.com/avatar.jpg');
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance) VALUES (?, ?)").run(peerPubkey, 50);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance_c) VALUES (?, ?)").run(peerPubkey, 50);
 
     let requestBlocked = false;
     try {

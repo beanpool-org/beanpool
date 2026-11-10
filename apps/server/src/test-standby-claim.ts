@@ -242,7 +242,7 @@ async function main(): Promise<void> {
     const db = new Database(path.join(dirO, 'state.db'));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES (?, 'Ann', strftime('%Y-%m-%dT%H:%M:%fZ','now'), NULL, 'copied')`).run(ann.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ann.pub);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ann.pub);
     db.close();
     // By key: a row written on this connection has no callsign_fold (the node's own connection folds names).
     const recovered = await beanpool(dirO, ['recover', '--key', ann.pub], { NODE_ROLE: 'backup' });

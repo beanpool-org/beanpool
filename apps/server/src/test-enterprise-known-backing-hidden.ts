@@ -73,7 +73,7 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -83,10 +83,10 @@ function makeEnterprise(name: string, keepers: { id: Id; backing: number }[]): s
     const pk = keypair(name).pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     setMemberPhoto(db, pk, AVATAR);
     for (const k of keepers) {
-        db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, backing) VALUES (?, ?, ?)').run(pk, k.id.pk, k.backing);
+        db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, backing_c) VALUES (?, ?, ?)').run(pk, k.id.pk, k.backing);
         db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.id.pk);
     }
     clearEnterpriseFloorCache(db);
@@ -95,7 +95,7 @@ function makeEnterprise(name: string, keepers: { id: Id; backing: number }[]): s
 
 /** A keeper's own pledge of earned credit, as insertPledgeRows writes its earned part (a plain id). */
 function earnedPledge(enterprise: string, keeper: Id, amount: number): void {
-    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)')
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, ?, ?)')
         .run(crypto.randomUUID(), keeper.pk, enterprise, amount, ago(DAY));
     clearEnterpriseFloorCache(db);
 }
@@ -107,10 +107,10 @@ function giveEarnedCredit(member: Id, target: number): number {
         const amount = Math.min(valueNeeded, 400);
         const peer = `peer-${member.pk.slice(0, 8)}-${i}`;
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peer, `Peer ${i}`, ago(30 * DAY));
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peer);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peer);
         const post = `post-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', ?, ?, 'completed')`).run(post, amount, peer);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-${crypto.randomUUID()}`, post, member.pk, peer, amount);
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', ?, ?, 'completed')`).run(post, amount, peer);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-${crypto.randomUUID()}`, post, member.pk, peer, amount);
         valueNeeded -= amount;
     }
     return getMemberTrustProfile(member.pk).earnedCredit;
@@ -211,7 +211,7 @@ function assertFolded(label: string, answer: { pledges: Pledge[] }, sum: number,
  */
 type Figures = { earned: number; known: number; allowance: number; knownShare: number; spendFloor: number; usable: number; keeperFloor: number; keeperUsable: number };
 function figuresOf(enterprise: string, keeper: Id): Figures {
-    const sum = (known: boolean) => Number((db.prepare(`SELECT COALESCE(SUM(amount), 0) AS s FROM enterprise_pledges
+    const sum = (known: boolean) => Number((db.prepare(`SELECT COALESCE(SUM(amount_c), 0) AS s FROM enterprise_pledges
         WHERE enterprise = ? AND keeper = ? AND released_at IS NULL AND id ${known ? '' : 'NOT '}LIKE 'known:%'`).get(enterprise, keeper.pk) as { s: number }).s);
     clearEnterpriseFloorCache(db);
     return {
@@ -233,13 +233,13 @@ function asMainReleases(enterprise: string, keeper: Id, amount: number): Figures
     let figures: Figures | undefined;
     try {
         db.transaction(() => {
-            const all = Number((db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(enterprise, keeper.pk) as { s: number }).s);
+            const all = Number((db.prepare('SELECT COALESCE(SUM(amount_c), 0) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(enterprise, keeper.pk) as { s: number }).s);
             const known = figuresOf(enterprise, keeper).known;
             const toRelease = Math.min(amount, all);
             const knownRemaining = Math.max(0, known - toRelease);
             const at = new Date().toISOString();
             db.prepare('UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL').run(at, keeper.pk, enterprise);
-            const insert = db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)');
+            const insert = db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)');
             if (all - toRelease - knownRemaining > 0) insert.run(crypto.randomUUID(), keeper.pk, enterprise, all - toRelease - knownRemaining, at);
             if (knownRemaining > 0) insert.run(`known:${crypto.randomUUID()}`, keeper.pk, enterprise, knownRemaining, at);
             figures = figuresOf(enterprise, keeper);
@@ -281,7 +281,7 @@ async function main(): Promise<void> {
     const request = requestToJoinEnterprise(kaiCo, kai.pk, 500);
     const approved = approveKeeperRequest(request.id, ada.pk);
     assert(approved.applied && approved.backing === 500, `Ada approves Kai with 500 of backing, bound at once (${show(approved)})`);
-    const kaiKnown = db.prepare("SELECT SUM(amount) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id LIKE 'known:%' AND released_at IS NULL").get(kaiCo, kai.pk) as { s: number };
+    const kaiKnown = db.prepare("SELECT SUM(amount_c) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id LIKE 'known:%' AND released_at IS NULL").get(kaiCo, kai.pk) as { s: number };
     assert(kaiKnown.s === 500, `Kai's 500 is a known pledge (${kaiKnown.s})`);
     // And a pledge Kai chose to put in of his own earned credit, which stays his and named.
     earnedPledge(kaiCo, kai, 50);
@@ -442,7 +442,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE enterprise_keeper_changes SET applies_at = ? WHERE enterprise_pubkey = ? AND member_pubkey = ?').run(ago(60_000), shed, zoe.pk);
     await pageAs(mo, shed);
     const moAfter = await pageAs(mo, shed);
-    const zoeSplit = db.prepare("SELECT id LIKE 'known:%' AS known, SUM(amount) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL GROUP BY 1 ORDER BY 1")
+    const zoeSplit = db.prepare("SELECT id LIKE 'known:%' AS known, SUM(amount_c) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL GROUP BY 1 ORDER BY 1")
         .all(shed, zoe.pk) as { known: number; s: number }[];
     assert(!!keeperOf(moAfter.keepers, zoe) && show(zoeSplit) === show([{ known: 0, s: zoeEarned }, { known: 1, s: zoeKnown }]),
         `the window ends: Zoe keeps Shed, with ${zoeEarned} named and ${zoeKnown} known (${show(zoeSplit)})`);
@@ -494,7 +494,7 @@ async function main(): Promise<void> {
     // Five live offers each, so Barn's and Zed's usable floors read their whole lines, not the offer bands' first steps.
     for (const author of [barn, zed.pk]) {
         for (let i = 0; i < 5; i++) {
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'goods', 'goods', 10, ?, 'active', 1)`)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'goods', 'goods', 10, ?, 'active', 1)`)
                 .run(`post-${crypto.randomUUID()}`, author);
         }
     }
@@ -505,7 +505,7 @@ async function main(): Promise<void> {
         `Zed pledges 40, then 260: ${zedEarned} of it named, ${300 - zedEarned} known (${zedFirst.status} ${zedTopUp.status} ${show(zedStart)})`);
     // The top-up wrote a named row and a known row in one write: the residual Rule 3 records ("What folding cannot hide").
     console.log(`  (residual, Rule 3) the 260 wrote a named row beside its known part, at one moment: ${show(db.prepare(
-        "SELECT id LIKE 'known:%' AS known, amount, pledged_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? ORDER BY rowid").all(barn, zed.pk))}`);
+        "SELECT id LIKE 'known:%' AS known, amount_c, pledged_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? ORDER BY rowid").all(barn, zed.pk))}`);
 
     /** Zed's named pledges to Barn as Una reads them on the page and the pledges route, his earned rows as stored, the fold. */
     const zedAsUnaReads = async () => {
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
         return {
             detail: (reads.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
             pledges: (reads.pledges.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
-            stored: db.prepare("SELECT id, amount, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id NOT LIKE 'known:%' ORDER BY rowid").all(barn, zed.pk),
+            stored: db.prepare("SELECT id, amount_c, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id NOT LIKE 'known:%' ORDER BY rowid").all(barn, zed.pk),
             fold: folded(reads.detail.pledges)[0]?.amount ?? 0,
         };
     };

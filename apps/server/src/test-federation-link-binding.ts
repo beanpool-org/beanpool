@@ -53,7 +53,7 @@ function makeMember(callsign: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, callsign);
     setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
     return pubkey;
 }
 

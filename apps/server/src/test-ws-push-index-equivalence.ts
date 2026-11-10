@@ -181,7 +181,7 @@ async function main(): Promise<void> {
         if (chosen || !party || party === p.author_pubkey || rand() < 0.5) {
             party = chosen ?? (rand() < 0.5 ? (pick(nearMembers(id)) ?? pick(members)) : pick(members));
             if (party === p.author_pubkey) return 0;
-            db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)')
+            db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 1, ?)')
                 .run(seededUuid(), id, party, p.author_pubkey, rand() < 0.5 ? 'requested' : 'pending');
         }
         return addBlocks(party, [p.author_pubkey]).length;

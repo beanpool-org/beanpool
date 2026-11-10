@@ -495,7 +495,7 @@ async function main(): Promise<void> {
         const pk = crypto.randomBytes(32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, 'TEST')`)
             .run(pk, callsign, new Date().toISOString(), owner);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     };
     join('MarkerOne');
     db.pragma('foreign_keys = OFF');
@@ -786,9 +786,9 @@ async function main(): Promise<void> {
                 `8. beanpool restore --unlocked of a v1.2.18 backup (no node_roles): refused in words, exit 1, nothing changed, no restore point (exit ${refused.code}: ${refused.out.trim().slice(-220)})`);
 
             for (const [label, extra, named] of [
-                ['a new trigger on members', ['CREATE TRIGGER members_bonus AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END'], 'members_bonus'],
+                ['a new trigger on members', ['CREATE TRIGGER members_bonus AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END'], 'members_bonus'],
                 [`a trigger on members named ${RETIRED}`, [`DROP TRIGGER ${RETIRED}`,
-                    `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END`], RETIRED],
+                    `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END`], RETIRED],
             ] as const) {
                 const crafted = oldReleaseDb([...UPDATED, ...extra]);
                 const d = direct(crafted);

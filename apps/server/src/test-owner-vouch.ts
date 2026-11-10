@@ -90,10 +90,10 @@ const vouch = (by: Id, who: Id, vouchAmount: unknown, raise?: boolean) => call(b
 const setLevel = (by: Id, who: Id, level: unknown) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level });
 
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
-const lines = (pk: string) => db.prepare('SELECT kind, amount, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
+const lines = (pk: string) => db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
-const roomOf = (pk: string) => count("SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'", pk);
-const sumBalances = () => count('SELECT ROUND(COALESCE(SUM(balance), 0), 2) AS n FROM accounts');
+const roomOf = (pk: string) => count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'", pk);
+const sumBalances = () => count('SELECT ROUND(COALESCE(SUM(balance_c), 0), 2) AS n FROM accounts');
 const budgetSlim = (pk: string) => { const b = budgetOf(pk); return { left: b.left, held: b.held, level: b.level }; };
 
 /** A confirmation on a fresh entry, written as the names list's confirmMember writes it (setup only). */
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     const owenBefore = budgetSlim(owen.pk);
     const owen500 = await vouch(owen, mel, 500);
     const owenHold = lines(owen.pk).at(-1);
-    const melRow = db.prepare("SELECT id, from_pubkey, amount FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'").get(mel.pk) as { id: string; from_pubkey: string; amount: number } | undefined;
+    const melRow = db.prepare("SELECT id, from_pubkey, amount_c FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'").get(mel.pk) as { id: string; from_pubkey: string; amount: number } | undefined;
     assert(owen500.status === 200 && owen500.body?.amount === 500 && owen500.body?.total === 500 && roomOf(mel.pk) === 500,
         `2. an owner vouches 500 for Mel from her profile (${show(owen500)})`);
     assert(JSON.stringify(budgetSlim(owen.pk)) === JSON.stringify(owenBefore),

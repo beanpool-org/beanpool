@@ -120,7 +120,7 @@ const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/cr
 const setCeiling = (body: Record<string, unknown>) => post('/api/local/federation/links/ceiling', body);
 
 const nodeTotal = (): number =>
-    (db.prepare('SELECT COALESCE(SUM(balance),0) AS t FROM accounts').get() as any).t;
+    (db.prepare('SELECT COALESCE(SUM(balance_c),0) AS t FROM accounts').get() as any).t;
 
 /**
  * Move beans into a peer's bridge account WITHOUT minting any, so the energy-balance read can be exercised
@@ -129,8 +129,8 @@ const nodeTotal = (): number =>
  */
 function tiltBridge(peerId: string, amount: number): void {
     db.transaction(() => {
-        db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(amount, bridgeAccountId(peerId));
-        db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(amount, 'COMMONS_POOL');
+        db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(amount, bridgeAccountId(peerId));
+        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(amount, 'COMMONS_POOL');
     })();
 }
 
@@ -222,7 +222,7 @@ async function main() {
     assert(nodeTotal() === baseline,
         `2g. creating a link MINTED NOTHING (${baseline} → ${nodeTotal()}) — a new account with a balance would be beans from nowhere`);
 
-    const treasuryRow = db.prepare('SELECT is_treasury, earned_credit FROM members WHERE public_key = ?')
+    const treasuryRow = db.prepare('SELECT is_treasury, earned_credit_c FROM members WHERE public_key = ?')
         .get(link!.treasuryPubkey) as any;
     assert(treasuryRow?.is_treasury === 1,
         '2h. the link IS an enterprise (is_treasury=1), not a parallel concept — so it inherits keepers, demurrage exemption and the Commons card for free');
@@ -415,7 +415,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                     VALUES (?, 'Rhea', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), ?, 'TEST', 'active')`).run(her.pk, operator.pk);
         setMemberPhoto(db, her.pk, 'https://example.com/r.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(her.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(her.pk);
     }
     const made = await signedPost(her, '/api/enterprise', { name: 'riverbend Link', purpose: 'Our own enterprise' });
     const hers = made.json?.publicKey as string;
@@ -441,7 +441,7 @@ async function main() {
     assert(river?.name === `riverbend Link (${RIVER.slice(-6)})` && treasuryCount() === treasuriesBeforeRiver + 1,
         `12f. named with the peer's suffix, her name being taken, and exactly one treasury more (got "${river?.name}")`);
     const riverKeepers = keepersOf(river!.treasuryPubkey);
-    const riverRow = db.prepare('SELECT is_treasury, earned_credit FROM members WHERE public_key = ?').get(river!.treasuryPubkey) as any;
+    const riverRow = db.prepare('SELECT is_treasury, earned_credit_c FROM members WHERE public_key = ?').get(river!.treasuryPubkey) as any;
     assert(riverRow?.is_treasury === 1 && riverRow?.earned_credit === 0 && riverKeepers.length === 1
         && riverKeepers[0].member_pubkey === operator.pk && riverKeepers[0].role === 'keeper' && riverKeepers[0].granted_by === 'system',
         `12g. system-made, no credit line, its one keeper the default operator, granted by the system (${JSON.stringify(riverKeepers)})`);
@@ -458,8 +458,8 @@ async function main() {
     // first peer's "eastgippy Link" and the first peer got a brand-new third treasury, the second's own stranded.
     const MOVED = 7;
     db.transaction(() => {
-        db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
-        db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
+        db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
+        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
     })();
     const treasuriesBeforeLoss = treasuryCount();
     db.prepare('DELETE FROM federation_links WHERE peer_id IN (?, ?)').run(PEER_ID, PEER_ID_2);
@@ -484,8 +484,8 @@ async function main() {
         `12n. the boot's reconcile finds the link's treasury again by its marker, its Beans with it, and makes none (${rebooted?.name}, ${rebooted?.treasuryBalance})`);
     assert(rebooted?.commissionCeiling === 0, '12o. its ceiling starts at 0 again, as a new link\'s does');
     db.transaction(() => {
-        db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
-        db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
+        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
+        db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
     })();
 
     assert(nodeTotal() === baseline,

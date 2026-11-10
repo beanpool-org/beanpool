@@ -91,7 +91,7 @@ function member(name: string, daysAgo: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -163,7 +163,7 @@ function doorRow(name: string, label: string, daysAgo = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'open:google', 'OPEN', 'active')`).run(id.pk, name, at);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, join_cohort) VALUES (?, ?, ?, ?, ?)')
         .run(id.pk, 'google', crypto.randomBytes(32).toString('hex'), at, label);
     return id;

@@ -57,7 +57,7 @@ function makeMember(): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, `Member${++made}`);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -83,9 +83,9 @@ async function signedPost(path: string, body: unknown, id: Id) {
 }
 
 const balanceOf = (key: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
 const raisedOf = (projectId: string): number =>
-    (db.prepare('SELECT current_amount FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? 0;
+    (db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? 0;
 
 /** A project's deadline on both its rows: the enterprise's (members) and the crowdfund project's (projects). */
 function setDeadline(projectId: string, deadline: string | null): void {
@@ -99,7 +99,7 @@ function moneyNow(backer: string, projectId: string) {
         backer: balanceOf(backer),
         escrow: balanceOf(`escrow_${projectId}`),
         raised: raisedOf(projectId),
-        sum: (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s as number,
+        sum: (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s as number,
         txs: (db.prepare('SELECT COUNT(*) as n FROM transactions').get() as any).n as number,
     };
 }
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
     const backerBalBeforeLate = balanceOf(backer.pubKeyHex);
     const escrowBeforeLate = balanceOf(`escrow_${projectId}`);
     const projectBeforeLate = raisedOf(projectId);
-    const accountsSumBeforeLate = (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s;
+    const accountsSumBeforeLate = (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s;
     const txCountBeforeLate = (db.prepare('SELECT COUNT(*) as n FROM transactions').get() as any).n;
     const auditBeforeLate = runLedgerAudit();
     assert(auditBeforeLate.ok, 'audit holds before late pledge attempts');
@@ -262,7 +262,7 @@ async function main(): Promise<void> {
     assert(projectAfterLate === projectBeforeLate,
         `project current_amount unchanged (${projectAfterLate} === ${projectBeforeLate})`);
 
-    const accountsSumAfterLate = (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s;
+    const accountsSumAfterLate = (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s;
     assert(accountsSumAfterLate === accountsSumBeforeLate,
         `sum of accounts unchanged (${accountsSumAfterLate} === ${accountsSumBeforeLate})`);
 

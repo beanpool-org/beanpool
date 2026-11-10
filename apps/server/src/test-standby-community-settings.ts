@@ -234,7 +234,7 @@ async function child(): Promise<void> {
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.amount, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.amount, a.publicKey);
             reconcileLedgerFromDb();
             return true;
         },

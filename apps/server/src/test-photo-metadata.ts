@@ -672,7 +672,7 @@ async function partTwo(): Promise<void> {
                 VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
         .run(member.pub, `photo-${member.pub.slice(0, 6)}`);
     setMemberPhoto(db, member.pub, dataUrl('image/jpeg', CLEAN_JPEG));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -948,7 +948,7 @@ async function partTwo(): Promise<void> {
                 VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
         .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`);
     setMemberPhoto(db, reader.pub, dataUrl('image/jpeg', CLEAN_JPEG));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
     const storedAvatar = () => getMemberPhoto(db, member.pub);
 
     const bare = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);

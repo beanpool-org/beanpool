@@ -74,19 +74,19 @@ function assert(cond: boolean, msg: string): void {
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
     return r4(accounts + getCommonsBalanceExact());
 }
 
 function assertMemoryMatchesDb(pk: string): void {
-    const dbRow = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any;
+    const dbRow = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any;
     const dbBal = dbRow ? dbRow.balance : 0;
     const memBal = ledger.getAccount(pk).balance;
     assert(Math.abs(dbBal - memBal) < 0.0001, `Account ${pk.substring(0, 12)} memory (${memBal}) matches DB (${dbBal})`);
 }
 
 function assertCommonsMatchesDb(): void {
-    const dbRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+    const dbRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
     const dbBal = dbRow ? dbRow.balance : 0;
     const memBal = getCommonsBalanceExact();
     assert(Math.abs(dbBal - memBal) < 0.0001, `Commons pool memory (${memBal}) matches DB (${dbBal})`);
@@ -108,7 +108,7 @@ function makeMember(callsign: string, initialBalance = 0): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
                 VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
     if (initialBalance > 0) {
@@ -131,9 +131,9 @@ let tradeSeq = 0;
  */
 function giveEarnedCredit(seller: string, buyer: string, credits: number): void {
     const postId = `atomic-post-${tradeSeq++}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                 VALUES (?, 'offer', 'misc', 'atomic', 'atomic', ?, ?, 'completed')`).run(postId, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                 VALUES (?, ?, ?, ?, ?, 'completed')`).run(`atomic-mtx-${tradeSeq++}`, postId, buyer, seller, credits);
 }
 
@@ -188,11 +188,11 @@ function memBalanceRaw(pk: string): number {
 function snapshotRows(pks: string[]): { accounts: Record<string, { balance: number; epoch: number }>; commons: number; total: number } {
     const accounts: Record<string, { balance: number; epoch: number }> = {};
     for (const pk of pks) {
-        const r = db.prepare('SELECT balance, last_demurrage_epoch AS epoch FROM accounts WHERE public_key = ?').get(pk) as any;
+        const r = db.prepare('SELECT balance_c, last_demurrage_epoch AS epoch FROM accounts WHERE public_key = ?').get(pk) as any;
         accounts[pk] = { balance: r ? r.balance : 0, epoch: r ? r.epoch : 0 };
     }
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    const sum = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    const commonsRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+    const sum = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
     return { accounts, commons: commonsRow ? commonsRow.balance : 0, total: r4(sum + (commonsRow ? commonsRow.balance : 0)) };
 }
 
@@ -654,7 +654,7 @@ async function main() {
             assert(abortSkipsSeen('abort_on_commons') === 1,
                 `and it fired on transfer()'s OWN commons write, not the pre-flush (let ${abortSkipsSeen('abort_on_commons')} through)`);
             assertNothingPersisted('abort-on-commons', before, memo, [dave, bob]);
-            assert(db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(dave) === undefined,
+            assert(db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee_c%'").get(dave) === undefined,
                 '[abort-on-commons] No demurrage row survived the rollback either');
             assertConservation('Post-abort-on-commons');
 
@@ -699,7 +699,7 @@ async function main() {
             // Queue the decay with an ordinary READ, BEFORE transfer() is ever called.
             const read = getBalance(ivy);
             assert(read.balance < 5000, `A plain balance read settled demurrage in memory (${read.balance})`);
-            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee_c%'").get(ivy),
                 '…and wrote no row for it: the debit is queued in memory only');
             const queued = r4(5000 - memBalanceRaw(ivy));
             assert(queued > 0, `Decay of ${queued} Beans is sitting unflushed before the send`);
@@ -722,7 +722,7 @@ async function main() {
             const after = snapshotRows([ivy, jack]);
             assert(Math.abs(after.total - before.total) < 0.0001,
                 `[pre-flush] Nothing destroyed ON DISK — rows still total the same (${before.total} → ${after.total})`);
-            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee_c%'").get(ivy),
                 '[pre-flush] No Circulation fee row was committed on its own');
             assertNothingPersisted('pre-flush torn write', before, memo, [ivy, jack]);
             assertCommonsMatchesDb();
@@ -735,7 +735,7 @@ async function main() {
             assert(!!ok, 'The same send succeeds once the forced failure is disarmed');
             assert(memBalanceRaw(ivy) < ivyBefore - 25, 'Sender paid the 25 Beans AND the demurrage it owed');
             assert(Math.abs(memBalanceRaw(jack) - (jackBefore + 25)) < 0.0001, 'Recipient credited exactly 25 Beans');
-            assert(!!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+            assert(!!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee_c%'").get(ivy),
                 'and the Circulation fee row is on disk this time');
             assertMemoryMatchesDb(ivy);
             assertMemoryMatchesDb(jack);
@@ -759,7 +759,7 @@ async function main() {
 
             conservingTransaction(() => {
                 // Outer work that MUST survive the inner failure.
-                db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+                db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                             VALUES ('atomic-outer-post', 'offer', 'misc', 'outer', 'outer', 1, ?, 'active')`).run(erin);
                 afterTransactionCommit(() => { hookFired++; });
 
@@ -836,7 +836,7 @@ async function main() {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
                         VALUES (?, 'AtomicRoute', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(senderHex);
             setMemberPhoto(db, senderHex, AVATAR);
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
             ledger.initializeGenesisAccount(senderHex);
             transfer('genesis', senderHex, 100, 'seed route sender', 'direct', true);
             giveEarnedCredit(senderHex, carol, 50);

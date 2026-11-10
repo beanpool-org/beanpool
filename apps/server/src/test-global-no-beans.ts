@@ -90,7 +90,7 @@ async function main() {
             .run(`${NODE_PROFILE_KEY}.${name}`, value);
     const clearOverrides = () => db.prepare('DELETE FROM node_config WHERE substr(key, 1, 12) = ?').run(`${NODE_PROFILE_KEY}.`);
     const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c;
-    const nonZeroBalances = () => (db.prepare('SELECT COUNT(*) AS c FROM accounts WHERE balance != 0').get() as { c: number }).c;
+    const nonZeroBalances = () => (db.prepare('SELECT COUNT(*) AS c FROM accounts WHERE balance_c != 0').get() as { c: number }).c;
 
     // ── 1. A fresh local node, Beans switched off by an override ──
     console.log('── 1. a fresh local node with nodeProfile.beans=false ──');
@@ -120,7 +120,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
             .run(pubKeyHex, callsign);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
     const alice = member('Alice'), bob = member('Bob'), carol = member('Carol'), dave = member('Dave');
@@ -166,7 +166,7 @@ async function main() {
     assert(count('posts') === 0, 'and nothing was stored');
     const free = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag, free', authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     const freeId = free.body?.post?.id;
-    const storedCredits = () => (db.prepare('SELECT credits FROM posts WHERE id = ?').get(freeId) as { credits: number } | undefined)?.credits;
+    const storedCredits = () => (db.prepare('SELECT price_c FROM posts WHERE id = ?').get(freeId) as { credits: number } | undefined)?.credits;
     assert(free.status === 200 && freeId && storedCredits() === 0, `a post with no price is stored, at 0 Beans (${free.status} ${storedCredits()})`);
     const zero = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', credits: '0', authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
     assert(zero.status === 200 && zero.body?.post?.credits === 0, `credits "0" is stored as 0 (${zero.status} ${JSON.stringify(zero.body)})`);
@@ -243,7 +243,7 @@ async function main() {
         `a pool-money Decision gets the plain answer first, even from a member with no standing to propose (${noStanding.status} ${JSON.stringify(noStanding.body)})`);
     // Standing to propose is a trading record, and a node without Beans has none. A trust badge is no standing (badges
     // unlock nothing), so here only an admin proposes.
-    db.prepare('UPDATE members SET earned_credit = 1 WHERE public_key = ?').run(carol.pubKeyHex);
+    db.prepare('UPDATE members SET earned_credit_c = 1 WHERE public_key = ?').run(carol.pubKeyHex);
     const badgeOnly = await call('POST', '/api/commons/decisions', {
         title: 'Freeze Dave', description: 'Freeze Dave for a while', touches: 'member', effect: 'freeze_credit', subject: dave.pubKeyHex,
     }, carol);

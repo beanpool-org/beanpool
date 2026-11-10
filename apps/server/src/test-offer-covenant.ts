@@ -33,13 +33,13 @@ let seq = 0;
 function seedMember(pk: string, balance = 0) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
     setMemberPhoto(db, pk, 'a.png');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
 }
 // Insert an Offer row directly. live=false → a paused/soft-deleted offer that still counts for the
 // "ever listed" contribution gate but is NOT a live offer for the covenant.
 function offer(author: string, live: boolean, credits = 10): string {
     const pid = 'test-post-' + (seq++) + '-' + Math.random().toString(36).slice(2, 9);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', ?, 'fixed', ?, ?, ?)`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', ?, 'fixed', ?, ?, ?)`)
         .run(pid, credits, author, live ? 1 : 0, live ? 'active' : 'paused');
     return pid;
 }
@@ -80,7 +80,7 @@ function main() {
     // Freeze: dropping below the offers your debt needs freezes spending (inbound stays open).
     seedMember('frozen'); adminSetTier('frozen', 'Elder');
     const fOfferA = offer('frozen', true); offer('frozen', true); // 2 offers → -500 line
-    db.prepare(`UPDATE accounts SET balance = -400 WHERE public_key = 'frozen'`).run();
+    db.prepare(`UPDATE accounts SET balance_c = -400 WHERE public_key = 'frozen'`).run();
     reconcileLedgerFromDb();
     assert(getBalance('frozen').frozen === false, 'debt -400 within the 2-offer -500 line → not frozen');
     db.prepare(`UPDATE posts SET status='paused', active=0 WHERE id = ?`).run(fOfferA); // pause one → 1 live offer
@@ -90,7 +90,7 @@ function main() {
     // ── 4b. Viewer-aware paused visibility: author sees own paused Offer; others & the feed don't ──
     seedMember('pauser');
     const pausedId = 'test-post-paused-' + (seq++) + '-' + Math.random().toString(36).slice(2, 7);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', 10, 'fixed', 'pauser', 1, 'paused')`).run(pausedId);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', 10, 'fixed', 'pauser', 1, 'paused')`).run(pausedId);
     assert(getPosts({ authorPubkey: 'pauser', viewerPubkey: 'pauser' }).some(p => p.id === pausedId), 'author viewing their own listings sees their paused Offer');
     assert(!getPosts({ authorPubkey: 'pauser', viewerPubkey: 'someone-else' }).some(p => p.id === pausedId), 'a different viewer does NOT see the author\'s paused Offer');
     assert(!getPosts().some(p => p.id === pausedId), 'the general feed hides paused Offers');
@@ -116,7 +116,7 @@ function main() {
     setHolidayMode('holA', false);
     assert(isOnHoliday('holA') === false, 'holiday switches back off');
     // open-trades guard: an in-flight deal blocks turning holiday ON
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES ('mt-hol', ?, 'holA', 'seller', 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(sOffer2);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES ('mt-hol', ?, 'holA', 'seller', 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(sOffer2);
     throws(() => setHolidayMode('holA', true), 'active trade', 'cannot go on holiday with an open trade in progress');
     // feed-hide: an away member's offer is excluded from the general feed, but visible on their own listing view
     seedMember('holB'); const hbOffer = offer('holB', true, 7);

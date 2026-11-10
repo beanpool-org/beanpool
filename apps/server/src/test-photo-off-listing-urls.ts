@@ -95,7 +95,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('UrlAlice');
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
     const now = new Date().toISOString();
     /** A completed trade of Alice's listing to `buyer`, and a chat between the two about it, as the escrow leaves them. */
     const trade = (postId: string, buyer: Id): void => {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), postId, buyer.pk, alice.pk, now, now);
         db.prepare("UPDATE posts SET status = 'completed', completed_at = ? WHERE id = ?").run(now, postId);
     };

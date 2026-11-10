@@ -49,7 +49,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -276,7 +276,7 @@ async function main(): Promise<void> {
 
     // Direct insert of an older photoless post
     const olderPostId = 'photoless-legacy-post-1';
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'food', 'Old bread legacy', 'Old loaf', 5, 'fixed', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1, 'active')`)
         .run(olderPostId, alice.pubKeyHex);
 

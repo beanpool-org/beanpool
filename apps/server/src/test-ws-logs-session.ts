@@ -53,7 +53,7 @@ function seedMember(callsign: string): Who {
     const pub = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pub, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return { pub, priv: privateKey };
 }
 

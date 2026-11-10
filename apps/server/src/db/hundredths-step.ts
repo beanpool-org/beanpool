@@ -11,7 +11,11 @@
  *  - every other table keeps its rows, and its money columns are replaced by the `*_c` ones at their defaults: balances
  *    0, listing and deal prices 0 (Free), goals, ceilings, vouches and known-floor exceptions none, backing 0;
  *  - money_requests (a payment's stored answer, replayed to a retry) is emptied, and the money settings in node_config
- *    (known floor, credit cap, voucher budget, member gift, the audit baseline) go back to their defaults.
+ *    (known floor, credit cap, voucher budget, member gift, the audit baseline) go back to their defaults;
+ *  - what holds an old figure as words is cleared too (OLD_FIGURE_WORDS): a known-floor exception that was only its amount
+ *    (a frozen one stays frozen), the known-floor log (its old and new values are Beans), and a copy's home price
+ *    (posts.shown_price, '20 fixed'), which would otherwise read as hundredths. A copy then says no price until its
+ *    community sends the listing again.
  *
  * So an upgraded node boots with every balance and the Commons at 0, and its conservation check passes exactly. What it
  * dropped is logged once, by count, so an operator knows what to redo by hand (castlemaine: the 3 gifts sent again;
@@ -63,6 +67,16 @@ export const MONEY_COLUMNS: ReadonlyArray<{ table: string; old: string; add: str
     { table: 'projects', old: 'current_amount', add: 'current_amount_c INTEGER NOT NULL DEFAULT 0' },
 ];
 
+/**
+ * Rows that hold an old figure as words or as a setting's text, cleared rather than read: each `sql` empties what would
+ * otherwise be read as hundredths (a figure 100 times too small). `what` names it in the log line.
+ */
+export const OLD_FIGURE_WORDS: ReadonlyArray<{ table: string; what: string; sql: string }> = [
+    { table: 'known_floor_exceptions', what: 'known-floor exceptions that were only an amount', sql: 'DELETE FROM known_floor_exceptions WHERE frozen = 0' },
+    { table: 'known_floor_log', what: 'known-floor log lines', sql: 'DELETE FROM known_floor_log' },
+    { table: 'posts', what: "copies' home prices", sql: 'UPDATE posts SET shown_price = NULL WHERE shown_price IS NOT NULL' },
+];
+
 /** The node_config money settings that go back to their defaults (each read as whole hundredths from here on). */
 export const MONEY_SETTINGS: readonly string[] = ['known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'ledger_audit_baseline', 'ledger_audit_rebaseline_note'];
 
@@ -75,6 +89,8 @@ export interface HundredthsStepReport {
     valuesDropped: Record<string, number>;
     /** money_requests answers emptied. */
     answersDropped: number;
+    /** Rows cleared of an old figure in words (OLD_FIGURE_WORDS), by `what`. */
+    wordsCleared: Record<string, number>;
     /** Money settings put back to their defaults. */
     settingsReset: string[];
 }
@@ -106,7 +122,7 @@ export function needsHundredthsStep(db: Database.Database): boolean {
  * boot, because a node with old money columns cannot run this code.
  */
 export function runHundredthsStep(db: Database.Database): HundredthsStepReport {
-    const report: HundredthsStepReport = { ran: false, rowsDropped: {}, valuesDropped: {}, answersDropped: 0, settingsReset: [] };
+    const report: HundredthsStepReport = { ran: false, rowsDropped: {}, valuesDropped: {}, answersDropped: 0, wordsCleared: {}, settingsReset: [] };
     if (!needsHundredthsStep(db)) return report;
     report.ran = true;
     db.transaction(() => {
@@ -134,6 +150,11 @@ export function runHundredthsStep(db: Database.Database): HundredthsStepReport {
         if (columnsOf(db, 'money_requests').size > 0) {
             report.answersDropped = db.prepare('DELETE FROM money_requests').run().changes;
         }
+        for (const { table, what, sql } of OLD_FIGURE_WORDS) {
+            const cols = columnsOf(db, table);
+            if (cols.size === 0 || (table === 'posts' && !cols.has('shown_price'))) continue;
+            report.wordsCleared[what] = db.prepare(sql).run().changes;
+        }
         if (columnsOf(db, 'node_config').size > 0) {
             const del = db.prepare('DELETE FROM node_config WHERE key = ?');
             for (const key of MONEY_SETTINGS) if (del.run(key).changes > 0) report.settingsReset.push(key);
@@ -146,7 +167,9 @@ export function runHundredthsStep(db: Database.Database): HundredthsStepReport {
 export function hundredthsStepLogLine(r: HundredthsStepReport): string {
     const rows = Object.entries(r.rowsDropped).map(([t, n]) => `${t} ${n}`).join(', ') || 'none';
     const values = Object.entries(r.valuesDropped).filter(([, n]) => n > 0).map(([c, n]) => `${c} ${n}`).join(', ') || 'none';
+    const words = Object.entries(r.wordsCleared).filter(([, n]) => n > 0).map(([w, n]) => `${w} ${n}`).join(', ') || 'none';
     return `[DB] Money is whole hundredths of a Bean now. Old money was dropped, not converted: rows removed: ${rows}; `
-        + `figures set to 0 or none: ${values}; stored payment answers removed: ${r.answersDropped}; money settings back to `
-        + `their defaults: ${r.settingsReset.join(', ') || 'none'}. Redo by hand what mattered (gifts re-sent, listings re-priced).`;
+        + `figures set to 0 or none: ${values}; stored payment answers removed: ${r.answersDropped}; old figures in words `
+        + `cleared: ${words}; money settings back to their defaults: ${r.settingsReset.join(', ') || 'none'}. `
+        + 'Redo by hand what mattered (gifts re-sent, listings re-priced).';
 }

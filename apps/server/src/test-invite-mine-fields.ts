@@ -74,7 +74,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
             .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`, visitor ? 1 : 0);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const maker = row('maker');
@@ -98,7 +98,7 @@ async function main() {
     const USED_KNOCK = 'INV-UKNK-CODE';
     const USED_NOTE = 'INV-UNTE-CODE';
     const madeAt = (daysAgo: number) => new Date(Date.now() - daysAgo * DAY).toISOString();
-    const insert = db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by, used_at, intended_for, names_entry_id, vouch_amount, voucher_level)
+    const insert = db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by, used_at, intended_for, names_entry_id, vouch_amount_c, voucher_level_c)
                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     insert.run(BOUND, maker.pubKeyHex, madeAt(7), null, null, null, ENTRY, 200, 1000);
     insert.run(NOTE, maker.pubKeyHex, madeAt(1), null, null, 'CJ', null, null, null);

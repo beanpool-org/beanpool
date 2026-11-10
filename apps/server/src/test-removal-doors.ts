@@ -151,7 +151,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(30 * DAY), invitedBy, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         if (beans > 0) se.transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
         return id;
     };
@@ -174,8 +174,8 @@ async function main() {
 
     const row = (id: Id): any => db.prepare('SELECT status, credit_frozen FROM members WHERE public_key = ?').get(id.pubKeyHex);
     const statusOf = (id: Id) => row(id)?.status as string | undefined;
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
-    const exactBalance = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance: number } | undefined)?.balance;
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
+    const exactBalance = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance: number } | undefined)?.balance;
     const decision = (id: string): any => db.prepare('SELECT * FROM decisions WHERE id = ?').get(id);
     const removalRows = () => (db.prepare("SELECT COUNT(*) AS n FROM decisions WHERE effect = 'remove_member'").get() as { n: number }).n;
     const looksAt = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM health_access_log WHERE subject_pubkey = ?').get(id.pubKeyHex) as { n: number }).n;
@@ -293,7 +293,7 @@ async function main() {
     const roz = seedMember('ReportedRoz');
     {
         const tiaPost = createPost('offer', 'food', 'Tia\'s eggs', 'A dozen eggs, fresh', 5, 'fixed', tia.pubKeyHex)!.id;
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(crypto.randomUUID(), tiaPost, gil.pubKeyHex, tia.pubKeyHex);
     }
     const before3 = removalRows();

@@ -75,7 +75,7 @@ function throws(fn: () => unknown, re: RegExp, msg: string): void {
 }
 
 const nodeTotal = () => {
-    const accRows = db.prepare("SELECT SUM(balance) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
+    const accRows = db.prepare("SELECT SUM(balance_c) as total FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as any;
     const accSum = accRows?.total || 0;
     return Math.round((accSum + getCommonsBalanceExact()) * 10000) / 10000;
 };
@@ -88,7 +88,7 @@ function makeMember(callsign: string): string {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, uniqueCallsign);
     setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     return pubkey;
 }
 

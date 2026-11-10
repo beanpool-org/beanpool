@@ -198,7 +198,7 @@ async function main(): Promise<void> {
     // as orphaned media and prune it.
     const authorKey = crypto.randomBytes(32).toString('hex');
     const insertPost = db.prepare(`
-        INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
         VALUES (?, 'offer', 'food', ?, 'from before the upgrade', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
     `);
     for (const p of fixture.photos) insertPost.run(p.postId, `Legacy ${p.postId}`, authorKey);
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(author);
     setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const freshBytes = makePhoto('fresh');
     const freshValue = dataUrl(freshBytes);
     const fresh = createPost('offer', 'food', 'Sourdough', 'Baked this morning', 3, 'fixed', author, undefined, undefined, [freshValue], true);
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
     const { publicKey: pKey, privateKey: privKey } = crypto.generateKeyPairSync('ed25519');
     const participantPubkey = pKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Attacher', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(participantPubkey);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(participantPubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(participantPubkey);
     const convId = crypto.randomUUID();
     db.prepare(`INSERT OR IGNORE INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(convId, participantPubkey);
     db.prepare(`INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`).run(convId, participantPubkey);
@@ -580,7 +580,7 @@ async function main(): Promise<void> {
         };
 
         const incomingId = crypto.randomUUID();
-        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                     VALUES (?, 'offer', 'food', 'Imported', 'from a peer', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')`)
             .run(incomingId, authorKey);
         const incomingBytes = [makePhoto('import-a'), makePhoto('import-b'), makePhoto('import-c')];
@@ -732,7 +732,7 @@ async function main(): Promise<void> {
     {
         const sameMsPostId = crypto.randomUUID();
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
             VALUES (?, 'offer', 'food', 'Same-ms watermark', 'test', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
         `).run(sameMsPostId, authorKey);
 

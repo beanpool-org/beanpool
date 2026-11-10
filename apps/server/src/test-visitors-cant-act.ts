@@ -152,7 +152,7 @@ function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: str
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(id.pk, name, ago(joinedDaysAgo * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -377,7 +377,7 @@ async function main(): Promise<void> {
         // orchard; a lead's row on an apiary of her own, where as lead she approved Quinn's request to keep it, which is
         // still waiting out its objection window.
         adminAssignTreasuryOperator(enterpriseKey, vera.pk, 'admin');
-        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, 5, ?, NULL)')
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, 5, ?, NULL)')
             .run(crypto.randomUUID(), vera.pk, enterpriseKey, new Date().toISOString());
         adminAssignTreasuryOperator(orchard, vera.pk, 'admin');
         apiary = keyOf(createTreasury('Vera apiary VA', AVATAR, 0, { leadKeeperPubkey: vera.pk, purpose: 'Honey' } as any));
@@ -995,7 +995,7 @@ async function main(): Promise<void> {
         assert(r2.status === 400 && !hasRow(over.pk), `so does one over what the sender holds (${show(r2)})`);
         const paid = keypair('PaidVA');
         const r3 = await call('POST', mia, '/api/ledger/transfer', { from: mia.pk, to: paid.pk, amount: 2 });
-        const acct = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(paid.pk) as any;
+        const acct = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(paid.pk) as any;
         assert(r3.status === 200 && isVisitorRow(paid.pk) && Math.abs(Number(acct?.balance) - 2) < 1e-6 && Math.abs(balanceOf(paid.pk) - 2) < 1e-6,
             `a send that goes through makes the recipient's visitor's row, holding the Beans (${show(r3)}, ${JSON.stringify(acct)})`);
         // A key with no row here holds nothing to send: refused as this rule refuses a visitor's write, not a 500 (3b's note).

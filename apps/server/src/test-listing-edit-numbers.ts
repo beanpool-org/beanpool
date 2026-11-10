@@ -42,7 +42,7 @@ function makeMember(callsign: string): string {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
 
@@ -56,9 +56,9 @@ async function dispatch(router: any, method: string, path: string, ctx: any) {
 
 /** Every balance row: the total SQLite sums, how many are NULL or not a finite number, and the in-memory balances. */
 function ledgerState(keys: string[]) {
-    const total = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as any).s as number;
+    const total = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as any).s as number;
     const bad = (db.prepare(`SELECT COUNT(*) AS c FROM accounts
-        WHERE balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`).get() as any).c as number;
+        WHERE balance_c IS NULL OR typeof(balance_c) NOT IN ('integer', 'real') OR balance_c > 1e308 OR balance_c < -1e308`).get() as any).c as number;
     const memory = keys.map((k) => getBalance(k).balance);
     return { total, bad, memory, memoryFinite: memory.every((b) => typeof b === 'number' && Number.isFinite(b)) };
 }
@@ -87,7 +87,7 @@ async function main() {
 
     const edit = async (actor: string, id: string, updates: Record<string, unknown>) =>
         dispatch(router, 'POST', '/api/marketplace/posts/update', { requestBody: { id, authorPublicKey: actor, ...updates }, state: { actor } });
-    const row = (id: string) => db.prepare('SELECT title, description, category, credits, typeof(credits) AS t, price_type, lat, lng FROM posts WHERE id = ?').get(id) as any;
+    const row = (id: string) => db.prepare('SELECT title, description, category, price_c, typeof(price_c) AS t, price_type, lat, lng FROM posts WHERE id = ?').get(id) as any;
 
     // ── 1. The reviewer's sequence ──────────────────────────────────────────────────────────────────
     console.log('— 1. the reviewer\'s sequence: edit credits to "abc", then request → approve → complete, and acceptPost —');
@@ -230,7 +230,7 @@ async function main() {
     check(hFinish.ok, `and the same deal completes for a real 2 hours (${hFinish.ok ? 'ok' : hFinish.error})`);
 
     const poisoned = createPost('offer', 'food', 'Leeks', 'Leeks', 6, 'fixed', seller, undefined, undefined, undefined, true)!;
-    db.prepare(`UPDATE posts SET credits = 'abc' WHERE id = ?`).run(poisoned.id);
+    db.prepare(`UPDATE posts SET price_c = 'abc' WHERE id = ?`).run(poisoned.id);
     const pReq = attempt(() => requestPost(poisoned.id, buyer));
     const pAcc = attempt(() => acceptPost(poisoned.id, third));
     check(!pReq.ok && /no valid price/.test(pReq.error) && !pAcc.ok && /no valid price/.test(pAcc.error),
@@ -241,7 +241,7 @@ async function main() {
     const txStatus = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as any)?.status;
     const reqListing = createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', seller)!;
     const rq = requestPost(reqListing.id, buyer);
-    db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(rq.id);
+    db.prepare(`UPDATE marketplace_transactions SET amount_c = 'abc' WHERE id = ?`).run(rq.id);
     const rqAppr = attempt(() => approvePostRequest(rq.id, seller));
     check(!rqAppr.ok && /can't be approved\. Decline it, or remove the listing/.test(rqAppr.error),
         `a request row holding "abc" can't be approved, and the refusal says to decline it (${rqAppr.ok ? 'approved' : rqAppr.error})`);
@@ -252,7 +252,7 @@ async function main() {
     const buyerBeforeKale = getBalance(buyer).balance;
     const dq = requestPost(dealListing.id, buyer);
     approvePostRequest(dq.id, seller);
-    db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(dq.id);
+    db.prepare(`UPDATE marketplace_transactions SET amount_c = 'abc' WHERE id = ?`).run(dq.id);
     const dCancelBuyer = attempt(() => cancelPostTransaction(dq.id, buyer));
     const dCancelSeller = attempt(() => cancelPostTransaction(dq.id, seller));
     const dDone = attempt(() => completePostTransaction(dq.id, buyer));
@@ -268,7 +268,7 @@ async function main() {
     // Where the 6 Beans end up (sync check F1, 2026-10-02): Math.min('abc', 6) is NaN, so the removal used to refund
     // nothing and leave them in the escrow of a cancelled deal, which nothing else can reach.
     const kaleEscrow = `escrow_${dq.id}`;
-    const kaleEscrowRow = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(kaleEscrow) as any)?.balance;
+    const kaleEscrowRow = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(kaleEscrow) as any)?.balance;
     check(Math.abs(getBalance(buyer).balance - buyerBeforeKale) < 1e-9 && getBalance(kaleEscrow).balance === 0 && kaleEscrowRow === 0,
         `and the buyer gets the 6 Beans its escrow held back (buyer ${buyerBeforeKale} → ${getBalance(buyer).balance}, escrow ${getBalance(kaleEscrow).balance}, row ${kaleEscrowRow})`);
     const liveAudit = runConservationCheck(db as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
@@ -284,17 +284,17 @@ async function main() {
     // balance of 0 wiped to NULL or to text moved no SUM, so the check read "ok".
     console.log('\n— 4. the conservation check flags a NULL, text or infinite balance —');
     const mem = new Database(':memory:');
-    mem.exec(`CREATE TABLE accounts (public_key TEXT PRIMARY KEY, balance REAL DEFAULT 0.0);
+    mem.exec(`CREATE TABLE accounts (public_key TEXT PRIMARY KEY, balance_c REAL DEFAULT 0.0);
               CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT);
               CREATE TABLE marketplace_transactions (id TEXT PRIMARY KEY, status TEXT);
               INSERT INTO accounts VALUES ('a', 10), ('b', -10), ('c', 0);`);
     const clean = runConservationCheck(mem as any);
     check(clean.ok, `a ledger summing to its baseline with every balance a number is ok (${JSON.stringify(clean)})`);
     for (const [label, value] of [['NULL (a NaN as better-sqlite3 binds it)', null], ['text', 'abc'], ['Infinity', Infinity]] as [string, unknown][]) {
-        mem.prepare(`UPDATE accounts SET balance = ? WHERE public_key = 'c'`).run(value);
+        mem.prepare(`UPDATE accounts SET balance_c = ? WHERE public_key = 'c'`).run(value);
         const r = runConservationCheck(mem as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
         check(!r.ok && r.badBalances === 1, `a balance of ${label} fails the check and is counted (${JSON.stringify(r)})`);
-        mem.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = 'c'`).run();
+        mem.prepare(`UPDATE accounts SET balance_c = 0 WHERE public_key = 'c'`).run();
     }
     mem.close();
 

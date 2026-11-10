@@ -46,11 +46,11 @@ function assert(cond: any, msg: string): void {
 function seedMember(pk: string, callsign: string, isTreasury = false): void {
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
         VALUES (?, ?, ?, 'active', 0, ?, 50)
     `).run(pk, callsign, joinedAt, isTreasury ? 1 : 0);
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)
         ON CONFLICT(public_key) DO NOTHING
     `).run(pk);
 }

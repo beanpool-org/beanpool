@@ -61,7 +61,7 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -93,8 +93,8 @@ async function call(method: string, id: Id, path: string, body?: unknown): Promi
 const pay = (id: Id, body: Record<string, unknown>) => call('POST', id, '/api/commons/pay', body);
 
 /** The whole node as one number (test-commons-conservation.ts nodeTotal): every account but the pot's shadow, plus the pot. */
-const nodeTotal = () => r2((db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact());
-const balanceRow = (who: Id) => r2((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => r2((db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact());
+const balanceRow = (who: Id) => r2((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number } | undefined)?.balance ?? 0);
 const paymentsBy = (who: Id) => (db.prepare(`SELECT COUNT(*) n FROM transactions WHERE from_pubkey = ? AND memo = 'Paid to the Commons'`).get(who.pk) as { n: number }).n;
 /** The request's record, or null; undefined when there is no such table (origin/main). */
 function recordOf(who: Id, requestId: string): any {

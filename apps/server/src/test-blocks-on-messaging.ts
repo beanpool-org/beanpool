@@ -120,7 +120,7 @@ function member(name: string, made?: Id): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     putPushTokenRow(id.pk, tokenOf(id), 'android');
     return id;
 }
@@ -546,7 +546,7 @@ async function main(): Promise<void> {
         attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', 1, 'fixed', who.pk));
         attempt(() => transfer('genesis', who.pk, 5, 'Seed grant', 'direct', true));
     }
-    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
     const systemLinesWith = (id: Id) => (db.prepare(`SELECT COUNT(*) AS n FROM messages m
         JOIN conversation_participants a ON a.conversation_id = m.conversation_id AND a.public_key = ?
         JOIN conversation_participants b ON b.conversation_id = m.conversation_id AND b.public_key = ?

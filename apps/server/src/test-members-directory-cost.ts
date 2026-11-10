@@ -120,7 +120,7 @@ async function main() {
     };
 
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status,
-                                   profile_updated_at, earned_credit, archetype, is_treasury, is_visitor, area_lat, area_lng)
+                                   profile_updated_at, earned_credit_c, archetype, is_treasury, is_visitor, area_lat, area_lng)
                                VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @profile, @earned, @archetype,
                                    @treasury, @visitor, @lat, @lng)`);
     // A photo goes in by its one writer (member_photos, and the row's avatar_ref), as a profile save puts it there.

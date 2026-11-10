@@ -57,7 +57,7 @@ function member(name: string, daysAgo: number): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 

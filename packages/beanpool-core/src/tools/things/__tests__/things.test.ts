@@ -31,7 +31,7 @@ import {
     lendBackAroundOf,
     loanDays,
     loanDaysRemaining,
-    loanTotalBeans,
+    loanTotal,
 } from '../loans.js';
 import {
     THINGS,
@@ -617,39 +617,42 @@ describe('loansDue (reminders due)', () => {
 describe('Loans maths and validations (against S3 lendable Offers semantics)', () => {
     const NOW = Date.parse('2026-10-20T09:00:00.000Z');
 
-    it('loanTotalBeans computes correct Beans fee for price types', () => {
+    it('loanTotal computes the fee in whole hundredths for each price type, as the node holds it', () => {
         // Free loans
-        expect(loanTotalBeans(0, 'fixed', 7)).toBe(0);
-        expect(loanTotalBeans(0, 'daily', 3)).toBe(0);
-        expect(loanTotalBeans(-5, 'daily', 3)).toBe(0);
+        expect(loanTotal(0, 'fixed', 7)).toBe(0);
+        expect(loanTotal(0, 'daily', 3)).toBe(0);
+        expect(loanTotal(-5, 'daily', 3)).toBe(0);
 
         // Fixed price (one fee regardless of loan days)
-        expect(loanTotalBeans(50, 'fixed', 7)).toBe(50);
-        expect(loanTotalBeans(50, 'fixed', 1)).toBe(50);
-        expect(loanTotalBeans(50, 'fixed', 365)).toBe(50);
-        expect(loanTotalBeans(50, null, 7)).toBe(50); // default is fixed
+        expect(loanTotal(5000, 'fixed', 7)).toBe(5000);
+        expect(loanTotal(5000, 'fixed', 1)).toBe(5000);
+        expect(loanTotal(5000, 'fixed', 365)).toBe(5000);
+        expect(loanTotal(5000, null, 7)).toBe(5000); // default is fixed
 
         // Daily price: credits * days
-        expect(loanTotalBeans(10, 'daily', 3)).toBe(30);
-        expect(loanTotalBeans(10, 'daily', 1)).toBe(10);
-        expect(loanTotalBeans(10, 'daily', 0)).toBe(0);
-        expect(loanTotalBeans(10, 'daily', -1)).toBe(0);
-        expect(loanTotalBeans(10, 'daily', 'three')).toBe(0);
+        expect(loanTotal(1000, 'daily', 3)).toBe(3000);
+        expect(loanTotal(1000, 'daily', 1)).toBe(1000);
+        expect(loanTotal(1000, 'daily', 0)).toBe(0);
+        expect(loanTotal(1000, 'daily', -1)).toBe(0);
+        expect(loanTotal(1000, 'daily', 'three')).toBe(0);
 
         // Weekly price: credits * weeks
-        expect(loanTotalBeans(25, 'weekly', 2)).toBe(50);
-        expect(loanTotalBeans(25, 'weekly', 1)).toBe(25);
-        expect(loanTotalBeans(25, 'weekly', 0)).toBe(0);
+        expect(loanTotal(2500, 'weekly', 2)).toBe(5000);
+        expect(loanTotal(2500, 'weekly', 1)).toBe(2500);
+        expect(loanTotal(2500, 'weekly', 0)).toBe(0);
     });
 
-    it('loanTotalBeans quotes what the node charges for a price with cents, never rounded to whole Beans', () => {
-        // escrow.ts draws post.credits * hours (or post.credits on one fee) with no rounding.
-        expect(loanTotalBeans(2.5, 'daily', 3)).toBe(2.5 * 3);
-        expect(loanTotalBeans(1.5, 'fixed', 1)).toBe(1.5);
-        expect(loanTotalBeans(0.4, 'fixed', 1)).toBe(0.4); // a loan that costs 0.4 Beans is not free
-        expect(loanTotalBeans(0.4, 'fixed', 1)).toBeGreaterThan(0);
-        expect(loanTotalBeans(0.75, 'weekly', 2)).toBe(0.75 * 2);
-        expect(loanTotalBeans(10, 'daily', 1.5)).toBe(10 * 1.5);
+    it('loanTotal quotes what the node holds for a price with cents: whole hundredths, truncated once, never rounded to whole Beans', () => {
+        // escrow.ts holds dealAmountFor(post.price_c, units) (or post.price_c on one fee).
+        expect(loanTotal(250, 'daily', 3)).toBe(750);
+        expect(loanTotal(150, 'fixed', 1)).toBe(150);
+        expect(loanTotal(40, 'fixed', 1)).toBe(40); // a loan that costs 0.40 Beans is not free
+        expect(loanTotal(75, 'weekly', 2)).toBe(150);
+        expect(loanTotal(1000, 'daily', 1.5)).toBe(1500);
+        // A third of a day at 1 Bean: 33.33… hundredths, truncated to 33, as the node holds it.
+        expect(loanTotal(100, 'daily', 0.3333)).toBe(33);
+        // Not whole hundredths (an old Beans figure) quotes nothing rather than a figure 100 times off.
+        expect(loanTotal(2.5, 'daily', 3)).toBe(0);
     });
 
     it('isLoanOverdue detects whether backAround date is in the past', () => {
@@ -784,36 +787,36 @@ describe('Mutation testing on loans maths and size bounds', () => {
     const NOW = Date.parse('2026-10-20T09:00:00.000Z');
     const DAY = 24 * 60 * 60 * 1000;
 
-    describe('loanTotalBeans mutations', () => {
+    describe('loanTotal mutations', () => {
         it('mutant: fixed price multiplying by units instead of flat fee is caught', () => {
             const mutantFixed = (credits: number, units: number) => credits * units;
-            const credits = 50;
+            const credits = 5000;
             const units = 7;
-            expect(loanTotalBeans(credits, 'fixed', units)).toBe(credits);
-            expect(mutantFixed(credits, units)).not.toBe(loanTotalBeans(credits, 'fixed', units));
+            expect(loanTotal(credits, 'fixed', units)).toBe(credits);
+            expect(mutantFixed(credits, units)).not.toBe(loanTotal(credits, 'fixed', units));
         });
 
         it('mutant: free loans (0 credits) charging units or flat fee is caught', () => {
             const mutantFree = (credits: number, units: number) => (credits === 0 ? units : credits);
-            expect(loanTotalBeans(0, 'daily', 5)).toBe(0);
-            expect(mutantFree(0, 5)).not.toBe(loanTotalBeans(0, 'daily', 5));
+            expect(loanTotal(0, 'daily', 5)).toBe(0);
+            expect(mutantFree(0, 5)).not.toBe(loanTotal(0, 'daily', 5));
         });
 
         it('mutant: daily loan using addition instead of multiplication is caught', () => {
             const mutantDaily = (credits: number, units: number) => credits + units;
-            expect(loanTotalBeans(10, 'daily', 3)).toBe(30);
-            expect(mutantDaily(10, 3)).not.toBe(loanTotalBeans(10, 'daily', 3));
+            expect(loanTotal(1000, 'daily', 3)).toBe(3000);
+            expect(mutantDaily(1000, 3)).not.toBe(loanTotal(1000, 'daily', 3));
         });
 
         it('mutant: weekly price multiplying by 7 (days) instead of units is caught', () => {
             const mutantWeekly = (credits: number, units: number) => credits * units * 7;
-            expect(loanTotalBeans(20, 'weekly', 2)).toBe(40);
-            expect(mutantWeekly(20, 2)).not.toBe(loanTotalBeans(20, 'weekly', 2));
+            expect(loanTotal(2000, 'weekly', 2)).toBe(4000);
+            expect(mutantWeekly(2000, 2)).not.toBe(loanTotal(2000, 'weekly', 2));
         });
 
         it('mutant: negative credits producing negative fees is caught', () => {
-            expect(loanTotalBeans(-10, 'daily', 3)).toBe(0);
-            expect(loanTotalBeans(-5, 'fixed', 1)).toBe(0);
+            expect(loanTotal(-10, 'daily', 3)).toBe(0);
+            expect(loanTotal(-5, 'fixed', 1)).toBe(0);
         });
     });
 

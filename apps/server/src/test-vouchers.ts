@@ -130,11 +130,11 @@ const vouch = (by: Id, who: Id, vouchAmount: unknown, raise?: boolean) => call(b
 const setLevel = (by: Id, who: Id, level: unknown) => call(by, 'POST', `/api/names/vouchers/${who.pk}/budget`, { level });
 
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
-const lines = (pk: string) => db.prepare('SELECT kind, amount, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
-const sumLines = (pk: string) => count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', pk);
+const lines = (pk: string) => db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
+const sumLines = (pk: string) => count('SELECT COALESCE(SUM(amount_c), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', pk);
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
-const roomOf = (pk: string) => count("SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE to_pubkey = ?", pk);
-const sumBalances = () => count('SELECT ROUND(COALESCE(SUM(balance), 0), 2) AS n FROM accounts');
+const roomOf = (pk: string) => count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ?", pk);
+const sumBalances = () => count('SELECT ROUND(COALESCE(SUM(balance_c), 0), 2) AS n FROM accounts');
 
 /** A confirmation on a fresh entry, written as the names list's confirmMember writes it (setup only: the list's crypto is its own suite's). */
 function confirm(member: Id, by: Id, awaitingSecond = false): string {
@@ -433,10 +433,10 @@ async function main(): Promise<void> {
     const samDebt = Math.abs(getBalance(sam.pk).balance);
     // The community's removal vote carried out (decisions-engine remove_member), as on a node where members vote.
     adminPruneUser(sam.pk, COMMUNITY_DECISION_ACTOR);
-    const settle = db.prepare("SELECT amount, memo FROM transactions WHERE to_pubkey = ? AND memo LIKE 'Settle bad debt for pruned user:%'").get(sam.pk) as { amount: number; memo: string } | undefined;
+    const settle = db.prepare("SELECT amount_c, memo FROM transactions WHERE to_pubkey = ? AND memo LIKE 'Settle bad debt for pruned user:%'").get(sam.pk) as { amount: number; memo: string } | undefined;
     assert(settle?.memo === `Settle bad debt for pruned user: ${sam.pk.slice(0, 8)}` && Math.abs((settle?.amount ?? 0) - samDebt) < 0.005,
         `9. a prune pays the Commons exactly as before: the same memo and amount (${JSON.stringify(settle)}, debt ${samDebt})`);
-    const stamped = db.prepare('SELECT amount, written_off FROM room_gifts WHERE to_pubkey = ? ORDER BY at, id').all(sam.pk) as { amount: number; written_off: number | null }[];
+    const stamped = db.prepare('SELECT amount_c, written_off_c FROM room_gifts WHERE to_pubkey = ? ORDER BY at, id').all(sam.pk) as { amount: number; written_off: number | null }[];
     const writtenOff = stamped.reduce((n, r) => n + (r.written_off ?? 0), 0);
     assert(stamped.every((r) => r.written_off !== null) && Math.abs(writtenOff - samDebt) < 0.005 && stamped[0].written_off === Math.min(samDebt, stamped[0].amount),
         `9. and stamps the room he held with the debt, oldest first (${JSON.stringify(stamped)})`);
@@ -449,7 +449,7 @@ async function main(): Promise<void> {
     spendBelowZero(uma, mel, 10);
     const umaDebt = Math.abs(getBalance(uma.pk).balance);
     purgeMemberSelf(uma.pk);
-    const umaStamped = db.prepare('SELECT COALESCE(SUM(written_off), 0) AS n FROM room_gifts WHERE to_pubkey = ?').get(uma.pk) as { n: number };
+    const umaStamped = db.prepare('SELECT COALESCE(SUM(written_off_c), 0) AS n FROM room_gifts WHERE to_pubkey = ?').get(uma.pk) as { n: number };
     assert(Math.abs(umaStamped.n - umaDebt) < 0.005 && !!db.prepare("SELECT 1 FROM transactions WHERE to_pubkey = ? AND memo LIKE 'Settle bad debt for self-purged user:%'").get(uma.pk),
         `9. a member's own account deletion stamps the room too, the Commons paying as before (${umaStamped.n} of ${umaDebt})`);
 
@@ -470,17 +470,17 @@ async function main(): Promise<void> {
     // A signed voucher owner/admin CAN vouch via seed-invite:
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const owenAdminSession = { 'x-admin-session': consumeHandshakeToken(mintHandshakeToken(owen.pk, 'owner').handshakeToken).sessionId! };
-    const owenBudgetBefore = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    const owenBudgetBefore = count('SELECT COALESCE(SUM(amount_c), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
     const owenSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: 25 }, owenAdminSession);
     assert(owenSeed.status === 200 && owenSeed.body?.vouchAmount === 25, `10. voucher admin can vouch on seed-invite (${show(owenSeed)})`);
-    const owenBudgetAfter = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    const owenBudgetAfter = count('SELECT COALESCE(SUM(amount_c), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
     assert(owenBudgetBefore - owenBudgetAfter === 25, `10. 25 Beans held from voucher's budget for seed-invite (${owenBudgetBefore} -> ${owenBudgetAfter})`);
 
     // Redeeming the seed invite lands the vouch from the issuing admin/owner (owen):
     const rita = newId('rita');
     const ritaRedeem = await redeem(rita, owenSeed.body.code);
     assert(ritaRedeem.status === 200 && ritaRedeem.body?.success === true, `10. seed invite with vouch redeems successfully (${show(ritaRedeem)})`);
-    const ritaVouchGift = db.prepare("SELECT amount, from_pubkey, to_pubkey FROM room_gifts WHERE invite_code = ? AND kind = 'vouch'").get(owenSeed.body.code) as { amount: number; from_pubkey: string; to_pubkey: string } | undefined;
+    const ritaVouchGift = db.prepare("SELECT amount_c, from_pubkey, to_pubkey FROM room_gifts WHERE invite_code = ? AND kind = 'vouch'").get(owenSeed.body.code) as { amount: number; from_pubkey: string; to_pubkey: string } | undefined;
     assert(ritaVouchGift && ritaVouchGift.amount === 25 && ritaVouchGift.from_pubkey === owen.pk && ritaVouchGift.to_pubkey === rita.pk,
         `10. seed invite vouch lands from issuing admin owen (${JSON.stringify(ritaVouchGift)})`);
 
@@ -562,7 +562,7 @@ async function main(): Promise<void> {
             if (op === 0) setBudgetLevel(owen.pk, pv.pk, { level: levels[rand(levels.length)] });
             else if (op === 1) generateInvite(pv.pk, undefined, undefined, undefined, [25, 50, 75, 100, 60][rand(5)]);
             else if (op === 2) {
-                const open = db.prepare("SELECT code FROM invite_codes WHERE created_by = ? AND used_by IS NULL AND vouch_amount IS NOT NULL").all(pv.pk) as { code: string }[];
+                const open = db.prepare("SELECT code FROM invite_codes WHERE created_by = ? AND used_by IS NULL AND vouch_amount_c IS NOT NULL").all(pv.pk) as { code: string }[];
                 if (open.length) { const k = newId(`R${step}`); redeemInvite(open[rand(open.length)].code, k.pk, k.name); }
             } else if (op === 3) {
                 const open = db.prepare("SELECT code FROM invite_codes WHERE created_by = ? AND used_by IS NULL").all(pv.pk) as { code: string }[];
@@ -578,15 +578,15 @@ async function main(): Promise<void> {
         const sum = sumLines(pv.pk);
         if (sum < 0) violations.push(`step ${step}: the lines sum to ${sum}`);
         if (b.left + b.held > 2000) violations.push(`step ${step}: left ${b.left} + held ${b.held}`);
-        const pair = db.prepare("SELECT to_pubkey, SUM(amount) AS n FROM room_gifts WHERE from_pubkey = ? AND kind = 'vouch' GROUP BY to_pubkey HAVING n > 100").get(pv.pk);
+        const pair = db.prepare("SELECT to_pubkey, SUM(amount_c) AS n FROM room_gifts WHERE from_pubkey = ? AND kind = 'vouch' GROUP BY to_pubkey HAVING n > 100").get(pv.pk);
         if (pair) violations.push(`step ${step}: a pair above 100 ${JSON.stringify(pair)}`);
-        const off = db.prepare("SELECT amount FROM room_gifts WHERE from_pubkey = ? AND amount NOT IN (25, 50, 75, 100)").get(pv.pk);
+        const off = db.prepare("SELECT amount_c FROM room_gifts WHERE from_pubkey = ? AND amount_c NOT IN (25, 50, 75, 100)").get(pv.pk);
         if (off) violations.push(`step ${step}: an amount outside the set ${JSON.stringify(off)}`);
     }
     const perPerson = db.prepare("SELECT to_pubkey, COUNT(DISTINCT from_pubkey) AS n FROM room_gifts WHERE kind = 'vouch' GROUP BY to_pubkey HAVING n > 3").get();
     assert(violations.length === 0 && !perPerson && ops > 100,
         `12. property: over 400 random steps (${ops} taken), no voucher's lines sum below zero, left + held never passes 2,000, no pair passes 100, no amount leaves the set, nobody has more than 3 vouchers${violations.length ? ` — ${violations.slice(0, 4).join(' | ')}` : ''}`);
-    const everySum = db.prepare('SELECT member_pubkey, SUM(amount) AS n FROM voucher_allocations GROUP BY member_pubkey HAVING n < 0').get();
+    const everySum = db.prepare('SELECT member_pubkey, SUM(amount_c) AS n FROM voucher_allocations GROUP BY member_pubkey HAVING n < 0').get();
     assert(!everySum, '12. and no voucher anywhere in this suite has lines summing below zero');
 
     // ── 13. A thousand vouches ──────────────────────────────────────────────────────────────────────────────────
@@ -650,7 +650,7 @@ async function main(): Promise<void> {
         && askByNed.body?.error === VOUCHER_WORDS.notAVoucher && askWaiting() === 1 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore15,
         `15. an ask's answer with a 60, or from an admin with no budget, is refused with the sentence; the ask still waits, no invite made (${show(askSixty)} | ${show(askByNed)})`);
     const askAnswered = await call(lou, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 50 });
-    const askCode = (db.prepare('SELECT code, vouch_amount FROM invite_codes WHERE created_by = ? ORDER BY rowid DESC LIMIT 1').get(lou.pk) as { code: string; vouch_amount: number | null } | undefined)
+    const askCode = (db.prepare('SELECT code, vouch_amount_c FROM invite_codes WHERE created_by = ? ORDER BY rowid DESC LIMIT 1').get(lou.pk) as { code: string; vouch_amount: number | null } | undefined)
         ?? { code: '', vouch_amount: null };
     assert(askAnswered.status === 200 && askWaiting() === 0 && askCode.vouch_amount === 50
         && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ?", lou.pk, askCode.code) === 1,
@@ -931,7 +931,7 @@ async function main(): Promise<void> {
         setMemberPhoto(db, seller.pk, FACE);
         const post = createPost('offer', 'general', `${seller.name} sells`, 'A deal for the trading line', 10, 'fixed', seller.pk);
         require_(!!post?.id, `${seller.name} lists an offer`);
-        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 10, ?)')
+        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 10, ?)')
             .run(crypto.randomBytes(16).toString('hex'), post!.id, buyer.pk, seller.pk, status);
     };
     deal(tx, mel, 'completed');

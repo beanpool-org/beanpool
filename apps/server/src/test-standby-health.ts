@@ -121,7 +121,7 @@ async function child(): Promise<void> {
             for (const [pk, callsign] of [[a.ann, 'Ann'], [a.bo, 'Bo'], [a.cy, 'Cy']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                     .run(pk, callsign, new Date().toISOString(), a.gwen, 'TEST');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             grantNodeRole(a.ann, 'admin', a.gwen);
             grantNodeRole(a.bo, 'moderator', a.gwen);
@@ -233,7 +233,7 @@ async function child(): Promise<void> {
         'photo-main-cannot-read': async (a: { author: string }) => {
             const { db } = await import('./db/db.js');
             const at = new Date().toISOString();
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, created_at, updated_at)
                 VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 2, ?, 'active', ?, ?)`).run(a.author, at, at);
             return db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, mime)
                 VALUES ('plums-lost-photo', NULL, 0, ?, 'photos/lost-on-the-main-server.webp', 'image/webp')`).run(at).changes;

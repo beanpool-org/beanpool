@@ -79,7 +79,7 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
     return r4(accounts + getCommonsBalanceExact());
 }
 
@@ -93,7 +93,7 @@ function assertConservation(step: string): void {
 /** No escrow account anywhere on the node may sit below the floor. The invariant, checked globally. */
 function assertNoNegativeEscrows(step: string): void {
     const rows = db.prepare(
-        `SELECT public_key, balance FROM accounts WHERE public_key LIKE 'escrow_%' AND balance < ?`
+        `SELECT public_key, balance_c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance_c < ?`
     ).all(ESCROW_FLOOR) as { public_key: string; balance: number }[];
     assert(rows.length === 0,
         `[${step}] no escrow account is below zero${rows.length ? ` (${rows.map(r => `${r.public_key}=${r.balance}`).join(', ')})` : ''}`);
@@ -113,7 +113,7 @@ function makeMember(callsign: string, initialBalance = 0): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
     if (initialBalance > 0) transfer('genesis', pk, initialBalance, `seed ${callsign}`, 'direct', true);
     // An offer apiece, so the contribution gate lets these members trade.
@@ -137,7 +137,7 @@ async function main() {
     {
         const holder = makeMember('FloorHolder', 100);
         const escrowId = `escrow_${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(escrowId);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(escrowId);
         assert(Boolean(transfer(holder, escrowId, 10, 'fund the test escrow', 'escrow', true)), 'escrow funded with 10');
         assert(escrowBalance(escrowId.slice('escrow_'.length)) === 10, 'escrow holds 10');
 
@@ -181,7 +181,7 @@ async function main() {
         // two legacy trades on the test node looked like — rows from 2026-05-29 whose holds predate the
         // escrow_<tx_id> wallet key and were never in one.
         const ghostTradeId = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                     VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 15);
         db.prepare(`UPDATE posts SET status='pending', accepted_by=?, pending_transaction_id=? WHERE id=?`)
             .run(buyer, ghostTradeId, offer.id);
@@ -224,7 +224,7 @@ async function main() {
         // node writes that, which is the point: if the rows and the ledger ever disagree, the LEDGER wins.
         const deal = acceptPost(offer.id, buyer);
         assert(escrowBalance(deal.id) === 30, 'escrow holds the real 30');
-        db.prepare('UPDATE marketplace_transactions SET credits = 50 WHERE id = ?').run(deal.id);
+        db.prepare('UPDATE marketplace_transactions SET amount_c = 50 WHERE id = ?').run(deal.id);
 
         const buyerBefore = getBalance(buyer).balance;
         const totalBefore = nodeTotal();
@@ -281,7 +281,7 @@ async function main() {
             'the seller receives nothing — no payout out of an escrow that was never topped up');
         assert(Math.abs(getBalance(buyer).balance - buyerBefore) < 0.0001, 'the buyer is not charged');
         assert(escrowBalance(deal.id) === 10, 'the escrow still holds exactly its base 10');
-        const row = db.prepare('SELECT status, credits FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
+        const row = db.prepare('SELECT status, amount_c FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
         assert(row.status === 'pending', 'the trade is still pending — the status update unwound too');
         assert(row.credits === 10, 'the trade still says 10, not the topped-up 30');
         assert(Math.abs(nodeTotal() - totalBefore) < 0.0001, 'the ledger is unchanged');
@@ -361,7 +361,7 @@ async function main() {
 
         // Same measured shape as Part 2: a pending trade row with no hold ever paid into its escrow.
         const ghostTradeId = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                     VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 12);
         db.prepare(`UPDATE posts SET status='pending', accepted_by=?, pending_transaction_id=? WHERE id=?`)
             .run(buyer, ghostTradeId, offer.id);

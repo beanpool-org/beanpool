@@ -213,7 +213,7 @@ async function main() {
         }
         // With search keywords, as every listing posted has them: the boot's keyword backfill writes (and so stamps) a row
         // that has none (state-engine.ts backfillSearchKeywords).
-        const offer = d.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+        const offer = d.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                                  VALUES (?, 'offer', 'food', ?, '', 5, ?, 'active', 1, ?, ?, lower(?))`);
         for (const [who, id, title] of [['ella', ella, 'Plums'], ['fern', fern, 'Figs']] as const) {
             fixtureOffers[who] = crypto.randomUUID();
@@ -285,7 +285,7 @@ async function main() {
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
             .run(id.pubKeyHex, callsign, gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         se.transfer('genesis', id.pubKeyHex, 50, `seed ${callsign}`, 'direct', true);
         return id;
     };
@@ -325,7 +325,7 @@ async function main() {
     };
     const dealStatus = (txId: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(txId) as { status: string } | undefined)?.status;
     const balanceOf = (id: Id) => Number(se.getBalance(id.pubKeyHex)?.balance);
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const codeUser = (code: string) => (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as { used_by: string | null } | undefined)?.used_by ?? null;
     const codesBy = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?').get(id.pubKeyHex) as { n: number }).n;
     const reportOn = (target: Id, reason: string) => {

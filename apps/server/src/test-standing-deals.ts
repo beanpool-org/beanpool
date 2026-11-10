@@ -82,7 +82,7 @@ function makeMember(name: string, beans: number, opts: { treasury?: boolean } = 
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active', ?)`).run(id.pk, name, opts.treasury ? 1 : 0);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     // Every buyer has listed an Offer of their own (the contribution rule).
     createPost('offer', 'general', `${name}'s jam`, 'A jar of plum jam', 5, 'fixed', id.pk);
@@ -128,13 +128,13 @@ function authorise(signer: Id, o: AuthOpts & { bare?: boolean }): { id: string; 
 
 const standingRow = (id: string) => db.prepare('SELECT * FROM standing_deals WHERE id = ?').get(id) as any;
 const periodRows = (id: string) => db.prepare('SELECT * FROM marketplace_transactions WHERE standing_id = ? ORDER BY period_no').all(id) as any[];
-const bal = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
+const bal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
 const escrowsOf = (id: string) => (db.prepare(`SELECT COUNT(*) AS n FROM accounts WHERE public_key IN (SELECT 'escrow_' || id FROM marketplace_transactions WHERE standing_id = ?)`).get(id) as { n: number }).n;
 const keptKinds = (pk: string, standingId: string) => (db.prepare(`SELECT data FROM moderation_notices WHERE recipient = ? ORDER BY created_at, rowid`).all(pk) as { data: string }[])
     .map(r => { try { return JSON.parse(r.data); } catch { return {}; } }).filter(d => d.standing === standingId).map(d => d.kind as string);
 const chatLines = (text: string) => (db.prepare(`SELECT ciphertext FROM messages WHERE system_type = 'STANDING_DEAL' AND ciphertext LIKE ?`).all(`%${text}%`) as { ciphertext: string }[]).map(r => r.ciphertext);
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
     return r2(accounts + getCommonsBalanceExact());
 }
 function assertConserved(step: string): void {
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     assert(near(martyBefore - bal(marty.pk), 50) && nearPaid(bal(rob.pk) - robBefore1, 50) && Math.abs(getCommonsBalanceExact() - commonsBefore1 - 50 * TRANSACTION_FEE_RATE) < 0.006,
         `Marty − 50, Rob + ${r2(bal(rob.pk) - robBefore1)} (50 less 1.5%), the Commons the fee`);
     assert(escrowsOf(a1.id) === 0, 'nothing is held in trust: no escrow account for the period');
-    const payRows = db.prepare(`SELECT from_pubkey, to_pubkey, amount, tax_fee, auth_signer, auth_payload FROM transactions WHERE auth_payload LIKE ?`).all(`standing:${a1.id}:%`) as any[];
+    const payRows = db.prepare(`SELECT from_pubkey, to_pubkey, amount_c, fee_c, auth_signer, auth_payload FROM transactions WHERE auth_payload LIKE ?`).all(`standing:${a1.id}:%`) as any[];
     assert(payRows.length === 1 && payRows[0].from_pubkey === marty.pk && payRows[0].to_pubkey === rob.pk && near(payRows[0].amount, 50) && payRows[0].tax_fee > 0
         && payRows[0].auth_signer === marty.pk && payRows[0].auth_payload === `standing:${a1.id}:1`,
         `ONE ledger row, payer to payee, the fee taken, naming the signer and standing:<id>:1 (${JSON.stringify(payRows)})`);
@@ -239,7 +239,7 @@ async function main(): Promise<void> {
     assert((db.prepare('SELECT last_reminded_at FROM marketplace_transactions WHERE id = ?').get(p1[0].id) as any).last_reminded_at == null, 'the hygiene nudges nobody: nothing is held');
     db.prepare(`UPDATE marketplace_transactions SET created_at = completed_at WHERE id = ?`).run(p1[0].id);
     const repriced = await post(rob, '/api/marketplace/posts/update', { id: storage.id, postId: storage.id, authorPublicKey: rob.pk, credits: 60 });
-    assert(repriced.status === 200 && near((db.prepare('SELECT credits FROM posts WHERE id = ?').get(storage.id) as any).credits, 60),
+    assert(repriced.status === 200 && near((db.prepare('SELECT price_c FROM posts WHERE id = ?').get(storage.id) as any).credits, 60),
         `the author can change the price while it runs (${show(repriced)})`);
     let payerHoliday = '';
     try { setHolidayMode(marty.pk, true); } catch (e: any) { payerHoliday = e?.message ?? ''; }
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
         `the retry pays month 3 once (${JSON.stringify(c2)})`);
     let unique = false;
     try {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, standing_id, period_no) VALUES (?, ?, ?, ?, 50, 'completed', ?, 3)`)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, standing_id, period_no) VALUES (?, ?, ?, ?, 50, 'completed', ?, 3)`)
             .run(crypto.randomUUID(), storage.id, marty.pk, rob.pk, a1.id);
     } catch (e: any) { unique = /UNIQUE/.test(String(e?.message)); }
     assert(unique, 'the UNIQUE (standing_id, period_no) index refuses a second row for a period');
@@ -673,7 +673,7 @@ async function main(): Promise<void> {
     console.log('── 18. An enterprise payee ──');
     const uma = makeMember('Uma', 300);
     const eggs = createPost('offer', 'food', 'Egg Box', 'A dozen a month', 20, 'monthly', ent.pk, undefined, undefined, undefined, true) as any;
-    const surplusOf = () => Number((db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(ent.pk) as any)?.earned_surplus) || 0;
+    const surplusOf = () => Number((db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(ent.pk) as any)?.earned_surplus) || 0;
     const surplus0 = surplusOf();
     const a18 = authorise(uma, { postId: eggs.id, payee: ent.pk, beans: 20, unit: 'month', max: null });
     assert((await post(uma, '/api/marketplace/posts/accept', { postId: eggs.id, buyerPublicKey: uma.pk, standing: a18.standing })).status === 200 && near(surplusOf() - surplus0, 20),

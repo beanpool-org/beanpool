@@ -34,10 +34,10 @@ function makeMember(callsign: string, initialBalance = 100) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
 
     // Update audit baseline sum for ledger
-    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s;
+    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s;
     db.prepare(`UPDATE node_config SET value = ? WHERE key = 'ledger_audit_baseline'`).run(String(totalSum));
     reconcileLedgerFromDb();
 

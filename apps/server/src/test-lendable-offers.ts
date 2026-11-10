@@ -102,7 +102,7 @@ function makeMember(callsign: string, beans: number, oddJobs = true): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
     if (oddJobs) createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);
     registerPushToken(id.pk, `ExponentPushToken[lend-${callsign}-${id.pk.slice(0, 6)}]`, 'android');
@@ -151,7 +151,7 @@ async function adminPost(urlPath: string, body: unknown) {
 }
 
 /** A balance as the ledger holds it (getBalance answers it rounded to the cent, for showing). */
-const bal = (pk: string): number => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number }).balance);
+const bal = (pk: string): number => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number }).balance);
 const commons = (): number => r4(getCommonsBalanceExact());
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 type PostRow = {
@@ -160,8 +160,8 @@ type PostRow = {
     pending_transaction_id: string | null; price_type: string; credits: number;
 };
 const postRow = (id: string) => db.prepare(`SELECT status, active, lendable, repeatable, lend_max_days, lend_terms, replacement_value,
-    typeof(replacement_value) AS typeof_value, accepted_by, accepted_at, pending_transaction_id, price_type, credits FROM posts WHERE id = ?`).get(id) as PostRow;
-const txRow = (id: string) => db.prepare('SELECT status, credits, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: number; hours: number | null };
+    typeof(replacement_value) AS typeof_value, accepted_by, accepted_at, pending_transaction_id, price_type, price_c FROM posts WHERE id = ?`).get(id) as PostRow;
+const txRow = (id: string) => db.prepare('SELECT status, amount_c, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: number; hours: number | null };
 const postsTitled = (title: string): number => (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE title = ?').get(title) as { n: number }).n;
 const backOnBoard = (id: string): boolean => {
     const p = postRow(id);
@@ -613,7 +613,7 @@ async function main(): Promise<void> {
     // ── 13. The offer covenant ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 13. The offer covenant');
     const fen = makeMember('Fen', 0, false);
-    db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(fen.pk); // a granted line of 100, metered by the offer bands
+    db.prepare('UPDATE members SET earned_credit_c = 100 WHERE public_key = ?').run(fen.pk); // a granted line of 100, metered by the offer bands
     const fenLadder = (await offer(fen, { title: 'Step ladder', lendable: true })).body?.post?.id as string;
     const listed = getBalance(fen.pk);
     assert(postRow(fenLadder)?.lendable === 1 && listed.liveOffers === 1 && listed.usableFloor === -100 && hasLiveOffer(fen.pk),

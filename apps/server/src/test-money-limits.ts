@@ -193,14 +193,14 @@ function member(name: string, balance = 1_000): Id {
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
     return id;
 }
 /** The accounts rows written above, into the ledger's memory. */
 const sync = () => reconcileLedgerFromDb();
 function setBalance(pk: string, balance: number): void {
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(pk, ledger.getCurrentEpoch());
-    db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(balance, ledger.getCurrentEpoch(), pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(pk, ledger.getCurrentEpoch());
+    db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(balance, ledger.getCurrentEpoch(), pk);
     sync();
 }
 
@@ -208,7 +208,7 @@ let seq = 0;
 /** A listing as the marketplace stores one. */
 function plantPost(author: string, type: 'offer' | 'need', credits = 1, repeatable = true): string {
     const id = `ml-post-${++seq}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable)
                 VALUES (?, ?, 'other', ?, 'test', ?, ?, 'active', ?)`).run(id, type, `${type} ${seq}`, credits, author, repeatable ? 1 : 0);
     return id;
 }
@@ -220,27 +220,27 @@ function plantPost(author: string, type: 'offer' | 'need', credits = 1, repeatab
 function completedTrade(buyer: string, seller: string, credits = 50): void {
     const pid = plantPost(seller, 'offer', credits, false);
     db.prepare("UPDATE posts SET status = 'completed' WHERE id = ?").run(pid);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(`ml-trade-${++seq}`, pid, buyer, seller, credits, ago(40 * DAY), ago(40 * DAY));
 }
 /** A request waiting on the listing's author, exactly the row asking to buy or to help writes (engine/escrow.ts requestPost). */
 function plantRequest(postId: string, buyer: string, seller: string, credits = 1): string {
     const id = crypto.randomUUID();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                 VALUES (?, ?, ?, ?, ?, 'requested', ?)`).run(id, postId, buyer, seller, credits, new Date().toISOString());
     return id;
 }
 /** A crowdfund project (never funded: its goal is far off), as the crowdfund route stores one. */
 function plantProject(creator: string): string {
     const id = `ml-proj-${++seq}`;
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status)
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status)
                 VALUES (?, ?, 'A community orchard', 'test', '[]', 1000000, 'ACTIVE')`).run(id, creator);
     return id;
 }
 
 /** Every account but the COMMONS_POOL shadow, plus the live Commons: a refusal moves none of it. */
-const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
-const bal = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
+const bal = (pk: string) => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
 interface Books { total: number; accounts: number; transactions: number; trades: number; pledges: number; members: number }
 const books = (): Books => ({
     total: nodeTotal(),
@@ -314,7 +314,7 @@ function newPeoplePaid(ent: string, keeper: string, n: number): void {
 }
 /** `n` posts `keeper` put up today for `ent`, as the enterprise's offer route stores them (created_by the keeper). */
 function entPosts(ent: string, keeper: string, n: number): void {
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable, created_by, created_at)
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable, created_by, created_at)
                                VALUES (?, 'offer', 'other', 'Stock', 'test', 1, ?, 'active', 1, ?, ?)`);
     db.transaction(() => { for (let i = 0; i < n; i++) insert.run(`ml-ent-post-${++seq}`, ent, keeper, new Date().toISOString()); })();
 }
@@ -323,7 +323,7 @@ const postsForEnterprises = (keeper: string) =>
     count(`SELECT COUNT(*) AS n FROM posts WHERE created_by = ? AND author_pubkey != ? AND created_at > ?`, keeper, keeper, ago(DAY));
 /** `n` posts of `member`'s own put up today, as the marketplace stores them. */
 function ownPosts(member: string, n: number): void {
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable, created_at)
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable, created_at)
                                VALUES (?, 'offer', 'other', 'Mine', 'test', 1, ?, 'active', 1, ?)`);
     db.transaction(() => { for (let i = 0; i < n; i++) insert.run(`ml-own-post-${++seq}`, member, new Date().toISOString()); })();
 }
@@ -385,7 +385,7 @@ async function runChild(): Promise<void> {
         insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
         setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
         if (first) {
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
             if (m.trades) completedTrade(m.pk, seed.tradie);
         }
     }
@@ -407,11 +407,11 @@ async function runChild(): Promise<void> {
         linkPk = link.treasuryPubkey;
         if (first) {
             setCommissionCeiling(seed.peer.peerId, 500);
-            db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), linkPk);
+            db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), linkPk);
             // The seller is a member of the other community (a visitor's row with its home), and the listing came from there.
             db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, home_node_url, is_visitor) VALUES (?, 'Far Seller', ?, ?, 1)`)
                 .run(seed.link.seller, ago(7 * DAY), seed.peer.url);
-            db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, origin_node)
+            db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, origin_node)
                         VALUES (?, 'offer', 'other', 'A far thing', 'test', 1, ?, 'active', 1, ?)`).run(seed.link.postId, seed.link.seller, seed.peer.url);
             sync();
         }
@@ -837,7 +837,7 @@ async function main(): Promise<void> {
         const node = await startNode(dir, seed, { FEDERATION_SETTLEMENT: 'true' });
         const their = new Database(path.join(dir, 'state.db'));
         const outbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound' AND buyer_pubkey = ?`).get(jo.pk) as { n: number }).n;
-        const balance = () => r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(jo.pk) as { balance: number }).balance);
+        const balance = () => r4((their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(jo.pk) as { balance: number }).balance);
         const purchase = () => callAt(node.base, 'POST', jo, '/api/federation/purchase', { peerAddress, sellerPublicKey: remoteSeller, amount: 1 });
         try {
             const sends = await many(M.paymentsPerDay - 1, 8, () => callAt(node.base, 'POST', jo, '/api/ledger/transfer', { to: ben.pk, amount: 1 }));
@@ -879,9 +879,9 @@ async function main(): Promise<void> {
             const commissionRow = ownRows('payment').find((r) => r.key !== null);
             assert(ownCommission.status !== 429 && linkOutbound() === 2 && commissionRow?.forEnt === link,
                 `so a commission now is his own 100th payment: it goes, the link's second settlement, and its row is Kit's own for the link (${show(ownCommission)}, ${linkOutbound()} outbound, ${JSON.stringify(commissionRow)})`);
-            const linkBalance = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const linkBalance = r4((their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
             const commissionPast = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
-            const linkAfter = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const linkAfter = r4((their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
             assert(commissionPast.status === 429 && commissionPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(commissionPast.body?.error ?? '')
                 && /has reached its own limit for today, so what you do for it counts against yours/.test(commissionPast.body?.error ?? '') && linkOutbound() === 2 && linkAfter === linkBalance,
                 `and a commission past it is 429 money_payments_day in his own words, before anything moves: no new settlement, the same balance (${show(commissionPast)}, ${linkOutbound()}, ${linkAfter})`);
@@ -1264,7 +1264,7 @@ async function main(): Promise<void> {
         assert(bal(`escrow_${deal}`) === 4, `setup: Victor buys from Sal, and 4 Beans wait in the deal's escrow (${show(bought)})`);
 
         const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
-        const rowOf = (pk: string) => JSON.stringify(db.prepare('SELECT callsign, bio, is_treasury, status, goal_amount FROM members WHERE public_key = ?').get(pk) ?? null);
+        const rowOf = (pk: string) => JSON.stringify(db.prepare('SELECT callsign, bio, is_treasury, status, goal_amount_c FROM members WHERE public_key = ?').get(pk) ?? null);
         const state = () => JSON.stringify({
             books: books(), projects: count('SELECT COUNT(*) AS n FROM projects'), keepers: count('SELECT COUNT(*) AS n FROM treasury_operators'),
             vic: rowOf(vic.pk), wendy: rowOf(wendy.pk), vats: rowOf(vats), commons: rowOf('COMMONS_POOL'), escrow: bal(`escrow_${deal}`),
@@ -1293,7 +1293,7 @@ async function main(): Promise<void> {
             `and createCrowdfundProject refuses each of them, and the deal's escrow's own name, writing nothing (${refusals.join(' | ')})`);
 
         // A projects row under a person's key, as the route wrote one before it made ids itself: nothing reaches it.
-        const plantBadProject = (pk: string) => db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+        const plantBadProject = (pk: string) => db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
             VALUES (?, ?, 'Mallory fund', 'For me', '[]', 1, NULL, 'ACTIVE', ?, ?, ?, ?)`).run(pk, mal.pk, new Date().toISOString(), pk, new Date().toISOString(), new Date().toISOString());
         plantBadProject(vic.pk);
         plantBadProject(wendy.pk);

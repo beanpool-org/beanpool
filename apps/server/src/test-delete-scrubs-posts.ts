@@ -204,7 +204,7 @@ async function child(): Promise<void> {
             return {
                 deals: db.prepare(`SELECT mt.id, mt.post_id, mt.status, p.id AS found FROM marketplace_transactions mt LEFT JOIN posts p ON p.id = mt.post_id
                                    WHERE mt.post_id IN (${ph}) ORDER BY mt.id`).all(...a.ids),
-                ledger: db.prepare(`SELECT id, from_pubkey, to_pubkey, amount, memo FROM transactions ORDER BY id`).all(),
+                ledger: db.prepare(`SELECT id, from_pubkey, to_pubkey, amount_c, memo FROM transactions ORDER BY id`).all(),
             };
         },
         checkpoint: async () => {

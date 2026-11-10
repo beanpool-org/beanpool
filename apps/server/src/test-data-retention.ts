@@ -251,7 +251,7 @@ async function main() {
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(key, name, gwen, `INV-${name.split(' ')[0]}`);
         setMemberPhoto(db, key, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
     }
     db.prepare(`INSERT INTO invalidated_keys (public_key, reason, rekeyed_to) VALUES (?, 'rekey', ?)`).run(wrenOld, wren);
 
@@ -344,7 +344,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(key, callsign, gwen, `INV-${callsign}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
         logger.info('P2P', `${OTHER_MSG} for ${callsign}: mutual=true`, OTHER_META);
         const metaId = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
         logger.info('SYS', SNAP_MSG, { bytes: 12, name: 'snapshot-2026-12-01T02-00-00.db' });
@@ -369,7 +369,7 @@ async function main() {
         const key = hexKey();
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
                     VALUES (?, 'Marlow Reed', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'INV-Marlow', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, gwen);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
         logger.info('ADMIN', '[Offboard] Looked at Marlow Reed', { who: 'Marlow Reed', nested: { list: ['x', 'Marlow Reed wrote'], n: 12, ok: true } });
         const id = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
         se.purgeMemberSelf(key);

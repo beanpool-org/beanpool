@@ -117,7 +117,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const vera = member('KeyVera');
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
         // What the old key builder left on a live node: Mallory's post, made with an id it stripped to Vera's, whose photo
         // row names her object. Written as it would be, by hand: nothing makes such a row now.
         const legacy = `legacy-${crypto.randomUUID()}`;
-        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                                 VALUES (?, 'offer', 'food', 'Medlar cheese, copied', 'x', 0, ?, ?, 1, 'active')`);
         ins.run(legacy, mallory.pk, new Date().toISOString());
         const vRow = db.prepare('SELECT sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = 0').get(v.id) as { sha256: string; bytes: number; mime: string };

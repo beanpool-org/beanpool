@@ -76,7 +76,7 @@ function member(name: string, opts: { invitedBy?: Id; daysAgo?: number; settled?
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, id.name, ago((opts.daysAgo ?? 60) * DAY), (opts.invitedBy ?? owner).pk);
     setMemberPhoto(db, id.pk, `https://example.org/${id.name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     if (opts.settled !== false) for (let i = 0; i < 3; i++) createPost('offer', 'other', `${id.name} kept ${i}`, 'An old offer', 0, 'fixed', id.pk);
     return id;
 }

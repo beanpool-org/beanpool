@@ -45,12 +45,12 @@ function main(): void {
     `).run(nowIso, nowIso);
 
     db.prepare(`
-        INSERT INTO posts (id, type, category, author_pubkey, title, description, credits, created_at)
+        INSERT INTO posts (id, type, category, author_pubkey, title, description, price_c, created_at)
         VALUES ('post_1', 'offer', 'goods', 'pubkey_alice', 'Apples', 'Fresh apples', 10, ?)
     `).run(nowIso);
 
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
         VALUES
             ('pubkey_alice', 150.5, 4, ?),
             ('pubkey_bob', 49.5, 2, ?),
@@ -59,7 +59,7 @@ function main(): void {
     `).run(nowIso, nowIso, nowIso, nowIso);
 
     db.prepare(`
-        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp)
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp)
         VALUES ('tx_1', 'pubkey_alice', 'pubkey_bob', 10.0, 'Test tx', ?)
     `).run(nowIso);
 
@@ -114,7 +114,7 @@ function main(): void {
     const afterTxCount = (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c;
     const afterMemberCount = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
     const afterPostCount = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c;
-    const remainingAccounts = db.prepare('SELECT public_key, balance, last_demurrage_epoch FROM accounts').all() as { public_key: string; balance: number; last_demurrage_epoch: number }[];
+    const remainingAccounts = db.prepare('SELECT public_key, balance_c, last_demurrage_epoch FROM accounts').all() as { public_key: string; balance: number; last_demurrage_epoch: number }[];
     const baselineConfig = db.prepare("SELECT value FROM node_config WHERE key = 'ledger_audit_baseline'").get();
     const otherConfig = db.prepare("SELECT value FROM node_config WHERE key = 'other_config'").get() as { value: string } | undefined;
 

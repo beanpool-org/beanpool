@@ -71,7 +71,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
         VALUES (?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, name, daysAgo(90));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     transfer('genesis', id.pk, 100, `seed ${name}`, 'direct', true);
     createPost('offer', 'other', `${name}'s offer`, 'on the books', 5, 'fixed', id.pk);
     return id;

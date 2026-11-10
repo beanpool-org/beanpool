@@ -98,7 +98,7 @@ function rowAsBefore(callsign: string, visitor: boolean): string {
     const pk = keypair().pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, is_visitor) VALUES (?, ?, ?, ?, ?, ?)`)
         .run(pk, callsign, new Date().toISOString(), visitor ? null : founder.pk, visitor ? null : 'before', visitor ? 1 : 0);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
 

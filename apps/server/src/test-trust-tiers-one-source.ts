@@ -35,11 +35,11 @@ function assert(cond: boolean, msg: string): void {
 }
 
 function seedMember(pk: string, granted = 0) {
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, pk, granted);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, pk, granted);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 function seedOffer(id: string, author: string) {
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'test', 'test', 10, ?, 'active', 1)`).run(id, author);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'test', 'test', 10, ?, 'active', 1)`).run(id, author);
 }
 
 async function main() {

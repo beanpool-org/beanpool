@@ -53,7 +53,7 @@ function makeAuthor(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 

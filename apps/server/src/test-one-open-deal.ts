@@ -63,7 +63,7 @@ function makeMember(name: string, beans: number, opts: { treasury?: boolean } = 
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active', ?)`).run(id.pk, name, opts.treasury ? 1 : 0);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -101,11 +101,11 @@ const isDealOpen = (r: Res, txId: string) => r.status === 409 && r.body?.code ==
 
 /** Every account's balance on disk, and the Commons pot in memory: what a refusal must leave exactly as it was. */
 function ledgerSnapshot(): string {
-    const rows = db.prepare(`SELECT public_key, balance FROM accounts WHERE public_key != 'COMMONS_POOL' ORDER BY public_key`).all() as { public_key: string; balance: number }[];
+    const rows = db.prepare(`SELECT public_key, balance_c FROM accounts WHERE public_key != 'COMMONS_POOL' ORDER BY public_key`).all() as { public_key: string; balance: number }[];
     return JSON.stringify([...rows.map(r => [r.public_key, r4(r.balance)]), ['COMMONS', r4(getCommonsBalanceExact())]]);
 }
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
     return r4(accounts + getCommonsBalanceExact());
 }
 function assertConserved(step: string): void {
@@ -116,7 +116,7 @@ function assertConserved(step: string): void {
 const dealsOf = (postId: string, buyer: string, seller?: string) => (seller
     ? db.prepare(`SELECT id, status FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? AND seller_pubkey = ? ORDER BY created_at`).all(postId, buyer, seller)
     : db.prepare(`SELECT id, status FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? ORDER BY created_at`).all(postId, buyer)) as { id: string; status: string }[];
-const escrowHolds = (txIds: string[]) => txIds.map(id => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(`escrow_${id}`) as any)?.balance ?? 0));
+const escrowHolds = (txIds: string[]) => txIds.map(id => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(`escrow_${id}`) as any)?.balance ?? 0));
 const memoryBalance = (pk: string) => r4(ledger.getAccount(pk).balance);
 
 /**
@@ -126,12 +126,12 @@ const memoryBalance = (pk: string) => r4(ledger.getAccount(pk).balance);
  */
 async function refusedPlainly<T>(probe: Id, step: () => Promise<T>): Promise<{ result: T; plain: boolean }> {
     const before = memoryBalance(probe.pk);
-    db.prepare('UPDATE accounts SET balance = balance + 7 WHERE public_key = ?').run(probe.pk);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + 7 WHERE public_key = ?').run(probe.pk);
     try {
         const result = await step();
         return { result, plain: memoryBalance(probe.pk) === before };
     } finally {
-        db.prepare('UPDATE accounts SET balance = balance - 7 WHERE public_key = ?').run(probe.pk);
+        db.prepare('UPDATE accounts SET balance_c = balance_c - 7 WHERE public_key = ?').run(probe.pk);
     }
 }
 
@@ -267,7 +267,7 @@ async function main(): Promise<void> {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(farm.pk, k.pk);
         db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.pk);
     }
-    db.prepare('UPDATE members SET earned_surplus = 30 WHERE public_key = ?').run(farm.pk);
+    db.prepare('UPDATE members SET earned_surplus_c = 30 WHERE public_key = ?').run(farm.pk);
     listSomething(farm);
     const books = createPost('offer', 'services', 'Bookkeeping', 'The month\'s books, done', 30, 'fixed', keeper.pk, undefined, undefined, undefined, true)!;
     const wages = () => (db.prepare('SELECT COUNT(*) c FROM deferred_wage_claims WHERE enterprise_pubkey = ?').get(farm.pk) as { c: number }).c;

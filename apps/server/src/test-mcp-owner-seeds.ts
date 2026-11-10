@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     setMemberPhoto(db, owner.pub, AVATAR);
     for (const [k, callsign] of [[mia, 'Mia Neighbour'], [noah, 'Noah Neighbour']] as const) {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     }
     clearEnterpriseFloorCache(db);
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     const auditBefore = runLedgerAudit();
-    const balancesBefore = JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const balancesBefore = JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const photo = await jpeg(400, 300);
 
     try {
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
             `the enterprise is made, named by its ref (${errorText(e) || JSON.stringify(structured(e))})`);
         assert(eRow?.lifecycle === 'ongoing' && eRow.goal_amount === null && eRow.deadline_at === null && eRow.working_capital_ceiling === null,
             `ongoing, with no goal, deadline or ceiling (${eRow?.lifecycle} ${eRow?.goal_amount} ${eRow?.deadline_at} ${eRow?.working_capital_ceiling})`);
-        const eAccount = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(eKey) as any;
+        const eAccount = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(eKey) as any;
         assert((eAccount?.balance ?? 0) === 0 && count('SELECT COUNT(*) AS c FROM projects WHERE id = ?', eKey) === 0, 'it holds no Beans and is no project');
         assert(eRow?.lat === -28.553 && eRow.lng === 153.5, `its place is rounded as the apps round a pin (${eRow?.lat}, ${eRow?.lng})`);
         assert(count('SELECT COUNT(*) AS c FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?', eKey, owner.pub) === 1, 'the owner keeps it');
@@ -324,7 +324,7 @@ async function main(): Promise<void> {
         const auditAfter = runLedgerAudit();
         // The accounts there before, as they were; any made since (the enterprise's own) hold 0.
         const before = new Set((JSON.parse(balancesBefore) as Array<{ public_key: string }>).map((r) => r.public_key));
-        const after = db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all() as Array<{ public_key: string; balance: number }>;
+        const after = db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all() as Array<{ public_key: string; balance: number }>;
         const balancesAfter = JSON.stringify(after.filter((r) => before.has(r.public_key)));
         const newOnes = after.filter((r) => !before.has(r.public_key));
         assert(auditAfter.ok === auditBefore.ok && auditAfter.sumBalances === auditBefore.sumBalances && auditAfter.drift === auditBefore.drift

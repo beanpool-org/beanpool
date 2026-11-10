@@ -318,7 +318,7 @@ async function main() {
         for (const w of [{ ...anna, seed: ownerSeed }, { ...ben, seed: benSeed }]) {
             db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(w.pubkey, w.callsign);
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(w.pubkey);
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(w.pubkey);
         }
         grantNodeRole(anna.pubkey, 'owner', 'owner:password');
         setReplicationToken(TOKEN);

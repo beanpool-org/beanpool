@@ -202,7 +202,7 @@ async function main() {
     const shop = member('Bangalow Bakery', null, 1);
     db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, 'lead', ?)").run(shop.pubKeyHex, kim.pubKeyHex, iso(T0));
 
-    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    event_start_at, event_end_at, event_private_note, event_host_lets_in, audience_scope)
                                 VALUES (@id, @type, 'general', @title, '', 0, @author, @at, @at, @lat, @lng, @start, @end, @note, @letsIn, 'public')`);
     const place = new Map<string, { lat: number; lng: number }>();

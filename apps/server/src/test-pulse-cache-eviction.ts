@@ -41,7 +41,7 @@ function makeMember(callsign: string): string {
         `INSERT INTO members (public_key, callsign, status, joined_at, updated_at)
          VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     return pubkey;
 }
 

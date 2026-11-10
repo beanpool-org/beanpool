@@ -48,7 +48,7 @@ function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), 'genesis', 'genesis')`).run(pk, callsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 function signedWsQuery(id: Id): string {

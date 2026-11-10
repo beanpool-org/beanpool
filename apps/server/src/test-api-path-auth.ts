@@ -48,7 +48,7 @@ function keypair(): Identity {
 function seedMember(pk: string, callsign: string, balance: number) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
 }
 
@@ -56,15 +56,15 @@ let seq = 0;
 /** A completed marketplace trade, so the member has earned credit and may make direct sends. */
 function completedTrade(buyer: string, seller: string, credits: number) {
     const pid = `pat-post-${seq++}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                 VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`).run(pid, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                 VALUES (?, ?, ?, ?, ?, 'completed')`).run(`pat-mtx-${seq++}`, pid, buyer, seller, credits);
 }
 
-const balanceOf = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key=?').get(pk) as any)?.balance ?? 0);
+const balanceOf = (pk: string) => r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key=?').get(pk) as any)?.balance ?? 0);
 const nodeTotal = () => r4((db.prepare(
-    `SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
+    `SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
 ).get() as any).t + getCommonsBalanceExact());
 
 /** Every table except logs, metrics and derived indexes, which background work may write at any time.

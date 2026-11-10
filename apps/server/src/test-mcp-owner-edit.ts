@@ -109,7 +109,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(mia, 'Mia Neighbour');
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(owner.pub);
@@ -561,7 +561,7 @@ async function main(): Promise<void> {
         assert(held.isError === true && errorText(held) === PRICE_FROZEN_ERROR && heldType.isError === true && errorText(heldType) === PRICE_FROZEN_ERROR && row(dealId)?.credits === beansBefore,
             `a live deal holds the price, in the engine's words (${errorText(held).slice(0, 60)})`);
         const dealMoved = await edit({ post_id: dealId, lat: -28.61, lng: 153.59 });
-        const txAfter = db.prepare('SELECT status, credits FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
+        const txAfter = db.prepare('SELECT status, amount_c FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
         assert(!dealMoved.isError && row(dealId)?.lat === -28.61 && txAfter?.credits === deal.credits, `and lets the place move, as a person's edit does; the deal stands (${errorText(dealMoved) || JSON.stringify(txAfter)})`);
 
         // A one-off in a deal is out of both apps' edit form, and stays out of this one (status 'pending').

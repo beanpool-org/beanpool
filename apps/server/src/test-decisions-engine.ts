@@ -104,17 +104,17 @@ function seedTestMember(pk: string, callsign: string, opts?: {
     const joinedAt = opts?.joinedAt || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(public_key) DO UPDATE SET
             status = excluded.status,
             credit_frozen = excluded.credit_frozen,
             is_treasury = excluded.is_treasury,
-            earned_credit = excluded.earned_credit
+            earned_credit_c = excluded.earned_credit_c
     `).run(pk, callsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
 
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, 0, 0)
         ON CONFLICT(public_key) DO NOTHING
     `).run(pk);
@@ -126,7 +126,7 @@ function recordTestActivity(buyer: string, seller: string, amount: number) {
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
     `).run(txId, postId, buyer, seller, amount, now, now);
 }
@@ -526,7 +526,7 @@ async function runDecisionsSuite() {
     const disabledMember = 'disabled_member_' + Date.now();
     seedTestMember(disabledMember, 'DisabledDave');
     db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
 
     const decOpenRemoval = removalProposedFromBefore({
         authorPubkey: admin,
@@ -897,7 +897,7 @@ async function runDecisionsSuite() {
     // Give negative balance
     const acctInsolvent = ledger.getAccount(insolventEnt);
     acctInsolvent.balance = -150;
-    db.prepare("UPDATE accounts SET balance = -150 WHERE public_key = ?").run(insolventEnt);
+    db.prepare("UPDATE accounts SET balance_c = -150 WHERE public_key = ?").run(insolventEnt);
     setCommonsBalance(500);
 
     const decWriteOff = createDecision({
@@ -924,7 +924,7 @@ async function runDecisionsSuite() {
     seedTestMember(queuedInsolventEnt, 'Queued Insolvent', { isTreasury: true });
     const acctQueued = ledger.getAccount(queuedInsolventEnt);
     acctQueued.balance = -200;
-    db.prepare("UPDATE accounts SET balance = -200 WHERE public_key = ?").run(queuedInsolventEnt);
+    db.prepare("UPDATE accounts SET balance_c = -200 WHERE public_key = ?").run(queuedInsolventEnt);
     setCommonsBalance(50); // Only 50 available, deficit is 200
 
     const decQueuedWriteOff = createDecision({
@@ -1002,7 +1002,7 @@ async function runDecisionsSuite() {
     const sameRole = (before: any, after: any) => !!before && !!after && before.role === after.role && before.granted_at === after.granted_at
         && before.granted_by === after.granted_by && after.session_epoch === before.session_epoch + 1;
     const heldAside = (decisionId: string) => db.prepare('SELECT member_pubkey, role FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as any;
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const markActive = (pk: string) => db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), pk);
     // Every block below measures its own electorate: nobody from the sections above counts as active any more.
     db.prepare('UPDATE members SET last_active_at = NULL').run();

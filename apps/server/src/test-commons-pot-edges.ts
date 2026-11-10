@@ -50,16 +50,16 @@ function assert(cond: unknown, msg: string): void {
 function makeMember(callsign: string, balance: number): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`)
         .run(pk, callsign);
     // Epoch at now: epoch 0 would charge ~56 years of demurrage at the first read.
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
 
-const potRow = () => db.prepare("SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
-const rowBalance = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance;
+const potRow = () => db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
+const rowBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance;
 const txCount = () => (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c;
 /** Everything a payment could touch, as one string to compare. */
 const snapshot = (pks: string[]) => JSON.stringify({
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     // ── 1. A healthy pot: unchanged behaviour ───────────────────────────────────────────────
     console.log('\n── 1. a healthy pot still pays, and the ledger adds up ──');
     setCommonsBalance(20);
-    db.prepare("UPDATE accounts SET balance = 20 WHERE public_key = 'COMMONS_POOL'").run();
+    db.prepare("UPDATE accounts SET balance_c = 20 WHERE public_key = 'COMMONS_POOL'").run();
     db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
     const base = runLedgerAudit();
     assert(base.ok && base.badBalances === 0, `the starting ledger adds up (${JSON.stringify(base)})`);
@@ -105,14 +105,14 @@ async function main(): Promise<void> {
     setConnectorCreditCap(PEER_ADDR, 500);
     const link = ensureFederationLink(PEER, 'byron', createTreasury)!;
     ensureBridgeAccount(PEER);
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(bridgeAccountId(PEER));
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(bridgeAccountId(PEER));
     reconcileLedgerFromDb();
     setCommissionCeiling(PEER, 500);
     assert(link && rowBalance(link.treasuryPubkey) !== undefined, 'a federation link with an empty enterprise to fund');
 
     // A healthy pot funds a commission, as before.
     setCommonsBalance(200);
-    db.prepare("UPDATE accounts SET balance = 200 WHERE public_key = 'COMMONS_POOL'").run();
+    db.prepare("UPDATE accounts SET balance_c = 200 WHERE public_key = 'COMMONS_POOL'").run();
     db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
     runLedgerAudit();
     const funded = fundCommission(PEER, 10);
@@ -120,9 +120,9 @@ async function main(): Promise<void> {
         `a commission of 10 draws 10.15 from a pot of 200 (${JSON.stringify(funded).slice(0, 160)}, pot ${getCommonsBalanceExact()})`);
     const afterFund = runLedgerAudit();
     assert(afterFund.ok, `and the ledger adds up (${JSON.stringify(afterFund)})`);
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     setCommonsBalance(getCommonsBalanceExact() + 10.15);
-    db.prepare("UPDATE accounts SET balance = ? WHERE public_key = 'COMMONS_POOL'").run(getCommonsBalanceExact());
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(getCommonsBalanceExact());
     reconcileLedgerFromDb();
 
     // ── 2–4. A pot that isn't a number ───────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ async function main(): Promise<void> {
         // As a boot leaves it: the row holds what makes the pot so (text for the unknown pot, ±9e999 for ±Infinity), and
         // the pot in memory is what the row gives. A failed move's resync reads the row back, so the two must agree.
         const broken = Number.isNaN(pot) ? "'abc'" : pot > 0 ? '9e999' : '-9e999';
-        db.prepare(`UPDATE accounts SET balance = ${broken} WHERE public_key = 'COMMONS_POOL'`).run();
+        db.prepare(`UPDATE accounts SET balance_c = ${broken} WHERE public_key = 'COMMONS_POOL'`).run();
         const brokenRow = potRow();
         setCommonsBalance(pot);
         const keys = [ben, cara, link.treasuryPubkey];
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
         // The pot set back to what its row holds, as the operator's repair does: the books add up, nothing minted or lost.
         assert(JSON.stringify(potRow()) === JSON.stringify(brokenRow) && String(COMMONS_BALANCE) === String(pot),
             `the pot's row was never written, and the pot is still ${pot} (${JSON.stringify(potRow())}, ${String(COMMONS_BALANCE)})`);
-        db.prepare("UPDATE accounts SET balance = ? WHERE public_key = 'COMMONS_POOL'").run(rowBefore.balance);
+        db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(rowBefore.balance);
         setCommonsBalance(rowBefore.balance as number);
         const audit = runLedgerAudit();
         assert(audit.ok && audit.badBalances === 0 && Math.abs(audit.drift) < 1e-9, `with the pot mended, the ledger adds up (${JSON.stringify(audit)})`);

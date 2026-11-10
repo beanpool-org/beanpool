@@ -114,7 +114,7 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
                     .run(m.pk, m.callsign);
                 setMemberPhoto(db, m.pk, AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
                 if (a.beans) se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
             }
             // A completed trade, so the trader may send Beans directly (the send gate).
@@ -125,7 +125,7 @@ async function child(): Promise<void> {
             }
             return true;
         },
-        balance: (a: { pk: string }) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
+        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
         member: (a: { pk: string }) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(a.pk) as { status: string } | undefined)?.status ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: async (a: { nonce: string }) => (await ms()).requestNonces.isSpent(a.nonce),

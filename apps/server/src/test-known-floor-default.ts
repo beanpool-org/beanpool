@@ -74,7 +74,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -197,7 +197,7 @@ async function main(): Promise<void> {
     createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', 40, 'fixed', kim.pk);
     createPost('offer', 'produce', 'Una bakes', 'Bread', 10, 'fixed', una.pk);
     const gil = makeMember('Gil');
-    db.prepare('UPDATE members SET earned_credit = 2100 WHERE public_key = ?').run(gil.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 2100 WHERE public_key = ?').run(gil.pk);
     assert(dialRow() === null, 'a fresh node has no confirmation row');
     const fresh = await read();
     assert(fresh.status === 200 && fresh.body?.confirmation === true && fresh.body?.knownFloor === 1000 && fresh.body?.creditCap === 2000,

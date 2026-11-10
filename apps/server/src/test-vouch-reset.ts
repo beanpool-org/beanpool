@@ -92,7 +92,7 @@ async function child(): Promise<void> {
                 mo: { profileFloor: se.getMemberTrustProfile(w.mo).floor, balanceFloor: se.getBalance(w.mo).floor, balance: se.getBalance(w.mo).balance },
                 vic: { floor: se.getMemberTrustProfile(w.vic).floor, activated: se.getMemberTrustProfile(w.vic).activated },
                 audit: se.runLedgerAudit(),
-                sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+                sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
                 touchTrigger: (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'members_touch_updated_at'`).get() as { sql: string } | undefined)?.sql ?? null,
             };
         },
@@ -163,10 +163,10 @@ interface World { val: Id; vee: Id; vic: Id; mo: Id; pat: Id; codes: Record<stri
 
 /** Two vouchers, Vic at -30 on a 100 vouch alone, Mo at -40 on 25 vouch + 100 granted, Pat holding +70; four invites. */
 function writeOldRows(d: Database.Database, w: World): void {
-    const member = d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, earned_credit, can_vouch, vouch_credit, elder_vouched_by)
+    const member = d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, earned_credit_c, can_vouch, vouch_credit, elder_vouched_by)
                               VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-20 days'), NULL, NULL, 'active', ?, ?, ?, ?)`);
-    const account = d.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)
-                               ON CONFLICT(public_key) DO UPDATE SET balance = excluded.balance`);
+    const account = d.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)
+                               ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c`);
     const epoch = Math.floor(Date.now() / DAY_MS);
     const code = d.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by, used_at, vouch_level) VALUES (?, ?, ?, ?, ?, ?)`);
     d.transaction(() => {
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
         }
         require_(OLD_COLUMNS.every((c) => columnsOf(file, 'members').includes(c)) && columnsOf(file, 'invite_codes').includes('vouch_level'),
             'the data dir holds the previous release\'s shape: the four columns');
-        const sumOf = () => { const d = new Database(file, { readonly: true }); try { return (d.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s; } finally { d.close(); } };
+        const sumOf = () => { const d = new Database(file, { readonly: true }); try { return (d.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s; } finally { d.close(); } };
         assert(Math.abs(sumOf()) < 1e-9, `the ledger sums to zero before (${sumOf()})`);
 
         const measured = measure(file);
@@ -286,8 +286,8 @@ async function main(): Promise<void> {
         console.log('\n— 2. the same with Vic settled: the reset runs —');
         {
             const d = new Database(file);
-            d.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(w.vic.pk);
-            d.prepare('UPDATE accounts SET balance = 40 WHERE public_key = ?').run(w.pat.pk);
+            d.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(w.vic.pk);
+            d.prepare('UPDATE accounts SET balance_c = 40 WHERE public_key = ?').run(w.pat.pk);
             d.close();
         }
         assert(Math.abs(sumOf()) < 1e-9, `the ledger sums to zero before the reset (${sumOf()})`);
@@ -374,8 +374,8 @@ async function main(): Promise<void> {
             const d = new Database(path.join(standbyDir, 'state.db'));
             givePreviousShape(d);
             writeOldRows(d, w);
-            d.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(w.vic.pk);
-            d.prepare('UPDATE accounts SET balance = 40 WHERE public_key = ?').run(w.pat.pk);
+            d.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(w.vic.pk);
+            d.prepare('UPDATE accounts SET balance_c = 40 WHERE public_key = ?').run(w.pat.pk);
             d.close();
         }
         const sb2 = await spawnNode(SCRIPT, standbyDir, { ...env, NODE_ROLE: 'backup' });

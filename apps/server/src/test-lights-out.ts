@@ -174,7 +174,7 @@ function member(callsign: string, role?: 'owner' | 'admin'): Id {
     const pk = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     if (role) se.grantNodeRole(pk, role, 'SYSTEM');
     return { pk, seed, callsign };
 }

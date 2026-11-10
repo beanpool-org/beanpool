@@ -197,7 +197,7 @@ async function child(): Promise<void> {
             const now = new Date().toISOString();
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
                         .run(`flood-${crypto.randomUUID()}`, `Flood ${i}`, a.author, now, now);
                 }
             })();

@@ -54,7 +54,7 @@ export async function rollbackChild(): Promise<void> {
             se.seedGenesisMember(anna, 'Anna');
             db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             se.grantNodeRole(ben, 'admin', anna);
             se.payFromCommons(ben, 3, 'a commons grant', { allowDeficit: true });
             addConnector('/ip4/127.0.0.1/tcp/4999/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA', 'peer', 'Neighbours', 'https://neighbours.example', true);
@@ -154,7 +154,7 @@ async function standbyState(): Promise<Record<string, any>> {
         cursor: (db.prepare("SELECT last_synced_at AS c FROM sync_cursors WHERE peer_id = 'backup:primary'").get() as { c: string } | undefined)?.c ?? null,
         ledger: {
             members: (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n,
-            sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+            sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
         },
         connectorsInMemory: getConnectors().map((x: any) => x.trustLevel).sort(),
         /** The standby's pin (services/standby-main.ts): the PeerId it copies, or null. */

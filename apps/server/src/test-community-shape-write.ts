@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, is_treasury)
                     VALUES (?, ?, ?, 'genesis', 'TEST', ?, ?, ?)`).run(id.pk, name, ago(30 * DAY), extra.status ?? 'active', extra.visitor ? 1 : 0, extra.treasury ? 1 : 0);
         setMemberPhoto(db, id.pk, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     function sessionHeaders(pub: string, role: 'owner' | 'admin' | 'moderator'): Record<string, string> {

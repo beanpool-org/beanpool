@@ -59,7 +59,7 @@ async function main(): Promise<void> {
     const carol = keyOf();
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, 'Carol', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(carol, owner);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(carol);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(carol);
     addConnector(`/ip4/127.0.0.1/tcp/4001/p2p/${PEER_ID}`, 'peer', 'Peer node', 'https://peer.example.org');
     registerFederationHandler(fakeNode);
     if (!handler) throw new Error('setup: the federation handler was not registered');

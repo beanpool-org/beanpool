@@ -3,7 +3,8 @@
  * Pure and universal: imported by both apps and the server.
  */
 
-import { formatNumber, t } from './words.js';
+import { t } from './words.js';
+import { formatHundredths, isHundredths, quantityHundredths, shareOf } from './hundredths.js';
 import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
 import type { StandingPhase } from './standing-deal.js';
 
@@ -357,15 +358,15 @@ export const listingDealLines = {
      * One row of the deals under way, for the listing's own people, from the deal's own amount: a free deal (a thing lent
      * for nothing, a free Offer taken up) has nothing held, and says so rather than "0 Beans held".
      */
-    heldRow: (name: string, credits: number, date: string) => (credits > 0
-        ? t('{name} · {n} Beans held · since {date}', { name, n: formatNumber(credits), date })
+    heldRow: (name: string, held: number, date: string) => (held > 0
+        ? t('{name} · {n} Beans held · since {date}', { name, n: formatHundredths(held), date })
         : t('{name} · no Beans held · since {date}', { name, date })),
     underWay: (n: number) => t('Deals under way: {n}', { n }),
     /** A keeper's note: the steps on this listing are taken as the enterprise. */
     actingFor: (name: string) => t('You act for {name} here.', { name }),
     /** A helper on a Need, approved, from the deal's own amount: the Beans are held for them, and on a free Need none are. */
-    helping: (credits: number) => (credits > 0
-        ? t("You're helping with this · {n} Beans held for you", { n: formatNumber(credits) })
+    helping: (held: number) => (held > 0
+        ? t("You're helping with this · {n} Beans held for you", { n: formatHundredths(held) })
         : t("You're helping with this · no Beans held")),
     offeredToHelp: (name: string) => t('You offered to help · waiting on {name}', { name }),
     askedToBorrow: (name: string) => t('You asked to borrow it · nothing is held until {name} says yes', { name }),
@@ -390,7 +391,8 @@ export const listingDealLines = {
 
 /** A deal as Release reads it: what it holds, and the time it was struck for (none on a fixed price). */
 export interface ReleaseDeal {
-    credits?: number | null;
+    /** What it holds, whole hundredths of a Bean. */
+    amount_c?: number | null;
     hours?: number | null;
 }
 
@@ -407,12 +409,14 @@ export interface ReleaseListing {
  * when none is asked for; a time that is not above 0 releases nothing (Release is off for it).
  */
 export function releaseAmount(deal: ReleaseDeal, units: number | undefined, listing: ReleaseListing): number {
-    const held = Number(deal.credits ?? 0);
+    const held = isHundredths(deal.amount_c) && deal.amount_c > 0 ? deal.amount_c : 0;
     const booked = Number(deal.hours);
     const oneFeeLoan = !!listing.lendable && (listing.priceType || 'fixed') === 'fixed';
     if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || units === undefined) return held;
     if (!(Number.isFinite(units) && units > 0)) return 0;
-    return units === booked ? held : (held / booked) * units;
+    // As the node pays it (engine/escrow.ts): what it holds times the time confirmed over the time booked, both in
+    // hundredths of a unit, truncated once (the payer keeps a part below a hundredth).
+    return units === booked ? held : shareOf(held, quantityHundredths(units), quantityHundredths(booked));
 }
 
 /**
@@ -423,6 +427,5 @@ export function releaseAmount(deal: ReleaseDeal, units: number | undefined, list
 export function releaseLine(deal: ReleaseDeal, listing: ReleaseListing, typed: ParsedAmount | null, payeeName: string): string {
     if (typed && !typed.ok && isAmbiguousAmount(typed.refusal)) return amountRefusalWords(typed.refusal);
     const units = typed ? (typed.ok ? typed.value : NaN) : undefined;
-    const n = Math.round(releaseAmount(deal, units, listing) * 100) / 100;
-    return t('Transferring {n} B to {name}', { n, name: payeeName });
+    return t('Transferring {n} B to {name}', { n: formatHundredths(releaseAmount(deal, units, listing)), name: payeeName });
 }

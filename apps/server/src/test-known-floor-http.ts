@@ -76,7 +76,7 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -85,12 +85,12 @@ function makeEnterprise(name: string, keepers: Id[], pledges: number[] = []): st
     const pk = keypair(name).pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     setMemberPhoto(db, pk, AVATAR);
     keepers.forEach((k, i) => {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(pk, k.pk);
         db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.pk);
-        if (pledges[i]) db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)')
+        if (pledges[i]) db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, ?, ?)')
             .run(crypto.randomUUID(), k.pk, pk, pledges[i], ago(DAY));
     });
     clearEnterpriseFloorCache(db);
@@ -297,11 +297,11 @@ async function main(): Promise<void> {
     assert(capSaved.status === 200 && capSaved.body?.creditCap === 5000 && capSaved.body?.confirmation === false,
         `the owner saves a cap of 5,000 with the dial off (${show(capSaved)})`);
     const gil = makeMember('Gil');
-    db.prepare('UPDATE members SET earned_credit = 2100 WHERE public_key = ?').run(gil.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 2100 WHERE public_key = ?').run(gil.pk);
     const gilOff = getBalance(gil.pk);
     assert(gilOff.floor === -2000, `a member granted 2,100 reads main's floor, -2,000, not -2,100 (${gilOff.floor})`);
     const bea = makeMember('Bea');
-    db.prepare('UPDATE members SET earned_credit = 2000 WHERE public_key = ?').run(bea.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 2000 WHERE public_key = ?').run(bea.pk);
     const offCo = makeEnterprise('Off Co', [bea, gil], [2000, 500]);
     const offCoServer = getEnterpriseUnderlyingFloor(offCo).floor;
     const offCoEngine = getEnterpriseFloor(db, offCo).floor;
@@ -404,7 +404,7 @@ async function main(): Promise<void> {
         const set = await settings(owner, { knownFloor: grant });
         assert(set.status === 200, `the owner sets the known floor to ${grant} (${show(set)})`);
         const keeper = makeMember(`Keeper ${grant} ${granted}`);
-        if (granted) db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, keeper.pk);
+        if (granted) db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(granted, keeper.pk);
         confirm(keeper, ada);
         const card = createPost('offer', 'produce', `Keeper ${grant} ${granted} mends shoes`, 'Shoes', 10, 'fixed', keeper.pk)!;
         pledgeEnterpriseBacking(makeEnterprise(`Keeper Co ${grant} ${granted}`, [keeper]), keeper.pk, pledged);
@@ -455,7 +455,7 @@ async function main(): Promise<void> {
                 `another member's board shows ${label}'s badge only: ${shown}, the least of ${own.body?.tier?.name}, never ${grant - pledged}; their profile, Trust Points ${theirs.body?.earnedCredit}`);
             return { floor: own.body?.floor, usable: own.body?.usableFloor, tier: own.body?.tier?.name, profileTier: theirs.body?.tier?.name,
                 cardTier: tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name,
-                row: db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined };
+                row: db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined };
         };
         const before = await look();
         assert(before.floor === -(grant - pledged) && before.tier === 'Newcomer' && before.profileTier === before.tier && before.cardTier === before.tier,
@@ -557,7 +557,7 @@ async function main(): Promise<void> {
     console.log('── 10. a change that changes nothing ──');
     const nod = makeMember('Nod');
     const nodLines = () => db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey = ? ORDER BY at, rowid').all(nod.pk) as { action: string; old_value: string; new_value: string }[];
-    const nodRow = () => db.prepare('SELECT amount, frozen, set_by, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(nod.pk) as { amount: number | null; frozen: number; set_by: string; set_at: string } | undefined;
+    const nodRow = () => db.prepare('SELECT amount_c, frozen, set_by, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(nod.pk) as { amount: number | null; frozen: number; set_by: string; set_at: string } | undefined;
     const set250 = await exception(owner, { memberPubkey: nod.pk, amount: 250 });
     const rowAt250 = nodRow();
     const same250 = await exception(adaAdmin, { memberPubkey: nod.pk, amount: 250 });

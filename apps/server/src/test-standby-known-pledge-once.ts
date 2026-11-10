@@ -72,7 +72,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                         VALUES (?, 'Kai Co', strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'), ?, 'INV-KaiCo', 'active', 1)`).run(a.enterprise, a.owner);
             for (const pk of [a.kai, a.enterprise]) {
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
                 setMemberPhoto(db, pk, avatar);
             }
             for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Kai Co goods ${i}`, 'Goods', 10, 'fixed', a.enterprise);
@@ -113,8 +113,8 @@ async function child(): Promise<void> {
                 engine: getEnterpriseFloor(db, a.enterprise).floor,
                 usable: getBalance(a.enterprise).usableFloor,
                 kaiOwn: getBalance(a.kai).floor,
-                figure: (db.prepare('SELECT backing FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(a.enterprise, a.kai) as { backing: number } | undefined)?.backing ?? null,
-                pledges: (db.prepare('SELECT id, amount FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL').all(a.enterprise) as { id: string; amount: number }[])
+                figure: (db.prepare('SELECT backing_c FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(a.enterprise, a.kai) as { backing: number } | undefined)?.backing ?? null,
+                pledges: (db.prepare('SELECT id, amount_c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL').all(a.enterprise) as { id: string; amount: number }[])
                     .map((r) => `${r.id.startsWith('known:') ? 'known' : 'earned'} ${r.amount}`).sort(),
             };
         },

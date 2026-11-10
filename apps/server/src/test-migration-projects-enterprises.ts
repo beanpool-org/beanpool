@@ -96,23 +96,23 @@ async function runTests() {
 
     popDb.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'creator', ?)`).run(creatorPubkey, now);
     popDb.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'backer', ?)`).run(backerPubkey, now);
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(creatorPubkey);
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(backerPubkey);
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(creatorPubkey);
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(backerPubkey);
 
     // Seed an unmigrated row in projects
     const legacyProjectId = 'proj_' + crypto.randomUUID();
     popDb.prepare(`
-        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, created_at, updated_at)
+        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, created_at, updated_at)
         VALUES (?, ?, 'Build Solar Kiln', 'Dry timber with solar heat', ?, 500, '2026-12-31T00:00:00.000Z', 'ACTIVE', ?, ?)
     `).run(legacyProjectId, creatorPubkey, JSON.stringify(['https://example.com/kiln.jpg']), now, now);
 
     // Seed a transaction referencing projects(id)
     const txId = 'pledge_tx_' + crypto.randomUUID();
     const escrowPubkey = `escrow_${legacyProjectId}`;
-    popDb.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(escrowPubkey);
-    popDb.prepare(`UPDATE accounts SET balance = balance - 50 WHERE public_key = ?`).run(backerPubkey);
+    popDb.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)`).run(escrowPubkey);
+    popDb.prepare(`UPDATE accounts SET balance_c = balance_c - 50 WHERE public_key = ?`).run(backerPubkey);
     popDb.prepare(`
-        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, project_id)
         VALUES (?, ?, ?, 50, 'Seed pledge', ?)
     `).run(txId, backerPubkey, escrowPubkey, legacyProjectId);
 
@@ -201,7 +201,7 @@ async function runTests() {
     initStateEngine();
     reconcileLedgerFromDb();
 
-    const sumBefore = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
+    const sumBefore = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) as s FROM accounts').get() as any).s;
 
     const testCreator = 'creator_' + crypto.randomUUID().slice(0, 12);
     const testBacker = 'backer_' + crypto.randomUUID().slice(0, 12);
@@ -210,8 +210,8 @@ async function runTests() {
     const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator, 'cr_' + testCreator.slice(8, 16));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker, 'bk_' + testBacker.slice(8, 16));
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`).run(testCreator, nowEpoch);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 500, ?)`).run(testBacker, nowEpoch);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 100, ?)`).run(testCreator, nowEpoch);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 500, ?)`).run(testBacker, nowEpoch);
     reconcileLedgerFromDb();
 
     // Create crowdfund project (goal = 200)
@@ -277,7 +277,7 @@ async function runTests() {
     testAssert(commonsPropProject?.current_amount === 50, 'Bounded commons proposal resolves in getCrowdfundProject with current_amount 50');
 
     // Verify ledger conservation
-    const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
+    const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) as s FROM accounts').get() as any).s;
     testAssert(Math.abs(sumAfter - (sumBefore + 600)) < 1e-9, 'Ledger conservation strictly preserved (delta = seeded 600)');
 
     // Test deleteProject does not resurrect in getAllProjects

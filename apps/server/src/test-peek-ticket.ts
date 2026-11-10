@@ -120,7 +120,7 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 30 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
         setMemberPhoto(db, id.pk, TEST_FACE);
         return id;
     };

@@ -92,7 +92,7 @@ async function child(): Promise<void> {
             for (const m of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                             VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'seed')`).run(m.pk, m.callsign, a.genesis);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
             }
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();

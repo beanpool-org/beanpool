@@ -91,7 +91,7 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -155,8 +155,8 @@ function socket(id: Id | null): Promise<Sock> {
 const settle = () => new Promise((r) => setTimeout(r, 400));
 
 /** The whole node as one number (test-commons-conservation.ts nodeTotal): every account but the pot's shadow, plus the pot. */
-const nodeTotal = () => r2((db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact());
-const balanceRow = (who: Id) => r2((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => r2((db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact());
+const balanceRow = (who: Id) => r2((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number } | undefined)?.balance ?? 0);
 const debtsOf = (entryId: string) => db.prepare('SELECT * FROM names_debts WHERE entry_id = ? ORDER BY removed_at').all(entryId) as any[];
 
 async function main(): Promise<void> {
@@ -182,7 +182,7 @@ async function main(): Promise<void> {
         const m = makeMember(`Proposer${++proposers}`, 0);
         const partner = makeMember(`Partner${proposers}`, 0);
         const at = new Date().toISOString();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
     assert(notAdmin.status === 403, `a member can't start a work-off (${show(notAdmin)})`);
     const workOff = await call('POST', ada, `/api/names/debts/${deeDebt[0].id}/work-off`, { memberPubkey: dee2.pk });
     const flag = debtsOf(deeEntry)[0];
-    const exc = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(dee2.pk) as any;
+    const exc = db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(dee2.pk) as any;
     assert(workOff.status === 201 && flag.repaying_pubkey === dee2.pk && exc?.amount === 0 && exc?.frozen === 0,
         `Ada confirms Dee's new key to work it off: the repayment flag, and a known floor of 0 (${show(workOff)}; ${JSON.stringify(exc)})`);
     const why = await call('GET', dee2, '/api/commons/repayment');
@@ -303,7 +303,7 @@ async function main(): Promise<void> {
     const done = debtsOf(deeEntry)[0];
     assert(balanceRow(dee2) === 18.5 && done.repaid === 200 && done.status === 'settled' && done.settled_how === 'work_off',
         `a 100-Bean sale through escrow: exactly the 80 left goes, Dee keeps the other 18.5 (after the 1.5 fee), and the record is settled (${balanceRow(dee2)}, ${JSON.stringify(done)})`);
-    const repaidRows = r2((db.prepare(`SELECT COALESCE(SUM(amount), 0) t FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(dee2.pk) as any).t);
+    const repaidRows = r2((db.prepare(`SELECT COALESCE(SUM(amount_c), 0) t FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(dee2.pk) as any).t);
     assert(repaidRows === 200 && r2(getCommonsBalanceExact() - commonsAtStart) === 201.5, `the Commons got exactly 200 of repayment, plus the sale's 1.5 fee (${repaidRows}, ${r2(getCommonsBalanceExact() - commonsAtStart)})`);
     transfer('genesis', dee2.pk, 30, 'Dee mends a shed', 'direct', true);
     assert(balanceRow(dee2) === 48.5, `and it stops there: the next 30 stay hers (${balanceRow(dee2)})`);
@@ -366,7 +366,7 @@ async function main(): Promise<void> {
     const revoked = await call('POST', ada, `/api/names/confirmations/${wrong.body?.id}/revoke`);
     assert(wrong.status === 201 && revoked.status === 200, `setup: Ada confirms Wil against Wren's entry to work it off, then revokes it (${show(wrong)}; ${show(revoked)})`);
     transfer('genesis', wil.pk, 40, 'Wil weeds a bed', 'direct', true);
-    const wilFloor = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(wil.pk) as any;
+    const wilFloor = db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(wil.pk) as any;
     const wilWhy = await call('GET', wil, '/api/commons/repayment');
     assert(balanceRow(wil) === 40 && debtsOf(wrenEntry)[0].repaid === 0, `40 Beans in after the revoke: Wil keeps all 40, nothing repaid (${balanceRow(wil)}, ${JSON.stringify(debtsOf(wrenEntry)[0])})`);
     assert(debtsOf(wrenEntry)[0].repaying_pubkey === null && !wilFloor && wilWhy.body?.repayment === null,
@@ -380,10 +380,10 @@ async function main(): Promise<void> {
     const right = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/work-off`, { memberPubkey: wren.pk });
     assert(right.status === 201 && right.body?.status === 'awaiting_second', `the right person can be confirmed to work it off now, awaiting a second admin (${show(right)})`);
     transfer('genesis', wren.pk, 40, 'Wren sweeps a path', 'direct', true);
-    const early = db.prepare('SELECT amount FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
+    const early = db.prepare('SELECT amount_c FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
     assert(balanceRow(wren) === 40 && debtsOf(wrenEntry)[0].repaid === 0 && !early, `before the second admin agrees, nothing is swept and no 0 floor is set (${balanceRow(wren)}, ${JSON.stringify(early)})`);
     const second = await call('POST', bea, `/api/names/confirmations/${right.body?.id}/second`);
-    const live = db.prepare('SELECT amount FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
+    const live = db.prepare('SELECT amount_c FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
     assert(second.status === 200 && live?.amount === 0, `Bea seconds it: now the 0 floor (${show(second)}; ${JSON.stringify(live)})`);
     transfer('genesis', wren.pk, 10, 'Wren sweeps another path', 'direct', true);
     assert(balanceRow(wren) === 0 && debtsOf(wrenEntry)[0].repaid === 50, `and the sweep: what she holds above 0 goes (${balanceRow(wren)}, ${JSON.stringify(debtsOf(wrenEntry)[0])})`);
@@ -392,7 +392,7 @@ async function main(): Promise<void> {
 
     // ── 10. a payment settles only the debt it was made for, once ──────────────────────────────
     console.log('── 10. a payment settles the one debt it was made for ──');
-    const sweepTx = db.prepare(`SELECT id, amount FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(vic.pk) as { id: string; amount: number };
+    const sweepTx = db.prepare(`SELECT id, amount_c FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(vic.pk) as { id: string; amount: number };
     const left = (e: string) => r2(debtsOf(e)[0].amount - debtsOf(e)[0].repaid);
     assert(sweepTx?.amount === 120 && sweepTx.amount >= left(wrenEntry), `setup: Vic's debt X swept 120 Beans (${JSON.stringify(sweepTx)}); Wren's debt Y has ${left(wrenEntry)} left`);
     const ySweep = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/settle`, { transactionId: sweepTx?.id });
@@ -412,7 +412,7 @@ async function main(): Promise<void> {
     const plain = await call('POST', wil, '/api/commons/pay', { amount: 150 });
     const plainSettle = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/settle`, { transactionId: plain.body?.transactionId });
     const wrenAfter = debtsOf(wrenEntry)[0];
-    const plainLink = db.prepare('SELECT debt_id, amount FROM names_debt_payments WHERE transaction_id = ?').get(plain.body?.transactionId) as { debt_id: string; amount: number } | undefined;
+    const plainLink = db.prepare('SELECT debt_id, amount_c FROM names_debt_payments WHERE transaction_id = ?').get(plain.body?.transactionId) as { debt_id: string; amount: number } | undefined;
     assert(plain.status === 200 && wrenLeft < 150 && plainSettle.status === 200 && wrenAfter.status === 'settled' && wrenAfter.settled_how === 'pay_back' && wrenAfter.settle_ref === plain.body?.transactionId
         && wrenAfter.settled_by === ada.pk && wrenAfter.repaid === wrenAfter.amount && plainLink?.debt_id === wrenDebt?.id && plainLink?.amount === wrenLeft,
         `an admin counts a payment made for no debt toward Y: only the ${wrenLeft} left counts, and it settles Y (${show(plain)}; ${show(plainSettle)}; ${JSON.stringify(plainLink)})`);
@@ -435,11 +435,11 @@ async function main(): Promise<void> {
     }
     const tooFine = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
     assert(tooFine.status === 400 && balanceRow(cy) === 48.01, `a part of a cent is refused (${show(tooFine)}, ${balanceRow(cy)})`);
-    const exactBalance = (who: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number }).balance;
+    const exactBalance = (who: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number }).balance;
     for (const [amount, cents] of [[1.0000000001, 1], [0.1 + 0.2, 0.3]]) {
         const before = exactBalance(cy);
         const paid = await call('POST', cy, '/api/commons/pay', { amount });
-        const stored = (db.prepare('SELECT amount FROM transactions WHERE id = ?').get(paid.body?.transactionId) as { amount: number } | undefined)?.amount;
+        const stored = (db.prepare('SELECT amount_c FROM transactions WHERE id = ?').get(paid.body?.transactionId) as { amount: number } | undefined)?.amount;
         assert(paid.status === 200 && paid.body?.amount === cents && stored === cents && exactBalance(cy) === Math.round((before - cents) * 100) / 100,
             `${amount}, within float noise of ${cents}, is paid and stored as whole cents: ${cents} (${show(paid)}; stored ${stored}; balance ${before} → ${exactBalance(cy)})`);
     }
@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     await call('POST', await debtor('Cy old', 5, cyEntry), '/api/member/purge', { action: 'purge_account' });
     const cyDebt = debtsOf(cyEntry)[0];
     const forDebt = await call('POST', cy, '/api/commons/pay', { amount: 2.0000000001, debtId: cyDebt.id });
-    const link = db.prepare('SELECT amount FROM names_debt_payments WHERE transaction_id = ?').get(forDebt.body?.transactionId) as { amount: number } | undefined;
+    const link = db.prepare('SELECT amount_c FROM names_debt_payments WHERE transaction_id = ?').get(forDebt.body?.transactionId) as { amount: number } | undefined;
     assert(forDebt.status === 200 && link?.amount === 2, `a payment made for a debt is linked as whole cents too (${show(forDebt)}; ${JSON.stringify(link)})`);
     const tooFineStill = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
     assert(tooFineStill.status === 400, `0.291 is still refused (${show(tooFineStill)})`);
@@ -474,15 +474,15 @@ async function main(): Promise<void> {
     await call('POST', qiOld, '/api/member/purge', { action: 'purge_account' });
     const qi = makeMember('Qi again');
     await call('POST', ada, `/api/names/debts/${debtsOf(qiEntry)[0]?.id}/work-off`, { memberPubkey: qi.pk });
-    db.prepare('UPDATE accounts SET balance = 0.005 WHERE public_key = ?').run(qi.pk);
+    db.prepare('UPDATE accounts SET balance_c = 0.005 WHERE public_key = ?').run(qi.pk);
     initStateEngine();
     const swept = sweepRepayment(qi.pk);
-    const qiBal = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(qi.pk) as any).balance;
+    const qiBal = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(qi.pk) as any).balance;
     assert(swept === 0 && qiBal === 0.005 && debtsOf(qiEntry)[0].repaid === 0, `half a cent above 0 sweeps nothing: never rounded up below 0 (${swept}, ${qiBal})`);
 
     // ── 13. a revoked work-off puts back only the floor it lowered ─────────────────────────────
     console.log('── 13. a revoked work-off puts back only what it lowered ──');
-    const floorOf = (who: Id) => db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined;
+    const floorOf = (who: Id) => db.prepare('SELECT amount_c, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined;
     const floorLog = (who: Id) => db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey = ? ORDER BY at, rowid').all(who.pk) as { action: string; old_value: string; new_value: string }[];
     const setFloor = (who: Id, amount: number) => call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: who.pk, amount }, owner);
     const twoAdmins = (on: boolean) => db.prepare(`INSERT INTO node_config (key, value) VALUES ('names_two_admins', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(on ? 'true' : 'false');
@@ -662,8 +662,8 @@ async function main(): Promise<void> {
     // Decay leaves fractions of a cent, and getBalance rounds: Ivy holds 4.996, shown as 5. The check before the
     // transaction tests what ledger.moveToCommons tests inside it, so 5 is refused there, in plain words.
     const ivy = makeMember('Ivy');
-    db.prepare('UPDATE accounts SET balance = 4.996 WHERE public_key = ?').run(ivy.pk);
-    db.prepare("UPDATE accounts SET balance = balance - 4.996 WHERE public_key = 'genesis'").run();
+    db.prepare('UPDATE accounts SET balance_c = 4.996 WHERE public_key = ?').run(ivy.pk);
+    db.prepare("UPDATE accounts SET balance_c = balance_c - 4.996 WHERE public_key = 'genesis'").run();
     initStateEngine();
     const ivyShown = await call('GET', ivy, `/api/ledger/balance/${ivy.pk}`);
     const ivyAll = await call('POST', ivy, '/api/commons/pay', { amount: 5 });
@@ -751,7 +751,7 @@ async function main(): Promise<void> {
     console.log('── 17. a payment, a work-off and a forgiveness read the same repaid ──');
     const workOffOf = async (debtId: string, member: Id) => call('POST', ada, `/api/names/debts/${debtId}/work-off`, { memberPubkey: member.pk });
     // Unrounded: section 15's 4.996 leaves half a cent on the node, which nodeTotal's rounding can flip either way.
-    const exactTotal = () => (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact();
+    const exactTotal = () => (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact();
     const total17 = exactTotal();
     // (a) working it off, then paying it back: the next receipt sweeps nothing
     const wrkDebt = await leftDebt('Wrk old', 200);

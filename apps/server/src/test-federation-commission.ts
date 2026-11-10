@@ -68,7 +68,7 @@ function assert(cond: boolean, msg: string): void {
 
 const r4 = (n: number): number => Math.round(n * 10000) / 10000;
 const bal = (pk: string): number =>
-    r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
 
 /**
  * Every account row except the COMMONS_POOL shadow, plus the live global.
@@ -77,7 +77,7 @@ const bal = (pk: string): number =>
  * double-count or miss the draw depending on flush timing, which is the one thing this must not do.
  */
 const nodeTotal = (): number => {
-    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
+    const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
     return r4(s + getCommonsBalanceExact());
 };
@@ -87,12 +87,12 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, is_visitor)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url, is_visitor)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
         .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
     setMemberPhoto(db, pk, TINY_PNG);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
@@ -101,7 +101,7 @@ function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isV
 /** Move a bridge to a chosen tab. What a settled trade in one direction or the other leaves behind. */
 function setTab(peerId: string, balance: number): void {
     ensureBridgeAccount(peerId);
-    db.prepare('UPDATE accounts SET balance = ? WHERE public_key = ?').run(balance, bridgeAccountId(peerId));
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(balance, bridgeAccountId(peerId));
     reconcileLedgerFromDb();
 }
 
@@ -171,7 +171,7 @@ async function main() {
     // What makes a refused commission self-correcting. If settlement reverses, escrow refunds to the
     // enterprise rather than the Commons; drawing only the shortfall means the next commission consumes that
     // residue instead of needing a sweep nobody would remember to run.
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     setCommonsBalance(1000);
     reconcileLedgerFromDb();
     setTab(PEER, 0);
@@ -198,7 +198,7 @@ async function main() {
     //
     // Each commission moves the tab positive by its amount (that is what settling one does), so it consumes
     // the room it used. Read per-commission, a ceiling of 200 would permit 200 forever.
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     setCommonsBalance(10_000);
     reconcileLedgerFromDb();
     setTab(PEER, 0);
@@ -217,7 +217,7 @@ async function main() {
     assert(fits.ok === true, '5d. and a commission that fits the remainder still goes through');
 
     // ── 6. THE COMMONS IS NOT PUSHED INTO DEFICIT for one person's discretionary act. ───────────────────
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     setCommonsBalance(10);
     reconcileLedgerFromDb();
     setTab(PEER, -1000);
@@ -340,7 +340,7 @@ async function main() {
     // a Commons debit for a commission that never started — and it is exactly what putting the transport
     // check after the funding would produce.
     setCommonsBalance(10_000);
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
     reconcileLedgerFromDb();
     const before9 = nodeTotal();
     const noTransport = await commission(keeper, { postId: remotePost.id });

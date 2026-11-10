@@ -38,7 +38,7 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 function assignKeeper(treasury: string, keeper: string, role = 'keeper') {
@@ -180,7 +180,7 @@ async function main() {
     assignKeeper(solventTreasury, bakerKeeper2);
 
     // Initial state: SolventBakery has 0 balance and 0 earned surplus
-    const surplusOf = (pk: string) => Number((db.prepare('SELECT earned_surplus FROM members WHERE public_key=?').get(pk) as any)?.earned_surplus) || 0;
+    const surplusOf = (pk: string) => Number((db.prepare('SELECT earned_surplus_c FROM members WHERE public_key=?').get(pk) as any)?.earned_surplus) || 0;
     assert(surplusOf(solventTreasury) === 0, 'SolventBakery starts with 0 earned surplus');
 
     // Seed positive balance for SolventBakery (e.g. 50 beans from genesis or grant)
@@ -286,7 +286,7 @@ async function main() {
     seedMember(daveKeeper, 'DaveKeeper');
     assignKeeper(cider, daveKeeper);
 
-    const ceilingOf = (pk: string) => (db.prepare('SELECT working_capital_ceiling FROM members WHERE public_key=?').get(pk) as any)?.working_capital_ceiling;
+    const ceilingOf = (pk: string) => (db.prepare('SELECT working_capital_ceiling_c FROM members WHERE public_key=?').get(pk) as any)?.working_capital_ceiling;
     assert(ceilingOf(cider) === 100, 'CommunityCider initialized with working_capital_ceiling = 100');
     assert(bal(cider) === 0, 'CommunityCider starts at 0 balance');
 
@@ -314,14 +314,14 @@ async function main() {
     assert(surplusOf(cider) === 0, 'Swept earned surplus is decremented from earned_surplus');
 
     // Admin updates ceiling: lowers ceiling to 60. Since earned_surplus is 0, nothing sweeps from capital!
-    db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(60, cider);
+    db.prepare('UPDATE members SET working_capital_ceiling_c = ? WHERE public_key = ?').run(60, cider);
     const { sweepEnterpriseCeiling, executeDecision } = await import('./state-engine.js');
     const sweptAmountNoSurplus = sweepEnterpriseCeiling(cider);
     assert(sweptAmountNoSurplus === 0, 'Lowering ceiling does not sweep capital when earned_surplus is 0');
     assert(bal(cider) === 129.40, 'CommunityCider balance remains 129.40');
 
     // Now give Cider 50 earned surplus: lowering ceiling to 60 sweeps min(129.40 - 60, 50) = 50!
-    db.prepare('UPDATE members SET earned_surplus = 50 WHERE public_key = ?').run(cider);
+    db.prepare('UPDATE members SET earned_surplus_c = 50 WHERE public_key = ?').run(cider);
     const sweptWithSurplus = sweepEnterpriseCeiling(cider);
     assert(sweptWithSurplus === 50, 'Admin lowering ceiling sweeps earned surplus (50) to Commons');
     assert(bal(cider) === 79.40, 'CommunityCider balance reduced to 79.40 (129.40 - 50)');
@@ -329,7 +329,7 @@ async function main() {
 
     // Batch/nested transaction sweeps via afterTransactionCommit (Rule 7 post-commit hook)
     const { publicKey: batchCider } = createTreasury('BatchCider', AVATAR, 100, { workingCapitalCeiling: 50 });
-    db.prepare('UPDATE members SET earned_surplus = 40 WHERE public_key = ?').run(batchCider);
+    db.prepare('UPDATE members SET earned_surplus_c = 40 WHERE public_key = ?').run(batchCider);
     db.transaction(() => {
         transfer('genesis', batchCider, 30, 'Batch 1', 'direct', true);
         transfer('genesis', batchCider, 40, 'Batch 2', 'direct', true); // Total 70 > ceiling 50, surplus 40 -> sweeps 20
@@ -411,14 +411,14 @@ async function main() {
     // Simulate historical trading before Rule 6 migration:
     // 2 completed sales of 12 beans each (total 24 beans)
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES ('hist-tx-1', 'post-1', ?, ?, 12.0, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                ('hist-tx-2', 'post-2', ?, ?, 12.0, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(eggCustomer, liveEggs, eggCustomer, liveEggs);
     // Give LiveCommunityEggs balance
     transfer('genesis', liveEggs, 24, 'Fund egg revenue', 'direct', true);
     // Explicitly reset earned_surplus to 0 and remove migration key to simulate pre-migration state
-    db.prepare('UPDATE members SET earned_surplus = 0 WHERE public_key = ?').run(liveEggs);
+    db.prepare('UPDATE members SET earned_surplus_c = 0 WHERE public_key = ?').run(liveEggs);
     db.prepare("DELETE FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").run();
     assert(surplusOf(liveEggs) === 0, 'LiveCommunityEggs starts with 0 earned surplus before backfill');
 
@@ -428,12 +428,12 @@ async function main() {
         if (!alreadyMigrated) {
             db.prepare(`
                 UPDATE members
-                SET earned_surplus = MAX(0, COALESCE((
-                    SELECT SUM(credits) FROM marketplace_transactions
+                SET earned_surplus_c = MAX(0, COALESCE((
+                    SELECT SUM(amount_c) FROM marketplace_transactions
                     WHERE seller_pubkey = members.public_key AND status = 'completed'
                       AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
                 ), 0) - COALESCE((
-                    SELECT SUM(credits) FROM marketplace_transactions
+                    SELECT SUM(amount_c) FROM marketplace_transactions
                     WHERE buyer_pubkey = members.public_key AND status = 'completed'
                       AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
                 ), 0))
@@ -475,7 +475,7 @@ async function main() {
 
     // Give garden 20 balance and 20 earned surplus
     transfer('genesis', garden, 20, 'Seed garden', 'direct', true);
-    db.prepare('UPDATE members SET earned_surplus = 20 WHERE public_key = ?').run(garden);
+    db.prepare('UPDATE members SET earned_surplus_c = 20 WHERE public_key = ?').run(garden);
 
     createPost('offer', 'food', 'Garden greens', 'Fresh lettuce', 25, 'fixed', garden, undefined, undefined, undefined, true);
     createPost('offer', 'skills', 'Weeding service', 'Weed beds', 10, 'fixed', gardenKeeper, undefined, undefined, undefined, true);
@@ -511,7 +511,7 @@ async function main() {
     const updatedGardenClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE id = ?').get(gardenClaim.id) as any;
     assert(updatedGardenClaim.status === 'paid', 'Deferred claim for extra hours paid automatically on sales income');
     assert(bal(gardenKeeper) === Math.round((19.70 + 9.85) * 100) / 100, 'Keeper received both payments minus fee (29.55 total)');
-    const finalWeedTx = db.prepare('SELECT credits, hours, status FROM marketplace_transactions WHERE id = ?').get(weedBid.id) as any;
+    const finalWeedTx = db.prepare('SELECT amount_c, hours, status FROM marketplace_transactions WHERE id = ?').get(weedBid.id) as any;
     assert(finalWeedTx.credits === 30, 'marketplace_transactions.credits updated to 30 (20 base + 10 diff) upon paying extra hours claim');
     assert(finalWeedTx.hours === 3, 'marketplace_transactions.hours reflects actual 3 hours worked');
     assert(finalWeedTx.status === 'completed', 'marketplace_transactions.status is completed');
@@ -592,7 +592,7 @@ async function main() {
 
     // Give CancelBakery positive balance and surplus
     transfer('genesis', cancelTreasury, 30, 'Fund cancel bakery', 'direct', true);
-    db.prepare('UPDATE members SET earned_surplus = 30 WHERE public_key = ?').run(cancelTreasury);
+    db.prepare('UPDATE members SET earned_surplus_c = 30 WHERE public_key = ?').run(cancelTreasury);
 
     createPost('offer', 'food', 'Scones', 'Fresh scones', 30, 'fixed', cancelTreasury, undefined, undefined, undefined, true);
     createPost('offer', 'skills', 'Baking help', 'Bake scones', 10, 'fixed', cancelKeeper, undefined, undefined, undefined, true);
@@ -647,7 +647,7 @@ async function main() {
     // Force a pending claim referencing this cancelled transaction
     const zombieClaimId = 'claim-zombie-test-1';
     db.prepare(`
-        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status)
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status)
         VALUES (?, ?, ?, ?, ?, 10, 'pending')
     `).run(zombieClaimId, cancelTreasury, cancelKeeper, resurrectNeed!.id, resurrectBid.id);
     const keeperBalBefore = bal(cancelKeeper);

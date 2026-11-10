@@ -52,7 +52,7 @@ async function child(): Promise<void> {
             const ben = crypto.randomBytes(32).toString('hex');
             db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             // A real grant, so the copy has a ledger with Beans in it.
             const paid = !!se.payFromCommons(ben, 5, 'a commons grant', { allowDeficit: true });
             se.updateNodeConfig({ publicAddress: { name: 'primary', mode: 'direct', hostname: 'primary.beanpool.org', status: 'live' } } as any);
@@ -84,11 +84,11 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             // As a string: the reply is JSON, where Infinity would come back as null.
             const read = () => {
-                const r = db.prepare("SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
+                const r = db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
                 return { balance: String(r.balance), t: r.t };
             };
             const afterBoot = read();
-            const dust = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(a.dust) as { balance: number } | undefined;
+            const dust = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.dust) as { balance: number } | undefined;
             let flush = 'wrote';
             try { se.persistDecayAndCommons(); } catch (e: any) { flush = `refused: ${e?.message}`; }
             return { afterBoot, memory: String(core.COMMONS_BALANCE), dust: dust?.balance ?? null, flush, afterFlush: read() };
@@ -194,9 +194,9 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
         const key = sc.account === 'ben' ? setup.ben : 'COMMONS_POOL';
         const sdb = new Database(path.join(dirs.standby, 'state.db'));
         if (sc.value === 'NULL') makeBalanceNullable(sdb);
-        const changed = sdb.prepare(`UPDATE accounts SET balance = ${sc.value} WHERE public_key = ?`).run(key).changes;
-        if (potRow) sdb.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0.0000005, 0)').run(DUST);
-        const row = sdb.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(key) as { balance: unknown; t: string };
+        const changed = sdb.prepare(`UPDATE accounts SET balance_c = ${sc.value} WHERE public_key = ?`).run(key).changes;
+        if (potRow) sdb.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0.0000005, 0)').run(DUST);
+        const row = sdb.prepare('SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = ?').get(key) as { balance: unknown; t: string };
         sdb.pragma('wal_checkpoint(TRUNCATE)');
         sdb.close();
         assert(changed === 1 && row.t === stored.t && String(row.balance) === (sc.value === 'NULL' ? 'null' : stored.holds.replace(/^text '(.*)'$/, '$1')),

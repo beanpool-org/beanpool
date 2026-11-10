@@ -145,12 +145,12 @@ function makeMember(callsign: string, opts?: {
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(pubkey, callsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
 
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, 0)
     `).run(pubkey, balance);
 
@@ -165,7 +165,7 @@ function recordActivity(buyer: string, seller: string, amount: number) {
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
     `).run(txId, postId, buyer, seller, amount, now, now);
 }
@@ -541,7 +541,7 @@ async function runSuite() {
 
     // Fund the Commons pool so grant can execute
     setCommonsBalance(500);
-    db.prepare(`UPDATE accounts SET balance = 500 WHERE public_key = 'COMMONS_POOL'`).run();
+    db.prepare(`UPDATE accounts SET balance_c = 500 WHERE public_key = 'COMMONS_POOL'`).run();
 
     // Fire the tick the way the node does: the periodic tickDecisions() in state-engine.ts. There is no
     // route for it — test-decisions-tick-route-gone.ts holds POST /api/commons/decisions/tick unrouted.

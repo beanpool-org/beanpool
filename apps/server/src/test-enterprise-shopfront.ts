@@ -98,7 +98,7 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor)
                 VALUES (?, ?, ?, ?, 'TEST', 'active', ?)`).run(id.pk, name, WEEK_AGO(), owner.pk, opts.visitor ? 1 : 0);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
@@ -386,10 +386,10 @@ async function main(): Promise<void> {
     await memberOffer(lou, 'repairs', 'Puncture fixed');
     await entOffer(lou, 'electronics', 'Phone screen', { shopId: entShop });
     // Rae's record: one completed deal, rated 4; Lou's tier from a grant.
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
                 VALUES (?, ?, ?, ?, 0, 'completed', ?)`).run(crypto.randomUUID(), honey, max.pk, rae.pk, new Date().toISOString());
     db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment) VALUES (?, ?, ?, 'provider', 4, '')`).run(crypto.randomUUID(), rae.pk, max.pk);
-    db.prepare('UPDATE members SET earned_credit = 300 WHERE public_key = ?').run(lou.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 300 WHERE public_key = ?').run(lou.pk);
 
     const detail = await call('GET', max, `/api/treasury/${ent}`);
     const keeperOf = (r: Res, pk: string) => (r.body?.keepers ?? []).find((k: any) => k.publicKey === pk);

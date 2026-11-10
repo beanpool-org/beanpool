@@ -26,7 +26,7 @@ console.log(`  A. Baseline established at: ${result1.baseline.toFixed(4)}`);
 
 // B. Simulate drift: insert a phantom account balance that wasn't part of a transaction
 // (This mirrors what happened on the 'review' node — a direct balance write)
-db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('phantom_test_account', 100, 0)`).run();
+db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('phantom_test_account', 100, 0)`).run();
 const result2 = runLedgerAudit();
 // Baseline is 0 from step A; sum is now 100; drift = 100
 assert.strictEqual(result2.ok, false, 'B. Drift of 100 must be detected as not ok');

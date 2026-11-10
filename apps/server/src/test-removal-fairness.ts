@@ -203,7 +203,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, opts.joinedAt ?? ago(30 * DAY), gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         se.transfer('genesis', id.pubKeyHex, 20, `seed ${callsign}`, 'direct', true);
         if (opts.token !== false) se.registerPushToken(id.pubKeyHex, id.token, 'android');
         return id;

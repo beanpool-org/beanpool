@@ -145,7 +145,7 @@ async function main(): Promise<void> {
             const code19 = recoveryCode;
             require_(await standby.send('envelope') === 'stored', 'S4 holds M\'s take-over envelope');
             // A balance M never had: the take-over's audit finds the ledger isn't the main server's.
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 7 WHERE public_key = ?', args: [ann.pk] });
             await standby.send('takeover-restart-off');
             // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
             const pw: Record<string, string> = await standby.send('owner-session');
@@ -256,7 +256,7 @@ async function main(): Promise<void> {
             require_(w22.ok === true && fs.existsSync(f('state.previous.db')), `S8 holds a whole copy, the old database beside it (${JSON.stringify(w22)})`);
             const code22 = recoveryCode ?? (await main.send('make-envelope')).code;
             require_(await standby.send('envelope') === 'stored', 'S8 holds M\'s take-over envelope');
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] }); // the audit finds trouble
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 7 WHERE public_key = ?', args: [ann.pk] }); // the audit finds trouble
             await standby.send('takeover-restart-off');
             // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
             const pw: Record<string, string> = await standby.send('owner-session');
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
             await standby.send('sql', { sql: `UPDATE members SET bio = 'AFTER-22' WHERE public_key = ?`, args: [ann.pk] });
             const look = async () => ({
                 bio: (await standby.send('rows', { sql: 'SELECT bio FROM members WHERE public_key = ?', args: [ann.pk] }))[0]?.bio ?? null,
-                balance: (await standby.send('rows', { sql: 'SELECT balance FROM accounts WHERE public_key = ?', args: [ann.pk] }))[0]?.balance ?? null,
+                balance: (await standby.send('rows', { sql: 'SELECT balance_c FROM accounts WHERE public_key = ?', args: [ann.pk] }))[0]?.balance ?? null,
                 messages: (await standby.send('rows', { sql: 'SELECT COUNT(*) AS n FROM messages' }))[0].n as number,
             });
             const before = await look();

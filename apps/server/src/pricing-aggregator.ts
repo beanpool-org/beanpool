@@ -111,7 +111,9 @@ export function runPricingAggregationCycle(): {
                 const titleTokenMatch = categoryMatch && nameTokens.some(t => t.length >= 4 && post.tokens.has(t));
 
                 if (post.text.includes(nameLower) || (categoryMatch && matchScore >= 2) || titleTokenMatch) {
-                    matchedPrices.push(post.price_c);
+                    // The guide is whole Beans (pricing_guide_items.price_beans, a hint that is never moved);
+                    // aggregateObservedPrice rounds what listings ask, in Beans, to its whole Beans.
+                    matchedPrices.push(post.price_c / 100);
                     if (post.hasPhoto && !latestPhotoUrl) {
                         latestPhotoUrl = `/api/marketplace/posts/${post.id}/photos/0`;
                     }

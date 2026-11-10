@@ -43,11 +43,11 @@ function assert(cond: boolean, msg: string): void {
 
 const r4 = (n: number): number => Math.round(n * 10000) / 10000;
 const bal = (pk: string): number =>
-    r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    r4((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
 
 /** Every account row except the COMMONS_POOL shadow, plus the live global. A refusal must not move it. */
 const nodeTotal = (): number => {
-    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
+    const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
     return r4(s + getCommonsBalanceExact());
 };
@@ -55,11 +55,11 @@ const nodeTotal = (): number => {
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, is_visitor)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url, is_visitor)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
         .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;

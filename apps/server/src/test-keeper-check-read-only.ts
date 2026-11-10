@@ -67,7 +67,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -155,9 +155,9 @@ async function main(): Promise<void> {
         { name: 'frozen after asking', pledge: 5, after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'frozen after asking, no pledge', pledge: 0, after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'no room: known floor lowered by an exception', pledge: 100,
-          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 50, 0, ?)').run(a.pk, lead.pk), expect: false },
+          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, 50, 0, ?)').run(a.pk, lead.pk), expect: false },
         { name: 'no room: known floor frozen by an exception', pledge: 100,
-          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, NULL, 1, ?)').run(a.pk, lead.pk), expect: false },
+          after: a => db.prepare('INSERT OR REPLACE INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, NULL, 1, ?)').run(a.pk, lead.pk), expect: false },
         { name: 'no room: the dial turned off', pledge: 100, after: () => setDial(false), expect: false },
         { name: 'own debt well inside the line', pledge: 400, before: a => { spend(a, 100); }, expect: true },
         { name: 'own debt one bean short of the edge', pledge: 400, before: (a, g) => { spend(a, g - 400 - 1); }, expect: true },
@@ -168,9 +168,9 @@ async function main(): Promise<void> {
         { name: 'own debt and frozen', pledge: 400, before: (a, g) => { spend(a, g - 100); },
           after: a => db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(a.pk), expect: false },
         { name: 'granted credit 100, debt at the edge', pledge: 300,
-          before: (a, g) => { db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300); }, expect: true },
+          before: (a, g) => { db.prepare('UPDATE members SET earned_credit_c = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300); }, expect: true },
         { name: 'granted credit 100, debt past the edge (100 deeper)', pledge: 300,
-          before: (a, g) => { db.prepare('UPDATE members SET earned_credit = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300 + 100 + 1); }, expect: false },
+          before: (a, g) => { db.prepare('UPDATE members SET earned_credit_c = 100 WHERE public_key = ?').run(a.pk); spend(a, g - 300 + 100 + 1); }, expect: false },
         { name: 'a known pledge of 200 elsewhere, at the edge', pledge: 250,
           before: (a, g) => { keepElsewhere(a, 200); spend(a, g - 200 - 250); }, expect: true },
         { name: 'a known pledge of 200 elsewhere, past the edge', pledge: 250,
@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     };
     const cents = (max: number) => 1 + Math.floor(random() * max);
     const elsewhere = createTreasury(`Elsewhere ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
-    const writeKnown = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+    const writeKnown = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                                    VALUES (?, ?, ?, ?, ?, NULL)`);
     let agree = 0, yes = 0, no = 0;
     const disagreements: string[] = [];

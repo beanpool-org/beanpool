@@ -82,7 +82,7 @@ async function main(): Promise<void> {
         const pk = keyOf();
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(pk, name, owner);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return pk;
     };
     const carol = addLocal('Carol');

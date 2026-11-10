@@ -69,7 +69,7 @@ function makeMember(baseCallsign: string): { pubKeyHex: string; callsign: string
     const pubKeyHex = crypto.randomBytes(32).toString('hex');
     const callsign = `${baseCallsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, status, earned_credit, joined_at)
+        INSERT INTO members (public_key, callsign, status, earned_credit_c, joined_at)
         VALUES (?, ?, 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'bundled://sprout');
@@ -561,7 +561,7 @@ async function runTests() {
             '10p. HARD RULE §9: group_members table has NO foreign key to enterprises');
 
         // Being a convenor grants no trust tier or credit
-        const aliceProfile = db.prepare("SELECT earned_credit, status FROM members WHERE public_key = ?").get(alice.pubKeyHex) as any;
+        const aliceProfile = db.prepare("SELECT earned_credit_c, status FROM members WHERE public_key = ?").get(alice.pubKeyHex) as any;
         assert(aliceProfile.earned_credit === 50, '10q. HARD RULE §9: Creating group or being convenor confers NO credit or trust tier');
 
         // Node roles remain separate

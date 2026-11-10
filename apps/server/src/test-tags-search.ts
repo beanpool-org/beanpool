@@ -70,7 +70,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
     // ── 9. the LIKE filter on 5,000 listings ──────────────────────────────────────────────────
     console.log('\n── 9. the tag filter measured on 5,000 listings ──');
     const pool = ['food.fruit.lemon', 'food.fruit.lime', 'food.eggs', 'food.dairy.milk', 'garden', 'tools'];
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, tags, search_keywords)
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, tags, search_keywords)
                                VALUES (?, 'offer', 'food', ?, '', 0, ?, 1, 'active', ?, 'food')`);
     db.transaction(() => {
         for (let i = 0; i < 5000; i++) {

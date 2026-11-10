@@ -62,7 +62,7 @@ function addMember(joinedDaysAgo: number, opts: { status?: string; visitor?: boo
 
 function addPost(author: string, daysAgo: number, opts: { type?: string; originNode?: string; shownFrom?: string; createdVia?: string; createdBy?: string; status?: string; audience?: string } = {}): string {
     const id = `post-${++n}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by, audience_scope)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by, audience_scope)
                 VALUES (?, ?, 'general', ?, '', 5, ?, ?, ?, 1, ?, ?, ?, ?, ?)`)
         .run(id, opts.type ?? 'offer', id, author, ago(daysAgo), opts.status ?? 'active', opts.originNode ?? null, opts.shownFrom ?? null, opts.createdVia ?? null, opts.createdBy ?? null, opts.audience ?? 'public');
     return id;
@@ -71,7 +71,7 @@ function addPost(author: string, daysAgo: number, opts: { type?: string; originN
 function addDeal(postId: string, buyer: string, seller: string, daysAgo: number, status = 'completed', dispute: string | null = null): void {
     // Every ending writes completed_at, a cancelled deal's and a rejected one's too (engine/escrow.ts).
     const ended = status === 'requested' || status === 'pending' ? null : ago(daysAgo);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, dispute_resolution)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, dispute_resolution)
                 VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`).run(`deal-${++n}`, postId, buyer, seller, status, ago(daysAgo + 1), ended, dispute);
 }
 
@@ -303,7 +303,7 @@ async function main(): Promise<void> {
         for (let i = 0; i < 5; i++) {
             const m = addMember(100);
             db.prepare("UPDATE members SET joined_at = '2026-01-10 08:00:00' WHERE public_key = ?").run(m);
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T14:00:00.000Z', 'active')`).run(`old-${++n}`, m);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T14:00:00.000Z', 'active')`).run(`old-${++n}`, m);
         }
         assert(all().daysToFirstListing === 2, `an older row's "YYYY-MM-DD HH:MM:SS" date reads as UTC, whatever the server's time zone (${all().daysToFirstListing})`);
         if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;

@@ -156,12 +156,12 @@ async function main() {
 
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number; balance?: number; joinedAt?: string } = {}): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor, earned_credit_c)
                     VALUES (?, ?, ?, ?, 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(),
                 `INV-${callsign.toUpperCase()}`, opts.visitor ? 1 : 0, opts.earned ?? 0);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, opts.balance ?? 0);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, opts.balance ?? 0);
         return id;
     };
     const alice = member('PrivAlice', { earned: 10, balance: 42.5 });
@@ -172,7 +172,7 @@ async function main() {
     const outsider = newId(); // signs, but no member here
 
     const tx = (id: string, from: string, to: string, amount: number, memo: string) =>
-        db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+        db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
             .run(id, from, to, amount, memo, new Date().toISOString());
     tx('tx-priv-ab', alice.pk, bob.pk, 5, 'Sentinel memo alice to bob');
     tx('tx-priv-bc', bob.pk, carol.pk, 2, 'Sentinel memo bob to carol');
@@ -256,7 +256,7 @@ async function main() {
     await sleep(200);
     // A completed trade is Alice's standing to propose (her earned_credit badge is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), alice.pk, carol.pk, tradedAt, tradedAt);
     // A removal Alice proposed before removal by vote S3 (since then only an admin's pause opens one), still open: what it
     // records about Bob is what each reader is served below.
@@ -352,7 +352,7 @@ async function main() {
         const kim = member('PrivKim');
         se.adminAssignTreasuryOperator(enterprise, kim.pk);
         se.transfer('genesis', enterprise, 20, 'Seed the bakery', 'direct', true);
-        db.prepare('UPDATE members SET earned_surplus = 20 WHERE public_key = ?').run(enterprise);
+        db.prepare('UPDATE members SET earned_surplus_c = 20 WHERE public_key = ?').run(enterprise);
         const kimSock = await openSocket(`${wsBase}?${signedWsQuery(kim)}`);
         const aliceSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
         const bystanderSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
@@ -455,7 +455,7 @@ async function main() {
 
         // A visitor's row may still hold a listing from before visitors were refused one, and may take it down: it reads
         // its own listings, and nothing else of the board.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status) VALUES ('priv-vera-old', 'offer', 'other', 'Sentinel old visitor offer', 'd', 1, ?, 1, 'active')").run(vera.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status) VALUES ('priv-vera-old', 'offer', 'other', 'Sentinel old visitor offer', 'd', 1, ?, 1, 'active')").run(vera.pk);
         const own = await get(`/api/marketplace/posts?author=${vera.pk}`, vera);
         assert(own.status === 200 && Array.isArray(own.body) && own.body.length === 1 && own.body[0].id === 'priv-vera-old',
             `a visitor's row reads its own listing (got ${own.status} ${own.text.slice(0, 100)})`);
@@ -672,7 +672,7 @@ async function main() {
         initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         // Bob backs the bakery, which is placed on the map; Bob runs a crowdfund; Alice proposes a Commons project; Alice's
         // Pulse channel lists a video on her own page elsewhere.
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-priv', ?, ?, 5)").run(bob.pk, enterprise);
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-priv', ?, ?, 5)").run(bob.pk, enterprise);
         db.prepare('UPDATE members SET lat = ?, lng = ? WHERE public_key = ?').run(-28.5123457, 153.5123457, enterprise);
         const crowdfund = newId().pk;
         createCrowdfundProject(crowdfund, bob.pk, 'Sentinel priv roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);

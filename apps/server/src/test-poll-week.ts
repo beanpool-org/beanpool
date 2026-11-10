@@ -69,7 +69,7 @@ function makeMember(callsign: string): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
         .run(pub, callsign, `INV-${callsign.toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`);
     setMemberPhoto(db, pub, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return { pub, priv: privateKey };
 }
 
@@ -375,7 +375,7 @@ async function main(): Promise<void> {
     console.log('\n--- 8. Decisions and the other votes are not polls ---');
     const trade = (a: string, b: string) => {
         const now = new Date().toISOString();
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at) VALUES (?, ?, ?, ?, 20, 'completed', ?, ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at) VALUES (?, ?, ?, ?, 20, 'completed', ?, ?)")
             .run(`tx-${crypto.randomBytes(4).toString('hex')}`, `post-${crypto.randomBytes(4).toString('hex')}`, a, b, now, now);
     };
     const dee = makeMember('Dee');

@@ -74,7 +74,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -99,9 +99,9 @@ function earnByTrading(member: Id, n: number): number {
     for (let i = 0; i < n; i++) {
         const peer = makeMember(`${member.name}'s peer ${i}`);
         const post = `post-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', 100, ?, 'completed')`)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', 100, ?, 'completed')`)
             .run(post, peer.pk);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 100, 'completed')`)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 100, 'completed')`)
             .run(`mtx-${crypto.randomUUID()}`, post, member.pk, peer.pk);
     }
     return getMemberTrustProfile(member.pk).earnedCredit;
@@ -186,8 +186,8 @@ async function main(): Promise<void> {
         return call('POST', approver, `/api/enterprise/${co}/keepers/requests/${asked.body?.request?.id}/approve`, {});
     };
     const line = (co: string) => (db.prepare('SELECT legacy_credit_floor AS l FROM members WHERE public_key = ?').get(co) as { l: number | null }).l;
-    const ownLine = (co: string) => (db.prepare('SELECT earned_credit AS e FROM members WHERE public_key = ?').get(co) as { e: number | null }).e;
-    const pledgeRows = (co: string) => (db.prepare('SELECT id, amount FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL ORDER BY id').all(co) as { id: string; amount: number }[])
+    const ownLine = (co: string) => (db.prepare('SELECT earned_credit_c AS e FROM members WHERE public_key = ?').get(co) as { e: number | null }).e;
+    const pledgeRows = (co: string) => (db.prepare('SELECT id, amount_c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL ORDER BY id').all(co) as { id: string; amount: number }[])
         .map(r => `${r.id.startsWith('known:') ? 'known' : 'earned'} ${r.amount}`).sort();
 
     const eve = makeMember('Eve');
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
     const sDeep = await spendAs(eve, deep.pk, 1);
     assert(refused(sDeep) && getBalance(deep.pk).balance === -280, `a 1-Bean spend is refused (${said(sDeep)}; ${getBalance(deep.pk).balance})`);
     const bea = makeMember('Bea');
-    db.prepare('UPDATE members SET earned_credit = 500 WHERE public_key = ?').run(bea.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 500 WHERE public_key = ?').run(bea.pk);
     for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Bea goods ${i}`, 'Goods', 10, 'fixed', bea.pk);
     const bought = await call('POST', bea, '/api/marketplace/posts/accept', { postId: deep.offer, buyerPublicKey: bea.pk });
     const done = await call('POST', bea, '/api/marketplace/transactions/complete', { transactionId: bought.body?.transaction?.id, confirmerPublicKey: bea.pk });
@@ -302,14 +302,14 @@ async function main(): Promise<void> {
     const ivy = makeMember('Ivy');
     confirm(ivy, ada);
     const lost = makeEnterprise('Lost Co', 200);
-    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing) VALUES (?, ?, 'keeper', ?, 200)").run(lost.pk, ivy.pk, ada.pk);
+    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing_c) VALUES (?, ?, 'keeper', ?, 200)").run(lost.pk, ivy.pk, ada.pk);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(ivy.pk);
-    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, 200, ?)').run(`known:${crypto.randomUUID()}`, ivy.pk, lost.pk, ago(DAY));
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, 200, ?)').run(`known:${crypto.randomUUID()}`, ivy.pk, lost.pk, ago(DAY));
     db.prepare('UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?').run(lost.pk);
     // And one from before Slice 4 with nothing on record for its line (the grandfathered 200, or none at all).
     const old = makeEnterprise('Old Co', 0);
-    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing) VALUES (?, ?, 'keeper', ?, 250)").run(old.pk, ivy.pk, ada.pk);
-    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, 250, ?)').run(`known:${crypto.randomUUID()}`, ivy.pk, old.pk, ago(DAY));
+    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing_c) VALUES (?, ?, 'keeper', ?, 250)").run(old.pk, ivy.pk, ada.pk);
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, 250, ?)').run(`known:${crypto.randomUUID()}`, ivy.pk, old.pk, ago(DAY));
     const after = count?.() ?? { enterprises: NaN, maybe: NaN };
     assert(after.enterprises === 1 && after.maybe === 1,
         `openingLinesClearedByKnownPledges counts Lost Co, and Old Co as one that may have held the grandfathered 200 (${JSON.stringify(after)})`);
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
 
     // ── 7. conservation ─────────────────────────────────────────────────────────────────────────
     console.log('── 7. conservation ──');
-    const sum = (db.prepare("SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as { s: number }).s;
+    const sum = (db.prepare("SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'").get() as { s: number }).s;
     assert(Math.abs(sum + getCommonsBalanceExact()) < 1e-6, `every balance and the commons still add up to zero (${sum + getCommonsBalanceExact()})`);
 
     console.log(`\n${passed}/${run} passed`);

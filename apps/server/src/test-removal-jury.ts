@@ -179,7 +179,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pk, callsign, ago(joinedDaysAgo * DAY), gen.pk, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         se.registerPushToken(id.pk, id.token, 'android');
         return id;
     };
@@ -344,7 +344,7 @@ async function main() {
     const at = (i: number) => byKey.get(heads[i])!;
     // The head of the draw, each with a conflict only this node knows of. at(9)'s deal with Sam is older than 90 days.
     const post = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Plums', '', 5, ?, 'active', 1, ?, ?, 'plums')`).run(post, sam.pk, ago(DAY), ago(DAY));
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status, created_at) VALUES (?, ?, ?, ?, 'A report of the plums', 'pending', ?)`)
         .run(crypto.randomUUID(), at(0).pk, gen.pk, post, ago(DAY));
@@ -352,7 +352,7 @@ async function main() {
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(sam.pk, at(2).pk);
     const block = db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)');
     block.run(at(4).pk, sam.pk);
-    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, updated_at)
+    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, updated_at)
                              VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`);
     deal.run(crypto.randomUUID(), post, at(5).pk, sam.pk, 'completed', ago(20 * DAY), ago(20 * DAY), ago(20 * DAY));
     // at(6) asked for Sam's plums: an open deal they opened.
@@ -374,18 +374,18 @@ async function main() {
     db.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, 'c', 'n', ?)")
         .run(crypto.randomUUID(), unanswered, sam.pk, ago(DAY));
     const theirPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
     deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
     // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer, through the real escrow code: a completed
     // deal, and its trade chat, Sam made alone (reviews of #2793 rounds 2 and 3). It stands nobody aside. Sam may accept: the
     // Plums are a listed Offer of Sam's.
     const freeOffer = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Free lemons', '', 0, ?, 'active', 1, ?, ?, 'lemons')`).run(freeOffer, at(17).pk, ago(DAY), ago(DAY));
     const lemons = se.acceptPost(freeOffer, sam.pk);
     const lemonsDone = se.completePostTransaction(lemons.id, sam.pk);
-    const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, credits, status FROM marketplace_transactions WHERE id = ?')
+    const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, amount_c, status FROM marketplace_transactions WHERE id = ?')
         .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; credits: number; status: string } | undefined;
     assert(lemonsDone?.status === 'completed' && lemonsRow?.status === 'completed' && lemonsRow.buyer_pubkey === sam.pk
         && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.credits === 0,
@@ -395,7 +395,7 @@ async function main() {
     // lent Sam a ladder 120 days ago, and is seated.
     const lendable = (lender: Id, title: string) => {
         const id = crypto.randomUUID();
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, lendable, repeatable, created_at, updated_at, search_keywords)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, lendable, repeatable, created_at, updated_at, search_keywords)
                     VALUES (?, 'offer', 'tools', ?, '', 0, ?, 'active', 1, 1, 1, ?, ?, ?)`).run(id, title, lender.pk, ago(DAY), ago(DAY), title.toLowerCase());
         return id;
     };

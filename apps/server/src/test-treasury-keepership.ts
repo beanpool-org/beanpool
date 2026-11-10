@@ -46,7 +46,7 @@ function makeIdentity(callsign: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -142,7 +142,7 @@ async function main() {
     // Privacy gating on deferred wage claims:
     // Insert 1 pending claim and 1 paid claim with sensitive keeper details
     db.prepare(`
-        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at)
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at, paid_at)
         VALUES ('claim-priv-pending', ?, ?, 'post-priv-1', 'tx-priv-1', 25.0, 'pending', '2026-09-14T00:00:00Z', NULL),
                ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', 50.0, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
     `).run(eggs, doone.pubKeyHex, eggs, doone.pubKeyHex);
@@ -314,7 +314,7 @@ async function main() {
     // keeper wages require positive balance and earned surplus. Seed Bakery with surplus
     // so the two-person rule approval/completion workflow can be exercised.
     transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
-    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
+    db.prepare('UPDATE members SET earned_surplus_c = 100 WHERE public_key = ?').run(bakery);
 
     // Keeper Alice bids on the need from her personal account
     const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
@@ -430,7 +430,7 @@ async function main() {
     }
     for (const rp of fullSync.posts ?? []) {
         replicaDb.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits,

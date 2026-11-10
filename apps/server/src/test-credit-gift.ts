@@ -109,7 +109,7 @@ const offerOf = (who: Id) => call(who, 'GET', '/api/credit/gift');
 const count = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
 const giftRows = () => count("SELECT COUNT(*) AS n FROM room_gifts WHERE kind = 'gift'");
 /** Every account row as it stands: a gift moves none of them. */
-const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance, last_demurrage_epoch FROM accounts ORDER BY public_key').all());
+const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c, last_demurrage_epoch FROM accounts ORDER BY public_key').all());
 const txCount = () => count('SELECT COUNT(*) AS n FROM transactions');
 
 /** A confirmation on a fresh entry, as the names list's confirmMember writes it (setup only: the list has its own suites). */
@@ -124,7 +124,7 @@ function deal(seller: Id, buyer: Id): void {
     setMemberPhoto(db, seller.pk, FACE);
     const post = createPost('offer', 'general', `${seller.name} sells`, 'A deal for the gift suite', 10, 'fixed', seller.pk);
     require_(!!post?.id, `${seller.name} lists an offer`);
-    db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 10, 'completed')")
+    db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 10, 'completed')")
         .run(crypto.randomBytes(16).toString('hex'), post!.id, buyer.pk, seller.pk);
 }
 /** Below zero the real way: a live offer and a marketplace spend within the usable floor. */
@@ -137,10 +137,10 @@ function spendBelowZero(who: Id, to: Id, amount: number): void {
 
 /** Room a member holds that traces to `root`: what they received rooted there less what they passed on rooted there. */
 const heldRooted = (pk: string, root: string) =>
-    count('SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND root_pubkey = ?', pk, root)
-    - count("SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE from_pubkey = ? AND kind = 'gift' AND root_pubkey = ?", pk, root);
+    count('SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND root_pubkey = ?', pk, root)
+    - count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE from_pubkey = ? AND kind = 'gift' AND root_pubkey = ?", pk, root);
 /** A member's pieces' open parts: each received piece less what was split from it. */
-const openParts = (pk: string) => count(`SELECT COALESCE(SUM(g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0)), 0) AS n
+const openParts = (pk: string) => count(`SELECT COALESCE(SUM(g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0)), 0) AS n
     FROM room_gifts g WHERE g.to_pubkey = ?`, pk);
 
 async function main(): Promise<void> {
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
     const owenPiece = db.prepare("SELECT id FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ? AND kind = 'vouch'").get(owen.pk, sam.pk) as { id: string };
     const adaPiece = db.prepare("SELECT id FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ? AND kind = 'vouch'").get(ada.pk, sam.pk) as { id: string };
     const split = await gift(sam, kim, 75);
-    const rows = db.prepare("SELECT from_pubkey, to_pubkey, root_pubkey, amount, source_gift_id, kind FROM room_gifts WHERE kind = 'gift' AND from_pubkey = ? ORDER BY rowid")
+    const rows = db.prepare("SELECT from_pubkey, to_pubkey, root_pubkey, amount_c, source_gift_id, kind FROM room_gifts WHERE kind = 'gift' AND from_pubkey = ? ORDER BY rowid")
         .all(sam.pk) as { from_pubkey: string; to_pubkey: string; root_pubkey: string; amount: number; source_gift_id: string; kind: string }[];
     assert(split.status === 200 && split.body?.amount === 75 && split.body?.pieces === 2 && rows.length === 2
         && rows[0].amount === 50 && rows[0].root_pubkey === owen.pk && rows[0].source_gift_id === owenPiece.id
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
     // all of it would leave him owing 250 on a line of 200, "Spending paused" (getBalance's `frozen`).
     vouchFromProfile(owen.pk, { memberPubkey: gus.pk, vouchAmount: 100 });
     deal(mel, gus);
-    db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(gus.pk); // setup: a granted line, as 6 does
+    db.prepare('UPDATE members SET earned_credit_c = 400 WHERE public_key = ?').run(gus.pk); // setup: a granted line, as 6 does
     spendBelowZero(gus, mel, 250);
     const gp = getMemberTrustProfile(gus.pk);
     const gb = getBalance(gus.pk);
@@ -351,7 +351,7 @@ async function main(): Promise<void> {
     deal(rin, mel);
     const cap = creditCap(db);
     const zp = getMemberTrustProfile(zoe.pk);
-    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(cap - 40 - zp.earnedCredit - zp.knownGrant - zp.roomHeld, zoe.pk); // setup: a granted line
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(cap - 40 - zp.earnedCredit - zp.knownGrant - zp.roomHeld, zoe.pk); // setup: a granted line
     const zr = getMemberTrustProfile(zoe.pk);
     require_(zr.knownGrant + zr.roomHeld + zr.otherAllowance === cap - 40, `Zoe's line is ${cap - 40}, 40 under the cap`);
     const pastCap = await gift(rin, zoe, 41);
@@ -401,7 +401,7 @@ async function main(): Promise<void> {
         && partBack.body?.error === 'Part of the credit line someone gave you started as @Ada’s vouch and can’t go to them, so you can give them 25 Beans at most.' && giftRows() === rowsBefore7b,
         `7b. with Owen's 25 too: past the 25 not rooted at Ada is refused, with the most she may give Ada (${show(partBack)})`);
     const owensPart = await gift(ivy, ada, 25);
-    const toAda = db.prepare("SELECT root_pubkey AS root, amount FROM room_gifts WHERE kind = 'gift' AND from_pubkey = ? AND to_pubkey = ?").all(ivy.pk, ada.pk) as { root: string; amount: number }[];
+    const toAda = db.prepare("SELECT root_pubkey AS root, amount_c FROM room_gifts WHERE kind = 'gift' AND from_pubkey = ? AND to_pubkey = ?").all(ivy.pk, ada.pk) as { root: string; amount: number }[];
     assert(owensPart.status === 200 && toAda.length === 1 && toAda[0].root === owen.pk && toAda[0].amount === 25 && heldRooted(ivy.pk, ada.pk) === 50,
         `7b. the 25 rooted at Owen goes to Ada, skipping Ada's older piece; Ivy keeps Ada's 50 (${JSON.stringify(toAda)})`);
     const passedOn = await gift(ivy, jon, 20);
@@ -410,15 +410,15 @@ async function main(): Promise<void> {
         `7b. passed on to Jon, Ada's piece still can't reach Ada (${show(roundBack)})`);
     // Before the cap (#2927's review): with Ada 10 under the cap, Jon's 20 all rooted at her answers back_to_root, never
     // over_cap, so refusals that write nothing can't measure her line.
-    const adaColumn = (db.prepare('SELECT earned_credit AS c FROM members WHERE public_key = ?').get(ada.pk) as { c: number }).c;
+    const adaColumn = (db.prepare('SELECT earned_credit_c AS c FROM members WHERE public_key = ?').get(ada.pk) as { c: number }).c;
     const ap = getMemberTrustProfile(ada.pk);
-    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(cap - 10 - ap.earnedCredit - ap.knownGrant - ap.roomHeld, ada.pk); // setup: a granted line, as 6 does
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(cap - 10 - ap.earnedCredit - ap.knownGrant - ap.roomHeld, ada.pk); // setup: a granted line, as 6 does
     const ar = getMemberTrustProfile(ada.pk);
     require_(ar.knownGrant + ar.roomHeld + ar.otherAllowance === cap - 10, `Ada's line is ${cap - 10}, 10 under the cap (${ar.knownGrant + ar.roomHeld + ar.otherAllowance})`);
     const nearCap = await gift(jon, ada, 20);
     assert(nearCap.status === 409 && nearCap.body?.code === 'back_to_root' && !nearCap.text.includes(String(cap)),
         `7b. near the cap the root rule answers first, saying nothing of Ada's line (${show(nearCap)})`);
-    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(adaColumn, ada.pk); // setup: back as it was
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(adaColumn, ada.pk); // setup: back as it was
 
     // ── 8. The owner's setting: a Core setting, changed in Core settings only ────────────────────────────────────────
     const SHAPE = '/api/local/admin/community-shape';
@@ -502,13 +502,13 @@ async function main(): Promise<void> {
     // Four of them owe on a line their one offer meters, as Gus did in 5b: 400 granted, 100 vouched, 250 spent. A gift may
     // take only the room their offer's line doesn't need, so no gift below ever pauses its giver (checked at every step).
     for (const [i, who] of crowd.slice(0, 4).entries()) {
-        db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(who.pk); // setup: a granted line, as 6 does
+        db.prepare('UPDATE members SET earned_credit_c = 400 WHERE public_key = ?').run(who.pk); // setup: a granted line, as 6 does
         vouchFromProfile(vouchers[i % vouchers.length].pk, { memberPubkey: who.pk, vouchAmount: 100 });
         require_(!!transfer(who.pk, mel.pk, 250, 'A purchase for the suite', 'escrow') && getBalance(who.pk).balance === -250 && !getBalance(who.pk).frozen,
             `${who.name} owes 250 on one offer's line (usable floor ${getBalance(who.pk).usableFloor})`);
     }
     const people = [...crowd, sam, kim, rin, ria, rex];
-    const allocated = (v: Id) => count("SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind IN ('grant', 'top_up')", v.pk);
+    const allocated = (v: Id) => count("SELECT COALESCE(SUM(amount_c), 0) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind IN ('grant', 'top_up')", v.pk);
     const accountsAtStart = accountsNow();
     // mulberry32, in 32-bit integer steps (a plain LCG in floats loses its low bits past 2^53 and repeats).
     let seedN = 0x5eed;
@@ -545,7 +545,7 @@ async function main(): Promise<void> {
             if (negative) broken.push(`step ${step}: ${negative.name} holds less than nothing rooted at ${v.name}`);
         }
         for (const who of people) if (roomHeldOf(db, who.pk) !== openParts(who.pk)) broken.push(`step ${step}: ${who.name}'s room ${roomHeldOf(db, who.pk)} != open parts ${openParts(who.pk)}`);
-        const overSplit = count('SELECT COUNT(*) AS n FROM room_gifts g WHERE (SELECT COALESCE(SUM(c.amount), 0) FROM room_gifts c WHERE c.source_gift_id = g.id) > g.amount');
+        const overSplit = count('SELECT COUNT(*) AS n FROM room_gifts g WHERE (SELECT COALESCE(SUM(c.amount_c), 0) FROM room_gifts c WHERE c.source_gift_id = g.id) > g.amount_c');
         if (overSplit > 0) broken.push(`step ${step}: ${overSplit} piece(s) split past their amount`);
         const rootless = count(`SELECT COUNT(*) AS n FROM room_gifts g WHERE g.kind = 'gift' AND (g.root_pubkey IS NULL OR NOT EXISTS
             (SELECT 1 FROM room_gifts s WHERE s.id = g.source_gift_id AND s.to_pubkey = g.from_pubkey AND s.root_pubkey = g.root_pubkey))`);

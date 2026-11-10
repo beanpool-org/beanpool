@@ -207,8 +207,8 @@ async function runTests() {
     {
         const mia = join('MiaMember');
         // Seven Beans she holds, from a trade with Ada (a conserving pair of rows, read into the ledger).
-        db.prepare('UPDATE accounts SET balance = 7 WHERE public_key = ?').run(mia.pubKeyHex);
-        db.prepare('UPDATE accounts SET balance = -7 WHERE public_key = ?').run(admin.pubKeyHex);
+        db.prepare('UPDATE accounts SET balance_c = 7 WHERE public_key = ?').run(mia.pubKeyHex);
+        db.prepare('UPDATE accounts SET balance_c = -7 WHERE public_key = ?').run(admin.pubKeyHex);
         reconcileLedgerFromDb();
         const before = getBalance(mia.pubKeyHex).balance;
         const code = (await issue(adminSession, mia.pubKeyHex)).json.code as string;

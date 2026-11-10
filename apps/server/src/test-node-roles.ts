@@ -81,7 +81,7 @@ function throws(fn: () => void, needle: string, msg: string) {
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 async function main() {
@@ -104,10 +104,10 @@ async function main() {
     // ── 2. Genesis members own the node by their node_roles row, as seedGenesisMember writes it ──
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES ('gen_alice', 'Alice', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run();
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('gen_alice', 100, 0)`).run();
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('gen_alice', 100, 0)`).run();
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES ('gen_bob', 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run();
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('gen_bob', 100, 0)`).run();
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('gen_bob', 100, 0)`).run();
     assert(isNodeOwner('gen_alice') === false && isNodeOwner('gen_bob') === false, 'a genesis row alone makes nobody an owner');
     const ownerRow = db.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')`);
     ownerRow.run('gen_alice');

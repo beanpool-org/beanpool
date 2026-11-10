@@ -135,7 +135,7 @@ async function seedHeap(a: { convenor: string; member: string; keeper: string })
     }
     se.joinGroup(newest, a.member);
     const photo = dataUrl(jpeg(SMALL_BYTES, 9));
-    const project = db.prepare(`INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+    const project = db.prepare(`INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 500, NULL, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
     let lastFund = '';
     db.transaction(() => {

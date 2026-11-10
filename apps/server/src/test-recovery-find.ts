@@ -133,7 +133,7 @@ async function call(id: Id | null, p: string, body: unknown): Promise<{ status: 
 function addMember(id: Id, callsign: string): void {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'recovery-find-test', 'TEST')`).run(id.pk, callsign);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
 }
 /** Settings' Connect: the member's own app seals the seed to the sign-in and deposits it. */
 async function connect(id: Id, provider: Provider, sub: string, extra: Record<string, unknown> = {}): Promise<{ status: number; body: any }> {

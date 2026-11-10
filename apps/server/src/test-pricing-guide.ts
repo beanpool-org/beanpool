@@ -172,7 +172,7 @@ async function main() {
     insertMember.run();
 
     const insertPost = db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active)
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)
     `);
 
@@ -195,7 +195,7 @@ async function main() {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign) VALUES ('author-2', 'Bea')`).run();
     db.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('group-sitters', 'Sitters', 'sitters', 'author-1')`).run();
     const insertScoped = db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, audience_scope, target_group_id, target_pubkey)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, audience_scope, target_group_id, target_pubkey)
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?, ?)
     `);
     insertScoped.run('post-group-1', 'Babysitting for the group', 'Group babysitting', 80, 'group', 'group-sitters', null);
@@ -214,7 +214,7 @@ async function main() {
     // must not become the item's picture either), one its author paused, and a cancelled one. A completed listing is a
     // deal someone paid, and counts on purpose.
     const insertWithStatus = db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, hidden_by_reports_at)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, hidden_by_reports_at)
         VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?)
     `);
     insertWithStatus.run('post-hidden-1', 'Babysitting overnight', 'Flagged babysitting', 60, 'active', new Date().toISOString());

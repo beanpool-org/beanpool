@@ -69,7 +69,7 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -104,12 +104,12 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
 }
 
 /** The whole node, exact: every account but the pot's shadow row, plus the pot. */
-const nodeTotalExact = () => (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact();
+const nodeTotalExact = () => (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact();
 const conserved = (before: number, what: string) => {
     const delta = nodeTotalExact() - before;
     assert(Math.abs(delta) < 1e-9, `conservation: ${what} (Δ ${delta})`);
 };
-const rowBal = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
+const rowBal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0;
 const debtOf = (entryId: string) => db.prepare('SELECT * FROM names_debts WHERE entry_id = ? ORDER BY removed_at').get(entryId) as any;
 const debtById = (id: string) => db.prepare('SELECT * FROM names_debts WHERE id = ?').get(id) as any;
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
         const m = makeMember(`Proposer${++proposers}`, 0);
         const partner = makeMember(`Partner${proposers}`, 0);
         const at = new Date().toISOString();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
     // The review's reproduction: Sam sends Dee 1 Bean. On main 51 was swept and Dee was left with 0.
     const totalH1 = nodeTotalExact();
     const one = await call('POST', sam, '/api/ledger/transfer', { from: sam.pk, to: dee2.pk, amount: 1, memo: 'thanks for the help' });
-    const swept1 = db.prepare(`SELECT amount FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'`).all(dee2.pk) as { amount: number }[];
+    const swept1 = db.prepare(`SELECT amount_c FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'`).all(dee2.pk) as { amount: number }[];
     assert(one.status === 200, `Sam sends Dee 1 Bean (${show(one)})`);
     assert(r2(rowBal(dee2.pk)) === 50 && debtOf(deeEntry).repaid === 1, `only the 1 Bean earned is swept: balance 50, repaid 1 (balance ${rowBal(dee2.pk)}, repaid ${debtOf(deeEntry).repaid})`);
     assert(swept1.length === 1 && swept1[0].amount === 1, `one sweep row of 1 (${JSON.stringify(swept1)})`);
@@ -420,7 +420,7 @@ async function main(): Promise<void> {
         const r = await call('POST', backer4, `/api/crowdfund/projects/${seeds}/pledge`, { amount: amt });
         assert(r.status === 200, `pledge ${amt} (${show(r)})`);
     }
-    const p = db.prepare('SELECT status, current_amount FROM projects WHERE id = ?').get(seeds) as any;
+    const p = db.prepare('SELECT status, current_amount_c FROM projects WHERE id = ?').get(seeds) as any;
     assert(p.status === 'FUNDED', `a goal of 1 pledged as 0.70 + 0.10 + 0.10 + 0.10 is funded (${p.status}, ${p.current_amount})`);
     assert(Math.abs(rowBal(`escrow_${seeds}`)) < 1e-9, `its escrow swept to the project (${rowBal(`escrow_${seeds}`)})`);
     conserved(totalG0, 'the pledges and the sweep at the goal');
@@ -442,7 +442,7 @@ async function main(): Promise<void> {
     const list2 = listStrandedEscrows().escrows.map((e) => e.escrowId);
     assert(list2.length === 2 && list2.includes(`escrow_${shade}`), `the admin's list shows the same two (${JSON.stringify(list2)})`);
     // N5: a projects row with a NULL id (corrupt: no code writes one) and a deal with one hide no stranded escrow.
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, goal_amount, status) VALUES (NULL, ?, 'A corrupt row', 1, 'ACTIVE')`).run(creator.pk);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, goal_amount_c, status) VALUES (NULL, ?, 'A corrupt row', 1, 'ACTIVE')`).run(creator.pk);
     const nullIds = (db.prepare('SELECT COUNT(*) c FROM projects WHERE id IS NULL').get() as { c: number }).c;
     const audit3 = runLedgerAudit();
     const list3 = listStrandedEscrows().escrows.length;

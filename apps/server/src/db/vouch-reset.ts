@@ -106,7 +106,7 @@ function count(db: Database.Database, sql: string): number {
 export function countVouchReset(db: Database.Database): VouchResetCounts {
     const members = columnsOf(db, 'members');
     const invites = columnsOf(db, 'invite_codes');
-    const hasAccounts = columnsOf(db, 'accounts').has('balance');
+    const hasAccounts = columnsOf(db, 'accounts').has('balance_c');
     const decisions = columnsOf(db, 'decisions');
     const vouchedSql = members.has('elder_vouched_by') ? 'm.elder_vouched_by IS NOT NULL' : '0';
     const person = members.has('is_treasury') ? 'COALESCE(m.is_treasury, 0) = 0' : '1';

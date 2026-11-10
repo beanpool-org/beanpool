@@ -188,7 +188,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(30 * DAY), gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         se.transfer('genesis', id.pubKeyHex, 20, `seed ${callsign}`, 'direct', true);
         se.registerPushToken(id.pubKeyHex, id.token, 'android');
         people.push(id);
@@ -203,7 +203,7 @@ async function main() {
     const voters = ['VoterVi', 'VoterWu', 'VoterXo', 'VoterYa', 'VoterZed'].map(seed);
     const [vi] = voters;
     const kim = seed('KeenKim');      // a member with a completed trade: she may propose a Decision
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(`tx-${crypto.randomUUID()}`, `post-${crypto.randomUUID()}`, kim.pubKeyHex, vi.pubKeyHex, ago(DAY), ago(DAY));
     const dave = seed('DaveDoe');     // No, an owner's second pause, then no third
     const erin = seed('ErinEast');    // too few voted

@@ -103,7 +103,7 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
                 VALUES (?, ?, ?, ?, ?, 'active', ?)`)
         .run(id.pk, name, WEEK_AGO(), opts.visitor ? null : owner.pk, opts.visitor ? null : 'TEST', opts.visitor ? 1 : 0);
     if (!opts.visitor) setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 

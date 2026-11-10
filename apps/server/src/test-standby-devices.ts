@@ -412,7 +412,7 @@ async function child(): Promise<void> {
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
                 answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category, 'community.notice');
             }
-            answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
+            answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount_c: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
             answers.adminBroadcastAnnouncement = se.adminBroadcastAnnouncement('On a standby', 'Never sent', 'info') ?? 'no answer';
             answers.tickEventReminders = tickEventReminders(se.dispatchPushNotification, Number(id.remindAt));
             answers.runMarketplaceHygiene = se.runMarketplaceHygiene() ?? 'no answer';

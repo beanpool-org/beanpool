@@ -109,7 +109,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, ?, ?)`)
             .run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk, `INV-${name.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const ana = member('ChatAna');

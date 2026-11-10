@@ -151,7 +151,7 @@ function plantLegacy(dir: string): Planted[] {
             member.run(id, CREATOR, STAMP, STAMP);
             rows.push({ id, label, value, kind, rowid: Number(r.lastInsertRowid) });
         }
-        d.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, target_group_id, audience_scope)
+        d.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, target_group_id, audience_scope)
                    VALUES ('group-post', 'offer', 'food', 'For the group', 'A post to group 1', 1, ?, ?, ?, ?, 'group')`).run(CREATOR, STAMP, STAMP, rows[1].id);
     })();
     d.close();

@@ -88,7 +88,7 @@ function makeMember(name: string, beans = 40): Id {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(id.pk, name, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
 }
@@ -199,7 +199,7 @@ const pausedOf = (ent: string) => db.prepare('SELECT paused, paused_by FROM memb
 const changeOf = (id: string) => db.prepare('SELECT status, reason FROM enterprise_keeper_changes WHERE id = ?').get(id) as { status: string; reason: string | null };
 const requestStatus = (id: string) => (db.prepare('SELECT status FROM enterprise_keeper_requests WHERE id = ?').get(id) as { status: string }).status;
 const pledgeOf = (ent: string, pk: string) => (db.prepare(
-    'SELECT COALESCE(SUM(amount), 0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(ent, pk) as { t: number }).t;
+    'SELECT COALESCE(SUM(amount_c), 0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(ent, pk) as { t: number }).t;
 const beansOf = (...ents: string[]) => ents.map(e => getBalance(e).balance);
 
 async function main(): Promise<void> {
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
         const partner = makeMember(`PartnerRD${proposers}`, 0);
         db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * 86400_000).toISOString(), m.pk, partner.pk);
         const at = new Date().toISOString();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     {
         const rex = makeMember('RexRD', 0);
         const offer = createPost('offer', 'produce', 'Rex walnuts', 'A bag of walnuts', 5, 'fixed', rex.pk)!;
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, updated_at)
                     VALUES ('rex-deal', ?, ?, ?, 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(offer.id, alice.pk, rex.pk);
         adminPruneUser(rex.pk, COMMUNITY_DECISION_ACTOR);
         const before = snapshot();
@@ -488,7 +488,7 @@ async function main(): Promise<void> {
         // Pia is an ordinary keeper under Gus, with a 10-Bean pledge, and Gus has proposed removing her.
         const gus = makeMember('GusRD', 0), pia = makeMember('PiaRD', 0), quin = makeMember('QuinRD', 0);
         const ent = makeEnterprise(gus, [pia, quin]);
-        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES (?, ?, ?, 10)').run(crypto.randomUUID(), pia.pk, ent);
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, 10)').run(crypto.randomUUID(), pia.pk, ent);
         const removePia = proposeKeeperRemoval(ent, gus.pk, pia.pk).change!;
         const beansBefore = beansOf(ent);
         const piaDeletes = await call('POST', '/api/member/purge', pia, {});

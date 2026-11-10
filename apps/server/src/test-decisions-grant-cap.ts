@@ -67,9 +67,9 @@ function makeMember(callsign: string, opts: { treasury?: boolean; balance?: numb
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const pkcs8 = new Uint8Array(privateKey.export({ type: 'pkcs8', format: 'der' }) as Buffer);
     const joinedAt = new Date(Date.now() - 60 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, is_treasury)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c, is_treasury)
                 VALUES (?, ?, ?, 'active', 100, ?)`).run(pubKeyHex, `${callsign}${++seq}`, joinedAt, opts.treasury ? 1 : 0);
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(pubKeyHex, opts.balance ?? 0);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(pubKeyHex, opts.balance ?? 0);
     reconcileLedgerFromDb();
     return { pubKeyHex, sign: ed25519Signer(pkcs8) };
 }
@@ -101,7 +101,7 @@ function grantBody(effect: 'grant_enterprise' | 'grant_hardship', params: unknow
 /** A completed trade: the standing to propose (the earned_credit badge makeMember gives is none). Not ledger, so no inflow. */
 function hasTraded(id: Id): void {
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), id.pubKeyHex, recipient.pubKeyHex, now, now);
 }
 
@@ -143,7 +143,7 @@ function refusal(held: string, inflow: string, most: string): string {
 }
 
 function insertTxn(opts: { from: string; to: string; amount: number; taxFee?: number; at: string; id?: string; memo?: string }) {
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(opts.id ?? `txn-${crypto.randomUUID()}`, opts.from, opts.to, opts.amount, opts.taxFee ?? 0, opts.memo ?? '', opts.at);
 }
 
@@ -282,11 +282,11 @@ async function main(): Promise<void> {
     tickDecisions();
     const waiting = db.prepare('SELECT status FROM decisions WHERE id = ?').get('queued-before-cap') as any;
     assert(waiting?.status === 'passed_queued_for_funds', `with 10 in the Commons it still waits in the queue (got ${waiting?.status})`);
-    const entBefore = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
+    const entBefore = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
     setCommonsBalance(5000);
     tickDecisions();
     const paid = db.prepare('SELECT status FROM decisions WHERE id = ?').get('queued-before-cap') as any;
-    const entAfter = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
+    const entAfter = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(enterprise.pubKeyHex) as any).balance as number;
     assert(paid?.status === 'executed' && Math.abs(entAfter - entBefore - 5000) < 1e-9 && Math.abs(getCommonsBalanceExact()) < 1e-9,
         `once the Commons holds 5000 it pays, as before (status ${paid?.status}, enterprise +${entAfter - entBefore}, Commons ${getCommonsBalanceExact()})`);
     const stillOpen = db.prepare('SELECT status FROM decisions WHERE id = ?').get('open-before-cap') as any;

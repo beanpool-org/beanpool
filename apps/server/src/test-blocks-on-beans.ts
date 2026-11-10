@@ -80,7 +80,7 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), ?, ?, 'active',
                                     strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, name, a.genesis, `INV-${name}`);
                 setMemberPhoto(db, key, 'data:image/png;base64,iVBORw0KGgo=');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
                 putPushTokenRow(key, `ExponentPushToken[${name}]`, 'android');
             }
             // Each sender holds Beans and has a completed trade behind them: a direct send needs both (state-engine transfer).
@@ -109,9 +109,9 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             const se = await import('./state-engine.js');
             const row = a.txId ? db.prepare('SELECT * FROM transactions WHERE id = ?').get(a.txId) as any : null;
-            const balances = Object.fromEntries(a.keys.map(k => [k, (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(k) as any)?.balance ?? null]));
+            const balances = Object.fromEntries(a.keys.map(k => [k, (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(k) as any)?.balance ?? null]));
             const memory = Object.fromEntries(a.keys.map(k => [k, se.getBalance(k)?.balance ?? null]));
-            const sum = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            const sum = (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s;
             let audit: unknown;
             try { audit = se.runLedgerAudit(); } catch (e: any) { audit = { error: e?.message }; }
             return { row, balances, memory, sum, audit };

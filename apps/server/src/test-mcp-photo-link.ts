@@ -339,7 +339,7 @@ async function main(): Promise<void> {
     setMemberPhoto(db, owner.pub, AVATAR);
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'Ottilie', 'active', ?, ?, 'inv-test')`).run(owner2.pub, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(owner2.pub);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(owner2.pub);
     setMemberPhoto(db, owner2.pub, AVATAR);
     grantNodeRole(owner2.pub, 'owner', 'SYSTEM');
     const setGateway = (over: Record<string, unknown>) => updateLocalConfig({ gateway: { ...(getLocalConfig().gateway ?? {}), ...over } as any });

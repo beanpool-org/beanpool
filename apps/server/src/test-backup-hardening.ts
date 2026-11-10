@@ -61,8 +61,8 @@ async function run() {
 
         // Seed >1 account (COMMONS_POOL + A + B) so the conservation guard is armed
         // (bootstrapping nodes with ≤1 account are exempt).
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('mintA', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('mintB', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintA', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES ('mintB', 50, '2026-01-01T00:00:00.000Z', 0)`).run();
 
         // A zero-delta re-export of current state imports cleanly (sanity).
         const clean = await exportSyncState(nodeId);
@@ -82,7 +82,7 @@ async function run() {
         assert(/conservation/i.test(err), 'A2-8: rejection cites the conservation guard');
 
         // And the rollback held — the forged balance did not land.
-        const bal = (db.prepare(`SELECT balance FROM accounts WHERE public_key='mintA'`).get() as { balance: number }).balance;
+        const bal = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key='mintA'`).get() as { balance: number }).balance;
         assert(bal === 50, 'A2-8: forged balance rolled back (mintA still 50, not 9999)');
 
         unpinMainServerForTests();

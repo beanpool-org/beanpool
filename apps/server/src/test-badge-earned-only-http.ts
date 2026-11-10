@@ -63,7 +63,7 @@ function makeMember(name: string, invitedBy = 'genesis'): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY), invitedBy);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -71,7 +71,7 @@ function makeEnterprise(name: string, keepers: Id[]): string {
     const pk = keypair(name).pk;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     setMemberPhoto(db, pk, AVATAR);
     for (const k of keepers) {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(pk, k.pk);
@@ -89,9 +89,9 @@ function confirm(member: Id, by: Id): void {
 /** A completed marketplace (escrow) trade, the only thing that earns trust: `seller` sold `buyer` goods worth `credits`. */
 function soldTo(seller: Id, buyer: Id, credits: number): void {
     const postId = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'produce', 'Sold', 'Sold', ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'produce', 'Sold', 'Sold', ?, ?, 'completed')`)
         .run(postId, credits, seller.pk);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, ?, 'completed')`)
         .run(crypto.randomUUID(), postId, buyer.pk, seller.pk, credits);
 }
 
@@ -256,7 +256,7 @@ async function main(): Promise<void> {
     // An ordinary pledge (from a keeper's earned credit) still counts towards an enterprise's badge; the known one beside it does not.
     const dee = makeMember('Dee');
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(knownCo, dee.pk);
-    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)').run(crypto.randomUUID(), dee.pk, knownCo, 300, ago(DAY));
+    db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at) VALUES (?, ?, ?, ?, ?)').run(crypto.randomUUID(), dee.pk, knownCo, 300, ago(DAY));
     clearEnterpriseFloorCache(db);
     const mixed = getMemberTrustProfile(knownCo);
     assert(mixed.floor === -800 && mixed.tier.name === 'Resident' && mixed.tierCredit === 300,

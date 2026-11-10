@@ -83,13 +83,13 @@ function main() {
     // 3. Stalled marketplace trade disputes
     // Recent transaction (should not be counted)
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES ('tx_recent', 'post_1', ?, ?, 100, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(buyerPk, sellerPk);
     // Stalled transaction (> DISPUTE_MIN_DAYS ago)
     const oldDate = new Date(Date.now() - (DISPUTE_MIN_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES ('tx_stalled', 'post_2', ?, ?, 200, 'pending', ?)`
     ).run(buyerPk, sellerPk, oldDate);
 

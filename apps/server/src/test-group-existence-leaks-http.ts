@@ -87,7 +87,7 @@ function makeMember(name: string): Id {
         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(id.pk, name);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     transfer('genesis', id.pk, 100, `seed ${name}`, 'direct', true);
     // An offer on the books, so the covenant is never what refuses a trade below.
     createPost('offer', 'other', `${name}'s offer`, 'on the books', 5, 'fixed', id.pk);

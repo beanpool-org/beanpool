@@ -112,7 +112,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
             .run(pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, pubKeyHex, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
     const noPhoto = (n: number) => (n === 0 ? { allowNoPhoto: true } : {});
@@ -422,7 +422,7 @@ async function main() {
     console.log('\n── 4. a listing a member traded on inside the 90 days stays ──');
     const traded = listing(ana, 'Traded on lately', 100);
     const tradedLongAgo = listing(ana, 'Traded on long ago', 100);
-    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, updated_at)
+    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, updated_at)
                              VALUES (?, ?, ?, ?, 5, 'completed', ?, ?, ?)`);
     deal.run(crypto.randomUUID(), traded, ben.pubKeyHex, ana.pubKeyHex, ago(12), ago(10), ago(10));
     deal.run(crypto.randomUUID(), tradedLongAgo, ben.pubKeyHex, ana.pubKeyHex, ago(102), ago(100), ago(100));

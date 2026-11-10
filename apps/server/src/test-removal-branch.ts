@@ -152,7 +152,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(joinedDaysAgo * DAY), invitedBy.pubKeyHex, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         if (active) db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), id.pubKeyHex);
         se.registerPushToken(id.pubKeyHex, id.token, 'android');
         return id;
@@ -250,8 +250,8 @@ async function main() {
 
     // ── 2. The pause ────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. The pause: every listed account paused, one vote, nobody removed');
-    db.prepare('UPDATE accounts SET balance = -40 WHERE public_key = ?').run(s1.a.pubKeyHex);
-    db.prepare('UPDATE accounts SET balance = -25 WHERE public_key = ?').run(s1.c.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = -40 WHERE public_key = ?').run(s1.a.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = -25 WHERE public_key = ?').run(s1.c.pubKeyHex);
     pushes.length = 0;
     const id1 = await pauseBranchNow(s1.root);
     const d1 = row(id1);

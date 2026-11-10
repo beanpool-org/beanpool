@@ -7,6 +7,7 @@
  */
 import { COMMUNITY_CARD_WORDS } from './community-card.js';
 import { t, tn } from './words.js';
+import { formatHundredths } from './hundredths.js';
 import { FREE_PRICE_WORDS } from './listing-price.js';
 
 /** A copy's from-line and its door, as the node sends them on `shownFrom`. */
@@ -20,8 +21,9 @@ export interface ShownFromLine {
 }
 
 /** An Offer's or Need's price at home, as a listing's own price is: Beans, and what they are for. */
+/** A price in words' terms: whole hundredths of a Bean (hundredths.ts) and how it is charged. */
 export interface CopyPrice {
-    beans: number;
+    price_c: number;
     per: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
 }
 
@@ -36,17 +38,18 @@ export interface EventCopy {
     takesQuestions?: boolean;
 }
 
-/** How a price is kept and sent: '20 fixed'. */
+/** How a price is kept and sent: '2000 fixed' (whole hundredths, then how it is charged). */
 export function copyPriceText(price: CopyPrice): string {
-    return `${price.beans} ${price.per}`;
+    return `${price.price_c} ${price.per}`;
 }
 
 /** {@link copyPriceText} read back. Anything else is no price: a card says less, and says nothing false. */
 export function copyPriceOf(raw: unknown): CopyPrice | null {
-    const [beans, per, more] = typeof raw === 'string' ? raw.split(' ') : [];
-    const n = Number(beans);
-    if (more !== undefined || !beans || !Number.isFinite(n) || n < 0) return null;
-    return per === 'fixed' || per === 'hourly' || per === 'daily' || per === 'weekly' || per === 'monthly' ? { beans: n, per } : null;
+    const [figure, per, more] = typeof raw === 'string' ? raw.split(' ') : [];
+    // Whole hundredths only: anything else (a decimal, a sign) is no price.
+    if (more !== undefined || !figure || !/^\d{1,12}$/.test(figure)) return null;
+    const n = Number(figure);
+    return per === 'fixed' || per === 'hourly' || per === 'daily' || per === 'weekly' || per === 'monthly' ? { price_c: n, per } : null;
 }
 
 function fromLineOf(raw: unknown): ShownFromLine | null {
@@ -80,16 +83,21 @@ export function eventCopyColumn(post: { shownCopy?: unknown; shownFrom?: unknown
     return JSON.stringify({ ...(post.shownFrom ?? {}), ...(typeof post.shownPrice === 'string' ? { price: post.shownPrice } : {}), ...(post.takesQuestions === true ? { takesQuestions: true } : {}) });
 }
 
-/** A price in Beans, in words: 'Free' at nothing, as a listing with no price reads. */
+/**
+ * A price in words: 'Free' at nothing, as a listing with no price reads. The figure is formatHundredths', the plural form
+ * read from its Beans.
+ */
 export function beansPriceWords(price: CopyPrice): string {
-    const n = price.beans;
-    if (!n) return t(FREE_PRICE_WORDS.short);
+    const c = price.price_c;
+    if (!c) return t(FREE_PRICE_WORDS.short);
+    const n = c / 100;
+    const shown = { n: formatHundredths(c) };
     switch (price.per) {
-        case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour');
-        case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day');
-        case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week');
-        case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month');
-        default: return tn(n, '{n} Beans', '{n} Beans');
+        case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour', shown);
+        case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day', shown);
+        case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week', shown);
+        case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month', shown);
+        default: return tn(n, '{n} Beans', '{n} Beans', shown);
     }
 }
 

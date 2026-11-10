@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(mia, 'Mia Neighbour');
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(owner.pub);

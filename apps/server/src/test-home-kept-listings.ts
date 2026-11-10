@@ -91,7 +91,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?, ?, ?, ?)`)
             .run(pubKeyHex, callsign, joined, `INV-${callsign.toUpperCase()}`, area.lat, area.lng, joined);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
 
@@ -309,7 +309,7 @@ async function main(): Promise<void> {
 
     console.log('── 4. The author\'s trust ──');
     {
-        db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(authorT.pubKeyHex);
+        db.prepare('UPDATE members SET earned_credit_c = 400 WHERE public_key = ?').run(authorT.pubKeyHex);
         bumpPostsVersion();
         const expected = tierForCredit(se.getMemberTrustProfile(authorT.pubKeyHex).tierCredit).minCredit;
         resetGatewayRateLimit();

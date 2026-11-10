@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
             .run(id.pk, name, ago(30 * DAY));
         setMemberPhoto(db, id.pk, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     /** A key session: a computer's, or the phone's Manage hand-off (whose unlock is now). */

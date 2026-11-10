@@ -37,6 +37,7 @@ import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 import { standingJsonOf, standingOfRow } from './standing-row';
@@ -321,19 +322,50 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
         CREATE TRIGGER IF NOT EXISTS posts_au_nearby_tag AFTER UPDATE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
         CREATE TRIGGER IF NOT EXISTS posts_ad_nearby_tag AFTER DELETE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;`;
 
+/**
+ * THE COPY'S SCHEMA NUMBER (`PRAGMA user_version`). A community's copy below this build's number is a cache made for older
+ * columns: its cache tables go (CACHE_TABLES, the ones a Force Resync's clearDB drops) and the sync reads it whole again.
+ * Nothing in it is read or rewritten on the way: the node holds every row, and the phone reads them again. Identity, the
+ * group keys with their verdicts and signers, and the tools' documents are not a copy of the node's and stay.
+ * 4 (1.4.0): money is whole hundredths of a Bean (DESIGN-atomic-beans-fable.md M2). Every money column is an INTEGER `*_c`,
+ * as the node's are, so a copy that held Beans as REAL (`posts.credits`, `accounts.balance`, ...) is dropped, never converted.
+ */
+export const COPY_SCHEMA = 4;
+
+/** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
+const CACHE_TABLES = [
+    'messages', 'conversation_participants', 'conversations', 'posts', 'marketplace_transactions', 'transactions', 'accounts', 'members',
+    'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held',
+] as const;
+const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
+
 async function _doInitDB() {
     const database = await getDb();
-    
-    // Nuke & Pave Version 3: Typed System Messages
+
+    // A copy below this build's schema number (COPY_SCHEMA): its cache tables go before the schema below makes them again
+    // with today's columns, and the copy is read whole (every cursor forgotten, as for a Force Resync). A fresh copy has
+    // nothing to drop and takes the number.
     const versionResult = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if (!versionResult || versionResult.user_version < 3) {
-        console.log("🧨 Native DB Version < 3. Nuking messaging tables for Object Attribution Overhaul...");
-        await database.execAsync(`
-            DROP TABLE IF EXISTS messages;
-            DROP TABLE IF EXISTS conversation_participants;
-            DROP TABLE IF EXISTS conversations;
-        `);
-        await database.execAsync('PRAGMA user_version = 3');
+    const copyBelowSchema = !versionResult || versionResult.user_version < COPY_SCHEMA;
+    if (copyBelowSchema) {
+        console.log(`[SQLite] Copy schema ${versionResult?.user_version ?? 0} is below ${COPY_SCHEMA}: clearing the cached tables to read them again.`);
+        // A sync cycle already under way read its cursor before this open: a new copy generation makes it store nothing,
+        // so it cannot write rows of the old shape or put back a cursor forgotten here (resetSyncFingerprints, as clearDB).
+        try {
+            const { resetSyncFingerprints } = require('../services/pillar-sync');
+            resetSyncFingerprints();
+        } catch (e) {
+            newCopyGeneration();
+        }
+        await database.execAsync(DROP_CACHE_TABLES_SQL);
+        try {
+            const file = dbFileOf.get(database);
+            const { syncCursorKeysOf } = await import('../services/pillar-sync');
+            if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+        } catch (e) {
+            console.warn('[SQLite] Could not forget the sync cursors of a copy below the schema number:', e);
+        }
+        await database.execAsync(`PRAGMA user_version = ${COPY_SCHEMA}`);
     }
 
     // We execute the same exact schema.sql payload to guarantee 1:1 API compatibility locally
@@ -354,14 +386,15 @@ async function _doInitDB() {
             status TEXT DEFAULT 'active',
             last_active_at DATETIME,
             profile_updated_at DATETIME,
-            earned_credit REAL DEFAULT 0,
+            -- Whole hundredths of a Bean, as every money column here (COPY_SCHEMA 4): the node's earnedCredit.
+            earned_credit_c INTEGER DEFAULT 0,
             archetype TEXT
         );
 
         -- 2. Ledger Accounts & Transactions
         CREATE TABLE IF NOT EXISTS accounts (
             public_key TEXT PRIMARY KEY,
-            balance REAL DEFAULT 0.0,
+            balance_c INTEGER DEFAULT 0,
             last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             last_demurrage_epoch INTEGER DEFAULT 0
         );
@@ -370,8 +403,8 @@ async function _doInitDB() {
             id TEXT PRIMARY KEY,
             from_pubkey TEXT NOT NULL,
             to_pubkey TEXT NOT NULL,
-            amount REAL NOT NULL CHECK (amount > 0),
-            tax_fee REAL DEFAULT 0.0,
+            amount_c INTEGER NOT NULL CHECK (amount_c > 0),
+            fee_c INTEGER DEFAULT 0,
             memo TEXT,
             timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
@@ -387,7 +420,8 @@ async function _doInitDB() {
             category TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT NOT NULL,
-            credits REAL NOT NULL DEFAULT 0,
+            -- No figure (NULL) when the node's price isn't whole hundredths: shown "—", never as Free (0).
+            price_c INTEGER DEFAULT 0,
             author_pubkey TEXT NOT NULL,
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -510,7 +544,7 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_id TEXT NOT NULL,
             buyer_pubkey TEXT NOT NULL,
             seller_pubkey TEXT NOT NULL,
-            credits REAL NOT NULL,
+            amount_c INTEGER,
             hours REAL,
             status TEXT DEFAULT 'pending',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -530,7 +564,7 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_title TEXT,
             post_status TEXT,
             post_photo TEXT,
-            post_credits REAL,
+            post_price_c INTEGER,
             request TEXT
         );
 
@@ -589,8 +623,8 @@ ${GROUP_KEY_TABLES_SQL}
             title TEXT NOT NULL,
             description TEXT,
             photos TEXT,
-            goal_amount INTEGER NOT NULL,
-            current_amount INTEGER DEFAULT 0,
+            goal_amount_c INTEGER NOT NULL,
+            current_amount_c INTEGER DEFAULT 0,
             deadline_at DATETIME,
             status TEXT DEFAULT 'ACTIVE',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -651,7 +685,6 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_title TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_status TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_credits REAL;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
         // 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN listed INTEGER;`); } catch (e) {}
@@ -739,7 +772,6 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
         // The old vouch's "who vouched" column goes (the vouching reset, R0): nothing on this phone reads or writes it any
         // more, and no index, trigger or view here names it. A build from before adds it back, empty, so a downgrade is safe.
         try { await database.execAsync(`ALTER TABLE members DROP COLUMN elder_vouched_by;`); } catch (e) {}
@@ -747,7 +779,6 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN archetype TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_founding_needed INTEGER DEFAULT 1;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0;`); } catch (e) {}
         // #143 step 4: per-listing reach control for federation
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
@@ -887,7 +918,14 @@ ${TOOL_DOCS_TABLE}
         } catch (cleanupErr) {
             console.error('[SQLite] Failed to clean up legacy conversations locally:', cleanupErr);
         }
-        
+        // A copy cleared for being below the schema number (above): read it whole now rather than at the next timer.
+        if (copyBelowSchema) {
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
+        }
+
         dbInitialized = true;
     } catch (e) {
         console.error('[SQLite] Database init error:', e);
@@ -951,7 +989,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS member_reviews_read; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
+        await database.execAsync(DROP_CACHE_TABLES_SQL
             // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
             + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : ''));
     } finally {
@@ -1295,7 +1333,9 @@ function formatSystemMessage(
     if (metadataStr) {
         try { meta = JSON.parse(metadataStr); } catch {}
     }
-    const amount = meta?.amount ?? '';
+    // The node's escrow lines carry the figure as whole hundredths (TypedMessagePayload amount_c); anything else, no figure.
+    // Plain ASCII ("49.25"): this English is matched by utils/chat-line-words.ts, which writes the figure in the member's language.
+    const amount = isHundredths(meta?.amount_c) && meta.amount_c > 0 ? hundredthsAsDecimalText(meta.amount_c) : '';
     const beansStr = amount ? `${amount} Beans` : 'Beans';
 
     if (systemType === 'ESCROW_FUNDED') {
@@ -1360,7 +1400,7 @@ export async function getConversations(myPubkey: string) {
                    p.status,
                    c.post_status
                ) as postStatus,
-               COALESCE(p.credits, c.post_credits) as postCredits,
+               COALESCE(p.price_c, c.post_price_c) as postPrice_c,
                COALESCE(p.photos, c.post_photo) as postPhotos,
                m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata,
                m.id as lastId, m.author_pubkey as lastAuthor, MAX(m.timestamp) as timestamp,
@@ -1385,7 +1425,7 @@ export async function getConversations(myPubkey: string) {
          AND ${countsAsUnreadSql('msg')}
         ) as unreadCount,
         mt.id as pendingTxId,
-        mt.credits as pendingAmount,
+        mt.amount_c as pendingAmount_c,
         mt.buyer_pubkey as txBuyerPubkey,
         mt.seller_pubkey as txSellerPubkey,
         -- Has the current user already left a review for this post's trade?
@@ -1506,7 +1546,7 @@ export async function getConversations(myPubkey: string) {
             postId: row.post_id,
             postTitle: row.postTitle,
             postStatus: row.postStatus,
-            postCredits: row.postCredits,
+            postPrice_c: isHundredths(row.postPrice_c) ? row.postPrice_c : null,
             postPhoto,
             type: row.convType || 'dm',
             // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
@@ -1529,7 +1569,7 @@ export async function getConversations(myPubkey: string) {
             // Escrow role metadata for "Action Required" section
             isPayer,
             isPayee,
-            pendingAmount: row.pendingAmount || null,
+            pendingAmount_c: isHundredths(row.pendingAmount_c) && row.pendingAmount_c > 0 ? row.pendingAmount_c : null,
             pendingTxId: row.pendingTxId || null,
             hasRated: row.hasRated > 0,
             dealCount: row.dealCount || 0,
@@ -1549,7 +1589,7 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
     // The listing joins in for who answers a request (its author) and what kind it is: core's dealStep needs both.
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
-               mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
+               mt.seller_pubkey as sellerPubkey, mt.amount_c as amount_c, mt.status as status,
                mt.post_title as postTitle, mt.created_at as createdAt,
                mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
@@ -1583,7 +1623,7 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
 export async function getDealsBetween(myPubkey: string, peerPubkey: string): Promise<any[]> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
+        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.amount_c as amount_c,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
                mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
@@ -1686,15 +1726,21 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
 
 /** The node's own balance read (GET /api/ledger/balance), as it answered: what a standing take-up's room is read from. */
 export type NodeBalanceRead = {
-    balance?: number | null; floor?: number | null; usableFloor?: number | null;
-    // The node sends whole hundredths under these names (M1); the phone reads them in M2.
+    // Whole hundredths of a Bean (@beanpool/core hundredths.ts), as the node sends them.
     balance_c?: number | null; floor_c?: number | null; usableFloor_c?: number | null;
     [field: string]: unknown;
 };
 
+/** A money field of the node's answer as this phone keeps it: whole hundredths, or null (shown "—", never a number). */
+const hundredthsOrNull = (v: unknown): number | null => (isHundredths(v) ? v : null);
+
+/** What a deal holds as this phone keeps it (marketplace_transactions.amount_c): the node's whole hundredths, or null. */
+const dealAmountColumn = (tx: any): number | null => (isHundredths(tx?.amount_c) && tx.amount_c >= 0 ? tx.amount_c : null);
+
 /**
  * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
- * couldn't be read (no node, refused, offline), so a caller never takes the phone's cached copy for a fresh read.
+ * couldn't be read (no node, refused, offline), so a caller never takes the phone's cached copy for a fresh read. Every
+ * figure is whole hundredths of a Bean (`*_c`); one that isn't is not kept.
  */
 export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBalanceRead | null> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -1704,40 +1750,42 @@ export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBala
         if (!res.ok) return null;
         const balData = await res.json();
         const database = await getDb();
-        const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
-        const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
-        
+        const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
+        const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
+
         let changed = false;
         await acquireSyncLock();
         try {
-            if (typeof balData.balance === 'number') {
-                if (balData.balance !== (row?.balance || 0)) changed = true;
+            if (isHundredths(balData.balance_c)) {
+                if (balData.balance_c !== (row?.balance_c ?? 0)) changed = true;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                    [pubkey, balData.balance, balData.last_demurrage_epoch || 0]
+                    'INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    [pubkey, balData.balance_c, balData.last_demurrage_epoch || 0]
                 );
             }
-            if (typeof balData.commonsBalance === 'number') {
-                if (balData.commonsBalance !== (commons?.balance || 0)) changed = true;
+            if (isHundredths(balData.commonsBalance_c)) {
+                if (balData.commonsBalance_c !== (commons?.balance_c ?? 0)) changed = true;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                    ['COMMONS', balData.commonsBalance, 0]
+                    'INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    ['COMMONS', balData.commonsBalance_c, 0]
                 );
             }
         } finally {
             releaseSyncLock();
         }
-        
-        if (balData.tier || balData.floor !== undefined) {
-            const floor = 0;   // no baked-in credit: a floor is only ever what the node reports
+
+        if (balData.tier || balData.floor_c !== undefined) {
             const tier = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
+            // No baked-in credit: a floor is only ever what the node reports (0 until it does). Every figure in hundredths;
+            // `grantedCredit` and `qualifiedValue` keep their names on the node and carry hundredths (M1).
+            const floor_c = isHundredths(balData.floor_c) ? balData.floor_c : 0;
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
-                floor: balData.floor ?? floor,
-                tierCredit: typeof balData.tierCredit === 'number' ? balData.tierCredit : null,
-                earnedCredit: balData.earnedCredit ?? 0,
-                grantedCredit: balData.grantedCredit ?? 0,
-                qualifiedValue: balData.qualifiedValue ?? 0,
+                floor_c,
+                tierCredit_c: hundredthsOrNull(balData.tierCredit_c),
+                earnedCredit_c: hundredthsOrNull(balData.earnedCredit_c) ?? 0,
+                grantedCredit_c: hundredthsOrNull(balData.grantedCredit) ?? 0,
+                qualifiedValue_c: hundredthsOrNull(balData.qualifiedValue) ?? 0,
                 avgRating: balData.avgRating ?? 0,
                 reviewCount: balData.reviewCount ?? 0,
                 trustStats: balData.trustStats ?? null,
@@ -1747,9 +1795,10 @@ export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBala
                 isTreasury: !!balData.isTreasury,
                 activated: !!balData.activated,
                 hasLiveOffer: !!balData.hasLiveOffer,
-                usableFloor: balData.usableFloor ?? balData.floor ?? floor,
+                usableFloor_c: hundredthsOrNull(balData.usableFloor_c) ?? floor_c,
                 liveOffers: balData.liveOffers ?? 0,
-                knownGrant: typeof balData.knownGrant === 'number' ? balData.knownGrant : 0,
+                knownGrant_c: hundredthsOrNull(balData.knownGrant_c) ?? 0,
+                roomHeld_c: hundredthsOrNull(balData.roomHeld_c) ?? 0,
                 frozen: !!balData.frozen,
                 knownFrozen: balData.knownFrozen === true,
                 creditFrozen: balData.creditFrozen === true,
@@ -1772,19 +1821,24 @@ export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBala
     }
 }
 
+/**
+ * The member's balance as this phone holds it, with what the node last said of their line (kept by
+ * refreshBalanceFromServer). Every money figure is whole hundredths of a Bean (`*_c`); a cache from before them (its fields
+ * named without `_c`) reads as nothing known, never as hundredths.
+ */
 export async function getBalance(pubkey: string) {
     const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
-    const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
-    
+    const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
+    const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
+
     // Store enriched data from server response
     let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
 
-    let floor = 0;     // no baked-in credit until the node reports one
-    let tierCredit: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
-    let earnedCredit = 0;
-    let grantedCredit = 0;
-    let qualifiedValue = 0;
+    let floor_c = 0;     // no baked-in credit until the node reports one
+    let tierCredit_c: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
+    let earnedCredit_c = 0;
+    let grantedCredit_c = 0;
+    let qualifiedValue_c = 0;
     let avgRating = 0;
     let reviewCount = 0;
     let isBlockedFromTrading = false;
@@ -1793,9 +1847,10 @@ export async function getBalance(pubkey: string) {
     let isTreasury = false;    // this account IS a community treasury, not a person
     let activated = false;     // has a credit line at all (earned/granted/known)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
-    let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
+    let usableFloor_c: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
-    let knownGrant = 0;        // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
+    let knownGrant_c = 0;      // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
+    let roomHeld_c = 0;        // the credit line a vouch or a member's gift gave (one live offer unlocks it)
     let frozen = false;        // v3: debt below usable floor → spending paused
     let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
     let creditFrozen = false;  // … or their whole line (the manager's Freeze)
@@ -1811,11 +1866,11 @@ export async function getBalance(pubkey: string) {
         if (cached) {
             const parsed = JSON.parse(cached);
             tier = parsed.tier || tier;
-            floor = parsed.floor ?? floor;
-            tierCredit = typeof parsed.tierCredit === 'number' ? parsed.tierCredit : null;
-            earnedCredit = parsed.earnedCredit ?? 0;
-            grantedCredit = parsed.grantedCredit ?? 0;
-            qualifiedValue = parsed.qualifiedValue ?? 0;
+            floor_c = hundredthsOrNull(parsed.floor_c) ?? floor_c;
+            tierCredit_c = hundredthsOrNull(parsed.tierCredit_c);
+            earnedCredit_c = hundredthsOrNull(parsed.earnedCredit_c) ?? 0;
+            grantedCredit_c = hundredthsOrNull(parsed.grantedCredit_c) ?? 0;
+            qualifiedValue_c = hundredthsOrNull(parsed.qualifiedValue_c) ?? 0;
             avgRating = parsed.avgRating ?? 0;
             reviewCount = parsed.reviewCount ?? 0;
             trustStats = parsed.trustStats ?? null;
@@ -1825,9 +1880,10 @@ export async function getBalance(pubkey: string) {
             isTreasury = !!parsed.isTreasury;
             activated = !!parsed.activated;
             hasLiveOffer = !!parsed.hasLiveOffer;
-            usableFloor = parsed.usableFloor ?? floor;
+            usableFloor_c = hundredthsOrNull(parsed.usableFloor_c) ?? floor_c;
             liveOffers = parsed.liveOffers ?? 0;
-            knownGrant = typeof parsed.knownGrant === 'number' ? parsed.knownGrant : 0;
+            knownGrant_c = hundredthsOrNull(parsed.knownGrant_c) ?? 0;
+            roomHeld_c = hundredthsOrNull(parsed.roomHeld_c) ?? 0;
             frozen = !!parsed.frozen;
             knownFrozen = parsed.knownFrozen === true;
             creditFrozen = parsed.creditFrozen === true;
@@ -1836,26 +1892,27 @@ export async function getBalance(pubkey: string) {
     } catch { /* ignore */ }
 
     return {
-        balance: row?.balance || 0,
-        floor,
+        balance_c: hundredthsOrNull(row?.balance_c) ?? 0,
+        floor_c,
         tier,
-        tierCredit,
-        earnedCredit,
-        grantedCredit,
-        qualifiedValue,
+        tierCredit_c,
+        earnedCredit_c,
+        grantedCredit_c,
+        qualifiedValue_c,
         avgRating,
         reviewCount,
         trustStats,
-        commons: commons?.balance || 0,
+        commons_c: hundredthsOrNull(commons?.balance_c) ?? 0,
         isBlockedFromTrading,
         canOperate,
         keeperOf,
         isTreasury,
         activated,
         hasLiveOffer,
-        usableFloor: usableFloor ?? floor,
+        usableFloor_c: usableFloor_c ?? floor_c,
         liveOffers,
-        knownGrant,
+        knownGrant_c,
+        roomHeld_c,
         frozen,
         knownFrozen,
         creditFrozen,
@@ -1880,10 +1937,12 @@ export async function getTransactions(pubkey: string) {
                     try {
                         await database.withTransactionAsync(async () => {
                             for (const t of txns) {
+                                // Whole hundredths above 0 (the node's amount_c), or the row isn't kept: never a guessed figure.
+                                if (!isHundredths(t.amount_c) || t.amount_c <= 0) continue;
                                 try {
                                     const result = await database.runAsync(
-                                        'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                        [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount, t.taxFee || t.tax_fee || 0, t.memo, t.timestamp]
+                                        'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                        [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo, t.timestamp]
                                     );
                                     if (result.changes > 0) newInserted = true;
                                 } catch(e) {}
@@ -1962,8 +2021,9 @@ export async function getTransactions(pubkey: string) {
         return {
             id: row.id,
             type: row.type,
-            amount: row.amount,
-            taxFee: row.tax_fee || 0,
+            // Whole hundredths of a Bean, as the node keeps them (amount_c left the payer; fee_c went to the Commons).
+            amount_c: row.amount_c,
+            fee_c: row.fee_c || 0,
             peer: peerName,
             // The other account's key: the Ledger tab shows Beans from someone blocked on this phone without their note
             // (utils/ledger-note.ts).
@@ -2050,22 +2110,25 @@ export async function getAllCommunityMembers(): Promise<{ publicKey: string; cal
     return rows.map(r => ({ publicKey: r.public_key, callsign: r.callsign }));
 }
 
-export async function sendTransfer(from: string, to: string, amount: number, memo: string) {
-    const res = await _signedRequest('/api/ledger/transfer', { from, to, amount, memo });
-    
+/**
+ * A send of `amount_c` (whole hundredths of a Bean, above 0: the member's typed figure through core parseHundredths) to
+ * `to`. The signed body carries the integer exactly (`{ from, to, amount_c, memo }`), as the node takes it (money-body.ts).
+ */
+export async function sendTransfer(from: string, to: string, amount_c: number, memo: string) {
+    const res = await _signedRequest('/api/ledger/transfer', { from, to, amount_c, memo });
+
     // Write new transaction and refresh balances
     try {
         const database = await getDb();
-        
+
         // 1. Insert transaction into local DB so it shows up instantly
-        if (res?.transaction) {
-            const t = res.transaction;
+        const t = res?.transaction;
+        if (t && isHundredths(t.amount_c) && t.amount_c > 0) {
             const fromKey = t.from_pubkey || t.from || null;
             const toKey = t.to_pubkey || t.to || null;
-            const taxFee = t.taxFee ?? t.tax_fee ?? 0;
             await database.runAsync(
-                'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [t.id || null, fromKey, toKey, t.amount || 0, taxFee, t.memo || null, t.timestamp || null]
+                'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [t.id || null, fromKey, toKey, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo || null, t.timestamp || null]
             );
         }
 
@@ -2224,7 +2287,8 @@ export async function createPost(post: any) {
         category: post.category,
         title: post.title,
         description: post.description,
-        credits: post.credits,
+        // Whole hundredths of a Bean (the composer's typed price through core parseHundredths), as the node takes it.
+        price_c: post.price_c,
         priceType: post.price_type || 'fixed',
         authorPublicKey: post.author_pubkey,
         lat: post.lat,
@@ -2351,9 +2415,9 @@ export async function createPost(post: any) {
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [post.id, post.type, post.category, post.title, post.description, post.credits,
+        [post.id, post.type, post.category, post.title, post.description, post.price_c,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
          (post.lendable === true || post.lendable === 1) ? 1 : 0,
@@ -2876,7 +2940,8 @@ export async function createEnterpriseApi(data: {
     purpose?: string;
     description?: string;
     lifecycle?: 'ongoing' | 'bounded';
-    goalAmount?: number | null;
+    /** A project's goal, whole hundredths of a Bean (the node refuses the old `goalAmount`). */
+    goalAmount_c?: number | null;
     deadlineAt?: string | null;
     avatar?: string;
     photos?: string[];
@@ -2887,7 +2952,8 @@ export async function createEnterpriseApi(data: {
 export async function createProject(project: {
     title: string;
     description: string;
-    goal_amount?: number;
+    /** Whole hundredths of a Bean. */
+    goal_amount_c?: number;
     photos?: string[];
     deadline_at?: string | null;
     lifecycle?: 'ongoing' | 'bounded';
@@ -2896,8 +2962,8 @@ export async function createProject(project: {
         name: project.title,
         purpose: project.description,
         description: project.description,
-        lifecycle: project.lifecycle || (project.goal_amount ? 'bounded' : 'ongoing'),
-        goalAmount: project.goal_amount,
+        lifecycle: project.lifecycle || (project.goal_amount_c ? 'bounded' : 'ongoing'),
+        goalAmount_c: project.goal_amount_c,
         deadlineAt: project.deadline_at,
         photos: project.photos,
         avatar: project.photos && project.photos.length > 0 ? project.photos[0] : undefined,
@@ -2956,14 +3022,15 @@ export interface TreasurySummary {
     callsign?: string;
     avatar?: string | null;
     avatarUrl?: string | null;
-    balance: number;
-    creditLine: number;
+    // Every figure whole hundredths of a Bean, as the node sends them (`*_c`).
+    balance_c: number;
+    creditLine_c: number;
     liveOffers: number;
-    earnedSurplus?: number;
-    workingCapitalCeiling?: number | null;
+    earnedSurplus_c?: number;
+    workingCapitalCeiling_c?: number | null;
     purpose?: string | null;
-    goalAmount?: number | null;
-    currentAmount?: number | null;
+    goalAmount_c?: number | null;
+    currentAmount_c?: number | null;
     deadlineAt?: string | null;
     lifecycle?: string;
     status?: string;
@@ -2972,9 +3039,10 @@ export interface TreasurySummary {
     link?: any;
 }
 
-export async function treasuryPledge(treasury: string, amount: number, memo?: string) {
+/** A pledge of `amount_c` (whole hundredths of a Bean, above 0) to an enterprise or project: signed over the integer. */
+export async function treasuryPledge(treasury: string, amount_c: number, memo?: string) {
     if (memo) await refuseReadableIntoDm(treasury);
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount_c, memo });
 }
 
 export async function getTreasuries(): Promise<TreasurySummary[]> {
@@ -3000,11 +3068,11 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 /** `photos`: JPEG data URLs, at most five (utils/post-photo.ts), checked by the node as a member's own listing's are. */
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
@@ -3036,16 +3104,18 @@ export async function getDealsFor(publicKey: string): Promise<MarketplaceTransac
     };
     return (await Promise.all([read('pending'), read('requested')])).flat();
 }
-export async function treasurySweep(treasury: string, amount: number) {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
+// Every figure in these bodies and answers is whole hundredths of a Bean (`*_c`), as the node takes and answers them.
+export async function treasurySweep(treasury: string, amount_c: number): Promise<{ success: boolean; swept_c: number; balance_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount_c });
 }
-export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+export async function treasuryPledgeBacking(treasury: string, amount_c: number): Promise<{ success: boolean; pledge: any; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount_c });
 }
-export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+/** Release some of a backing (`amount_c`), or all of it (no amount: the body carries no money key). */
+export async function treasuryRelease(treasury: string, amount_c?: number): Promise<{ success: boolean; releasedAmount_c: number; remainingPledge_c: number; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, amount_c === undefined ? {} : { amount_c });
 }
-export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number | null } | null> {
     try {
         const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
         if (!res.ok) return null;
@@ -3056,8 +3126,9 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
 }
 
 // Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
-export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number) {
-    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+/** Ask to keep an enterprise, pledging `pledgedBacking_c` (whole hundredths of a Bean, 0 for none) of backing. */
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking_c: number) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking_c });
 }
 
 export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending') {
@@ -3121,7 +3192,7 @@ export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDe
  * and a pay-out's memo are words the node reads, so a known DM's id refuses first (#1938 confirmation 7, finding 2).
  */
 export async function proposeEnterpriseDecision(treasury: string, body: {
-    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount_c: number; memo?: string };
 }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
@@ -3508,7 +3579,7 @@ export async function getConversationKind(conversationId: string, opts: { askNod
 
 // Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the
 // actor from the signature only and decides who may act; these throw the server's own error message.
-export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot_c?: number; alreadyPaused?: boolean }> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/pause`, {});
 }
 
@@ -3524,16 +3595,21 @@ export async function cancelWindUp(treasury: string): Promise<{ success: boolean
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`, {});
 }
 
+/** `sweptAmount`: what went to the Commons, whole hundredths of a Bean (the node keeps the name: a listed deviation of M1). */
 export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`, {});
 }
 
+/**
+ * One line of an enterprise's income & spend. Every figure is whole hundredths of a Bean: `amount_c` and `fee_c` as the
+ * node names them, and `netAmount` and `runningBalance`, which keep their names on the node (M1's listed deviations).
+ */
 export interface EnterpriseLedgerEntry {
     id: string;
     timestamp: string;
     direction: 'income' | 'spend';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     netAmount: number;
     counterparty: string;
     counterpartyName: string;
@@ -3543,8 +3619,9 @@ export interface EnterpriseLedgerEntry {
 }
 
 export interface EnterpriseLedgerResponse {
-    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance: number };
+    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance_c: number };
     period: { since: string | null; until: string | null };
+    /** The totals and balances, whole hundredths of a Bean (their names kept on the node). */
     summary: {
         totalIncome: number;
         totalSpend: number;
@@ -3828,7 +3905,8 @@ export async function updatePost(id: string, updates: any) {
         category: updates.category,
         title: updates.title,
         description: updates.description,
-        credits: updates.credits,
+        // Whole hundredths of a Bean (the edit's typed price through core parseHundredths), as the node takes it.
+        price_c: updates.price_c,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
         photos,
@@ -3846,13 +3924,13 @@ export async function updatePost(id: string, updates: any) {
     if (photos !== undefined) {
         const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
         );
     } else {
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
         );
     }
 }
@@ -4004,14 +4082,15 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
             p.category ?? null,
             p.title ?? null,
             p.description ?? '',
-            p.credits ?? 0,
+            // Whole hundredths of a Bean (the node's price_c); anything else is no price (null, shown "—"), never Free.
+            isHundredths(p.price_c) && p.price_c >= 0 ? p.price_c : null,
             p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
             p.lat ?? null,
             p.lng ?? null,
@@ -4383,10 +4462,11 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const placeholders = batch.map(() => '(?, ?, ?)').join(', ');
             const params: any[] = [];
             for (const acc of batch) {
-                params.push(acc.public_key ?? null, acc.balance ?? 0, acc.last_demurrage_epoch ?? 0);
+                // Whole hundredths of a Bean (the node's balance_c); anything else is held as 0, never a guessed figure.
+                params.push(acc.public_key ?? null, isHundredths(acc.balance_c) ? acc.balance_c : 0, acc.last_demurrage_epoch ?? 0);
             }
             await txn.runAsync(
-                `INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ${placeholders}`,
+                `INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ${placeholders}`,
                 params
             );
         }
@@ -4420,7 +4500,9 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const av = m.avatarUrl || m.avatar_url || null;
             const joinedAt = m.joinedAt || m.joined_at || null;
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
-            const ec = m.earnedCredit || m.earned_credit || 0;
+            // The node's earnedCredit keeps its name and carries whole hundredths (M1). A card the phone already holds
+            // (asHeldRow, kept from a search result by keepCards) carries the copy's own earned_credit_c. Anything else is 0.
+            const ec = isHundredths(m.earnedCredit) ? m.earnedCredit : isHundredths(m.earned_credit_c) ? m.earned_credit_c : 0;
             let arch = m.archetype || null;
             let finalArch = arch;
             // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
@@ -4459,7 +4541,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
-                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, archetype) VALUES (?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit_c, archetype) VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
                    archetype = CASE WHEN ? THEN excluded.archetype
@@ -4468,7 +4550,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
-                   earned_credit = excluded.earned_credit`,
+                   earned_credit_c = excluded.earned_credit_c`,
                 // The CASE placeholders are the 8th (archetype) and 9th (avatar, last) `?` in the statement text, so
                 // they bind AFTER the seven VALUES parameters.
                 [pk, cs, av, joinedAt, profileUpdatedAt, ec, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
@@ -4517,12 +4599,13 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     
     if (delta.transactions) {
             for (const t of delta.transactions) {
+                // Whole hundredths above 0 (the node's amount_c and fee_c), or the row isn't kept: never a guessed figure.
+                if (!isHundredths(t.amount_c) || t.amount_c <= 0) continue;
                 const fromKey = t.from_pubkey || t.from || null;
                 const toKey = t.to_pubkey || t.to || null;
-                const taxFee = t.taxFee ?? t.tax_fee ?? 0;
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [t.id ?? null, fromKey, toKey, t.amount ?? 0, taxFee, t.memo ?? null, t.timestamp ?? null]
+                    'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [t.id ?? null, fromKey, toKey, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo ?? null, t.timestamp ?? null]
                 );
             }
         }
@@ -4585,13 +4668,14 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 }
 
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         tx.id ?? null,
                         tx.postId ?? tx.post_id ?? null,
                         tx.buyerPublicKey ?? tx.buyerPubkey ?? tx.buyer_pubkey ?? null,
                         tx.sellerPublicKey ?? tx.sellerPubkey ?? tx.seller_pubkey ?? null,
-                        tx.credits ?? 0,
+                        // What the deal holds, whole hundredths (the node's amount_c); anything else, no figure (shown "—").
+                        dealAmountColumn(tx),
                         tx.hours ?? null,
                         incomingStatus,
                         tx.createdAt ?? tx.created_at ?? new Date().toISOString(),
@@ -4628,15 +4712,16 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         if (delta.projects !== undefined) {
             for (const proj of delta.projects) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, current_amount_c, deadline_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         proj.id ?? null,
                         proj.creatorPubkey ?? proj.creator_pubkey ?? null,
                         proj.title ?? null,
                         proj.description ?? '',
                         proj.photos ? JSON.stringify((typeof proj.photos === 'string' ? JSON.parse(proj.photos) : proj.photos).filter((url: string) => !url.startsWith('file://'))) : null,
-                        proj.goalAmount ?? proj.goal_amount ?? 0,
-                        proj.currentAmount ?? proj.current_amount ?? 0,
+                        // Whole hundredths of a Bean (the node's project row: goal_amount_c, current_amount_c); anything else is 0.
+                        isHundredths(proj.goal_amount_c) ? proj.goal_amount_c : 0,
+                        isHundredths(proj.current_amount_c) ? proj.current_amount_c : 0,
                         proj.deadlineAt ?? proj.deadline_at ?? null,
                         proj.status ?? 'ACTIVE',
                         proj.createdAt ?? proj.created_at ?? new Date().toISOString()
@@ -5051,7 +5136,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             const requestAfterList = () => requestAfterReadHere(conv.id, heldRequest, conv.request, decidedBefore);
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request, listed FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, request, listed FROM conversations WHERE id = ?', [conv.id]);
                 heldRequest = localConv?.request;
                 const requestJson = requestAfterList();
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
@@ -5064,7 +5149,6 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     (localConv.post_title ?? null) !== (conv.postTitle ?? null) ||
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
-                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
                     (requestJson !== undefined && (localConv.request ?? null) !== requestJson) ||
                     localConv.listed !== 1
                 ) {
@@ -5109,7 +5193,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
                     if (!localConv) {
                         await txn.runAsync(
-                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
                             [
                                 conv.id,
                                 heldType,
@@ -5120,7 +5204,6 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null,
                                 requestAfterList() ?? null
                             ]
                         );
@@ -5128,12 +5211,11 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                         // Undefined: the row keeps the request it holds.
                         const requestJson = requestAfterList();
                         await txn.runAsync(
-                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
+                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null,
                                 ...(requestJson === undefined ? [] : [requestJson]),
                                 conv.id
                             ]
@@ -5581,7 +5663,7 @@ export async function getConversation(id: string, myPubkey?: string) {
                 p.status,
                 c.post_status
             ) as postStatus,
-            p.price_type, p.credits,
+            p.price_type, p.price_c,
             (SELECT memb.callsign FROM conversation_participants cp 
              LEFT JOIN members memb ON memb.public_key = cp.public_key
              WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherCallsign,
@@ -5591,7 +5673,7 @@ export async function getConversation(id: string, myPubkey?: string) {
              LEFT JOIN members memb ON memb.public_key = cp.public_key
              WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherAvatar,
             mt.id as pendingTxId,
-            mt.credits as pendingAmount,
+            mt.amount_c as pendingAmount_c,
             mt.buyer_pubkey as txBuyerPubkey,
             mt.seller_pubkey as txSellerPubkey
             FROM conversations c 
@@ -7420,18 +7502,18 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             let postTitle: string | null = null;
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
-            let postCredits: number | null = null;
+            let postPrice_c: number | null = null;
             // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
             const convType = await heldConversationType(conv.id, type);
             if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {
-                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, credits: number }>('SELECT title, status, photos, credits FROM posts WHERE id = ?', [lookupPid]);
+                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, price_c: number | null }>('SELECT title, status, photos, price_c FROM posts WHERE id = ?', [lookupPid]);
                 if (post) {
                     postTitle = post.title;
                     postStatus = post.status;
-                    postCredits = post.credits;
+                    postPrice_c = isHundredths(post.price_c) ? post.price_c : null;
                     if (post.photos) {
                         try {
                             const arr = JSON.parse(post.photos);
@@ -7441,7 +7523,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                 }
             }
             await database.runAsync(
-                'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_price_c) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     conv.id,
                     convType,
@@ -7452,7 +7534,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                     postTitle,
                     postStatus,
                     postPhoto,
-                    postCredits
+                    postPrice_c
                 ]
             );
             // The key asked for is pinned now: a listing that names another key before the first send only offers it, the
@@ -8217,8 +8299,8 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
                 );
             }
 
@@ -8255,7 +8337,7 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
 
             const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
             const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-            console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, credits=${res?.transaction?.credits}`);
+            console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, amount_c=${res?.transaction?.amount_c}`);
 
             // Emit events so Ledger screen refreshes immediately
             const { DeviceEventEmitter } = require('react-native');
@@ -8316,8 +8398,8 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
                 );
             }
         } finally {
@@ -8343,8 +8425,8 @@ export async function approveMarketplaceRequest(transactionId: string, authorPub
         await database.runAsync("UPDATE marketplace_transactions SET status = 'pending' WHERE id = ?", [transactionId]);
         const tx = res?.transaction;
         if (tx?.standingId) {
-            await database.runAsync('UPDATE marketplace_transactions SET credits = ?, standing_id = ?, period_no = ?, standing = ? WHERE id = ?',
-                [tx.credits ?? 0, tx.standingId, tx.periodNo ?? null, standingJsonOf(tx), transactionId]);
+            await database.runAsync('UPDATE marketplace_transactions SET amount_c = ?, standing_id = ?, period_no = ?, standing = ? WHERE id = ?',
+                [dealAmountColumn(tx), tx.standingId, tx.periodNo ?? null, standingJsonOf(tx), transactionId]);
         }
     } catch(e) {}
     return res;
@@ -8734,7 +8816,8 @@ export interface MarketplaceTransaction {
     buyerCallsign?: string | null;
     sellerPublicKey: string;
     sellerCallsign?: string | null;
-    credits: number;
+    /** What the deal holds, whole hundredths of a Bean (the node's amount_c); null when the figure isn't one. */
+    amount_c: number | null;
     hours?: number | null;
     status: string;
     createdAt: string;
@@ -8752,7 +8835,8 @@ export interface MarketplaceTransaction {
     standingId?: string | null;
     periodNo?: number | null;
     standingPhase?: StandingPhase | null;
-    standingBeans?: number | null;
+    /** Per period, whole hundredths of a Bean. */
+    standingBeans_c?: number | null;
     standingUnit?: StandingPeriodUnit | null;
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string | null;
@@ -8809,7 +8893,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             buyerCallsign: r.buyerCallsign, 
             sellerPublicKey: r.seller_pubkey, 
             sellerCallsign: r.sellerCallsign, 
-            credits: r.credits, 
+            amount_c: isHundredths(r.amount_c) ? r.amount_c : null,
             hours: typeof r.hours === 'number' ? r.hours : null,
             status: r.status, 
             createdAt: r.created_at, 
@@ -8838,7 +8922,7 @@ export async function getPledgeHistory(pubkey: string) {
     const database = await getDb();
     // Pledges are recorded as ledger transfers from the member to 'project_<id>'
     const rows = await database.getAllAsync<any>(
-        `SELECT t.id, t.amount, t.memo, t.timestamp,
+        `SELECT t.id, t.amount_c, t.memo, t.timestamp,
                 REPLACE(t.to_pubkey, 'project_', '') as project_id,
                 p.title as projectTitle
          FROM transactions t
@@ -8849,7 +8933,7 @@ export async function getPledgeHistory(pubkey: string) {
     );
     return rows.map(r => ({
         id: r.id,
-        amount: r.amount,
+        amount_c: r.amount_c,
         projectId: r.project_id,
         projectTitle: r.projectTitle || 'Community Project',
         timestamp: r.timestamp,
@@ -8864,10 +8948,11 @@ export async function getPledgeHistory(pubkey: string) {
  * out of 'pending' to 'completed' or 'cancelled', and a request turned down or left to expire never held any. The same
  * rule as the node's own ledger export (engine/audit.ts exportLedgerFor, its Pending_Trade rows).
  */
+/** In whole hundredths of a Bean: the deals' amount_c summed exactly (a deal with no figure counts nothing). */
 export async function getEscrowTotal(pubkey: string): Promise<number> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
-        `SELECT COALESCE(SUM(credits), 0) as total
+        `SELECT COALESCE(SUM(amount_c), 0) as total
          FROM marketplace_transactions
          WHERE buyer_pubkey = ? AND status = 'pending'`,
         [pubkey]

@@ -6,8 +6,12 @@
  * GET /api/names/vouchers (it answers only owners and committee admins); whether a level, a stop or an appointment stands is
  * engine/vouchers.ts's, and its refusal sentences are shown as they come. What is here only keeps the phone from OFFERING
  * what the node would refuse (a level off its 100-step grid, below held, above 2,000), and puts words on what it sends.
+ *
+ * Every budget figure is whole hundredths of a Bean, as all credit room is (DESIGN-atomic-beans-fable.md Q3): a level of
+ * 1,000 is 100000, the step 10000, and core's VOUCHER_BUDGET_* constants are in the same unit, so the grid's arithmetic is
+ * exact integers. Words write them through formatHundredths (100000 reads "1,000").
  */
-import { t, formatDate, formatNumber, isBudgetLevel, VOUCHER_BUDGET_MIN, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_STEP, VOUCHER_BUDGET_DEFAULT } from '@beanpool/core';
+import { t, formatDate, formatHundredths, isBudgetLevel, isHundredths, VOUCHER_BUDGET_MIN, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_STEP, VOUCHER_BUDGET_DEFAULT } from '@beanpool/core';
 import type { OpenedEntry, VoucherSummaryRow, VoucherHistoryLine, ConfirmationRow } from './names-list';
 
 // ── Budget levels (§10: 100 to 2,000 in 100s, never below held; core's isBudgetLevel is the node's own check) ────────
@@ -75,11 +79,37 @@ const day = (iso: string | null | undefined): string => {
     return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month') : '';
 };
 
+/**
+ * A history line's figure as the node sends it (engine/vouchers.ts historyOf: `amount_c`, whole hundredths, signed), or
+ * null when it isn't one: checked here, at the boundary, so a figure that isn't whole hundredths is never written as one.
+ */
+export function historyAmountOf(h: VoucherHistoryLine): number | null {
+    const c = (h as { amount_c?: unknown }).amount_c;
+    return isHundredths(c) ? c : null;
+}
+
+/**
+ * What passed on past the people a voucher vouched for (engine/vouchers.ts passedOnOf: `passedOn.amount_c`), whole hundredths,
+ * or null when it isn't one.
+ */
+export function passedOnAmountOf(passedOn: object | null | undefined): number | null {
+    const c = (passedOn as { amount_c?: unknown } | null | undefined)?.amount_c;
+    return isHundredths(c) ? c : null;
+}
+
+/** What a voucher vouched for one person (engine/vouchers.ts peopleOf: `amount_c`), whole hundredths, or null when it isn't one. */
+export function personVouchedOf(person: object): number | null {
+    const c = (person as { amount_c?: unknown }).amount_c;
+    return isHundredths(c) ? c : null;
+}
+
 /** One Budget history line in words (§3: "+1,000 budget, made a voucher by @marty, 5 Nov · −100 held for an invite"). */
 export function historyLineWords(h: VoucherHistoryLine): string {
     const date = day(h.at);
     const actor = voucherActorWords(h);
-    const amount = formatNumber(Math.abs(h.amount));
+    const c = historyAmountOf(h);
+    // A figure that isn't whole hundredths reads "—" (formatHundredths), never a number.
+    const amount = formatHundredths(c === null ? null : Math.abs(c));
     switch (h.kind) {
         case 'grant': return t('+{amount} budget, made a voucher by {actor}, {date}', { amount, actor, date });
         case 'top_up': return t('+{amount} top-up by {actor}, {date}', { amount, actor, date });

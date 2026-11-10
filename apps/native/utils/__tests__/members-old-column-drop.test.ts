@@ -65,14 +65,14 @@ describe("the phone's members table after the vouching reset", () => {
         // The previous build's table: the same, with the column, and a member someone vouched for.
         await closeDB();
         sql.exec(`ALTER TABLE members ADD COLUMN ${OLD_COLUMN} TEXT`);
-        sql.prepare(`INSERT INTO members (public_key, callsign, earned_credit, archetype, ${OLD_COLUMN}) VALUES (?, ?, ?, ?, ?)`)
-            .run(KOFI, 'Kofi', 200, 'weaver', ROSA);
+        sql.prepare(`INSERT INTO members (public_key, callsign, earned_credit_c, archetype, ${OLD_COLUMN}) VALUES (?, ?, ?, ?, ?)`)
+            .run(KOFI, 'Kofi', 20000, 'weaver', ROSA);
         const before = columns();
         await getDb();
         expect(columns()).not.toContain(OLD_COLUMN);
         expect(columns()).toEqual(before.filter((c) => c !== OLD_COLUMN));
-        expect(sql.prepare('SELECT public_key, callsign, earned_credit, archetype FROM members WHERE public_key = ?').get(KOFI))
-            .toEqual({ public_key: KOFI, callsign: 'Kofi', earned_credit: 200, archetype: 'weaver' });
+        expect(sql.prepare('SELECT public_key, callsign, earned_credit_c, archetype FROM members WHERE public_key = ?').get(KOFI))
+            .toEqual({ public_key: KOFI, callsign: 'Kofi', earned_credit_c: 20000, archetype: 'weaver' });
         // Opened again: the drop finds nothing to drop and the open goes on as before.
         await closeDB();
         await getDb();

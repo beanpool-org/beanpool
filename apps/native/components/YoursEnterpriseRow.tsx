@@ -15,7 +15,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { deadlineDaysRemaining, formatNumber, t, tn } from '@beanpool/core';
+import { deadlineDaysRemaining, formatHundredths, isHundredths, t, tn } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { MemberAvatar } from './MemberAvatar';
@@ -214,35 +214,36 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
     const kindName = ownerKindName(item.chat.kind, item.chat.lifecycle);
     const roleWord = rowRoleWord(item.chat);
 
-    // Line 2 wording
+    // Line 2 wording. Every figure is whole hundredths of a Bean (the node's `*_c` fields), written by formatHundredths: a
+    // balance that isn't one reads "—", never a number.
     let line2: string | null = null;
     if (item.summary) {
+        const balance_c = isHundredths(item.summary.balance_c) ? item.summary.balance_c : null;
         if (isProject) {
-            const raised = item.summary.currentAmount != null
-                ? item.summary.currentAmount
-                : Math.max(0, item.summary.balance ?? 0);
-            const goal = item.summary.goalAmount ?? 0;
+            const raised = isHundredths(item.summary.currentAmount_c)
+                ? item.summary.currentAmount_c
+                : Math.max(0, balance_c ?? 0);
+            const goal = isHundredths(item.summary.goalAmount_c) ? item.summary.goalAmount_c : 0;
             const daysRemaining = getDaysRemaining(item.summary.deadlineAt);
             if (goal > 0) {
                 line2 = daysRemaining
                     ? t('{raised} of {goal} 🫘 raised · {days}', {
-                        raised: formatNumber(raised),
-                        goal: formatNumber(goal),
+                        raised: formatHundredths(raised),
+                        goal: formatHundredths(goal),
                         days: daysRemaining.text,
                     })
                     : t('{raised} of {goal} 🫘 raised', {
-                        raised: formatNumber(raised),
-                        goal: formatNumber(goal),
+                        raised: formatHundredths(raised),
+                        goal: formatHundredths(goal),
                     });
             } else {
-                line2 = t('Balance {amount} 🫘', { amount: formatNumber(item.summary.balance ?? 0) });
+                line2 = t('Balance {amount} 🫘', { amount: formatHundredths(balance_c) });
             }
         } else {
-            const balance = item.summary.balance ?? 0;
             const liveOffers = item.summary.liveOffers ?? 0;
             const offersText = tn(liveOffers, '{n} live offer', '{n} live offers');
             line2 = t('Balance {amount} 🫘 · {offers}', {
-                amount: formatNumber(balance),
+                amount: formatHundredths(balance_c),
                 offers: offersText,
             });
         }

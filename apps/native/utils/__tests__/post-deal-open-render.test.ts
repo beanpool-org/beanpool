@@ -147,23 +147,23 @@ const KOFI = { pubkey: 'kofi-key', callsign: 'Kofi' };
 /** A recurring Offer: it stays on the board while its deals run. */
 const COURSE = {
     id: 'p-course', type: 'offer', status: 'active', title: 'Pottery course', description: 'Six weeks on the wheel', category: 'education',
-    author_pubkey: DAMO.pubkey, author_callsign: DAMO.callsign, credits: 45, price_type: 'fixed', photos: '[]', repeatable: 1,
+    author_pubkey: DAMO.pubkey, author_callsign: DAMO.callsign, price_c: 4500, price_type: 'fixed', photos: '[]', repeatable: 1,
     audience_scope: 'public', created_at: iso(Date.now() - 3 * 60 * 60_000),
 };
 /** The member's deal on it, held in trust: made on their other device, not yet on this phone. */
 const COURSE_DEAL = {
     id: 'tx-course', post_id: 'p-course', status: 'pending', buyer_pubkey: ME.publicKey, buyer_callsign: ME.callsign,
-    seller_pubkey: DAMO.pubkey, seller_callsign: DAMO.callsign, credits: 45, hours: null, created_at: iso(Date.now() - 60 * 60_000),
+    seller_pubkey: DAMO.pubkey, seller_callsign: DAMO.callsign, amount_c: 4500, hours: null, created_at: iso(Date.now() - 60 * 60_000),
 };
 /** A recurring Need of Kofi's, and the member's deal helping with it, approved: Kofi's Beans held. */
 const STALL = {
     id: 'p-stall', type: 'need', status: 'active', title: 'Help at the market stall', description: 'Saturday mornings', category: 'labour',
-    author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, credits: 20, price_type: 'fixed', photos: '[]', repeatable: 1,
+    author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: 2000, price_type: 'fixed', photos: '[]', repeatable: 1,
     audience_scope: 'public', created_at: iso(Date.now() - 26 * 60 * 60_000),
 };
 const STALL_DEAL = {
     id: 'tx-stall', post_id: 'p-stall', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign,
-    seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, credits: 20, hours: null, created_at: iso(Date.now() - 60 * 60_000),
+    seller_pubkey: ME.publicKey, seller_callsign: ME.callsign, amount_c: 2000, hours: null, created_at: iso(Date.now() - 60 * 60_000),
 };
 
 const DEAL_OPEN_WORDS = 'You already have a deal under way on this. Finish or cancel it first.';
@@ -336,7 +336,7 @@ describe('"I can do this" on a Need (cold start N4)', () => {
     });
 
     it('a free Need says it is free; a Need with no name says the person who asked', async () => {
-        await open({ ...STALL, credits: 0 }, untouched);
+        await open({ ...STALL, price_c: 0 }, untouched);
         await press('✋ I can do this');
         expect(sentence()).toBe("You'd do it for free. Kofi agrees, you do it, and Kofi confirms.");
         expect(host.textContent).not.toMatch(/0 Beans|0 credits/);

@@ -417,7 +417,7 @@ describe('What needs you: a short standing deal (U2)', () => {
     const PAYEE = 'rob-pubkey';
     const standing = (over: Partial<NeedsYouTransaction> = {}): NeedsYouTransaction => ({
         id: 'sd-m1', postId: 'post-storage', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: ME, buyerCallsign: 'Marty',
-        sellerPublicKey: PAYEE, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50, standingUnit: 'month',
+        sellerPublicKey: PAYEE, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans_c: 5000, standingUnit: 'month',
         standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z', standingStopped: false, ...over,
     });
     const at = (s: string) => Date.parse(s);

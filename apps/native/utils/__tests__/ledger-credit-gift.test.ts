@@ -130,10 +130,10 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import LedgerScreen from '../../app/(tabs)/ledger';
 
 const NODE = 'https://mullum.example';
-/** A member who can send Beans: 120 held, a first trade made. */
+/** A member who can send Beans: 120 held, a first trade made. Whole hundredths of a Bean, as getBalance answers (db.ts). */
 const HOLDER = {
-    balance: 120, floor: -150, usableFloor: -150, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 0,
-    tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 3, earnedCredit: 3, qualifiedValue: 10, avgRating: 5, reviewCount: 0, commons: 12.5,
+    balance_c: 12000, floor_c: -15000, usableFloor_c: -15000, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant_c: 0,
+    tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 300, earnedCredit_c: 300, qualifiedValue_c: 1000, avgRating: 5, reviewCount: 0, commons_c: 1250,
     trustStats: { uniquePartners: 1 },
 };
 const MEMBERS = [{ publicKey: 'mia-key', callsign: 'Mia' }];
@@ -173,7 +173,8 @@ beforeEach(() => {
     net.calls.length = 0;
     blocked.keys = [];
     node.balance = HOLDER;
-    node.offer = { offered: true, max: 100, room: 100, canGive: 100, why: null };
+    // The node's figures are whole hundredths (engine/credit-gift.ts creditGiftOffer: `max`, `room`, `canGive` kept their names).
+    node.offer = { offered: true, max: 10000, room: 10000, canGive: 10000, why: null };
     node.gifts = [];
     node.refuse = null;
     node.offerReads = 0;
@@ -194,7 +195,7 @@ beforeEach(() => {
         }
         if (name === 'signedRequest' && args[0] === '/api/credit/gift') {
             node.gifts.push(args);
-            return node.refuse ? Promise.reject(new Error(node.refuse)) : Promise.resolve({ amount: (args[1] as any).amount, room: 50, canGive: 50 });
+            return node.refuse ? Promise.reject(new Error(node.refuse)) : Promise.resolve({ amount: (args[1] as any).amount_c, room: 5000, canGive: 5000 });
         }
         return undefined;
     };
@@ -239,7 +240,7 @@ async function pickMia() {
 
 describe('the Credit line tab beside Beans on Send (G1)', () => {
     it('no tab when the node does not offer it: the owner set 0, no credit line someone gave them, or a node from before G1', async () => {
-        for (const offer of [{ offered: false, max: 0, room: 60, canGive: 0, why: 'Giving part of your credit line is off in this community.' }, { offered: false, max: 100, room: 0, canGive: 0, why: null }, null]) {
+        for (const offer of [{ offered: false, max: 0, room: 6000, canGive: 0, why: 'Giving part of your credit line is off in this community.' }, { offered: false, max: 10000, room: 0, canGive: 0, why: null }, null]) {
             node.offer = offer;
             await openSend();
             expect(byTestId('send-kind-tabs'), JSON.stringify(offer)).toBeNull();
@@ -262,7 +263,8 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
         expect(byLabel('Memo')).toBeNull();
         await type(byLabel('Credit line to give'), '50');
         await click(buttonSaying('Give credit line'), 'Give credit line');
-        expect(node.gifts).toEqual([['/api/credit/gift', { memberPubkey: 'mia-key', amount: 50 }]]);
+        // 50 typed is 50 Beans, sent as whole hundredths (the node reads `amount_c`).
+        expect(node.gifts).toEqual([['/api/credit/gift', { memberPubkey: 'mia-key', amount_c: 5000 }]]);
         expect(text()).toContain('✓ Given!');
     });
 
@@ -281,7 +283,7 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
     });
 
     it('nothing to give now: the node\'s why, and Give stays off', async () => {
-        node.offer = { offered: true, max: 100, room: 17, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
+        node.offer = { offered: true, max: 10000, room: 1700, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
         await openSend();
         await click(byTestId('send-kind-credit'), 'Credit line');
         await pickMia();
@@ -294,7 +296,7 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
     });
 
     it('Beans locked (nothing held) but part of the line to give: Send opens on the Credit line tab, the Beans tab says why', async () => {
-        node.balance = { ...HOLDER, balance: 0 };
+        node.balance = { ...HOLDER, balance_c: 0 };
         await render();
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         expect(byLabel('Send Beans')).toBeNull();
@@ -306,17 +308,17 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
     });
 
     it('Beans locked, and all of it given: the node\'s sentence for that, and Cancel still closes the form (round 2)', async () => {
-        node.balance = { ...HOLDER, balance: 0 };
-        node.offer = { offered: true, max: 100, room: 25, canGive: 25, why: null };
+        node.balance = { ...HOLDER, balance_c: 0 };
+        node.offer = { offered: true, max: 10000, room: 2500, canGive: 2500, why: null };
         await render();
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         await click(byLabel('Give part of your credit line'), 'Give part of your credit line');
         await pickMia();
         await type(byLabel('Credit line to give'), '25');
         const allGiven = 'You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.';
-        node.offer = { offered: false, max: 100, room: 0, canGive: 0, why: allGiven };
+        node.offer = { offered: false, max: 10000, room: 0, canGive: 0, why: allGiven };
         await click(buttonSaying('Give credit line'), 'Give credit line');
-        expect(node.gifts).toEqual([['/api/credit/gift', { memberPubkey: 'mia-key', amount: 25 }]]);
+        expect(node.gifts).toEqual([['/api/credit/gift', { memberPubkey: 'mia-key', amount_c: 2500 }]]);
         expect(text()).toContain('✓ Given!');
         expect(byTestId('credit-gift-words')?.textContent).toBe(allGiven);
         expect(text()).not.toContain('nobody has given you any');
@@ -328,8 +330,8 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
     });
 
     it('Beans locked and nothing to give: Send stays locked as before', async () => {
-        node.balance = { ...HOLDER, balance: 0 };
-        node.offer = { offered: true, max: 100, room: 50, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
+        node.balance = { ...HOLDER, balance_c: 0 };
+        node.offer = { offered: true, max: 10000, room: 5000, canGive: 0, why: 'You’re using the credit line someone gave you, so none of it is free to give now.' };
         await render();
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         expect(text()).toContain('Send Beans (needs positive balance)');

@@ -71,7 +71,7 @@ async function lines(): Promise<any[]> {
 beforeAll(async () => {
     await getDb();
     const put = (id: string, from: string, to: string, memo: string, at: string) =>
-        sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, 3, 0, ?, ?)').run(id, from, to, memo, at);
+        sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, 300, 0, ?, ?)').run(id, from, to, memo, at);
     put('from-bo', BO, ME, 'meet me behind the shed', '2026-10-01T10:00:00.000Z');
     put('from-cy', CY, ME, 'thanks for the eggs', '2026-10-01T09:00:00.000Z');
     put('to-bo', ME, BO, 'for the bread', '2026-10-01T08:00:00.000Z');

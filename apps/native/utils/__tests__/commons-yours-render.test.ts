@@ -164,7 +164,8 @@ const node = vi.hoisted(() => ({
     getTreasuries: null as any,
 }));
 vi.mock('../db', () => ({
-    getBalance: async () => ({ earnedCredit: 5, commons: 800 }),
+    // db.ts getBalance's answer, its figures whole hundredths of a Bean (`*_c`).
+    getBalance: async () => ({ earnedCredit_c: 500, commons_c: 80000 }),
     getTreasuries: (...args: unknown[]) => node.getTreasuries(...args),
     getDecisions: async () => ({ decisions: [], myPoolVoting: { voiceCredits: 4, hasCompletedTrade: true }, canPropose: true }),
     getAllCommunityMembers: async () => [{ publicKey: 'd'.repeat(64), callsign: 'Dave' }],
@@ -198,11 +199,12 @@ const EGGS_SUMMARY = {
     name: 'Community Eggs',
     callsign: 'Community Eggs',
     purpose: 'Fresh eggs for Mullum',
-    balance: 40,
-    creditLine: 0,
+    // Every figure whole hundredths of a Bean, as the node's /api/treasuries row sends them: 40 held.
+    balance_c: 4000,
+    creditLine_c: 0,
     liveOffers: 3,
-    goalAmount: null,
-    currentAmount: null,
+    goalAmount_c: null,
+    currentAmount_c: null,
     lifecycle: 'ongoing',
     status: 'active',
     paused: false,

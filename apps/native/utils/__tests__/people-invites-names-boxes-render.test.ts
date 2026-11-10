@@ -121,9 +121,10 @@ const node = vi.hoisted(() => ({
     role: null as 'owner' | 'admin' | 'moderator' | null,
     committee: false,
     voucher: true,
-    budgetLeft: 550,
-    budgetLevel: 1000,
-    voucherBudget: 1000,
+    // Every budget figure is whole hundredths of a Bean, as the node sends them: 55000 is 550 Beans.
+    budgetLeft: 55000,
+    budgetLevel: 100000,
+    voucherBudget: 100000,
     online: true,
     inviteDown: false,
     inviteRefusal: null as string | null,
@@ -200,8 +201,8 @@ vi.mock('../node-post', () => ({
             ok: true,
             json: async () => ({
                 voucher: node.voucher,
-                budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
-                presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [],
+                budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
+                presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000, vouchedBy: [],
             }),
         }
         : { ok: false, json: async () => null })),
@@ -247,7 +248,7 @@ beforeEach(() => {
     pushed.length = 0;
     nav.on = true;
     Object.assign(node, {
-        role: null, committee: false, voucher: true, budgetLeft: 550, budgetLevel: 1000, voucherBudget: 1000, online: true, inviteDown: false, inviteRefusal: null,
+        role: null, committee: false, voucher: true, budgetLeft: 55000, budgetLevel: 100000, voucherBudget: 100000, online: true, inviteDown: false, inviteRefusal: null,
         vouchersDown: false, waiting: [], generated: [], bound: [], mine: [],
     });
     inviteFolds.clear();
@@ -257,8 +258,8 @@ beforeEach(() => {
         if (u.endsWith('/api/vouchers/me')) {
             return json({
                 voucher: node.voucher,
-                budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
-                presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000, vouchedBy: [],
+                budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
+                presets: [2500, 5000, 7500, 10000], vouchMax: 10000, budgetMax: 200000, vouchedBy: [],
             });
         }
         // GET /api/names/vouchers answers owners and committee admins only (routes/names-list.ts).
@@ -266,7 +267,7 @@ beforeEach(() => {
             if (!node.online) throw new TypeError('Network request failed');
             if (node.vouchersDown) return json({ error: 'Something went wrong.' }, 500);
             return node.committee
-                ? json({ vouchers: [], waiting: node.waiting, settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 100 } })
+                ? json({ vouchers: [], waiting: node.waiting, settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 10000 } })
                 : json({ code: 'committee_only', error: COMMITTEE_ONLY }, 403);
         }
         const bind = u.match(/\/api\/names\/entries\/([^/]+)\/invite$/);
@@ -365,7 +366,8 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         expect(list.saved).toHaveLength(1);
         expect(list.saved[0].name).toBe('Rowan Penhallow');
         expect(list.saved[0].addId, 'the entry’s id, chosen on this phone').toMatch(/\S/);
-        expect(node.bound).toEqual([{ entryId: list.saved[0].addId, body: { vouchAmount: 50, voucherLevel: 1100 } }]);
+        // Both in whole hundredths (the node kept the names): a vouch of 50 and a budget of 1,100 Beans.
+        expect(node.bound).toEqual([{ entryId: list.saved[0].addId, body: { vouchAmount: 5000, voucherLevel: 110000 } }]);
         expect(node.generated, 'no plain invite, and the name never went to the node').toEqual([]);
         expect(tickets.made).toBe(0);
         expect(alerts.said).toEqual([]);
@@ -392,7 +394,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         await open();
         await press('invite-vouch-25');
         await generate();
-        expect(node.generated).toEqual([{ publicKey: 'a-member-key', vouchAmount: 25 }]);
+        expect(node.generated).toEqual([{ publicKey: 'a-member-key', vouchAmount: 2500 }]);
         expect(node.bound).toEqual([]);
     });
 
@@ -533,7 +535,7 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
             await generate();
             expect(list.saved.map((e) => e.addId)).toEqual([tegans, tegans]);
             expect(list.onNode).toEqual([{ id: tegans, name: 'Tegan Rule' }]);
-            expect(node.bound).toEqual([{ entryId: tegans, body: { vouchAmount: 50 } }]);
+            expect(node.bound).toEqual([{ entryId: tegans, body: { vouchAmount: 5000 } }]);
             expect(alerts.said).toEqual([]);
         });
 
@@ -712,7 +714,7 @@ const mineRow = (code: string, daysAgo: number, extra: Record<string, unknown> =
 const rowsText = () => Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]')).map((r) => r.textContent ?? '');
 
 describe('People → Invites: Pending and Joined are folded, and each row says what the invite is for', () => {
-    const BOUND = mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 });
+    const BOUND = mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 20000, voucherLevel: 100000 });
     const PLAIN = mineRow('INV-PLAIN-0002', 1, { intendedFor: 'Kim' });
     const USED = mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' });
 
@@ -880,7 +882,7 @@ describe('People → Invites: the retired sentences are drawn nowhere (invites-v
     it('an owner after Generate, and again once the form is back, with Pending and Joined open: none of the three', async () => {
         node.role = 'owner';
         node.committee = true;
-        node.mine = [mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 200, voucherLevel: 1000 }), mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' })];
+        node.mine = [mineRow('INV-BOUND-0001', 7, { namesEntryId: 'entry-jane', vouchAmount: 20000, voucherLevel: 100000 }), mineRow('INV-USED-0003', 10, { usedBy: 'c-key', usedAt: madeAgo(9), usedByCallsign: 'joanne' })];
         await open();
         await generate();
         for (const gone of RETIRED_INVITE_WORDS) expect(host.textContent).not.toContain(gone);
@@ -892,7 +894,7 @@ describe('People → Invites: the retired sentences are drawn nowhere (invites-v
 });
 
 describe('People → Invites: waiting to join, and the other way into the names list (invites-vouching I4)', () => {
-    const WAITING = { entryId: 'entry-jane', level: 1000, vouchAmount: 25, madeBy: 'a-member-key', madeByCallsign: 'Robin', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
+    const WAITING = { entryId: 'entry-jane', level: 100000, vouchAmount: 2500, madeBy: 'a-member-key', madeByCallsign: 'Robin', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
 
     it('the committee sees "Jane Albury · waiting to join · budget 1,000 ›": the name opened from the list on this phone, by entry id', async () => {
         node.role = 'owner';

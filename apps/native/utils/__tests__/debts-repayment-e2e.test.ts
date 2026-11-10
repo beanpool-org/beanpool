@@ -7,6 +7,8 @@
  *   Working off 200 and holding 510: the phone reads its repayment (GET /api/commons/repayment), whose debtId is the
  *   code Pay the Commons fills in; pays 200 with it (POST /api/commons/pay, as the screen confirms it). It comes off the
  *   debt at once and settles it; the next 10 received is the member's own, never swept: 200 paid once (510 → 320).
+ *   Every figure is whole hundredths of a Bean, as the node keeps, sends and takes them (and its harness writes them):
+ *   510 Beans is 51000.
  *
  * Nothing else is contacted: the phone's fetch is held to this node's address, and the node's own fetch refuses every
  * host but this machine.
@@ -135,17 +137,17 @@ describe('working a debt off, paying it from the banner (the phone against a rea
     it('the repayment carries the code Pay the Commons fills in; 200 paid with it comes off the debt, and the next receipt is never swept', async () => {
         await control('limiters');
         const me = await draftIdentity('Pe');
-        const debtId = await control<string>('workingOff', { key: me.publicKey, beans: 510, owed: 200 });
+        const debtId = await control<string>('workingOff', { key: me.publicKey, beans: 51000, owed: 20000 });
         const why = await fetchMyRepayment(URL_BASE, me);
-        expect(why).toEqual({ ok: true, value: { debtId, amount: 200, repaid: 0, left: 200 } });
-        // What the screen sends once the member confirms 200 with the code it filled in.
+        expect(why).toEqual({ ok: true, value: { debtId, amount_c: 20000, repaid_c: 0, left_c: 20000 } });
+        // What the screen sends once the member confirms 200 with the code it filled in: 200 Beans, 20000 hundredths.
         const code = why.ok ? why.value?.debtId : undefined;
-        const paid = await payTheCommons(URL_BASE, me, confirmCommonsPayment(200, code));
-        expect(paid.ok && paid.value).toMatchObject({ amount: 200, left: 200, leftAfter: 0, settled: true });
-        expect(REPAYMENT_COPY.paid(200, paid.ok ? paid.value.transactionId : '', !!code, paid.ok ? paid.value : {})).toBe('Paid 200 Beans to the Commons. Your debt is paid off and settled.');
-        await control('receive', { key: me.publicKey, beans: 10 });
+        const paid = await payTheCommons(URL_BASE, me, confirmCommonsPayment(20000, code));
+        expect(paid.ok && paid.value).toMatchObject({ amount_c: 20000, left_c: 20000, leftAfter_c: 0, settled: true });
+        expect(REPAYMENT_COPY.paid(20000, paid.ok ? paid.value.transactionId : '', !!code, paid.ok ? paid.value : {})).toBe('Paid 200 Beans to the Commons. Your debt is paid off and settled.');
+        await control('receive', { key: me.publicKey, beans: 1000 });
         expect(await control('debt', { key: me.publicKey, debtId })).toEqual({
-            balance: 320, record: { amount: 200, repaid: 200, status: 'settled', settled_how: 'pay_back' }, links: 1,
+            balance_c: 32000, record: { amount_c: 20000, repaid_c: 20000, status: 'settled', settled_how: 'pay_back' }, links: 1,
         });
         expect(await fetchMyRepayment(URL_BASE, me)).toEqual({ ok: true, value: null });
         expect(sent.map((r) => `${r.method} ${r.path} ${r.status}`)).toEqual([

@@ -16,8 +16,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** The value exports of utils/db.ts: its functions, its one class and its one string, by name. */
-export function dbExportNames(): { functions: string[]; classes: string[]; strings: Record<string, string> } {
+/** The value exports of utils/db.ts: its functions, its one class, its one string and its whole-number constants, by name. */
+export function dbExportNames(): { functions: string[]; classes: string[]; strings: Record<string, string>; numbers: Record<string, number> } {
     const source = fs.readFileSync(path.resolve(__dirname, '../db.ts'), 'utf8');
     const functions = [...source.matchAll(/^export (?:async )?function\*? ?(\w+)/gm)].map(m => m[1]);
     // `export { a, b };` re-exports a function imported into db.ts (communityCachesRenamed).
@@ -25,14 +25,17 @@ export function dbExportNames(): { functions: string[]; classes: string[]; strin
     const classes = [...source.matchAll(/^export class (\w+)/gm)].map(m => m[1]);
     const strings: Record<string, string> = {};
     for (const m of source.matchAll(/^export const (\w+)\s*=\s*'([^']*)'/gm)) strings[m[1]] = m[2];
-    const otherConsts = [...source.matchAll(/^export (?:const|let|var) (\w+)/gm)].map(m => m[1]).filter(n => !(n in strings));
+    // A whole-number constant (COPY_SCHEMA, the copy's schema number) stands in as itself.
+    const numbers: Record<string, number> = {};
+    for (const m of source.matchAll(/^export const (\w+)\s*=\s*(\d+);/gm)) numbers[m[1]] = Number(m[2]);
+    const otherConsts = [...source.matchAll(/^export (?:const|let|var) (\w+)/gm)].map(m => m[1]).filter(n => !(n in strings) && !(n in numbers));
     if (otherConsts.length) throw new Error(`net-spy-db: utils/db exports ${otherConsts.join(', ')}, which this stand-in doesn't know how to stand in for`);
-    return { functions, classes, strings };
+    return { functions, classes, strings, numbers };
 }
 
 export function dbStandIn(calls: string[], answer?: (name: string, args: unknown[]) => Promise<unknown> | undefined): Record<string, unknown> {
-    const { functions, classes, strings } = dbExportNames();
-    const out: Record<string, unknown> = { ...strings };
+    const { functions, classes, strings, numbers } = dbExportNames();
+    const out: Record<string, unknown> = { ...strings, ...numbers };
     for (const name of functions) {
         const record = { [name](...args: unknown[]) { calls.push(`db.${name}`); return answer?.(name, args) ?? new Promise(() => {}); } }[name];
         out[name] = record;

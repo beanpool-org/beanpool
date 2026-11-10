@@ -16,7 +16,8 @@ const JUNIOR = { publicKey: 'jun', callsign: 'Ana', role: 'keeper', suspended: f
 const SUSP = { publicKey: 'sus', callsign: 'Ivo', role: 'keeper', suspended: true, grantedAt: '2025-12-01T00:00:00Z' };
 const KEEPERS = [LEAD, SENIOR, JUNIOR, SUSP];
 
-const ADD = { id: 'c1', kind: 'add' as const, memberPubkey: 'app', memberCallsign: 'Lee', proposedBy: 'lead', proposedByCallsign: 'Rosa', pledgedBacking: 20, appliesAt: new Date(NOW + 2 * DAY + 5 * HOUR).toISOString() };
+// pledgedBacking is whole hundredths of a Bean (the node keeps the key and carries hundredths: M1's listed deviations): 20 Beans.
+const ADD = { id: 'c1', kind: 'add' as const, memberPubkey: 'app', memberCallsign: 'Lee', proposedBy: 'lead', proposedByCallsign: 'Rosa', pledgedBacking: 2000, appliesAt: new Date(NOW + 2 * DAY + 5 * HOUR).toISOString() };
 const REMOVE = { ...ADD, id: 'c2', kind: 'remove' as const, memberPubkey: 'jun', memberCallsign: 'Ana', pledgedBacking: 0 };
 
 describe('countdowns', () => {
@@ -36,6 +37,10 @@ describe('pending keeper changes (answers A and M)', () => {
         // A keeper other than the lead is sent the named part only, and the words say so (no known part reads as missing).
         expect(keeperChangeTitle({ ...ADD, namedBackingOnly: true })).toBe('Adding Lee as a keeper, with 20 beans of named backing');
         expect(keeperChangeTitle({ ...ADD, pledgedBacking: 0, namedBackingOnly: true })).toBe('Adding Lee as a keeper');
+        // Any figure, as every figure is written: a hundredth, a part, and none that isn't whole hundredths.
+        expect(keeperChangeTitle({ ...ADD, pledgedBacking: 1 })).toBe('Adding Lee as a keeper, backing 0.01 beans');
+        expect(keeperChangeTitle({ ...ADD, pledgedBacking: 4925 })).toBe('Adding Lee as a keeper, backing 49.25 beans');
+        expect(keeperChangeTitle({ ...ADD, pledgedBacking: 20.5 })).toBe('Adding Lee as a keeper');
         expect(keeperChangeTitle(REMOVE)).toBe('Removing Ana as a keeper');
         expect(keeperChangeBody(ADD)).toContain('one objection cancels it');
     });

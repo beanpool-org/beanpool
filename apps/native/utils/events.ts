@@ -87,7 +87,8 @@ export interface EventPostDraft {
     category: 'community';
     title: string;
     description: string;
-    credits: 0;
+    /** An event is never priced: 0 hundredths of a Bean, as the node keeps it. */
+    price_c: 0;
     price_type: 'fixed';
     author_pubkey: string;
     lat?: number;
@@ -154,7 +155,7 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         category: 'community',
         title,
         description,
-        credits: 0,
+        price_c: 0,
         price_type: 'fixed',
         author_pubkey: input.authorPubkey,
         ...(online ? {} : { lat: input.lat!, lng: input.lng! }),

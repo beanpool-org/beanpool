@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COMMUNITY_CARD_WORDS, PEEK_WORDS as W, eventPlaceTimeText, t, tn, word } from '@beanpool/core';
+import { COMMUNITY_CARD_WORDS, PEEK_WORDS as W, eventPlaceTimeText, formatHundredths, t, tn, word } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { communityOrigin } from '../utils/community-origin';
@@ -120,8 +120,9 @@ export default function PeekScreen() {
         }
         const kind = post.type === 'offer' ? t(W.kindOffer) : post.type === 'need' ? t(W.kindNeed)
             : post.type === 'event' ? t(W.kindEvent) : post.type === 'poll' ? t(W.kindPoll) : null;
-        const price = (post.type === 'offer' || post.type === 'need') && typeof post.credits === 'number' && post.credits > 0
-            ? tn(post.credits, W.beans.one, W.beans.other) : null;
+        // Whole hundredths (price_c): the plural from its Beans, the figure as formatHundredths writes it ("12.50").
+        const price = (post.type === 'offer' || post.type === 'need') && typeof post.price_c === 'number' && post.price_c > 0
+            ? tn(post.price_c / 100, W.beans.one, W.beans.other, { n: formatHundredths(post.price_c) }) : null;
         const chip = [kind, price].filter(Boolean).join(' · ');
         const when = post.type === 'event' ? eventPlaceTimeText(post.eventStartLocal, post.eventTz, post.eventStartAt) : null;
         const photo = post.photos && post.photos.length > 0 ? `${peek.origin}${post.photos[0]}` : null;

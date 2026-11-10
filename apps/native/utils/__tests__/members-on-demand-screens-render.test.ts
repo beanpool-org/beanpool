@@ -822,7 +822,7 @@ for (const scheme of ['light', 'dark'] as const) {
         describe('Your deals', () => {
             async function holdDeal(partner: string) {
                 await (await db.getDb()).runAsync(
-                    "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 12, 'completed', ?, ?, 'Sourdough loaf')",
+                    "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 1200, 'completed', ?, ?, 'Sourdough loaf')",
                     [OWN, partner, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z']);
             }
 

@@ -119,10 +119,10 @@ vi.mock('../node-post', () => ({
                 ok: true,
                 json: async () => ({
                     voucher: node.voucher,
-                    budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
-                    presets: [25, 50, 75, 100],
-                    vouchMax: 100,
-                    budgetMax: 2000,
+                    budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
+                    presets: [2500, 5000, 7500, 10000],
+                    vouchMax: 10000,
+                    budgetMax: 200000,
                     vouchedBy: [],
                 }),
             };
@@ -149,8 +149,9 @@ const node = {
     made: [] as Array<Record<string, unknown>>,
     down: false,
     voucher: true,
-    budgetLeft: 550,
-    budgetLevel: 1000,
+    // Whole hundredths of a Bean, as the node sends every budget figure: 55000 is 550 Beans.
+    budgetLeft: 55000,
+    budgetLevel: 100000,
     generateRefusal: null as string | null,
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -169,8 +170,8 @@ beforeEach(() => {
     node.made = [];
     node.down = false;
     node.voucher = true;
-    node.budgetLeft = 550;
-    node.budgetLevel = 1000;
+    node.budgetLeft = 55000;
+    node.budgetLevel = 100000;
     node.generateRefusal = null;
 
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
@@ -178,10 +179,10 @@ beforeEach(() => {
         if (u.endsWith('/api/vouchers/me')) {
             return json({
                 voucher: node.voucher,
-                budget: { left: node.budgetLeft, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: node.budgetLevel },
-                presets: [25, 50, 75, 100],
-                vouchMax: 100,
-                budgetMax: 2000,
+                budget: { left: node.budgetLeft, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: node.budgetLevel },
+                presets: [2500, 5000, 7500, 10000],
+                vouchMax: 10000,
+                budgetMax: 200000,
                 vouchedBy: [],
             });
         }
@@ -222,7 +223,7 @@ describe('People → Invites with vouch presets (slice V3, §4)', () => {
     });
 
     it('greys out preset above budget left', async () => {
-        node.budgetLeft = 30;
+        node.budgetLeft = 3000;
         await open();
         const b25 = host.querySelector('[data-testid="invite-vouch-25"]');
         const b50 = host.querySelector('[data-testid="invite-vouch-50"]');
@@ -239,9 +240,10 @@ describe('People → Invites with vouch presets (slice V3, §4)', () => {
         await generate();
 
         expect(node.made).toHaveLength(1);
+        // The node kept the name `vouchAmount` and reads it as whole hundredths: a vouch of 50 Beans.
         expect(node.made[0]).toEqual({
             publicKey: 'a-member-key',
-            vouchAmount: 50,
+            vouchAmount: 5000,
         });
         expect(tickets.made).toBe(0);
     });

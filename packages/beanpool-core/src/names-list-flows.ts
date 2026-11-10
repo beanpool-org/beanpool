@@ -189,8 +189,8 @@ export interface VoucherSummaryRow {
     /** What their vouches that landed in the last 30 days add up to: the card's headline (invites-vouching I4). */
     vouchedLast30Days?: number;
     /** Room rooted at this voucher that moved on past the people they vouched for (§5 tracking (a)): how much, held by how
-     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf). */
-    passedOn: { amount: number; people: number; belowZero: number };
+     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf), in whole hundredths. */
+    passedOn: { amount_c: number; people: number; belowZero: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
 }
@@ -206,7 +206,8 @@ export interface VoucherSettings {
 
 export interface VoucherHistoryLine {
     kind: string;
-    amount: number;
+    /** Whole hundredths of a Bean, signed as the allocation ledger keeps them (engine/vouchers.ts historyOf). */
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
@@ -221,7 +222,8 @@ export interface VoucherPersonRow {
     memberPubkey: string;
     callsign: string;
     joinedAt: string | null;
-    amount: number;
+    /** What this voucher vouched for them, in whole hundredths (engine/vouchers.ts peopleOf). */
+    amount_c: number;
     raised: boolean;
     byInvite: boolean;
     belowZero: boolean;
@@ -1209,12 +1211,13 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
     const fetchVoucherCard = (anchor: string, id: I, memberPubkey: string) =>
         call<VoucherCardData>(anchor, id, 'GET', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
 
-    const makeNamesVoucher = (anchor: string, id: I, entryId: string, amount?: number) =>
-        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount !== undefined ? { amount } : {}) });
+    /** Make a confirmed name a voucher: `{ entryId, amount_c? }`, the budget in whole hundredths (the node refuses `amount`). */
+    const makeNamesVoucher = (anchor: string, id: I, entryId: string, amount_c?: number) =>
+        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount_c !== undefined ? { amount_c } : {}) });
 
-    /** An owner makes an admin a voucher with no names-list entry (slice I5): `{ memberPubkey, amount? }`. */
-    const makeAdminVoucher = (anchor: string, id: I, memberPubkey: string, amount?: number) =>
-        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { memberPubkey, ...(amount !== undefined ? { amount } : {}) });
+    /** An owner makes an admin a voucher with no names-list entry (slice I5): `{ memberPubkey, amount_c? }`. */
+    const makeAdminVoucher = (anchor: string, id: I, memberPubkey: string, amount_c?: number) =>
+        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { memberPubkey, ...(amount_c !== undefined ? { amount_c } : {}) });
 
     const stopNamesVoucher = (anchor: string, id: I, memberPubkey: string) =>
         call<VoucherCardData>(anchor, id, 'DELETE', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);

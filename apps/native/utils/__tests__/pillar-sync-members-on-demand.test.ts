@@ -92,7 +92,7 @@ function answer(status: number, body: string) {
 }
 function listing(id: string, author: string) {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', credits: 5, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', price_c: 500, priceType: 'fixed',
         authorPublicKey: author, authorCallsign: 'Carried', authorAvatarUrl: FACE(author),
         createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z',
         active: true, status: 'active', audienceScope: 'public', photos: [],
@@ -147,7 +147,7 @@ function partners(n: number) {
     for (let i = 1; i <= n; i++) {
         const pk = hexKey(i);
         keys.push(pk);
-        sql.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits) VALUES (?, ?, ?, ?, ?)').run(`t${i}`, 'L1', OWN, pk, 1);
+        sql.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c) VALUES (?, ?, ?, ?, ?)').run(`t${i}`, 'L1', OWN, pk, 100);
     }
     return keys;
 }
@@ -413,7 +413,7 @@ describe('NB-2: a held card is the author\'s face, even when it has none', () =>
     function seed(card: { avatarUrl: string | null } | null) {
         if (card) sql.prepare('INSERT INTO members (public_key, callsign, avatar_url) VALUES (?, ?, ?)').run(P, 'Held', card.avatarUrl);
         for (const [id, author] of [['N1', P], ['N2', STRANGER]] as const) {
-            sql.prepare('INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, audience_scope, created_at, updated_at, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, \'\', 5, ?, ?, 1, ?, ?, ?, ?, ?)')
+            sql.prepare('INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, audience_scope, created_at, updated_at, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, \'\', 500, ?, ?, 1, ?, ?, ?, ?, ?)')
                 .run(id, 'offer', 'food', id, author, 'active', 'public', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', 'Carried', FACE(author));
         }
     }

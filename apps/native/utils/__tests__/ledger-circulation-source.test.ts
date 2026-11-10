@@ -16,7 +16,8 @@ const box = src.slice(src.indexOf('{/* ── Community Circulation ── */}')
 
 describe("the phone Wallet's Community Circulation box", () => {
     it('reads the month from core and keeps no copy of the brackets', () => {
-        expect(src).toMatch(/const monthly = monthlyCirculation\(balanceState\.balance\);/);
+        // The balance in whole hundredths (getBalance's balance_c), as core's brackets are.
+        expect(src).toMatch(/const monthly = monthlyCirculation\(balanceState\.balance_c\);/);
         expect(src).not.toMatch(/\{ m: 200, r: 0\.0 \}|maxInBracket|0\.025/);
         expect(src).not.toMatch(/CIRC_TICKS/);
     });
@@ -25,12 +26,14 @@ describe("the phone Wallet's Community Circulation box", () => {
         expect(box.length).toBeGreaterThan(0);
         expect(box).toMatch(/\{monthly > 0 && \(\s*\/\/[^\n]*\n\s*<CurrencyDisplay/);
         expect(box).toMatch(/\{monthly > 0 \? \(\s*<View style=\{styles\.circRow\}>\s*<Text[^>]*>\{t\('per month → commons pool'\)\}/);
-        expect(box).toContain("t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })");
+        // The line is whole hundredths (core's CIRCULATION_FREE_BEANS), written as every figure is.
+        expect(box).toContain("t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: formatHundredths(CIRCULATION_FREE_BEANS) })");
     });
 
     it('is nothing for the example member (85 Beans) and at 200, something just above', () => {
-        expect(monthlyCirculation(85)).toBe(0);
-        expect(monthlyCirculation(200)).toBe(0);
-        expect(monthlyCirculation(300)).toBeCloseTo(1, 10);
+        // Whole hundredths: 85 Beans is 8500; 100 Beans over the line at 1 % a month is exactly one Bean (100).
+        expect(monthlyCirculation(8500)).toBe(0);
+        expect(monthlyCirculation(20000)).toBe(0);
+        expect(monthlyCirculation(30000)).toBe(100);
     });
 });

@@ -773,7 +773,7 @@ describe('the inbox preview in another language: only what BeanPool wrote is tra
         written(dm, ana, b64(TABLE_SENTENCE), 'plaintext-v1', { type: 'system' });
         await phoneOf(ben);
         expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise(TABLE_SENTENCE)));
-        written(dm, ana, '', '00000', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount: 5 }) });
+        written(dm, ana, '', '00000', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount_c: 500 }) });
         expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5')));
     });
 
@@ -4816,7 +4816,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
     }
     const VOTE_FORMS: Record<string, (id: string, words: string) => Promise<unknown>> = {
         'group vote': (id, words) => dbPort.proposeGroupDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'close_group' } as any),
-        'enterprise vote': (id, words) => dbPort.proposeEnterpriseDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'pay_out', params: { to: puppet.publicKey, amount: 1, memo: `${words} (memo)` } } as any),
+        'enterprise vote': (id, words) => dbPort.proposeEnterpriseDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'pay_out', params: { to: puppet.publicKey, amount_c: 100, memo: `${words} (memo)` } } as any),
     };
     for (const how of ['a read that throws', 'a corrupt value'] as const) {
         it(`GXD (${how}) the list full when the DM is met; pruned, then relisted as an unlocked group while the pins can't be read: both vote forms are refused with the pins sentence and the node reads nothing; the pins back and after the sync, refused as a DM; a true group's and enterprise's votes wait for the pins too, then go`, async () => {
@@ -4886,14 +4886,14 @@ describe('the DM guard list: one bounded list per community file, never read as 
     const soon = () => ({ eventStartAt: new Date(Date.now() + 864e5).toISOString(), eventEndAt: new Date(Date.now() + 9e7).toISOString(), eventPlaceName: 'Hall' });
     /** The id-keyed forms, each for a group id `g`, an event id `ev` and an enterprise id `ent` (app/group-post.tsx, NewEventModal, treasury-detail, treasury-post, ProposeDecisionModal). */
     const ID_FORMS: Record<string, (ids: { g: string; ev: string; ent: string }, w: string) => Promise<unknown>> = {
-        'group feed post': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'offer', title: `${w} (post title)`, description: `${w} (post why)`, category: 'other', credits: 1, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }),
-        'group-only event': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (event title)`, description: `${w} (event why)`, category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon(), eventPrivateNote: `${w} (private note)`, audienceScope: 'group', targetGroupId: g }),
-        'enterprise-hosted event': ({ ent }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (enterprise event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ent, created_at: new Date().toISOString(), ...soon() }),
+        'group feed post': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'offer', title: `${w} (post title)`, description: `${w} (post why)`, category: 'other', price_c: 100, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }),
+        'group-only event': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (event title)`, description: `${w} (event why)`, category: 'event', price_c: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon(), eventPrivateNote: `${w} (private note)`, audienceScope: 'group', targetGroupId: g }),
+        'enterprise-hosted event': ({ ent }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (enterprise event)`, description: 'x', category: 'event', price_c: 0, author_pubkey: ent, created_at: new Date().toISOString(), ...soon() }),
         'pledge memo': ({ ent }, w) => dbPort.treasuryPledge(ent, 1, `${w} (pledge memo)`),
-        'treasury offer': ({ ent }, w) => dbPort.treasuryPostOffer(ent, { category: 'other', title: `${w} (offer)`, description: `${w} (offer why)`, credits: 1 }),
-        'treasury need': ({ ent }, w) => dbPort.treasuryPostNeed(ent, { category: 'other', title: `${w} (need)`, credits: 1 }),
+        'treasury offer': ({ ent }, w) => dbPort.treasuryPostOffer(ent, { category: 'other', title: `${w} (offer)`, description: `${w} (offer why)`, price_c: 100 }),
+        'treasury need': ({ ent }, w) => dbPort.treasuryPostNeed(ent, { category: 'other', title: `${w} (need)`, price_c: 100 }),
         'event edit': ({ ev }, w) => dbPort.updateEvent(ev, { title: `${w} (event edit)`, description: `${w} (event edit why)` } as any),
-        'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', credits: 0 }),
+        'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', price_c: 0 }),
         'commons decision about an enterprise': ({ ent }, w) => dbPort.createDecision({ authorPubkey: ana.publicKey, title: `${w} (decision)`, description: `${w} (decision why)`, touches: 'pool', effect: 'write_off_deficit' as any, subject: ent }),
         // updateGroupApi's name and about (#1938 confirmation 9: no screen sends them today, GroupDetailModal sends joinPolicy).
         'group edit (name, about)': ({ g }, w) => dbPort.updateGroupApi(g, { name: `${w} (group name)`, description: `${w} (group about)` }),
@@ -4988,7 +4988,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
                 out[name] = r.err ?? (r.nodeReads.length === 1 && !r.reasons.length && r.wordsLeftOut === null ? 'went'
                     : !r.nodeReads.length && r.reasons.length === 1 && r.reasons[0] === form.picked && r.wordsLeftOut ? `the reason alone, ${r.wordsLeftOut}` : JSON.stringify(r));
             }
-            out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
+            out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', price_c: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
             let noMemo: string = 'went';
             try { await dbPort.treasuryPledge(ent.id, 1); } catch (e: any) { if (e?.name && e.name !== 'Error') noMemo = e.name; }
             out['pledge, no memo'] = noMemo;

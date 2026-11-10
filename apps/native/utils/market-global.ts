@@ -17,7 +17,7 @@ import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
 import { sectionsOfOrdered, type FeedSection } from './feed-sections';
 import { formatDistance } from './events';
-import { LOCAL_COMMUNITY_LINES, isNodePulsePost, marketOrder, postRulesFor, t, word } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, isNodePulsePost, marketOrder, parseHundredths, postRulesFor, t, word } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -74,12 +74,15 @@ export function meetingTips(): { heading: string; tips: string[] } {
  * The map's Offer/Need form (app/(tabs)/map.tsx). With Beans off it has no price section, and the price never holds
  * a post back: whatever the field holds (a draft saved with a price, an offer picked from the Community Pricing
  * Guide), the post goes up at 0 Beans and a total price, which is all the server takes there. With Beans on, or on a
- * node that says nothing, each of these is exactly what the form did before.
+ * node that says nothing, the price is read as every typed amount is: in the member's language, at most two decimals,
+ * and as whole hundredths of a Bean (core parseHundredths; DESIGN-atomic-beans-fable.md M2), never a float.
  */
 
-/** The Beans the post goes up at. */
-export function postFormCredits(field: string, features: NodeFeatures | null | undefined): number {
-    return marketShowsBeans(features) ? Number(field) || 0 : 0;
+/** The price the post goes up at, whole hundredths of a Bean: "12" is 1200, "12.5" is 1250; a field that isn't an amount is 0. */
+export function postFormPrice_c(field: string, features: NodeFeatures | null | undefined): number {
+    if (!marketShowsBeans(features)) return 0;
+    const read = parseHundredths(field);
+    return read.ok ? read.value : 0;
 }
 
 /** Total, per hour, per day...: only where there is a price. */
@@ -92,9 +95,9 @@ export function postFormPriceMissing(field: string, features: NodeFeatures | nul
     return marketShowsBeans(features) && field === '';
 }
 
-/** Tapping Post marks the price field: empty, or not a number. */
+/** Tapping Post marks the price field: empty, or not an amount (core parseHundredths: a negative or a third decimal is none). */
 export function postFormPriceInvalid(field: string, features: NodeFeatures | null | undefined): boolean {
-    return marketShowsBeans(features) && (field.trim() === '' || isNaN(Number(field)));
+    return marketShowsBeans(features) && (field.trim() === '' || !parseHundredths(field).ok);
 }
 
 export interface PostFormState {
@@ -106,7 +109,8 @@ export interface PostFormState {
     photoCount: number;
     /** Whether a photo is required (every Offer and Need carries at least one photo). */
     photoRequired?: boolean;
-    credits: string;
+    /** The price box's text as typed (read as whole hundredths by postFormPrice_c). */
+    priceText: string;
     title: string;
     description: string;
 }
@@ -148,7 +152,7 @@ export function postFormSubmitLabel(s: PostFormState, features: NodeFeatures | n
         : (!s.category) ? t('📂 Select a category')
         : (!s.hasLocation) ? t('📍 Set a location')
         : (s.photoRequired !== false && s.photoCount < 1) ? t('📷 Add a photo')
-        : postFormPriceMissing(s.credits, features) ? t('💰 Set a price')
+        : postFormPriceMissing(s.priceText, features) ? t('💰 Set a price')
         : (!s.title.trim() || !s.description.trim()) ? t('✏️ Fill required fields')
         : s.postType === 'offer' ? t('Post Offer') : t('Post Need');
 }

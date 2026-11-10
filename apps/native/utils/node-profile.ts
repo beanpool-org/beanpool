@@ -100,7 +100,8 @@ export interface NodeFeatures {
      */
     dmRequests?: boolean;
     /**
-     * The community's known floor for confirmed members (design §4.2, S5).
+     * The community's known floor for confirmed members (design §4.2, S5), in whole hundredths of a Bean (the node kept the
+     * name; 100000 is a floor of 1,000 Beans): core's communityShapeLines writes it through formatHundredths.
      */
     knownFloor?: number;
     /**

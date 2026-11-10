@@ -42,7 +42,7 @@ const PHOTO = 'data:image/jpeg;base64,/9j/AAAA';
 const photoUrl = (id: string, n: number) => `/api/marketplace/posts/${id}/photos/${n}?v=1`;
 function listing(id: string, over: Partial<OwnListing> = {}): OwnListing {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: `About ${id}`, credits: 0, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: `About ${id}`, price_c: 0, priceType: 'fixed',
         authorPublicKey: ME, createdAt: '2026-10-01T00:00:00.000Z', active: true, status: 'active', lat: -28.5, lng: 153.5,
         photos: [photoUrl(id, 0)], audienceScope: 'public', ...over,
     };
@@ -251,7 +251,7 @@ describe('what a run sends', () => {
         const result = await runBring(OFFER, { bring: [post], gone: [] }, identity, undefined, deps);
         expect(result).toEqual({ brought: 1, lines: [], kept: false, held: false });
         expect(posted).toEqual([{
-            id: broughtId('a', LOCAL), type: 'offer', category: 'food', title: 'Tomato seedlings', description: 'Six trays', credits: 0, priceType: 'fixed',
+            id: broughtId('a', LOCAL), type: 'offer', category: 'food', title: 'Tomato seedlings', description: 'Six trays', price_c: 0, priceType: 'fixed',
             authorPublicKey: ME, lat: -28.5, lng: 153.5, photos: [PHOTO, PHOTO], repeatable: true, cashAlsoNeeded: true,
         }]);
         expect(vi.mocked(deps.post).mock.calls[0].slice(0, 2)).toEqual([LOCAL, '/api/marketplace/posts']);

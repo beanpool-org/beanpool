@@ -33,7 +33,8 @@ import {
 
 const NODE = 'https://mullum.example';
 const offer = (over: Record<string, unknown> = {}) => ({
-    id: 'p1', type: 'offer', category: 'repairs', title: 'Puncture fixed', description: '', credits: 5, priceType: 'fixed',
+    // Its price is whole hundredths of a Bean, as the node sends it (price_c): 5 Beans.
+    id: 'p1', type: 'offer', category: 'repairs', title: 'Puncture fixed', description: '', price_c: 500, priceType: 'fixed',
     status: 'active', authorPublicKey: 'e'.repeat(64), authorCallsign: 'Lou Repairs', createdAt: '2026-10-20T10:00:00.000Z',
     photos: ['/api/marketplace/posts/p1/photos/0'], ...over,
 });
@@ -52,7 +53,7 @@ describe('a listing as the shopfront draws it', () => {
     it('reads an Offer or a Need, its first photo on the node, its stamp and its shop', () => {
         const l = listing({ featuredAt: '2026-10-22T09:00:00.000Z', shopId: 's1', lendable: true });
         expect(l).toMatchObject({
-            id: 'p1', type: 'offer', title: 'Puncture fixed', category: 'repairs', credits: 5, priceType: 'fixed', status: 'active',
+            id: 'p1', type: 'offer', title: 'Puncture fixed', category: 'repairs', price_c: 500, priceType: 'fixed', status: 'active',
             lendable: true, featuredAt: '2026-10-22T09:00:00.000Z', shopId: 's1', photo: `${NODE}/api/marketplace/posts/p1/photos/0`,
         });
         expect(listing({ type: 'need' }).type).toBe('need');
@@ -106,11 +107,17 @@ describe('the sections', () => {
         expect(shopSectionsOf([])).toEqual([]);
     });
     it('a price in words: a total, by the time, or none where the community shows no Beans', () => {
-        expect(listingPriceLine(listing({ credits: 5 }), true)).toBe('5 🫘');
-        expect(listingPriceLine(listing({ credits: 3, priceType: 'hourly' }), true)).toBe('3 🫘 an hour');
-        expect(listingPriceLine(listing({ credits: 20, priceType: 'daily' }), true)).toBe('20 🫘 a day');
-        expect(listingPriceLine(listing({ credits: 0 }), true)).toBe('Free');
-        expect(listingPriceLine(listing({ credits: 5 }), false)).toBeNull();
+        expect(listingPriceLine(listing({ price_c: 500 }), true)).toBe('5 🫘');
+        expect(listingPriceLine(listing({ price_c: 300, priceType: 'hourly' }), true)).toBe('3 🫘 an hour');
+        expect(listingPriceLine(listing({ price_c: 2000, priceType: 'daily' }), true)).toBe('20 🫘 a day');
+        expect(listingPriceLine(listing({ price_c: 0 }), true)).toBe('Free');
+        expect(listingPriceLine(listing({ price_c: 500 }), false)).toBeNull();
+        // Any figure as every figure is written; a price that isn't whole hundredths is no figure ("—"), never Free.
+        expect(listingPriceLine(listing({ price_c: 1 }), true)).toBe('0.01 🫘');
+        expect(listingPriceLine(listing({ price_c: 4925, priceType: 'hourly' }), true)).toBe('49.25 🫘 an hour');
+        expect(listingPriceLine(listing({ price_c: 50000 }), true)).toBe('500 🫘');
+        expect(listing({ price_c: 12.5 }).price_c).toBeNull();
+        expect(listingPriceLine(listing({ price_c: 12.5 }), true)).toBe('— 🫘');
     });
 });
 
@@ -150,12 +157,15 @@ describe('the lines', () => {
         expect(sinceLine('2026-09-03T10:00:00.000Z')).toBe('since Sep 2026');
         expect(sinceLine(null)).toBeNull();
         expect(sinceLine('not a date')).toBeNull();
-        expect(moneyLine(12, 50)).toBe('12 🫘 · credit line 50 🫘');
-        expect(moneyLine(-3.5, 0)).toBe('-3.5 🫘 · credit line 0 🫘');
+        // Whole hundredths of a Bean (the detail's balance_c and creditLine_c), written as every figure is: two places
+        // when not whole, a true minus below zero.
+        expect(moneyLine(1200, 5000)).toBe('12 🫘 · credit line 50 🫘');
+        expect(moneyLine(-350, 0)).toBe('−3.50 🫘 · credit line 0 🫘');
+        expect(moneyLine(-982, 50000)).toBe('−9.82 🫘 · credit line 500 🫘');
     });
     it('every word through t(): the pseudo-locale', () => {
         setLanguage('xx' as never);
-        expect(moneyLine(12, 50)).toBe(pseudoLocalise('{balance} 🫘 · credit line {credit} 🫘').replace('{balance}', '12').replace('{credit}', '50'));
+        expect(moneyLine(1200, 5000)).toBe(pseudoLocalise('{balance} 🫘 · credit line {credit} 🫘').replace('{balance}', '12').replace('{credit}', '50'));
         expect(messageLabel('Damo', 'enterprise')).toBe(pseudoLocalise('Message {name} (lead keeper)').replace('{name}', 'Damo'));
         expect(shopSectionsOf([listing()])[0].title).toBe(pseudoLocalise('To buy ({n})').replace('{n}', '1'));
     });

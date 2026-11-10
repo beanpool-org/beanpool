@@ -238,7 +238,7 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         const day = 86_400_000;
         vi.mocked(db.getMarketplaceTransactions).mockResolvedValueOnce([{
             id: 'sd-m1', postId: POST, postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: ME, buyerCallsign: 'Zara',
-            sellerPublicKey: 'c'.repeat(64), sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans: 50,
+            sellerPublicKey: 'c'.repeat(64), sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans_c: 5000,
             standingUnit: 'month', standingStartsAt: new Date(Date.now() - 40 * day).toISOString(), standingShortSince: new Date(Date.now() - 3.2 * day).toISOString(),
             standingStopped: false,
         }] as never);

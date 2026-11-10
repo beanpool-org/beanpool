@@ -25,7 +25,7 @@ import {
     stepDownConfirmText, removeKeeperConfirmText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
-import { formatDate, formatNumber, inCapitalsOf, keeperWords, t, tn, isSampleId, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -320,7 +320,8 @@ export default function TreasuryManageScreen() {
                 message = project ? t('Wind-up cancelled. Project restored to active status.') : t('Wind-up cancelled. Enterprise restored to active status.');
             } else {
                 const res = await finaliseWindUp(treasuryKey);
-                const amount = res?.sweptAmount ?? 0;
+                // What went to the Commons, whole hundredths (the node keeps the key sweptAmount: a listed deviation of M1).
+                const amount = formatHundredths(isHundredths(res?.sweptAmount) ? res.sweptAmount : 0);
                 title = t('Wind-up finalised 🏁');
                 message = project
                     ? t('Wind-up finalised. Swept {amount} 🫘 to Commons and released collaborators.', { amount })
@@ -346,7 +347,8 @@ export default function TreasuryManageScreen() {
         load();
     };
 
-    const balance = detail?.balance ?? 0;
+    // Whole hundredths of a Bean, as the node sends every figure of the detail (`*_c`); a balance that isn't one counts 0.
+    const balance = isHundredths(detail?.balance_c) ? detail.balance_c : 0;
     // The name its members gave it, as written; the words only when there is none.
     const name = detail?.name || nameParam || t('Community Enterprise');
 
@@ -377,22 +379,22 @@ export default function TreasuryManageScreen() {
 
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
-        // The language's decimal mark (core parseAmount): fr "12,5" is 12.5, never refused as not a number; "1.000", which
-        // could be a thousand, is refused in words that say so. The node's cents rule decides the decimals, as before.
-        const read = parseAmount(sweepAmount, undefined, ANY_DECIMALS);
-        if (!read.ok && isAmbiguousAmount(read.refusal)) { Alert.alert(t('Enter an amount'), amountRefusalWords(read.refusal)); return; }
+        // The language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5" is 1,250, never refused as not a
+        // number; "1.000", which could be a thousand, and a third decimal are refused in words that say so.
+        const read = parseHundredths(sweepAmount);
+        if (!read.ok && (isAmbiguousAmount(read.refusal) || read.refusal === 'too-many-decimals')) { Alert.alert(t('Enter an amount'), amountRefusalWords(read.refusal)); return; }
         const amt = read.ok ? read.value : NaN;
-        if (isNaN(amt) || amt <= 0) { Alert.alert(t('Enter an amount'), t('Type a positive number of Beans to sweep into the Commons.')); return; }
+        if (!isHundredths(amt) || amt <= 0) { Alert.alert(t('Enter an amount'), t('Type a positive number of Beans to sweep into the Commons.')); return; }
         if (amt > balance) {
             Alert.alert(t('Not enough surplus'), project
-                ? t('This project only holds {amount} 🫘.', { amount: balance })
-                : t('This enterprise only holds {amount} 🫘.', { amount: balance }));
+                ? t('This project only holds {amount} 🫘.', { amount: formatHundredths(balance) })
+                : t('This enterprise only holds {amount} 🫘.', { amount: formatHundredths(balance) }));
             return;
         }
         setSweeping(true);
         try {
             await treasurySweep(treasuryKey, amt);
-            Alert.alert(t('Swept to the Commons 🌱'), t('{amount} 🫘 moved from {name} into the shared Commons pool.', { amount: amt, name }));
+            Alert.alert(t('Swept to the Commons 🌱'), t('{amount} 🫘 moved from {name} into the shared Commons pool.', { amount: formatHundredths(amt), name }));
             setSweepAmount('');
             load();
         } catch (e: any) {
@@ -621,8 +623,9 @@ export default function TreasuryManageScreen() {
         Alert.alert(
             t('Release Payment?'),
             d.peer_callsign
-                ? t('Are you sure you want to release {amount} 🫘 to {name}? This cannot be undone.', { amount: d.credits, name: d.peer_callsign })
-                : t('Are you sure you want to release {amount} 🫘 to the member? This cannot be undone.', { amount: d.credits }),
+                // The deal's amount_c, whole hundredths (routes/treasury.ts activeDeals).
+                ? t('Are you sure you want to release {amount} 🫘 to {name}? This cannot be undone.', { amount: formatHundredths(d.amount_c), name: d.peer_callsign })
+                : t('Are you sure you want to release {amount} 🫘 to the member? This cannot be undone.', { amount: formatHundredths(d.amount_c) }),
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {
@@ -715,7 +718,7 @@ export default function TreasuryManageScreen() {
                     {treasuryKey && (
                         <EnterpriseDecisions
                             treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
-                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
+                            earnedSurplus={isHundredths(detail?.earnedSurplus_c) ? detail.earnedSurplus_c : null}
                             lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
                         />
                     )}
@@ -738,7 +741,8 @@ export default function TreasuryManageScreen() {
                                     <View style={styles.requestInfo}>
                                         <Text style={styles.requestCallsign} numberOfLines={2}>{req.callsign || req.applicantCallsign || req.memberCallsign || t('Member')}</Text>
                                         <Text style={styles.requestBacking} numberOfLines={1}>
-                                            {t('Backing pledge: {amount} 🫘', { amount: req.pledgedBacking })}
+                                            {/* Whole hundredths (the node keeps the key pledgedBacking: a listed deviation of M1). */}
+                                            {t('Backing pledge: {amount} 🫘', { amount: formatHundredths(req.pledgedBacking) })}
                                         </Text>
                                         {applicantBackingText(req.canBackPledge) ? (
                                             <Text style={[styles.requestStanding, req.canBackPledge === false && styles.requestStandingShort]}>
@@ -964,7 +968,7 @@ export default function TreasuryManageScreen() {
                                             <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{b.post_title}</Text>
                                             <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
                                                 <Sentence
-                                                    text={t('Bid by {name} · {amount} 🫘', { amount: b.credits })}
+                                                    text={t('Bid by {name} · {amount} 🫘', { amount: formatHundredths(b.amount_c) })}
                                                     parts={{ name: <Text style={{ fontWeight: '700', color: colors.text.body }}>{b.peer_callsign || t('Member')}</Text> }}
                                                 />
                                             </Text>
@@ -978,7 +982,7 @@ export default function TreasuryManageScreen() {
                                                     {actionState?.id === b.id && actionState?.type === 'approve' ? (
                                                         <ActivityIndicator size="small" color={colors.text.inverse} />
                                                     ) : (
-                                                        <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]}>{t('Approve Bid ({amount} 🫘)', { amount: b.credits })}</Text>
+                                                        <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]}>{t('Approve Bid ({amount} 🫘)', { amount: formatHundredths(b.amount_c) })}</Text>
                                                     )}
                                                 </Pressable>
                                                 <Pressable
@@ -1008,8 +1012,8 @@ export default function TreasuryManageScreen() {
                                             <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
                                                 <Sentence
                                                     text={d.action_required === 'fulfill'
-                                                        ? t('Customer: {name} · {amount} 🫘 held in trust', { amount: d.credits })
-                                                        : t('Worker: {name} · {amount} 🫘 held in trust', { amount: d.credits })}
+                                                        ? t('Customer: {name} · {amount} 🫘 held in trust', { amount: formatHundredths(d.amount_c) })
+                                                        : t('Worker: {name} · {amount} 🫘 held in trust', { amount: formatHundredths(d.amount_c) })}
                                                     parts={{ name: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || t('Member')}</Text> }}
                                                 />
                                             </Text>
@@ -1034,7 +1038,7 @@ export default function TreasuryManageScreen() {
                                                         {actionState?.id === d.id && actionState?.type === 'complete' ? (
                                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                                         ) : (
-                                                            <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]}>{t('Release Payment ({amount} 🫘)', { amount: d.credits })}</Text>
+                                                            <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]}>{t('Release Payment ({amount} 🫘)', { amount: formatHundredths(d.amount_c) })}</Text>
                                                         )}
                                                     </Pressable>
                                                 )}
@@ -1059,7 +1063,7 @@ export default function TreasuryManageScreen() {
                     {treasuryKey && (
                         <EnterpriseDecisions
                             treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
-                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
+                            earnedSurplus={isHundredths(detail?.earnedSurplus_c) ? detail.earnedSurplus_c : null}
                             lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
                         />
                     )}

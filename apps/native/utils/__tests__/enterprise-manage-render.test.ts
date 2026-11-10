@@ -170,7 +170,8 @@ const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 const DECISIONS: ScopedDecisionList = {
     decisions: [{
         id: 'd1', authorPubkey: KOFI, title: 'Pay Mia for the oven door', description: 'She fixed the hinge.', effect: 'pay_out', subject: MIA,
-        params: { amount_c: 12.5 }, status: 'open', opensAt: iso(now - 3600_000), closesAt: iso(now + 4 * DAY),
+        // Whole hundredths of a Bean, as the node carries a pay-out's figure: 12.50 Beans.
+        params: { amount_c: 1250 }, status: 'open', opensAt: iso(now - 3600_000), closesAt: iso(now + 4 * DAY),
         tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 }, myVote: null, canVote: true,
     }],
     canPropose: true, rollSize: 3,
@@ -181,22 +182,25 @@ function leadsView(over: Record<string, unknown> = {}) {
     return {
         publicKey: ENT, name: NAME, purpose: PURPOSE, about: ABOUT, since: iso(now - 60 * DAY), offerCategories: ['baking'],
         lifecycle: 'ongoing', status: 'active', paused: false,
-        balance: 40, creditLine: 100, liveOffers: 2, earnedSurplus: 7, workingCapitalCeiling: 400,
-        isLeadOrSoleKeeperOrAdmin: true, availableToBack: 40, shop: SHOP,
+        // Every figure whole hundredths of a Bean (`*_c`), as GET /api/treasury/:id sends them: 40 held, a credit line of 100.
+        balance_c: 4000, creditLine_c: 10000, liveOffers: 2, earnedSurplus_c: 700, workingCapitalCeiling_c: 40000,
+        isLeadOrSoleKeeperOrAdmin: true, availableToBack_c: 4000, shop: SHOP,
         keepers: [
             { publicKey: ME, callsign: 'Ana', role: 'lead', grantedAt: iso(now - 300 * DAY) },
-            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing: 20, grantedAt: iso(now - 200 * DAY) },
+            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing_c: 2000, grantedAt: iso(now - 200 * DAY) },
             { publicKey: MIA, callsign: 'Mia', role: 'keeper', grantedAt: iso(now - 100 * DAY) },
         ],
-        keeperRequests: [{ id: 'r1', callsign: 'Ivo', pledgedBacking: 15, canBackPledge: true }],
-        keeperChanges: [{ id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 10, appliesAt: iso(now + 2 * DAY) }],
+        // pledgedBacking keeps its name on the node and carries whole hundredths (M1's listed deviations): 15 and 10 Beans.
+        keeperRequests: [{ id: 'r1', callsign: 'Ivo', pledgedBacking: 1500, canBackPledge: true }],
+        keeperChanges: [{ id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 1000, appliesAt: iso(now + 2 * DAY) }],
         deferredClaims: [],
-        posts: [{ id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', credits: 4, price_type: 'fixed', status: 'active' }],
+        posts: [{ id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', price_c: 400, price_type: 'fixed', status: 'active' }],
         flow: [],
-        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', credits: 30 }],
+        // Each deal's amount_c, whole hundredths (routes/treasury.ts pendingBids/activeDeals): 30 and 4 Beans.
+        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', amount_c: 3000 }],
         activeDeals: [
-            { id: 'x1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', credits: 4, action_required: 'fulfill' },
-            { id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', credits: 30, action_required: 'pay', price_type: 'fixed' },
+            { id: 'x1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', amount_c: 400, action_required: 'fulfill' },
+            { id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', amount_c: 3000, action_required: 'pay', price_type: 'fixed' },
         ],
         ...over,
     };
@@ -204,7 +208,7 @@ function leadsView(over: Record<string, unknown> = {}) {
 /** A project whose leader has gone quiet, as one of its other collaborators reads it. */
 function quietProject(over: Record<string, unknown> = {}) {
     return leadsView({
-        lifecycle: 'bounded', status: 'active', isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], goalAmount: 500, currentAmount: 120,
+        lifecycle: 'bounded', status: 'active', isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], goalAmount_c: 50000, currentAmount_c: 12000,
         keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }, { publicKey: ZOE, callsign: 'Zoe', role: 'keeper' }],
         leadInactivity: { isEligible: true, leadPubkey: KOFI, leadCallsign: 'Kofi', daysInactive: 34 },
         succession: { proposals: [] },
@@ -212,19 +216,19 @@ function quietProject(over: Record<string, unknown> = {}) {
     });
 }
 const THREAD = [{ id: 'm1', type: 'text', ciphertext: b64('see you at the stall'), authorCallsign: 'Kofi', authorPubkey: KOFI, timestamp: iso(now - DAY) }];
-/** What `author=` answers for its keepers: three of its Offers in its shop (one featured), one not in it yet, one Need. */
+/** What `author=` answers for its keepers: three of its Offers in its shop (one featured), one not in it yet, one Need; each price_c. */
 const OFFERS = [
-    { id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', credits: 4, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: SHOP_ID },
-    { id: 'p3', type: 'offer', category: 'baking', title: 'Rye loaf', credits: 5, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
-    { id: 'p4', type: 'offer', category: 'baking', title: 'Seed bread', credits: 6, priceType: 'fixed', status: 'pending', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
-    { id: 'p5', type: 'offer', category: 'baking', title: 'Fruit buns', credits: 3, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null },
-    { id: 'n1', type: 'need', category: 'tools', title: 'A new oven door', credits: 30, priceType: 'fixed', status: 'active', audienceScope: 'public', shopId: null },
+    { id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', price_c: 400, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: SHOP_ID },
+    { id: 'p3', type: 'offer', category: 'baking', title: 'Rye loaf', price_c: 500, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
+    { id: 'p4', type: 'offer', category: 'baking', title: 'Seed bread', price_c: 600, priceType: 'fixed', status: 'pending', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
+    { id: 'p5', type: 'offer', category: 'baking', title: 'Fruit buns', price_c: 300, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null },
+    { id: 'n1', type: 'need', category: 'tools', title: 'A new oven door', price_c: 3000, priceType: 'fixed', status: 'active', audienceScope: 'public', shopId: null },
 ];
 type Writer = (method: string, path: string, body: unknown) => Promise<unknown>;
 function community(over: Record<string, unknown> = {}, opts: { offers?: unknown; write?: Writer } = {}): (name: string, args: unknown[]) => Promise<unknown> | undefined {
     const answers: Record<string, unknown> = {
         getTreasuryDetail: leadsView(),
-        getBalance: { balance: 10, keeperOf: [ENT] },
+        getBalance: { balance_c: 1000, keeperOf: [ENT] },
         getEnterpriseThread: { conversation: null, messages: THREAD, readOnly: false },
         getEnterpriseLedger: null,
         getEnterpriseDecisions: DECISIONS,
@@ -345,7 +349,7 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpGraceEndsAt: iso(now - 3600_000) }),
     // A project its leader reads: the node says they may cancel it (apps/server db.ts mayCancelProject, `mayCancel`).
-    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: true }),
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount_c: 50000, currentAmount_c: 12000, mayCancel: true }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -368,13 +372,13 @@ for (const dark of [false, true]) {
         });
 
         it('a member who keeps none of it reads no Manage; a node admin who keeps none of it does, for the requests are theirs', async () => {
-            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance_c: 1000, keeperOf: [] } });
             await render('page');
             expect(byId('shopfront-name')?.textContent).toBe(NAME);
             expect(byId('enterprise-manage')).toBeNull();
             expect(host.textContent).not.toContain('Manage');
 
-            net.answer = community({ getTreasuryDetail: leadsView({ keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: leadsView({ keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance_c: 1000, keeperOf: [] } });
             await render('page');
             expect(byId('enterprise-manage')).not.toBeNull();
         });
@@ -420,7 +424,7 @@ for (const dark of [false, true]) {
         it("a project's cancel is drawn from the node's word alone, for whoever it names (Marty's answers CF-Q1, CF-Q2)", async () => {
             const cancel = () => byLabel('Cancel initiative and refund backers');
             // Its leader, whom the node no longer lets cancel it (operator access switched off): none.
-            net.answer = community({ getTreasuryDetail: leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: false }) });
+            net.answer = community({ getTreasuryDetail: leadsView({ lifecycle: 'bounded', status: 'active', goalAmount_c: 50000, currentAmount_c: 12000, mayCancel: false }) });
             await render('console');
             expect(byId('manage-screen')).not.toBeNull();
             expect(cancel()).toBeNull();
@@ -432,21 +436,21 @@ for (const dark of [false, true]) {
             // A node admin who keeps none of it, so has no operator controls: the node lets them, and it is drawn on its own,
             // in the central tokens.
             const admin = { keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'keeper' }], leadInactivity: null, isLeadOrSoleKeeperOrAdmin: true, mayCancel: true };
-            net.answer = community({ getTreasuryDetail: quietProject(admin), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: quietProject(admin), getBalance: { balance_c: 1000, keeperOf: [] } });
             await render('console');
             expect(byId('manage-screen')).not.toBeNull();
             expect(host.textContent).not.toContain('OPERATOR CONTROLS');
             expect(cancel()).not.toBeNull();
             expect(styleOf(cancel()).borderColor).toBe(colors().feedback.danger.solid);
             // The same reader when the node says no (say, no longer an admin): none.
-            net.answer = community({ getTreasuryDetail: quietProject({ ...admin, mayCancel: false }), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: quietProject({ ...admin, mayCancel: false }), getBalance: { balance_c: 1000, keeperOf: [] } });
             await render('console');
             expect(byId('manage-screen')).not.toBeNull();
             expect(cancel()).toBeNull();
         });
 
         it('a release by the hour asks the hours; a candidate is picked from the keepers', async () => {
-            net.answer = community({ getTreasuryDetail: leadsView({ activeDeals: [{ id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', credits: 30, action_required: 'pay', price_type: 'hourly', hours: 2 }] }) });
+            net.answer = community({ getTreasuryDetail: leadsView({ activeDeals: [{ id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', amount_c: 3000, action_required: 'pay', price_type: 'hourly', hours: 2 }] }) });
             await render('console');
             await click(buttonWith('Release Payment (30 🫘)'), 'Release Payment');
             expect(host.textContent).toContain('Confirm Hours Worked');
@@ -461,7 +465,7 @@ for (const dark of [false, true]) {
         // The node answers someone who keeps none of it, on no vote's roll, a 404 for its votes (decisions-engine.ts
         // getScopedDecisions): the console asks, and draws no Decisions block.
         it('someone who keeps none of it opening the console reads why, and nothing is offered or written', async () => {
-            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] }, getEnterpriseDecisions: null });
+            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance_c: 1000, keeperOf: [] }, getEnterpriseDecisions: null });
             await render('console');
             expect(byId('manage-not-keeper')?.textContent).toBe('Only its keepers manage this enterprise.');
             for (const a of ACTIONS.filter((x) => x.view === 'lead')) expect(found(a), a.what).toBeNull();
@@ -479,7 +483,7 @@ for (const dark of [false, true]) {
             let voted: boolean | null = null;
             const node = community({
                 getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: MIA, callsign: 'Mia', role: 'keeper' }] }),
-                getBalance: { balance: 10, keeperOf: [] },
+                getBalance: { balance_c: 1000, keeperOf: [] },
             });
             // What the node answers one on a vote's roll who keeps it no more: that vote, and no Propose.
             net.answer = (name, args) => {
@@ -505,7 +509,7 @@ for (const dark of [false, true]) {
         // Its shop's routes and the feature route take its keepers only; its profile route takes a node admin too (PR #2405
         // review 4355986004).
         it('a node admin who keeps none of it gets the face its profile route takes: no kind, no how we deal, no Featured', async () => {
-            net.answer = community({ getTreasuryDetail: leadsView({ shop: null, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: leadsView({ shop: null, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance_c: 1000, keeperOf: [] } });
             await render('console');
             expect(byId('manage-screen')).not.toBeNull();
             expect(byLabel('Approve keeper request')).not.toBeNull();
@@ -761,7 +765,7 @@ for (const dark of [false, true]) {
             });
 
             it('six on the shelf: the rest wait, said once; one comes off with a tap', async () => {
-                const six = Array.from({ length: 7 }, (_, i) => ({ id: `q${i}`, type: 'offer', title: `Loaf ${i}`, credits: 4, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: i < 6 ? iso(now - i * 1000) : null, shopId: SHOP_ID }));
+                const six = Array.from({ length: 7 }, (_, i) => ({ id: `q${i}`, type: 'offer', title: `Loaf ${i}`, price_c: 400, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: i < 6 ? iso(now - i * 1000) : null, shopId: SHOP_ID }));
                 net.answer = community({}, { offers: six });
                 await render('console');
                 expect(byId('manage-featured-full')?.textContent).toBe('Six is the shelf; un-feature one first.');

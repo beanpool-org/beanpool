@@ -6,6 +6,7 @@
  * search they always had. An answer is shown, not kept: a card is kept when the member opens it (the profile by key,
  * §2.2.4), so the held cards stay the people this member has dealt with.
  */
+import { isHundredths } from '@beanpool/core';
 import { applyDelta, copyForRead, signedGet } from './db';
 import { isMemberKey, membersKeysPath } from './members-on-demand';
 
@@ -26,8 +27,11 @@ export function nearPath(area: { lat: number; lng: number }): string {
     return `/api/members?lat=${encodeURIComponent(String(area.lat))}&lng=${encodeURIComponent(String(area.lng))}&limit=${NEAR_MAX}`;
 }
 
-/** A directory row as the node sends it, in the shape of a held card (the members table's columns the lists read). */
-export function asHeldRow(m: any): { public_key: string; callsign: string; avatar_url: string | null; joined_at: string | null; earned_credit: number; last_active_at: null; distance_km: number | null } | null {
+/**
+ * A directory row as the node sends it, in the shape of a held card (the members table's columns the lists read). Its
+ * `earnedCredit` keeps its name on the node and carries whole hundredths of a Bean, as the copy's earned_credit_c does.
+ */
+export function asHeldRow(m: any): { public_key: string; callsign: string; avatar_url: string | null; joined_at: string | null; earned_credit_c: number; last_active_at: null; distance_km: number | null } | null {
     const key = m?.publicKey ?? m?.public_key;
     if (typeof key !== 'string' || key === '') return null;
     return {
@@ -35,7 +39,7 @@ export function asHeldRow(m: any): { public_key: string; callsign: string; avata
         callsign: typeof m.callsign === 'string' && m.callsign !== '' ? m.callsign : key.slice(0, 8),
         avatar_url: m.avatarUrl ?? m.avatar_url ?? null,
         joined_at: m.joinedAt ?? m.joined_at ?? null,
-        earned_credit: Number(m.earnedCredit ?? m.earned_credit ?? 0) || 0,
+        earned_credit_c: isHundredths(m.earnedCredit) ? m.earnedCredit : 0,
         last_active_at: null,
         distance_km: typeof m.distanceKm === 'number' ? m.distanceKm : null,
     };

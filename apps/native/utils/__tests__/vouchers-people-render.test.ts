@@ -142,20 +142,21 @@ const PEOPLE = {
 } as const;
 type Who = keyof typeof PEOPLE;
 
+/** A voucher's row as the node sends it: every figure whole hundredths of a Bean (left 55000 is 550 Beans). */
 const row = (pk: string, callsign: string, over: Record<string, unknown> = {}) => ({
     memberPubkey: pk, callsign, source: 'entry', entryId: '9'.repeat(32), madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
-    stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 0,
-    passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over,
+    stoppedAt: null, stopReason: null, left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 65000, belowZero: 1, writtenOff: 0,
+    passedOn: { amount_c: 0, people: 0, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over,
 });
 /** The node's block, in the node's order (vouchersBlock() orders by callsign; here Wren before Jane's row to prove the phone keeps it). */
-const OWNER_ROW = row(key('a'), 'Sally', { source: 'role', noLimit: true, left: 0, held: 0, level: 0, vouched: 200, peopleVouched: 2, belowZero: 0, vouchedLast30Days: 200 });
-const WAITING = { entryId: '7'.repeat(32), level: 1000, vouchAmount: 25, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
+const OWNER_ROW = row(key('a'), 'Sally', { source: 'role', noLimit: true, left: 0, held: 0, level: 0, vouched: 20000, peopleVouched: 2, belowZero: 0, vouchedLast30Days: 20000 });
+const WAITING = { entryId: '7'.repeat(32), level: 100000, vouchAmount: 2500, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
 const BLOCK = {
-    vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
+    vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 150000, held: 0, level: 150000, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
     waiting: [WAITING],
     // Whom "+ Make someone a voucher" offers (invites-vouching I5): an admin with no budget, and a name confirmed on the list.
     candidates: { admins: [{ memberPubkey: key('9'), callsign: 'Kit' }], confirmed: [{ memberPubkey: key('8'), callsign: 'liz', entryId: '6'.repeat(32) }], adminsOffered: true },
-    settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
+    settings: { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 },
 };
 const COMMITTEE_ONLY = 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.';
 const ADMINS_ONLY = 'Only the community’s owners and admins can open the names list.';

@@ -62,7 +62,7 @@ describe('applyDelta batch accounts sync', () => {
     it('batches account insertions into chunks of 100 rather than N single-row queries', async () => {
         const accounts = Array.from({ length: 250 }, (_, i) => ({
             public_key: `pk_${i}`,
-            balance: i * 10,
+            balance_c: i * 10,   // whole hundredths, as the node sends them
             last_demurrage_epoch: i % 5,
         }));
 
@@ -91,8 +91,8 @@ describe('applyDelta batch accounts sync', () => {
 
     it('handles null/undefined fallback values in account batching', async () => {
         const accounts = [
-            { public_key: 'pk_1' }, // balance & last_demurrage_epoch undefined
-            { balance: 100 }, // public_key undefined
+            { public_key: 'pk_1' }, // balance_c & last_demurrage_epoch undefined
+            { balance_c: 100 }, // public_key undefined
         ];
 
         await applyDelta({ accounts });

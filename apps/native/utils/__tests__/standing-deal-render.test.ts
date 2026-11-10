@@ -69,7 +69,7 @@ afterEach(() => { host?.remove(); });
 describe('Take this up? (§2.2)', () => {
     it('what is paid now and for which month; Agree hands on until-stopped from today', async () => {
         const onAgree = vi.fn();
-        await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
+        await show(createElement(StandingTakeUp, { unit: 'month', beans_c: 5000, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
         expect(host.textContent).toContain('Take this up?');
         expect(host.textContent).toContain('Vehicle Storage · 50 Beans a month · from Rob');
         expect(byId('standing-held-now')!.textContent).toBe('50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.');
@@ -79,27 +79,28 @@ describe('Take this up? (§2.2)', () => {
     });
     it('without room for the first month, Agree is disabled with a plain line; with room it stays (design §3)', async () => {
         const onAgree = vi.fn();
-        await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 30 }));
+        await show(createElement(StandingTakeUp, { unit: 'month', beans_c: 5000, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 3000 }));
         expect(byId('standing-no-room')!.textContent).toBe('You need 50 Beans of room; you have 30');
         expect(byId('standing-agree')!.getAttribute('aria-disabled')).toBe('true');
         await tap(byId('standing-agree'));
         expect(onAgree).not.toHaveBeenCalled();
         host.remove();
-        await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 80 }));
+        await show(createElement(StandingTakeUp, { unit: 'month', beans_c: 5000, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree, now: NOW, room: 8000 }));
         expect(byId('standing-no-room')).toBeNull();
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledTimes(1);
     });
     it('for a count of weeks and a later start', async () => {
         const onAgree = vi.fn();
-        await show(createElement(StandingTakeUp, { unit: 'week', beans: 12.5, title: 'Eggs', payeeName: 'Ann', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
+        await show(createElement(StandingTakeUp, { unit: 'week', beans_c: 1250, title: 'Eggs', payeeName: 'Ann', busy: false, onCancel: vi.fn(), onAgree, now: NOW }));
         await tap(byId('standing-periods'));
         await tap(button('One fewer'));
         expect(byId('standing-periods')!.textContent).toBe('For 5 weeks');
         await tap(byId('standing-start-on'));
         await tap(button('A day later'));
         expect(byId('standing-start-on')!.textContent).toBe('On 11 Nov');
-        expect(byId('standing-held-now')!.textContent).toBe('12.5 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.5 at the start of each week, until one of you stops it.');
+        // 12.50 Beans a week (1250 hundredths), written as every figure is: two decimals when not whole ("12.5" before).
+        expect(byId('standing-held-now')!.textContent).toBe('12.50 Beans go to Ann now for the first week (11 Nov – 18 Nov), then 12.50 at the start of each week, until one of you stops it.');
         await tap(byId('standing-agree'));
         expect(onAgree).toHaveBeenCalledWith({ periods: 5, startsAt: NOW + 2 * 86_400_000 });
     });
@@ -109,7 +110,7 @@ describe('Take this up? (§2.2)', () => {
         const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
         try {
             const onAgree = vi.fn();
-            await show(createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree }));
+            await show(createElement(StandingTakeUp, { unit: 'month', beans_c: 5000, title: 'Vehicle Storage', payeeName: 'Rob', busy: false, onCancel: vi.fn(), onAgree }));
             clock.mockReturnValue(NOW + 11 * 60_000);
             await tap(byId('standing-agree'));
             expect(onAgree).toHaveBeenLastCalledWith({ periods: null, startsAt: NOW + 11 * 60_000 });
@@ -123,11 +124,12 @@ describe('Take this up? (§2.2)', () => {
     });
 });
 
-// Month 2 of a deal started 9 Oct, paid on 9 Nov; month 3 due 9 Dec. Every row of a standing deal is a finished deal.
+// Month 2 of a deal started 9 Oct, paid on 9 Nov; month 3 due 9 Dec. Every row of a standing deal is a finished deal. Its
+// figure per period is whole hundredths of a Bean, as the node reads it (standingBeans_c).
 const row = (o: Record<string, unknown> = {}) => ({
     id: 'tx-3', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: PAYER, buyerCallsign: 'Marty', sellerPublicKey: PAYEE, sellerCallsign: 'Rob',
     createdAt: '2026-11-09T08:00:00.000Z', completedAt: '2026-11-09T08:00:00.000Z',
-    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans: 50, standingUnit: 'month', standingMaxPeriods: 6,
+    standingId: 'sd-1', periodNo: 2, standingPhase: 'paid', standingBeans_c: 5000, standingUnit: 'month', standingMaxPeriods: 6,
     standingNextDueAt: '2026-12-09T08:00:00.000Z', standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: null, standingStopped: false,
     ...o,
 }) as any;
@@ -189,7 +191,7 @@ describe('at 320 dp with the text at 1.3x, light and dark from the tokens', () =
             theme.dark = dark;
             const colors = dark ? darkColors : lightColors;
             await show(createElement('div', null,
-                createElement(StandingTakeUp, { unit: 'month', beans: 50, title: 'A very long listing title for a garden plot down by the creek', payeeName: 'Bartholomew', busy: false, onCancel: vi.fn(), onAgree: vi.fn(), now: NOW, room: 12.5 }),
+                createElement(StandingTakeUp, { unit: 'month', beans_c: 5000, title: 'A very long listing title for a garden plot down by the creek', payeeName: 'Bartholomew', busy: false, onCancel: vi.fn(), onAgree: vi.fn(), now: NOW, room: 1250 }),
                 createElement(StandingPanel, { tx: row(SHORT), actingAs: PAYER, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Rob' })));
             const tokens = new Set<string>();
             const walk = (o: unknown) => { if (o && typeof o === 'object') Object.values(o).forEach(walk); else if (typeof o === 'string') tokens.add(o); };

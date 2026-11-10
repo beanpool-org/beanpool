@@ -10,16 +10,19 @@ const entries = [
 const BODY: HealthExceptionsBody = {
     settings: { debtLinePct: 50, quietDays: 60 },
     exceptions: [
-        { memberPubkey: 'k1', entryId: 'e1', balance_c: -120, floor_c: 200, reasons: ['past_debt_line', 'quiet_in_debit'] },
-        { memberPubkey: 'k2', entryId: 'e2', balance_c: -20, floor_c: 200, reasons: ['quiet_in_debit'] },
+        // Whole hundredths of a Bean, as the node sends them (engine/community-health.ts): −120 of a 200 floor, −20 of 200.
+        { memberPubkey: 'k1', entryId: 'e1', balance_c: -12000, floor_c: 20000, reasons: ['past_debt_line', 'quiet_in_debit'] },
+        { memberPubkey: 'k2', entryId: 'e2', balance_c: -2000, floor_c: 20000, reasons: ['quiet_in_debit'] },
     ],
-    departed: [{ id: 'd1', entryId: 'e1', amount_c: 80, reason: 'removed', removedAt: '2026-10-01T00:00:00Z', repaid_c: 30, repaying: true }],
+    // 80 owed, 30 of it repaid.
+    departed: [{ id: 'd1', entryId: 'e1', amount_c: 8000, reason: 'removed', removedAt: '2026-10-01T00:00:00Z', repaid_c: 3000, repaying: true }],
 };
 
 describe('community health on the phone', () => {
     it('names come from the decrypted list by entry id; an entry the phone can’t open shows no name', () => {
         const rows = exceptionRows(BODY, entries);
-        expect(rows[0]).toEqual({ key: 'k1', name: 'Ada Lovelace', detail: '-120 Beans of a 200 Beans floor · past 50% of their floor, and in debit with no sale for 60 days' });
+        // A balance below zero is written with the true minus, as every figure is (formatHundredths).
+        expect(rows[0]).toEqual({ key: 'k1', name: 'Ada Lovelace', detail: '−120 Beans of a 200 Beans floor · past 50% of their floor, and in debit with no sale for 60 days' });
         expect(rows[1].name).toBe('A name this phone can’t open');
         expect(nameFor(null, entries)).toBe('A name this phone can’t open');
         expect(nameFor('missing', entries)).toBe('A name this phone can’t open');
@@ -55,7 +58,8 @@ describe('community health on the phone', () => {
 
 // The node's answers since #1608, as GET /api/names/health and GET /api/names/health/log send them.
 const SUMMARY = {
-    totals: { beansInCirculation: 4321.4, sumOfCredit: 3800, sumOfDebt: 1250.6, membersInDebit: 3, accounts: 12, commonsPot: 521.4, tradesThisMonth: 17, monthStart: '2026-10-01T00:00:00.000Z' },
+    // Every money total whole hundredths of a Bean (`*_c`, engine/community-health.ts communityTotals).
+    totals: { beansInCirculation_c: 432140, sumOfCredit_c: 380000, sumOfDebt_c: 125060, membersInDebit: 3, accounts: 12, commonsPot_c: 52140, tradesThisMonth: 17, monthStart: '2026-10-01T00:00:00.000Z' },
     settings: { debtLinePct: 50, quietDays: 60 }, known: true,
 };
 const LOG_ANSWER = {
@@ -75,12 +79,13 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
     it('shows the community’s totals from /api/names/health, in Beans, with the manager’s labels', () => {
         const t = readHealthTotals(SUMMARY);
         expect(t).not.toBeNull();
+        // Exact, as the owner console shows them (apps/manager beansText): whole hundredths leave nothing to round.
         expect(totalsRows(t!)).toEqual([
-            { label: 'Beans in circulation', value: '4,321 Beans' },
+            { label: 'Beans in circulation', value: '4,321.40 Beans' },
             { label: 'Credit held (all balances above 0)', value: '3,800 Beans' },
-            { label: 'Debt owed (all balances below 0)', value: '1,251 Beans' },
+            { label: 'Debt owed (all balances below 0)', value: '1,250.60 Beans' },
             { label: 'Members in debit', value: '3' },
-            { label: 'Commons pot', value: '521 Beans' },
+            { label: 'Commons pot', value: '521.40 Beans' },
             { label: 'Trades this month', value: '17' },
         ]);
         expect(totalsRows(t!).map((r) => r.value).join(' ')).not.toMatch(/Ʀ/);
@@ -89,20 +94,22 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
     it('no totals from an answer without them: the screen says so instead of showing zeros', () => {
         expect(readHealthTotals(null)).toBeNull();
         expect(readHealthTotals({})).toBeNull();
-        expect(readHealthTotals({ totals: { sumOfCredit: 'x', sumOfDebt: 0, membersInDebit: 0 } })).toBeNull();
+        expect(readHealthTotals({ totals: { sumOfCredit_c: 'x', sumOfDebt_c: 0, membersInDebit: 0 } })).toBeNull();
+        // A money total that isn't whole hundredths is a bad answer too, never a figure.
+        expect(readHealthTotals({ totals: { ...SUMMARY.totals, sumOfCredit_c: 3800.5 } })).toBeNull();
         expect(HEALTH_COPY.totalsMissing).toMatch(/couldn’t be read/);
     });
 
     it('a total the node couldn’t count shows “Not known just now”, never 0 Beans (review of #1610, finding 1)', () => {
         // The Commons pot's row holding no number: the server keeps NaN for the pot and for the circulation, and JSON sends null.
-        const wire = JSON.parse(JSON.stringify({ ...SUMMARY, totals: { ...SUMMARY.totals, commonsPot: NaN, beansInCirculation: NaN } }));
-        expect(wire.totals.commonsPot).toBeNull();
+        const wire = JSON.parse(JSON.stringify({ ...SUMMARY, totals: { ...SUMMARY.totals, commonsPot_c: NaN, beansInCirculation_c: NaN } }));
+        expect(wire.totals.commonsPot_c).toBeNull();
         const t = readHealthTotals(wire);
         expect(t).not.toBeNull();
         expect(totalsRows(t!)).toEqual([
             { label: 'Beans in circulation', value: 'Not known just now' },
             { label: 'Credit held (all balances above 0)', value: '3,800 Beans' },
-            { label: 'Debt owed (all balances below 0)', value: '1,251 Beans' },
+            { label: 'Debt owed (all balances below 0)', value: '1,250.60 Beans' },
             { label: 'Members in debit', value: '3' },
             { label: 'Commons pot', value: 'Not known just now' },
             { label: 'Trades this month', value: '17' },
@@ -222,19 +229,20 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
 });
 
 describe('a reason this phone has no words for (the node still has S1\'s step-back reason, which no app can cause)', () => {
-    const ROW = { memberPubkey: 'k', entryId: 'e1', balance_c: -800, floor_c: 200, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
+    // −800 of a 200 floor, whole hundredths.
+    const ROW = { memberPubkey: 'k', entryId: 'e1', balance_c: -80000, floor_c: 20000, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
     const SETTINGS = { debtLinePct: 50, quietDays: 60 };
 
     it('shows the balance and the floor alone, never "in debit with no sale", which would be untrue', () => {
         const [row] = exceptionRows({ settings: SETTINGS, exceptions: [ROW], departed: [] }, entries);
         expect(row.name).toBe('Ada Lovelace');
-        expect(row.detail).toBe('-800 Beans of a 200 Beans floor');
+        expect(row.detail).toBe('−800 Beans of a 200 Beans floor');
     });
 
     it('a line crossed keeps its reason, with or without the other', () => {
         const row = (reasons: unknown[]) => exceptionRows({ settings: SETTINGS, exceptions: [{ ...ROW, reasons: reasons as HealthReason[] }], departed: [] }, entries)[0];
-        expect(row(['past_debt_line']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
-        expect(row(['past_debt_line', 'stepped_back_owing']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
+        expect(row(['past_debt_line']).detail).toBe('−800 Beans of a 200 Beans floor · past 50% of their floor');
+        expect(row(['past_debt_line', 'stepped_back_owing']).detail).toBe('−800 Beans of a 200 Beans floor · past 50% of their floor');
     });
 });
 

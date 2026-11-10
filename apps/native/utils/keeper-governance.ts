@@ -6,7 +6,7 @@
  * row's KeeperWords, an enterprise's when none is given. Pure functions only, so the words are tested; the PWA carries the same file.
  */
 
-import { keeperWords, t, tn, type KeeperWords } from '@beanpool/core';
+import { formatHundredths, isHundredths, keeperWords, t, tn, type KeeperWords } from '@beanpool/core';
 
 const ENTERPRISE = keeperWords('ongoing');
 /**
@@ -30,6 +30,7 @@ export interface KeeperChangeLite {
     memberCallsign?: string;
     proposedBy: string;
     proposedByCallsign?: string | null;
+    /** The pledge, whole hundredths of a Bean (the node keeps the key `pledgedBacking`: a listed deviation of M1). */
     pledgedBacking?: number;
     /** The node sent the pledge's named part only: a keeper other than the lead reads no known part (keeperChangeForReader). */
     namedBackingOnly?: boolean;
@@ -70,17 +71,21 @@ export function keeperChangeTitle(c: KeeperChangeLite, w: KeeperWords = ENTERPRI
     const name = c.memberCallsign || t('A member');
     const project = isProject(w);
     if (c.kind === 'remove') return project ? t('Removing {name} as a collaborator', { name }) : t('Removing {name} as a keeper', { name });
-    const backing = Number(c.pledgedBacking || 0);
+    // Whole hundredths only: anything else is no pledge named.
+    const backing = isHundredths(c.pledgedBacking) ? c.pledgedBacking : 0;
+    // The count in Beans picks the form; {n} is the figure as every figure is written (formatHundredths).
+    const n = backing / 100;
+    const shown = { name, n: formatHundredths(backing) };
     // Never "backing N" for a part: the rest, from a known grant, still backs the enterprise, unnamed.
     if (backing > 0 && c.namedBackingOnly) {
         return project
-            ? tn(backing, 'Adding {name} as a collaborator, with {n} beans of named backing', 'Adding {name} as a collaborator, with {n} beans of named backing', { name })
-            : tn(backing, 'Adding {name} as a keeper, with {n} beans of named backing', 'Adding {name} as a keeper, with {n} beans of named backing', { name });
+            ? tn(n, 'Adding {name} as a collaborator, with {n} beans of named backing', 'Adding {name} as a collaborator, with {n} beans of named backing', shown)
+            : tn(n, 'Adding {name} as a keeper, with {n} beans of named backing', 'Adding {name} as a keeper, with {n} beans of named backing', shown);
     }
     if (backing > 0) {
         return project
-            ? tn(backing, 'Adding {name} as a collaborator, backing {n} beans', 'Adding {name} as a collaborator, backing {n} beans', { name })
-            : tn(backing, 'Adding {name} as a keeper, backing {n} beans', 'Adding {name} as a keeper, backing {n} beans', { name });
+            ? tn(n, 'Adding {name} as a collaborator, backing {n} beans', 'Adding {name} as a collaborator, backing {n} beans', shown)
+            : tn(n, 'Adding {name} as a keeper, backing {n} beans', 'Adding {name} as a keeper, backing {n} beans', shown);
     }
     return project ? t('Adding {name} as a collaborator', { name }) : t('Adding {name} as a keeper', { name });
 }

@@ -53,16 +53,19 @@ describe('Invite this person (community modes slice 3)', () => {
     it('an outcome it has no words for reads as "joined", with no clause, and never throws', () => {
         const odd = (over: Record<string, unknown>) => inv(over as Partial<BoundInvite>);
         expect(boundInviteLine(odd({ usedBy: 'kim123', outcome: 'merged_later' }), at)).toBe('@kim joined');
-        expect(boundInviteLine(odd({ usedBy: 'kim123', outcome: 'confirmed', voucherOutcome: 'paused', voucherLevel: 900 }), at)).toBe('@kim joined and was confirmed');
+        expect(boundInviteLine(odd({ usedBy: 'kim123', outcome: 'confirmed', voucherOutcome: 'paused', voucherLevel: 90000 }), at)).toBe('@kim joined and was confirmed');
         expect(() => boundInviteLine(odd({ usedBy: 'kim123', outcome: 'constructor', voucherOutcome: 'toString' }), at)).not.toThrow();
         expect(boundInviteLine(odd({ usedBy: 'kim123', outcome: 'constructor', voucherOutcome: 'toString' }), at)).toBe('@kim joined');
         for (const line of [
             boundInviteLine(odd({ usedBy: 'kim123', outcome: 'merged_later', voucherOutcome: 'paused' }), at),
             boundInviteLine(odd({ usedBy: 'kim123', outcome: 'hasOwnProperty', voucherOutcome: '__proto__' }), at),
         ]) expect(line).not.toMatch(/undefined|function|\[object/);
-        // The words it knows are unchanged.
-        expect(boundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed', voucherOutcome: 'made', voucherLevel: 1000 }), at))
-            .toBe('@kim joined and was confirmed; made a voucher with a budget of 1000 Beans');
+        // The words it knows are unchanged. The level keeps its name on the node and carries whole hundredths of a Bean
+        // (core formatHundredths writes it, grouped in English as on the web: 100000 is "1,000").
+        expect(boundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed', voucherOutcome: 'made', voucherLevel: 100000 }), at))
+            .toBe('@kim joined and was confirmed; made a voucher with a budget of 1,000 Beans');
+        expect(boundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed', voucherOutcome: 'made', voucherLevel: 50000 }), at))
+            .toBe('@kim joined and was confirmed; made a voucher with a budget of 500 Beans');
     });
 
     // Note 2: a confirmed or waiting entry shows its invite's line when the invite promised a voucher budget.
@@ -71,7 +74,7 @@ describe('Invite this person (community modes slice 3)', () => {
         expect(showsBoundInviteLine(inv({}), false)).toBe(true);
         expect(showsBoundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed' }), true)).toBe(false);
         for (const voucherOutcome of ['made', 'maker_not_committee', 'beans_off', 'not_made', 'awaiting_second'] as const) {
-            expect(showsBoundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed', voucherLevel: 1000, voucherOutcome }), true)).toBe(true);
+            expect(showsBoundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed', voucherLevel: 100000, voucherOutcome }), true)).toBe(true);
         }
     });
 
@@ -79,9 +82,10 @@ describe('Invite this person (community modes slice 3)', () => {
     it('the entry invite’s body carries only what was chosen', () => {
         expect(namesInviteBody({})).toEqual({});
         expect(namesInviteBody({ vouchAmount: null, voucherLevel: null })).toEqual({});
-        expect(namesInviteBody({ vouchAmount: 50 })).toEqual({ vouchAmount: 50 });
-        expect(namesInviteBody({ voucherLevel: 1000 })).toEqual({ voucherLevel: 1000 });
-        expect(namesInviteBody({ vouchAmount: 100, voucherLevel: 1500 })).toEqual({ vouchAmount: 100, voucherLevel: 1500 });
+        // Whole hundredths of a Bean, under the names the node kept: a vouch of 50, a budget of 1,000.
+        expect(namesInviteBody({ vouchAmount: 5000 })).toEqual({ vouchAmount: 5000 });
+        expect(namesInviteBody({ voucherLevel: 100000 })).toEqual({ voucherLevel: 100000 });
+        expect(namesInviteBody({ vouchAmount: 10000, voucherLevel: 150000 })).toEqual({ vouchAmount: 10000, voucherLevel: 150000 });
         expect(namesInviteBody({ vouchAmount: Number.NaN, voucherLevel: Infinity })).toEqual({});
     });
 });

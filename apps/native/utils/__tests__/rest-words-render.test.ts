@@ -130,7 +130,7 @@ import { OneWayBackCard, ONE_WAY_BACK_LINES } from '../../components/OneWayBackC
 import { SavedNodePicker } from '../../components/SavedNodePicker';
 import { SyncStatus } from '../../components/SyncStatus';
 import { beansWords, linkLeftWords, paidWords, payConfirmWords, repaymentBannerWords, repaymentLineWords, REPAYMENT_LINES } from '../../components/repayment-lines';
-import { DEBT_UNREACHABLE, PAY_REFUSED_UNSAID, PAY_UNANSWERED_RETRY, REPAYMENT_COPY, beans } from '../names-debts';
+import { DEBT_UNREACHABLE, PAY_REFUSED_UNSAID, PAY_UNANSWERED_RETRY, REPAYMENT_COPY, debtBeans } from '../names-debts';
 import { ONE_WAY_BACK_TEXT } from '../one-way-back';
 import { lightColors } from '../../constants/colors';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
@@ -149,7 +149,7 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
     debt.repayment = null;
-    debt.pay = { ok: true, value: { transactionId: 'tx-42', amount: 12.5 } };
+    debt.pay = { ok: true, value: { transactionId: 'tx-42', amount_c: 1250 } };
     grp.group = undefined;
     grp.members = [];
     grp.error = null;
@@ -226,20 +226,22 @@ describe('the credit bar in the pseudo-locale, and its offer ladder\'s English w
     const bar = (props: Record<string, unknown>) => createElement(CreditBar, { colors: lightColors, ...props } as any);
 
     it('its spoken line, the bubble, the anchors, the hints and the ladder', async () => {
-        await renderIn('xx', bar({ balance: 12.5, floor: -100, usableFloor: -25, liveOffers: 1, knownGrant: 0 }));
+        // Whole hundredths of a Bean, as the node sends them (balance_c …): 12.50 Beans, written as every figure is (two
+        // decimals when not whole; "+12.5" before).
+        await renderIn('xx', bar({ balance_c: 1250, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0 }));
         expect(host.querySelector('[aria-label]')!.getAttribute('aria-label')).toMatch(/^\[.*\]$/s);
-        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe(xx('{balance} B').replace('{balance}', '+12.5'));
+        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe(xx('{balance} B').replace('{balance}', '+12.50'));
         for (const english of ['your limit', 'sweet spot', 'fee-free', '← carry credit', 'hold credit →']) expect(host.textContent, english).toContain(xx(english));
         expect(bypassing(host)).toEqual([]);
     });
 
     it('in English, as before: the ladder\'s two sentences with their bold parts and non-breaking spaces', async () => {
-        await renderIn('en', bar({ balance: -10, floor: -100, usableFloor: -25, liveOffers: 1, knownGrant: 0 }));
+        await renderIn('en', bar({ balance_c: -1000, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0 }));
         const ladder = Array.from(host.querySelectorAll('span')).find((s) => (s.textContent ?? '').startsWith('🎣'))!;
         expect(ladder.textContent).toMatch(/^🎣 1 offer unlocks\u00A0−25( · 2 offers\u00A0→\u00A0−\d+)?$/);
         act(() => root.unmount());
         root = createRoot(host);
-        await renderIn('en', bar({ balance: 0, floor: -100, usableFloor: 0, liveOffers: 0, knownGrant: 0 }));
+        await renderIn('en', bar({ balance_c: 0, floor_c: -10000, usableFloor_c: 0, liveOffers: 0, knownGrant_c: 0 }));
         const post = Array.from(host.querySelectorAll('span')).find((s) => (s.textContent ?? '').startsWith('🎣'))!;
         expect(post.textContent).toMatch(/^🎣 Post an offer to open your credit line — \d+ offers? unlocks? your\u00A0full\u00A0−100\.$/);
         expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe('+0 B');
@@ -293,32 +295,36 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
     });
 
     it('the repayment card: what is left, and the way to pay', async () => {
-        debt.repayment = { amount_c: 200, repaid_c: 50, left_c: 150, debtId: 'a'.repeat(32) };
+        // The node's figures are whole hundredths: 200 Beans owed, 50 repaid, 150 left.
+        debt.repayment = { amount_c: 20000, repaid_c: 5000, left_c: 15000, debtId: 'a'.repeat(32) };
         await renderIn('xx', createElement(RepaymentCard));
-        expect(host.textContent).toContain(repaymentBannerWords({ amount_c: 200, left_c: 150 }));
+        expect(host.textContent).toContain(repaymentBannerWords({ amount_c: 20000, left_c: 15000 }));
+        expect(host.textContent).toContain(xx('{amount} Beans').replace('{amount}', '150'));
         expect(host.textContent).toMatch(/^\[/);
         expect(host.querySelector(`[data-hint="${xx('Pay Beans you hold to the Commons, or pay back a debt')}"]`)).not.toBeNull();
         expect(bypassing(host)).toEqual([]);
     });
 
     it("the sentences are names-debts.ts's, word for word in English, for every variant", () => {
-        for (const n of [0.5, 1, 12, 12.5, 300]) expect(beansWords(n), String(n)).toBe(beans(n));
-        const r = { amount_c: 200, repaid_c: 0, left_c: 200, debtId: 'x' };
+        // Whole hundredths of a Bean (core debtBeans): 0.50, 1, 12, 12.50, 300 and 1,234.56 Beans, and one hundredth.
+        for (const n of [50, 100, 1200, 1250, 30000, 123456, 1]) expect(beansWords(n), String(n)).toBe(debtBeans(n));
+        expect([1, 4925, 50000].map(beansWords)).toEqual(['0.01 Beans', '49.25 Beans', '500 Beans']);
+        const r = { amount_c: 20000, repaid_c: 0, left_c: 20000, debtId: 'x' };
         expect(repaymentBannerWords(r)).toBe(REPAYMENT_COPY.banner(r));
-        expect(linkLeftWords(300)).toBe(REPAYMENT_COPY.linkLeft(300));
+        expect(linkLeftWords(30000)).toBe(REPAYMENT_COPY.linkLeft(30000));
         expect(String(REPAYMENT_LINES.payTitle)).toBe(REPAYMENT_COPY.payTitle);
         expect(String(REPAYMENT_LINES.payIntro)).toBe(REPAYMENT_COPY.payIntro);
         for (const forDebt of [false, true]) {
-            for (const sharedLeft of [null, 80]) {
+            for (const sharedLeft of [null, 8000]) {
                 for (const openDebt of [false, true]) {
-                    expect(payConfirmWords(200, forDebt, sharedLeft, openDebt), `${forDebt} ${sharedLeft} ${openDebt}`).toBe(REPAYMENT_COPY.payConfirm(200, forDebt, sharedLeft, openDebt));
+                    expect(payConfirmWords(20000, forDebt, sharedLeft, openDebt), `${forDebt} ${sharedLeft} ${openDebt}`).toBe(REPAYMENT_COPY.payConfirm(20000, forDebt, sharedLeft, openDebt));
                 }
             }
         }
         for (const forDebt of [false, true]) {
-            for (const answer of [{}, { settled: true }, { leftAfter: 40 }]) {
+            for (const answer of [{}, { settled: true }, { leftAfter_c: 4000 }]) {
                 for (const openDebt of [false, true]) {
-                    expect(paidWords(200, 'tx-9', forDebt, answer, openDebt), `${forDebt} ${JSON.stringify(answer)} ${openDebt}`).toBe(REPAYMENT_COPY.paid(200, 'tx-9', forDebt, answer, openDebt));
+                    expect(paidWords(20000, 'tx-9', forDebt, answer, openDebt), `${forDebt} ${JSON.stringify(answer)} ${openDebt}`).toBe(REPAYMENT_COPY.paid(20000, 'tx-9', forDebt, answer, openDebt));
                 }
             }
         }

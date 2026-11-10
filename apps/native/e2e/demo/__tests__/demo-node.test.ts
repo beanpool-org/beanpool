@@ -98,7 +98,7 @@ describe('Riverbend: the town (design §2)', () => {
     });
 
     it('has 14 listings on the board, each with a photograph of its own, and Beans prices', async () => {
-        const board = await rows(`SELECT p.id, p.type, p.title, p.credits, p.price_type FROM posts p WHERE ${BOARD}`);
+        const board = await rows(`SELECT p.id, p.type, p.title, p.price_c, p.price_type FROM posts p WHERE ${BOARD}`);
         expect(board).toHaveLength(14);
         expect(board.filter((p) => p.type === 'offer')).toHaveLength(11);
         expect(board.filter((p) => p.type === 'need')).toHaveLength(3);
@@ -137,18 +137,19 @@ describe('Riverbend: the town (design §2)', () => {
 
 describe('Riverbend: the books (design §2 "Ledger")', () => {
     it('sum to zero across every account, the Commons and the escrow included', async () => {
-        const { s } = await one('SELECT ROUND(SUM(balance), 6) AS s FROM accounts');
+        // Whole hundredths of a Bean: an exact integer sum, no rounding.
+        const { s } = await one('SELECT SUM(balance_c) AS s FROM accounts');
         expect(s).toBe(0);
     });
 
     it('give Sam exactly +42 Beans, after 7 completed trades, within the design\'s range for everyone else', async () => {
-        expect((await one('SELECT ROUND(balance, 6) AS b FROM accounts WHERE public_key = ?', [world.sam])).b).toBe(42);
+        expect((await one('SELECT balance_c AS b FROM accounts WHERE public_key = ?', [world.sam])).b).toBe(4200);
         const samTrades = await one("SELECT COUNT(*) AS n FROM marketplace_transactions WHERE status = 'completed' AND (buyer_pubkey = ? OR seller_pubkey = ?)", [world.sam, world.sam]);
         expect(samTrades.n).toBe(7);
-        const people = await rows(`SELECT m.callsign, a.balance FROM members m JOIN accounts a ON a.public_key = m.public_key WHERE ${PEOPLE}`);
+        const people = await rows(`SELECT m.callsign, a.balance_c FROM members m JOIN accounts a ON a.public_key = m.public_key WHERE ${PEOPLE}`);
         for (const p of people) {
-            expect(p.balance, p.callsign).toBeGreaterThanOrEqual(-60);
-            expect(p.balance, p.callsign).toBeLessThanOrEqual(85);
+            expect(p.balance_c, p.callsign).toBeGreaterThanOrEqual(-6000);
+            expect(p.balance_c, p.callsign).toBeLessThanOrEqual(8500);
         }
         // The history reads as three weeks, oldest first, none in the future.
         const stamps = (await rows('SELECT timestamp FROM transactions ORDER BY rowid')).map((r) => Date.parse(r.timestamp));
@@ -158,17 +159,17 @@ describe('Riverbend: the books (design §2 "Ledger")', () => {
     });
 
     it('has exactly one open deal: Sam holding 12 Beans for Amara\'s sourdough, in trust', async () => {
-        const open = await rows("SELECT id, post_id, buyer_pubkey, seller_pubkey, credits FROM marketplace_transactions WHERE status IN ('requested', 'pending')");
+        const open = await rows("SELECT id, post_id, buyer_pubkey, seller_pubkey, amount_c FROM marketplace_transactions WHERE status IN ('requested', 'pending')");
         expect(open).toHaveLength(1);
-        expect(open[0]).toMatchObject({ id: world.openDeal.transactionId, post_id: world.posts.sourdough, buyer_pubkey: world.sam, seller_pubkey: world.members.amara, credits: 12 });
-        const held = await rows("SELECT public_key, balance FROM accounts WHERE public_key LIKE 'escrow_%' AND balance != 0");
-        expect(held).toEqual([{ public_key: `escrow_${open[0].id}`, balance: 12 }]);
+        expect(open[0]).toMatchObject({ id: world.openDeal.transactionId, post_id: world.posts.sourdough, buyer_pubkey: world.sam, seller_pubkey: world.members.amara, amount_c: 1200 });
+        const held = await rows("SELECT public_key, balance_c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance_c != 0");
+        expect(held).toEqual([{ public_key: `escrow_${open[0].id}`, balance_c: 1200 }]);
     });
 
     it('collects the 1.5% fee into the Commons', async () => {
-        const fees = await one('SELECT ROUND(SUM(tax_fee), 4) AS f FROM transactions');
+        const fees = await one('SELECT SUM(fee_c) AS f FROM transactions');
         expect(fees.f).toBeGreaterThan(0);
-        const commons = await one("SELECT ROUND(balance, 4) AS b FROM accounts WHERE public_key = 'COMMONS_POOL'");
+        const commons = await one("SELECT balance_c AS b FROM accounts WHERE public_key = 'COMMONS_POOL'");
         expect(commons.b).toBeGreaterThan(0);
         expect(commons.b).toBeLessThanOrEqual(fees.f);
     });

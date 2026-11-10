@@ -28,7 +28,7 @@ import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sam
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 import { StartSomethingSheet } from '../../components/StartSomethingSheet';
 import { startRows, startTarget, type StartRowKey } from '../../utils/start-something';
-import { formatNumber, groupNameShown, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatHundredths, formatNumber, groupNameShown, inCapitalsOf, isHundredths, t, tn, word, type WordKey } from '@beanpool/core';
 import { memberShelves, phoneTools } from '../../tools/index';
 import { ToolRow } from '../../tools/ui';
 
@@ -82,7 +82,8 @@ export default function ProjectsScreen() {
         () => yoursRows(yourGroups, enterprises),
         [yourGroups, enterprises],
     );
-    const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
+    // db.ts getBalance's answer: every figure whole hundredths of a Bean (`*_c`).
+    const [balanceState, setBalanceState] = useState<any>({ earnedCredit_c: 0, commons_c: 0 });
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
     // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its
     // own (the Tools screen asks each tool with the community's profile too).
@@ -107,7 +108,7 @@ export default function ProjectsScreen() {
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
     const [showStartSomething, setShowStartSomething] = useState(false);
-    const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+    const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string }>>([]);
     const [pickedSection, setActiveSection] = useState<CommonsSection | null>(null);
     // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
@@ -238,7 +239,7 @@ export default function ProjectsScreen() {
             console.error('[Commons] Failed loading identity:', e);
         }
         if (!modesKnown || !latest()) return;
-        if (beansPreview) setBalanceState({ earnedCredit: 0, commons: 0 });
+        if (beansPreview) setBalanceState({ earnedCredit_c: 0, commons_c: 0 });
 
         if (enterprisesPreview) {
             setEnterprises([]);
@@ -295,7 +296,7 @@ export default function ProjectsScreen() {
     }, [modesKnown, beansPreview, enterprisesPreview, decisionsPreview]);
 
     // The node's rule (a completed trade, or a node admin); earned credit only when the node hasn't said.
-    const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit || 0) > 0;
+    const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit_c || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
         return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
@@ -525,7 +526,7 @@ export default function ProjectsScreen() {
                             <View style={styles.statCard}>
                                 <Text style={styles.statCardLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{inCapitalsOf(t('Commons Pool'))}</Text>
                                 <View style={styles.statCardValueRow}>
-                                    <CurrencyDisplay amount={formatNumber(balanceState.commons || 0, 2)} style={styles.statCardAmount} />
+                                    <CurrencyDisplay amount={formatHundredths(isHundredths(balanceState.commons_c) ? balanceState.commons_c : 0)} style={styles.statCardAmount} />
                                 </View>
                             </View>
                             {showsDecide && !decisionsPreview && (
@@ -739,7 +740,7 @@ export default function ProjectsScreen() {
             <CommonsInfoModal
                 isOpen={showCommonsInfo}
                 onClose={() => setShowCommonsInfo(false)}
-                commonsBalance={balanceState.commons || 0}
+                commonsBalance={balanceState.commons_c || 0}
             />
 
             {showsDecide && !decisionsPreview && (
@@ -748,7 +749,7 @@ export default function ProjectsScreen() {
                     onClose={() => setShowProposeDecision(false)}
                     onCreated={loadData}
                     identity={identity}
-                    commonsBalance={balanceState.commons || 0}
+                    commonsBalance={balanceState.commons_c || 0}
                     treasuries={enterprises}
                     members={membersList}
                     features={reader.effective}

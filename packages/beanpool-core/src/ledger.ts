@@ -66,15 +66,6 @@ export function isBeanAmount(amount: unknown): amount is Hundredths {
     return isMoveAmount(amount);
 }
 
-/**
- * The phone's Send door until its own lane (M2, DESIGN-atomic-beans-fable.md §6) moves it to parseHundredths: a figure in
- * Beans, at least a cent, in whole cents. Nothing on the node or the web reads it; M2 deletes it.
- */
-export function isWholeCents(amount: unknown): amount is number {
-    return typeof amount === 'number' && Number.isFinite(amount) && Math.round(amount * 100) >= 1
-        && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
-}
-
 /** A balance a ledger may hold: whole hundredths. An account holding anything else moves nothing until an operator looks. */
 function isFiniteBalance(balance: unknown): balance is Hundredths {
     return isHundredths(balance);

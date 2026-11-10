@@ -1718,7 +1718,6 @@
   "Trust hold cancelled and funds refunded.": "Η δέσμευση καταπιστεύματος ακυρώθηκε και τα κεφάλαια επιστράφηκαν.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Αυτό το μήνυμα δεν ήταν δυνατό να επαληθευτεί, επομένως δεν εμφανίζεται.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ Αυτό το μήνυμα δεν ήταν κρυπτογραφημένο, οπότε το BeanPool δεν μπορεί να επιβεβαιώσει ποιος το έγραψε. Δεν εμφανίζεται.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "Στάλθηκε από παλαιότερη έκδοση της εφαρμογής: το BeanPool δεν μπορεί να επιβεβαιώσει ποιος το έγραψε.",
   "Shown out of the order it was written in.": "Εμφανίζεται εκτός της σειράς με την οποία γράφτηκε.",
   "Moved here from another conversation.": "Μεταφέρθηκε εδώ από άλλη συνομιλία.",
   "From your community's admins. Not a private message: the community's server can read it.": "Από τους διαχειριστές της κοινότητάς σας. Δεν είναι ιδιωτικό μήνυμα: ο διακομιστής της κοινότητας μπορεί να το διαβάσει.",

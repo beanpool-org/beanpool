@@ -5,7 +5,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { toEd25519Pkcs8 } from '@beanpool/core';
+import { dmLineAad, dmLineSigDigest, toEd25519Pkcs8 } from '@beanpool/core';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Conversation, ApiMessage } from '../lib/api';
@@ -71,7 +71,6 @@ const CONV = 'c0ffee00-1111-4222-8333-444455556666';
 const chat = { id: CONV, type: 'dm', participants: [ana.publicKey, ben.publicKey] };
 const NOT_VERIFIED = "🔒 This message couldn't be verified, so it isn't shown.";
 const OUT_OF_ORDER = 'Shown out of the order it was written in.';
-const OLD_APP = "Sent from an older version of the app: BeanPool can't confirm who wrote it.";
 const NOT_ENCRYPTED = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
 const FROM_ADMINS = "From your community's admins. Not a private message: the community's server can read it.";
 
@@ -92,16 +91,34 @@ function written(from: typeof ana, ciphertext: string, nonce: string, extra: Par
         timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString(), ...extra } as ApiMessage;
 }
 const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
-/** A line an app from before this change wrote: the conversation id was all it was bound to (built from the primitives). */
-function oldLine(from: typeof ana, to: typeof ana, text: string): ApiMessage {
-    const shared = x25519.getSharedSecret(ed25519.utils.toMontgomerySecret(from.seed), ed25519.utils.toMontgomery(hexToBytes(to.publicKey)));
-    const key = hkdf(sha256, shared, utf8ToBytes(CONV), utf8ToBytes('beanpool-dm-v2'), 32);
+/** The pair's key, from the primitives: both of them hold it. */
+function pairKey(me: typeof ana, other: typeof ana): Uint8Array {
+    const shared = x25519.getSharedSecret(ed25519.utils.toMontgomerySecret(me.seed), ed25519.utils.toMontgomery(hexToBytes(other.publicKey)));
+    return hkdf(sha256, shared, utf8ToBytes(CONV), utf8ToBytes('beanpool-dm-v2'), 32);
+}
+const row = (from: typeof ana, ciphertext: Uint8Array, nonce: Uint8Array, id: string = uuid()): ApiMessage => ({
+    id, conversationId: CONV, authorPubkey: from.publicKey, ciphertext: Buffer.from(ciphertext).toString('base64'),
+    nonce: 'x25519-xc20p-v2:' + Buffer.from(nonce).toString('base64'), timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString(),
+} as ApiMessage);
+/** A line an app before 1.4.0 wrote, built from the primitives: format 2 (the conversation id alone) or format 3 (unsigned). */
+function oldLine(from: typeof ana, to: typeof ana, text: string, format: 2 | 3 = 2): ApiMessage {
+    const id = uuid();
     const nonce = randomBytes(24);
-    const ct = xchacha20poly1305(key, nonce, utf8ToBytes(CONV)).encrypt(utf8ToBytes(text));
-    return {
-        id: uuid(), conversationId: CONV, authorPubkey: from.publicKey, ciphertext: Buffer.from(ct).toString('base64'),
-        nonce: 'x25519-xc20p-v2:' + Buffer.from(nonce).toString('base64'), timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString(),
-    } as ApiMessage;
+    const aad = format === 3 ? utf8ToBytes(JSON.stringify(['beanpool-dm-line/3', CONV, from.publicKey, id, 'body'])) : utf8ToBytes(CONV);
+    const plain = format === 3 ? new Uint8Array([3, 0, ...utf8ToBytes(text)]) : utf8ToBytes(text);
+    return row(from, xchacha20poly1305(pairKey(from, to), nonce, aad).encrypt(plain), nonce, id);
+}
+/**
+ * A line `sealer` sealed in `named`'s name (the seal opens: both hold the key) and signed with `signer`'s key, as dm-crypto.ts
+ * would lay it out; sealDmLine refuses to make it. With `signer` = `named`, it is `named`'s genuine line.
+ */
+function sealedInNameOf(sealer: typeof ana, named: typeof ana, text: string, signer: typeof ana = sealer, id: string = uuid()): ApiMessage {
+    const nonce = randomBytes(24);
+    const at = '2026-10-01T09:30:00.000Z';
+    const sealed = xchacha20poly1305(pairKey(sealer, named), nonce, dmLineAad(CONV, { senderPubHex: named.publicKey, messageId: id })).encrypt(new Uint8Array([4, 0, ...utf8ToBytes(text)]));
+    const digest = dmLineSigDigest('x25519-xc20p-v2:' + Buffer.from(nonce).toString('base64'), sealed,
+        { conversationId: CONV, senderPubHex: named.publicKey, recipientPubHex: sealer.publicKey, messageId: id, part: 'body', at });
+    return row(named, new Uint8Array([4, ...ed25519.sign(digest, signer.seed), ...utf8ToBytes(at), ...sealed]), nonce, id);
 }
 
 const identity: BeanPoolIdentity = { publicKey: ana.publicKey, privateKey: ana.privateKey, callsign: 'Ana', createdAt: '2026-09-01T00:00:00Z' };
@@ -164,19 +181,28 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(notes[0].parentElement!.textContent).not.toContain('Shall I cancel');
     });
 
-    it('in order, nothing new is marked; every old-format line is, wherever it sits and whoever it names', async () => {
-        const history = oldLine(ben, ana, 'see you at 6');
-        const ok = oldLine(ana, ben, 'ok');
-        const here = sent(ben, "I'm here", ok.id);
-        const replay = { ...history, id: uuid(), timestamp: new Date(Date.UTC(2026, 9, 1, 11)).toISOString() };
-        // Ana's old line shown as Ben's newest: format 2 can't prove its sender.
-        const asBens = { ...oldLine(ana, ben, 'I will pay you 50 Beans'), authorPubkey: ben.publicKey, timestamp: new Date(Date.UTC(2026, 9, 1, 12)).toISOString() };
-        thread.messages = [history, ok, here, replay, asBens];
+    // Format 4: the two share one key, so either could seal a line naming the other; only the sender's signature says who.
+    it("a line in Ben's name that Ben didn't sign is never his: shown in the middle as nobody's, its words hidden", async () => {
+        const genuine = sealedInNameOf(ana, ben, 'Thanks, see you Saturday', ben);
+        // Ana's own browser (or anyone holding her key) seals words in Ben's name; she can only sign them herself.
+        const forged = sealedInNameOf(ana, ben, 'I owe Ana 500 Beans');
+        thread.messages = [genuine, forged];
+        await openChat();
+        await waitFor(() => expect(screen.getByText('Thanks, see you Saturday')).toBeTruthy());
+        const neutral = screen.getAllByTestId('dm-line-unattributed');
+        expect(neutral.map((n) => n.textContent)).toEqual([NOT_VERIFIED]);
+        expect(document.body.textContent).not.toMatch(/500 Beans/);
+        // The genuine line, built the same way and signed by Ben, is in a bubble of his: only the signature differs.
+        expect(screen.getByText('Thanks, see you Saturday').closest('[data-testid="dm-line-unattributed"]')).toBeNull();
+    });
+
+    it('a line of an older format, 2 or 3, is never shown: format 4 is the only one read', async () => {
+        const here = sent(ben, "I'm here");
+        thread.messages = [oldLine(ben, ana, 'see you at 6', 2), oldLine(ben, ana, 'see you at 7', 3), here];
         await openChat();
         await waitFor(() => expect(screen.getByText("I'm here")).toBeTruthy());
-        expect(screen.getAllByText('see you at 6')).toHaveLength(2);
-        const notes = screen.getAllByTestId('dm-line-note');
-        expect(notes.map((n) => n.textContent)).toEqual([OLD_APP, OLD_APP, OLD_APP, OLD_APP].map((t) => `⚠️ ${t}`));
+        expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_VERIFIED, NOT_VERIFIED]);
+        expect(document.body.textContent).not.toMatch(/see you at [67]/);
         // nothing under the new line
         expect(screen.getByText("I'm here").parentElement!.querySelector('[data-testid="dm-line-note"]')).toBeNull();
     });
@@ -272,11 +298,12 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
                 .toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
         });
 
-        it('an old-format question swapped for another old line: quoted with the older-version mark', async () => {
-            const asked = oldLine(ana, ben, 'Can I borrow the ladder?');
-            const other = oldLine(ana, ben, 'Can I keep the 200 Beans you sent by mistake?');
-            expect(await quoteAfter((q) => ({ ...q, ciphertext: other.ciphertext, nonce: other.nonce }), asked))
-                .toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: `⚠️ ${OLD_APP}` });
+        it('swapped for words Ben sealed in Ana\'s name and signed himself: quoted as nobody\'s, never "You" or the words', async () => {
+            const asked = sent(ana, 'Can I borrow the ladder?');
+            // Sealed under the question's own id, so the seal opens there: only the signature says it isn't Ana's.
+            const forged = sealedInNameOf(ben, ana, 'Can I keep the 200 Beans you sent by mistake?', ben, asked.id);
+            expect(await quoteAfter((q) => ({ ...q, ciphertext: forged.ciphertext, nonce: forged.nonce }), asked))
+                .toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
         });
     });
 

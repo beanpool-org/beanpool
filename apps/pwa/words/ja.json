@@ -4013,7 +4013,6 @@
   "Sending your account to your phone…": "アカウントをスマートフォンに送っています…",
   "Sent as a request. {name} will see it under Message requests. You can write more once they accept.": "リクエストとして送信しました。{name}さんには「メッセージリクエスト」に表示されます。承認されたら、続きを書けます。",
   "Sent from an earlier key of {name}'s, replaced {date}.": "{name}さんの以前の鍵（{date}に更新済み）から送信されました。",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "古いバージョンのアプリから送信されたため、BeanPoolは送信者を確認できません。",
   "Settled between you and the borrower. BeanPool never holds or collects it.": "あなたと借りる人の間で決めます。BeanPoolは預かったり徴収したりしません。",
   "Share your area, or type your town, to see the nearest.": "地域を共有するか、町の名前を入力すると、いちばん近いものが見られます。",
   "Shop": "お店",

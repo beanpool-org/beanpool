@@ -1722,7 +1722,6 @@
   "Trust hold cancelled and funds refunded.": "আস্থার হেফাজত বাতিল করা হয়েছে এবং অর্থ ফেরত দেওয়া হয়েছে।",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 এই বার্তাটি যাচাই করা যায়নি, তাই এটি দেখানো হচ্ছে না।",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ এই বার্তাটি এনক্রিপ্ট করা ছিল না, তাই কে লিখেছেন তা BeanPool নিশ্চিত করতে পারছে না। এটি দেখানো হচ্ছে না।",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "অ্যাপের পুরোনো সংস্করণ থেকে পাঠানো হয়েছে: কে লিখেছেন তা BeanPool নিশ্চিত করতে পারছে না।",
   "Shown out of the order it was written in.": "যে ক্রমে লেখা হয়েছিল সে ক্রমে দেখানো হচ্ছে না।",
   "Moved here from another conversation.": "অন্য বার্তালাপ থেকে এখানে সরানো হয়েছে।",
   "From your community's admins. Not a private message: the community's server can read it.": "আপনার কমিউনিটির অ্যাডমিনদের কাছ থেকে। ব্যক্তিগত বার্তা নয়: কমিউনিটির সার্ভার এটি পড়তে পারে।",

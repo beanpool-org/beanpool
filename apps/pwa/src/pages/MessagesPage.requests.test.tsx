@@ -2,7 +2,7 @@ import { render, screen, act, waitFor, cleanup, within, fireEvent } from '@testi
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { toEd25519Pkcs8 } from '@beanpool/core';
+import { dmLineSigOf, toEd25519Pkcs8 } from '@beanpool/core';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { ApiMessage } from '../lib/api';
@@ -105,10 +105,6 @@ function line(from: typeof ann, text: string, at = LINE_AT, extra: Partial<ApiMe
         id, conversationId: CONV, authorPubkey: from.publicKey, ...lockForDm(text, chat, from, { messageId: id, after: null }),
         type: 'text', systemType: null, metadata: null, timestamp: at, editedAt: null, updatedAt: at, ...extra,
     } as unknown as ApiMessage;
-}
-/** The line as the node serves it: its sender's signature in its metadata (MessagesPage's lineMetadata). */
-function signed(l: ApiMessage): ApiMessage {
-    return { ...l, metadata: JSON.stringify({ lineSig: (l as unknown as { lineSig: unknown }).lineSig }) } as ApiMessage;
 }
 /** A photo with its caption, sealed as MessagesPage's handleSendImage seals one. */
 function photo(from: typeof ann, caption: string): ApiMessage {
@@ -527,7 +523,7 @@ describe('a request card', () => {
     });
 
     it('Report reports the line, as sealed and signed, with its words, then blocks its sender, and files no second report', async () => {
-        const hello = signed(line(bo, 'Hello'));
+        const hello = line(bo, 'Hello');
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [hello]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -541,8 +537,10 @@ describe('a request card', () => {
         expect(messageId).toBe(hello.id);
         expect(reason).toContain('Spam or scam');
         expect(disclosure).toMatchObject({ v: 1, ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
-        expect(disclosure.lineSig).toEqual(JSON.parse(hello.metadata as string).lineSig);
-        expect(Object.keys(disclosure).sort()).toEqual(['ciphertext', 'conversationId', 'lineSig', 'nonce', 'v', 'words']);
+        // The line as the node serves it, its sender's signature in its own ciphertext (format 4): nothing beside it.
+        expect(dmLineSigOf(disclosure.ciphertext)).toEqual(dmLineSigOf(hello.ciphertext));
+        expect(dmLineSigOf(disclosure.ciphertext)).not.toBeNull();
+        expect(Object.keys(disclosure).sort()).toEqual(['ciphertext', 'conversationId', 'nonce', 'v', 'words']);
         expect(decideMessageRequest).not.toHaveBeenCalled();
     });
 
@@ -597,7 +595,7 @@ describe('a request card', () => {
     });
 
     it('with an older line of theirs still there, that is the one it reports', async () => {
-        const older = signed(line(bo, 'Hello', LINE_AT));
+        const older = line(bo, 'Hello', LINE_AT);
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [older, tombstone(line(bo, 'Gone', new Date(Date.parse(LINE_AT) + 1000).toISOString()))]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -621,7 +619,7 @@ describe('a request card', () => {
     it('a block the node refuses shows the node\'s own sentence, whichever way the report went', async () => {
         const full = 'You can block up to 500 people. Unblock someone to block another.';
         node.list = annListWith([requestEntry(bo, CONV)]);
-        node.reads[CONV] = readOf(pending(), [signed(line(bo, 'Hello'))]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
         vi.mocked(blockUser).mockRejectedValueOnce(Object.assign(new Error(full), { status: 409, code: 'block_limit' }));
         render(<MessagesPage identity={idOf(ann)} />);
         expect(await within(await submitReport()).findByText(full)).toBeInTheDocument();
@@ -748,7 +746,7 @@ describe('a request card', () => {
 
 describe('a line of an ordinary direct message (R0)', () => {
     it('Report under someone else\'s line sends that line, as sealed and signed, with its words, and blocks nobody', async () => {
-        const hello = signed(line(bo, 'Hello'));
+        const hello = line(bo, 'Hello');
         const mine = line(ann, 'Mine', '2026-10-27T01:00:00.000Z');
         const { addedYou: _, ...entry } = requestEntry(bo, CONV, { request: null });
         node.list = { conversations: [entry], totalUnread: 0, deletedAccounts: [], requests: { count: 0, conversations: [] } };
@@ -766,7 +764,7 @@ describe('a line of an ordinary direct message (R0)', () => {
         const [messageId, , disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
         expect(messageId).toBe(hello.id);
         expect(disclosure).toMatchObject({ ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
-        expect(disclosure.lineSig).toEqual(JSON.parse(hello.metadata as string).lineSig);
+        expect(dmLineSigOf(disclosure.ciphertext)).toEqual(dmLineSigOf(hello.ciphertext));
         expect(blockUser).not.toHaveBeenCalled();
     });
 });

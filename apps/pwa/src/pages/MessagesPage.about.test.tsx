@@ -63,7 +63,7 @@ const stamp = () => new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString();
 function fromBen(text: string, post?: object): ApiMessage {
     const id = crypto.randomUUID();
     const words = lockForDm(text, dmConv as never, ben, { messageId: id });
-    let metadata: string | undefined = words.lineSig ? JSON.stringify({ lineSig: words.lineSig }) : undefined;
+    let metadata: string | undefined;
     if (post) {
         const ctx = dmKeyContext(dmConv as never, ben)!;
         metadata = metadataWithAbout(metadata, sealChatAbout(aboutOfPost(post)!, ctx, { senderPubHex: ben.publicKey, messageId: id }));

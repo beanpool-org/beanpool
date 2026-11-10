@@ -80,7 +80,8 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { getDb, getMessages, syncMessages, syncSingleConversation } from '../db';
-import { encryptDmFormat2 } from '../e2e-crypto';
+import { sealDmLine } from '../e2e-crypto';
+import { randomUUID } from 'node:crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
 const sql = (globalThis as any).__phoneSql as import('node:sqlite').DatabaseSync;
@@ -150,18 +151,22 @@ const fetchMock = vi.fn(async (url: string) => {
 function write(conv: Conv, author: Person, text: string, opts: { type?: string; metadata?: Record<string, unknown> } = {}): Line {
     let ciphertext: string;
     let nonce: string;
+    // A DM line is sealed and signed to its own id (format 4); a node-readable chat's line keeps the node's.
+    const id = conv.type === 'dm' ? randomUUID() : `line-${++serial}`;
     if (conv.type === 'dm') {
         const peer = conv.participants.find((p) => p !== author.publicKey)!;
-        // Lines already on the node, as written before the line format took the sender and id in (format 2): what a
-        // member's history is made of, and what this phone must still read and blank.
-        ({ ciphertext, nonce } = encryptDmFormat2(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id }));
+        // Lines already on the node, as both apps write them (format 4): what a member's history is made of, and what this
+        // phone must read and blank.
+        // A reply is sealed to what it answers, as its metadata names it (the apps' dm-lock).
+        const replyToId = typeof opts.metadata?.replyToId === 'string' ? opts.metadata.replyToId : null;
+        ({ ciphertext, nonce } = sealDmLine(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id }, { senderPubHex: author.publicKey, messageId: id, replyToId }));
     } else {
         ciphertext = b64(text);
         nonce = 'plaintext-v1';
     }
     clock += 1000;
     const line: Line = {
-        id: `line-${++serial}`, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext, nonce,
+        id, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext, nonce,
         type: opts.type ?? 'text', systemType: null, metadata: opts.metadata ? JSON.stringify(opts.metadata) : null,
         timestamp: new Date(clock).toISOString(), editedAt: null,
     };
@@ -433,7 +438,7 @@ describe("a deleted member's older lines on the other person's phone", () => {
         expect(rowsBy(dee.publicKey)).toHaveLength(60);
 
         // Dee, active, sends one more DM line whose metadata claims she deleted her account. The node stores it as sent.
-        write(dm, dee, 'Dee 61: crafted', { metadata: { removed: true, removedBy: dee.publicKey, accountDeleted: true } });
+        const crafted = write(dm, dee, 'Dee 61: crafted', { metadata: { removed: true, removedBy: dee.publicKey, accountDeleted: true } });
         const deeBefore = rowsBy(dee.publicKey);
         await phoneSyncs();
         await withScreens(() => syncSingleConversation(dm.id));
@@ -442,7 +447,9 @@ describe("a deleted member's older lines on the other person's phone", () => {
         expect(blankWrites()).toBe(0);
         const shown = (await getMessages(dm.id)).filter((m: any) => m.senderId === dee.publicKey && m.text !== 'Dee 61: crafted');
         expect(shown.map((m: any) => m.text)).toEqual(words);
-        expect(rowsBy(dee.publicKey).slice(0, 60)).toEqual(deeBefore.slice(0, 60));
+        // Her 60 rows from before, unchanged (by id: a DM line's id is a UUID, so the crafted one sorts anywhere among them).
+        expect(deeBefore).toHaveLength(60);
+        expect(rowsBy(dee.publicKey).filter((r) => r.id !== crafted.id)).toEqual(deeBefore);
     });
 
     it("never blanks this phone's own lines, nor anyone the node did not name (a member the community removed)", async () => {

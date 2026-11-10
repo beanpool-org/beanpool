@@ -1724,7 +1724,6 @@
   "Trust hold cancelled and funds refunded.": "நம்பிக்கைப் பொறுப்பு ரத்து செய்யப்பட்டுத் தொகை திரும்ப வழங்கப்பட்டது.",
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 இந்தச் செய்தியைச் சரிபார்க்க முடியவில்லை, எனவே இது காட்டப்படவில்லை.",
   "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": "⚠️ இந்தச் செய்தி குறியாக்கப்படவில்லை, எனவே இதை யார் எழுதினார்கள் என்பதை BeanPool உறுதிப்படுத்த முடியாது. இது காட்டப்படவில்லை.",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "செயலியின் பழைய பதிப்பிலிருந்து அனுப்பப்பட்டது: இதை யார் எழுதினார்கள் என்பதை BeanPool உறுதிப்படுத்த முடியாது.",
   "Shown out of the order it was written in.": "எழுதப்பட்ட வரிசைக்கு மாறாகக் காட்டப்படுகிறது.",
   "Moved here from another conversation.": "வேறொரு உரையாடலில் இருந்து இங்கு நகர்த்தப்பட்டது.",
   "From your community's admins. Not a private message: the community's server can read it.": "உங்கள் சமூக நிர்வாகிகளிடமிருந்து. இது தனிப்பட்ட செய்தி அல்ல: சமூகத்தின் சர்வர் இதைப் படிக்க முடியும்.",

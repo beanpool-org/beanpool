@@ -38,7 +38,7 @@ const WHOLE = [
     GROUP_LINE_WAITING_KEY_TEXT,
     GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_STARTED_DM_TEXT, GROUP_CHAT_IS_DM_TEXT,
     DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT,
-    dmLineMarkText('old-app')!, dmLineMarkText('out-of-order')!, dmLineMarkText('moved')!, dmLineMarkText('from-admins')!,
+    dmLineMarkText('out-of-order')!, dmLineMarkText('moved')!, dmLineMarkText('from-admins')!,
     dmQuoteLabel('admins'), dmQuoteLabel('notice'), dmQuoteLabel('nobody'),
     chatImageRefusal({ type: 'text/plain', size: 10 } as File)!, NODE_READABLE_NO_PHOTOS_TEXT,
 ];

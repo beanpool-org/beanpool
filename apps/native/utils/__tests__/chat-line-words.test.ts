@@ -63,7 +63,7 @@ describe('every sentence the key and line code writes is in the table', () => {
 
     it('core dm-crypto.ts: the stand-ins for a DM line, the marks under one, and who a quote is from', () => {
         for (const s of [DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT]) expect(known(s), s).toBe(true);
-        for (const mark of ['old-app', 'out-of-order', 'moved', 'from-admins'] as const) expect(known(dmLineMarkText(mark)!), mark).toBe(true);
+        for (const mark of ['out-of-order', 'moved', 'from-admins'] as const) expect(known(dmLineMarkText(mark)!), mark).toBe(true);
         for (const from of ['admins', 'notice', 'nobody'] as const) expect(known(dmQuoteLabel(from)), from).toBe(true);
     });
 

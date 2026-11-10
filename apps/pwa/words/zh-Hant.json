@@ -4013,7 +4013,6 @@
   "Sending your account to your phone…": "正在把你的帳號傳送到手機…",
   "Sent as a request. {name} will see it under Message requests. You can write more once they accept.": "已作為請求傳送。{name} 會在「訊息請求」中看到它。對方接受後，你可以繼續寫更多。",
   "Sent from an earlier key of {name}'s, replaced {date}.": "由 {name} 先前的金鑰發送（已於 {date} 被取代）。",
-  "Sent from an older version of the app: BeanPool can't confirm who wrote it.": "自舊版應用程式發送：BeanPool 無法確認發送者身分。",
   "Settled between you and the borrower. BeanPool never holds or collects it.": "由你和借用者自行商定。BeanPool 絕不代為保管或收取。",
   "Share your area, or type your town, to see the nearest.": "分享你所在的區域，或輸入你的城鎮，即可查看最近的社群。",
   "Shop": "小店",

@@ -72,7 +72,7 @@ function thread(withListings) {
     for (const [from, words, minutes, post] of rows) {
         const id = `00000000-0000-4000-8000-0000000000${String(minutes)}`;
         const sealed = lockForDm(words, chat, from, { messageId: id, after: lines.at(-1)?.id ?? null });
-        let metadata = sealed.lineSig ? JSON.stringify({ lineSig: sealed.lineSig }) : undefined;
+        let metadata;   // the line's signature is in its own ciphertext (format 4)
         if (withListings && post) {
             metadata = metadataWithAbout(metadata, sealChatAbout(aboutOfPost(post), dmKeyContext(chat, from), { senderPubHex: from.publicKey, messageId: id }));
         }

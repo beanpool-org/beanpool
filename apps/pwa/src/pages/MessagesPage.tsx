@@ -210,12 +210,12 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
 
 /**
  * Lazily fetch + decrypt an encrypted image attachment, then render it. The photo opens only as part of its message:
- * bound to the author and id the node shows the message under, and in the format its words opened in
- * (`bodyFormat`, from the thread check), so no other line's photo, and no old-format picture, can stand in for it.
- * Words that didn't open (`bodyFormat` null) leave the photo locked too.
+ * bound to the author and id the node shows the message under, and signed by that author (format 4), so no other line's
+ * photo, and no picture the other person sealed in the author's name, can stand in for it. Words that didn't open
+ * (`bodyFormat` null, from the thread check) leave the photo locked too.
  */
 function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen }:
-    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 2 | 3 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
+    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 4 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
@@ -225,7 +225,7 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
                 if (!bodyFormat) throw new Error('not verified');
                 const att = await getMessageAttachmentApi(messageId);
                 const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex },
-                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }, [bodyFormat]).text;
+                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }).text;
                 if (active) setUri(dataUri);
             } catch { if (active) setFailed(true); }
         })();
@@ -574,7 +574,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     );
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
-    // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
+    // name that isn't an encrypted line never either, nor one its named sender didn't sign; one the node moved or reordered, marked;
     // the admin page's message shown as the community admins'. Only the node's own notices are left out.
     const lineViews = useMemo(() => {
         if (!activeConv || !isDmThread) return null;
@@ -1334,8 +1334,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Nothing is sent when a DM can't be locked (caught by lineSender). A DM line is sealed to its message id and
             // to the line it was written after.
             const seal: DmLineSeal = { messageId: line.id, after: lineAfter(conv.id).dm, replyToId: line.replyToId };
-            const { ciphertext, nonce, lineSig } = await payloadFor(line.text, conv, seal);
-            let metadata = lineMetadata(line.replyToId ?? undefined, lineSig);
+            const { ciphertext, nonce } = await payloadFor(line.text, conv, seal);
+            let metadata = lineMetadata(line.replyToId ?? undefined);
             if (line.about) {
                 // The listing it is about is sealed as its own part of this line, to the same key and message id, and travels in
                 // the metadata as sealed bytes: the node reads nothing new (core chat-about.ts).
@@ -1549,7 +1549,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     after: lineViews?.get(wasEditing.id)?.after ?? null,
                     replyToId: dmReplyToOf(wasEditing.metadata) ?? null,
                 };
-                const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
+                const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv, line);
 
                 const prevMessages = messages;
                 const nowIso = new Date().toISOString();
@@ -1561,7 +1561,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 } : m));
 
                 try {
-                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce, lineSig);
+                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
                     setEditingMessage(null);
                     setDraft('');
                     setChatRefusal(null);
@@ -1614,12 +1614,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
             await chatSettled(conv.id);
-            // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.
+            // Both sealed to the message's own id, each as its own part, so neither can stand in for the other, and each signed by
+            // me (format 4), so the other person can't put a picture in my name.
             const messageId = newDmMessageId();
             const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
             const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
             const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: lineAfter(conv.id).dm, replyToId });   // caption (often empty) -> message body
-            const metadata = lineMetadata(replyToMessage?.id, encCap.lineSig);
+            const metadata = lineMetadata(replyToMessage?.id);
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             ownLineTaken(activeConv.id);
@@ -1798,8 +1799,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     /**
      * The quote of the message a reply answers, from that message as the thread judged it (core dmQuoteFrom): its words
      * only if they opened, its named author only if the line is theirs, with its mark. In a DM the node can rewrite the
-     * row a verified reply answers while keeping its id (as a notice, the admin page's message, or another old-format
-     * line): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
+     * row a verified reply answers while keeping its id (as a notice, the admin page's message, or a line its named sender
+     * didn't sign): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
      */
     function quoteOf(parent: ApiMessage | undefined): { author: string; text: string; note: string | null; named: boolean } {
         if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null, named: false };
@@ -2872,7 +2873,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         </div>
                                     )}
                                     {(() => {
-                                        // A line the node moved or reordered, or an old-format line (checkDmThread).
+                                        // A line the node moved or reordered (checkDmThread).
                                         const note = chatLineWords(dmLineMarkText(lineView?.mark));
                                         return note ? (
                                             <div data-testid="dm-line-note" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>

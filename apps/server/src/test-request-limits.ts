@@ -37,7 +37,7 @@ import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine, requestsLimitedWords, requestsClearedNotice, requestsClearedTitle, REQUESTS_CLEARED_KIND, setLanguage } from '@beanpool/core';
+import { dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, requestsLimitedWords, requestsClearedNotice, requestsClearedTitle, REQUESTS_CLEARED_KIND, setLanguage } from '@beanpool/core';
 import { REQUESTS_CLEARED_TITLE, requestsClearedBody, notifyRequestsCleared } from './engine/moderation-notices.js';
 import { REQUEST_LIMIT, requestLimitOf, requestReportsReach, wordingOf } from './engine/request-limits.js';
 import { independentCircles } from './engine/auto-moderation.js';
@@ -110,11 +110,11 @@ async function open(a: Id, b: Id): Promise<string> {
     return r.body.conversation.id;
 }
 interface Line { id: string; conversationId: string; ciphertext: string; nonce: string; metadata: string | undefined; text: string }
+/** A line as an app sends one: sealed and signed by its sender, the signature in its column (core sealDmLine, format 4). */
 function sealed(from: Id, to: Id, conversationId: string, text: string): Line {
     const id = newDmMessageId();
     const seal = sealDmLine(text, { myEdPrivHex: from.seedHex, peerEdPubHex: to.pk, conversationId }, { senderPubHex: from.pk, messageId: id });
-    const lineSig = signDmLine(seal, from.seedHex, { conversationId, senderPubHex: from.pk, recipientPubHex: to.pk, messageId: id, at: new Date().toISOString() });
-    return { id, conversationId, ...seal, metadata: JSON.stringify({ lineSig }), text };
+    return { id, conversationId, ...seal, metadata: undefined, text };
 }
 const sent = (from: Id, line: Line) => call('POST', from, '/api/messages/send', { id: line.id, conversationId: line.conversationId, authorPubkey: from.pk, ciphertext: line.ciphertext, nonce: line.nonce, metadata: line.metadata });
 /** `from` writes a request to `to`: their line, signed. */
@@ -125,7 +125,7 @@ async function request(from: Id, to: Id, text: string): Promise<Line> {
     return line;
 }
 const report = (who: Id, l: Line) => call('POST', who, '/api/messages/report', {
-    messageId: l.id, reason: 'Spam', disclosure: dmLineDisclosureFor({ ciphertext: l.ciphertext, nonce: l.nonce, conversationId: l.conversationId, metadata: l.metadata }, l.text),
+    messageId: l.id, reason: 'Spam', disclosure: dmLineDisclosureFor({ ciphertext: l.ciphertext, nonce: l.nonce, conversationId: l.conversationId }, l.text),
 });
 const waitingFor = async (id: Id): Promise<string[]> => ((await call('GET', id, `/api/messages/conversations/${id.pk}`)).body?.requests?.conversations ?? []).map((c: any) => c.id);
 const limited = (id: Id) => requestLimitOf(id.pk) !== null;

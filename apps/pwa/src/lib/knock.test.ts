@@ -5,7 +5,7 @@ import {
 } from './knock';
 import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
-import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
+import { hearNodeVersionForTests, nodeNotReadText, nodeTooOldText, resetNodeVersionGateForTests } from './node-version-gate';
 import { formatDate, KNOCK_ANSWERABLE_DAYS, t } from '@beanpool/core';
 
 const PUB = 'a'.repeat(64);
@@ -240,5 +240,37 @@ describe('the status read and the cancel are signed for the community they name'
         expect(await readKnockStatus(null, IDENTITY)).toMatchObject({ ok: false, kind: 'no_address' });
         expect(await cancelKnock('http://insecure.example.org', IDENTITY)).toMatchObject({ ok: false });
         expect(fetchSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe("a community the version gate refuses: Ask to join, the waiting page and cancel say the gate's own line", () => {
+    const OLD = 'https://s.example.org';
+    beforeEach(() => {
+        localStorage.clear();
+        resetNodeVersionGateForTests();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('a server heard on 1.2.37: nothing is sent, and each says the version line (a refusal, 426)', async () => {
+        hearNodeVersionForTests(OLD, '1.2.37');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+        const line = nodeTooOldText('1.2.37');
+        expect(await knockLib.sendKnock(OLD, IDENTITY, { callsign: 'Ana', message: 'Hello.' })).toEqual({ kind: 'refused', status: 426, code: 'node_too_old', message: line });
+        expect(await readKnockStatus(OLD, IDENTITY)).toEqual({ ok: false, kind: 'refused', status: 426, code: 'node_too_old', message: line });
+        expect(await cancelKnock(OLD, IDENTITY)).toEqual({ ok: false, message: line, status: 426, code: 'node_too_old' });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(line).not.toBe(t(KNOCK_MESSAGES.unreachable));
+    });
+
+    it('a health read that fails the way a browser does (TypeError): only the health read went, and each says the not-read line', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+        const line = nodeNotReadText();
+        expect(await knockLib.sendKnock(OLD, IDENTITY, { callsign: 'Ana', message: 'Hello.' })).toEqual({ kind: 'unreachable', message: line });
+        expect(await readKnockStatus(OLD, IDENTITY)).toEqual({ ok: false, kind: 'unreachable', message: line });
+        expect(await cancelKnock(OLD, IDENTITY)).toEqual({ ok: false, message: line });
+        for (const [url] of fetchSpy.mock.calls) expect(String(url)).toBe('https://s.example.org/api/community/health');
+        expect(line).not.toBe(t(KNOCK_MESSAGES.unreachable));
     });
 });

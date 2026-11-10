@@ -134,7 +134,9 @@ async function main(): Promise<void> {
     grantNodeRole(ora.pk, 'owner', owen.pk);
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: true })).status === 200, 'Ada is on the credit committee');
     require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(jane, owen), amount: 500 })).status === 201, 'Jane is made a voucher with 500');
-    require_(budgetOf(owen.pk).left === 1000 && budgetOf(ada.pk).left === 1000 && budgetOf(ora.pk).left === 1000, 'every owner and admin holds 1,000 by the role');
+    // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada and Dan vouchers.
+    require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201 && (await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: dan.pk })).status === 201, 'Owen makes Ada and Dan, admins, vouchers');
+    require_(budgetOf(owen.pk).left === 1000 && budgetOf(ada.pk).left === 1000 && budgetOf(ora.pk).left === 1000, 'every owner holds 1,000 by the role, and Ada the 1,000 Owen made her');
     const balancesBefore = sumBalances();
 
     // ── 1. The reads ─────────────────────────────────────────────────────────────────────────────────────────────

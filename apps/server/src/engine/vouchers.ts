@@ -4,18 +4,24 @@
  * member's profile, and the credit line (room) a vouch gives.
  *
  * ## Who is a voucher (`vouchers`)
- * - An owner or admin, by role (`source` 'role'): from the day the role is granted (node-roles.ts grantNodeRole, a role a
- *   suspension held aside and gave back) and, for every owner and admin who never had a budget, at boot (actor
- *   `migration:vouchers`: Byron's owners and admins vouch on day one). The budget ends with the role.
+ * - An owner, by role (`source` 'role'): from the day the role is granted (node-roles.ts grantNodeRole, a role a suspension
+ *   held aside and gave back) and, for every owner who never had a budget, at boot (actor `migration:vouchers`). The
+ *   budget ends with the role.
+ * - An admin only when an owner makes them one (Marty, 10 Nov; DESIGN-invites-vouching-review-fable.md §3 ask 1, slice
+ *   I5): from the vouchers block's sheet, with no names-list entry (`source` 'role', actor the owner: the role is the
+ *   owner's vouch for them), or from their confirmed entry. Being made admin gives no budget. An admin's budget, whatever
+ *   its source, is an owner's to make and to stop (Stop vouching from the card); it ends with the role as a role budget
+ *   does. A budget an admin held before this rule stays until an owner stops it: nothing here stops it for them.
  * - A member whose confirmed names-list entry an owner or a credit-committee admin made one (`entry`). It ends on Stop
  *   vouching, a revoked confirmation, or with the account. Making a role voucher one from their entry allocates nothing
  *   and only moves the source to the entry, so losing the role later changes nothing.
  * Being on the list makes nobody a voucher; a moderator isn't one. One budget per member.
  *
- * An owner or admin vouches by the role whatever their budget's source (amend2 §2(b)): while they hold the role, Stop
- * vouching refuses their budget, and a revoked entry or a step-back moves its source back to the role (a `voucher_source`
- * line, entry → role) instead of stopping it, the same left and held. Nobody sets an owner's budget: an owner vouches with
- * no limit (Marty, 9 Nov; OWNER_VOUCH_ACTOR), and what the role gave them waits, whole, for a step down to admin.
+ * An owner vouches by the role whatever their budget's source (amend2 §2(b)): while they hold the role, Stop vouching
+ * refuses their budget. A revoked entry or a step-back moves an owner's or admin's entry budget back to the role (a
+ * `voucher_source` line, entry → role) instead of stopping it, the same left and held. Nobody sets an owner's budget: an
+ * owner vouches with no limit (Marty, 9 Nov; OWNER_VOUCH_ACTOR), and what the role gave them waits, whole, for a step down
+ * to admin, where it is an admin's budget like any other: an owner may stop it.
  * The credit-committee flag is an admin's: any role change that leaves them no admin (made owner included) clears it, logged.
  *
  * ## The budget (`voucher_allocations`, never updated or deleted)
@@ -106,6 +112,8 @@ export const VOUCHER_WORDS = {
     awaitingSecond: word('This confirmation waits for a second admin. Make them a voucher once it is confirmed.'),
     badLevel: word('A budget is 100 to 2,000 Beans, in steps of 100.'),
     notAdmin: word('Only an admin can be put on the credit committee. Every owner is on it already.'),
+    adminOwnerOnly: word('Only an owner makes an admin a voucher or stops an admin’s budget.'),
+    notAdminToMake: word('Only an admin can be made a voucher without a names-list entry. Anyone else needs a confirmed name on the names list.'),
     ownerOnly: word('Only an owner changes this.'),
     badGift: word('A member’s credit-line gift is 0 (off) to 100 Beans.'),
     giftInCoreSettings: word('Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.'),
@@ -124,7 +132,6 @@ const raiseNotAbove = (name: string, total: number) => tr('You’ve vouched {tot
 const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total, max });
 const alreadyVoucher = (name: string) => tr('@{name} is a voucher already.', { name });
 const notVoucher = (name: string) => tr('@{name} isn’t a voucher.', { name });
-const roleVoucher = (name: string) => tr('@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.', { name });
 const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.', { name });
 const ownerNoLimit = (name: string) => tr('@{name} is an owner: owners vouch with no limit, so there is no budget to set.', { name });
 const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held });
@@ -397,9 +404,11 @@ export function tellVoucherNotice(n: VoucherNotice, hooks: VoucherNoticeHooks): 
 
 /**
  * After a member's node role changed (granted, revoked, demoted, dropped by a suspension, a removal or their account
- * deleted, given back after a suspension), inside the change's transaction where there is one: an owner or admin with no
- * live budget gets one (the community's setting, actor who granted it); anyone else loses a budget whose source is the
- * role. The place on the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
+ * deleted, given back after a suspension), inside the change's transaction where there is one: an owner with no live
+ * budget gets one (the community's setting, actor who granted it); an admin keeps what they hold and is given nothing
+ * (an owner makes an admin a voucher by hand: Marty, 10 Nov, slice I5), so an owner stepping down to admin keeps the
+ * budget the role gave them until an owner stops it; anyone else loses a budget whose source is the role. The place on
+ * the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
  * no admin clears it with a `committee` line, a promotion to owner too (an owner is on it by role), so a later demotion
  * back to admin never brings it back unasked. Never throws; nothing on a standby or with Beans off.
  */
@@ -412,10 +421,11 @@ export function vouchingAfterRoleChange(pk: string, actor: string | undefined): 
             const committee = db.prepare('UPDATE members SET credit_committee = 0 WHERE public_key = ? AND credit_committee = 1').run(pk);
             if (committee.changes > 0) logLine(by, 'committee', pk, 'on', 'off');
         }
-        if (role === 'owner' || role === 'admin') {
+        if (role === 'owner') {
             if (!liveVoucher(pk) && getProfileSwitches().beans) startBudget(pk, 'role', null, voucherBudgetSetting(), by);
             return;
         }
+        if (role === 'admin') return;
         const row = voucherRow(pk);
         if (row && !row.stopped_at && row.source === 'role') {
             const status = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
@@ -426,16 +436,16 @@ export function vouchingAfterRoleChange(pk: string, actor: string | undefined): 
 
 /**
  * At boot on a main server with Beans on, the catch-all for a role changed outside grantNodeRole (the shell's claim or
- * recover, which write node_roles on their own connection): every owner and admin whose role acts and who has no LIVE
- * budget gets one, actor `migration:vouchers`; and anyone on the credit committee whose acting role is not admin leaves it,
- * with its `committee` line, as vouchingAfterRoleChange does inside the server. On a node from before vouchers, that is
- * every owner and admin, once; later boots find only the shell's, or none. A stopped budget on a current owner or admin
- * always comes from before the role they hold now (nothing in the server stops one while they hold it), so it is granted.
+ * recover, which write node_roles on their own connection): every owner whose role acts and who has no LIVE budget gets
+ * one, actor `migration:vouchers` (never an admin: an owner makes an admin a voucher by hand, slice I5); and anyone on the
+ * credit committee whose acting role is not admin leaves it, with its `committee` line, as vouchingAfterRoleChange does
+ * inside the server. A stopped budget on a current owner always comes from before the role they hold now (nothing in the
+ * server stops an owner's while they hold it), so it is granted.
  */
 export function grantMissingRoleBudgets(): number {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().beans) return 0;
     const keys = (db.prepare(`SELECT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
-        WHERE nr.role IN ('owner', 'admin') AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey AND v.stopped_at IS NULL)
+        WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey AND v.stopped_at IS NULL)
         ORDER BY nr.granted_at ASC, nr.member_pubkey ASC`).all() as { pk: string }[]).map((r) => r.pk);
     const amount = voucherBudgetSetting();
     const committee = (db.prepare('SELECT public_key AS pk FROM members WHERE credit_committee = 1').all() as { pk: string }[])
@@ -466,37 +476,61 @@ function memberKey(raw: unknown): string {
 }
 
 /**
- * Make a voucher (POST /api/names/vouchers `{ entryId, amount? }`): the member confirmed against the entry, with a budget of
- * `amount` (100 to 2,000 in 100s; the community's setting when left out). A role voucher made one from their entry gets
- * nothing new: their budget's source moves to the entry, so losing the role later leaves it. Never yourself. A new budget
- * is a notice to its voucher, kept in the transaction and told by `tell` after it.
+ * An admin's budget is an owner's to make and to stop (Marty, 10 Nov; slice I5): refused for anyone else. An owner's is
+ * no one's (they vouch by the role); anyone else's, the committee's.
  */
-export function makeVoucher(actor: string, body: { entryId?: unknown; amount?: unknown }, tell?: TellVoucher) {
+function assertMayMakeOrStop(actor: string, pk: string): void {
+    if (heldPrivilegedRole(pk) === 'admin' && !isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.adminOwnerOnly);
+}
+
+/**
+ * Make a voucher (POST /api/names/vouchers): `{ entryId, amount? }`, the member confirmed against the entry; or
+ * `{ memberPubkey, amount? }`, an admin with no names-list entry (an owner only: the role is the owner's vouch for them,
+ * so the budget's source is the role and it ends with it). A budget of `amount` (100 to 2,000 in 100s; the community's
+ * setting when left out). An admin is made a voucher by an owner only, either way (slice I5). A role voucher made one from
+ * their entry gets nothing new: their budget's source moves to the entry, so losing the role later leaves it. Never
+ * yourself. A new budget is a notice to its voucher, kept in the transaction and told by `tell` after it.
+ */
+export function makeVoucher(actor: string, body: { entryId?: unknown; memberPubkey?: unknown; amount?: unknown }, tell?: TellVoucher) {
     assertCommittee(actor);
-    if (typeof body.entryId !== 'string' || !/^[0-9a-f]{32}$/.test(body.entryId)) throw new VoucherError(400, 'bad_entry', 'An entry id is 32 hexadecimal characters.');
-    const conf = db.prepare('SELECT member_pubkey, needs_second, seconded_at FROM confirmations WHERE entry_id = ? AND revoked_at IS NULL')
-        .get(body.entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
-    if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
-    if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
-    const debt = db.prepare("SELECT amount FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount: number } | undefined;
-    if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount));
-    const pk = conf.member_pubkey;
+    if (body.memberPubkey !== undefined && body.entryId !== undefined) throw new VoucherError(400, 'entry_or_member', 'Send an entry id or an admin’s key, not both.');
+    const byRole = body.memberPubkey !== undefined;
+    let pk: string;
+    let entryId: string | null = null;
+    if (byRole) {
+        pk = memberKey(body.memberPubkey);
+        if (!isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.adminOwnerOnly);
+        if (actingRole(pk) !== 'admin') throw new VoucherError(409, 'not_admin', VOUCHER_WORDS.notAdminToMake);
+    } else {
+        if (typeof body.entryId !== 'string' || !/^[0-9a-f]{32}$/.test(body.entryId)) throw new VoucherError(400, 'bad_entry', 'An entry id is 32 hexadecimal characters.');
+        entryId = body.entryId;
+        const conf = db.prepare('SELECT member_pubkey, needs_second, seconded_at FROM confirmations WHERE entry_id = ? AND revoked_at IS NULL')
+            .get(entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
+        if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+        if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
+        const debt = db.prepare("SELECT amount FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(entryId) as { amount: number } | undefined;
+        if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount));
+        pk = conf.member_pubkey;
+    }
     const m = getMember(db, pk);
-    if (!m || m.status !== 'active' || isVisitorKey(db, pk) || m.isTreasury) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+    if (!m || m.status !== 'active' || isVisitorKey(db, pk) || m.isTreasury) {
+        throw byRole ? new VoucherError(409, 'not_admin', VOUCHER_WORDS.notAdminToMake) : new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+    }
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
+    assertMayMakeOrStop(actor, pk);
     const amount = body.amount === undefined ? voucherBudgetSetting() : body.amount;
     if (!isBudgetLevel(amount)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
     const live = liveVoucher(pk);
-    if (live?.source === 'entry') throw new VoucherError(409, 'already_voucher', alreadyVoucher(m.callsign));
+    if (live && (byRole || live.source === 'entry')) throw new VoucherError(409, 'already_voucher', alreadyVoucher(m.callsign));
     const notice = db.transaction((): VoucherNotice | undefined => {
         returnLapsedHolds(pk);
         if (live) {
-            db.prepare("UPDATE vouchers SET source = 'entry', entry_id = ?, made_by = ?, made_at = ? WHERE member_pubkey = ?").run(body.entryId, actor, now(), pk);
+            db.prepare("UPDATE vouchers SET source = 'entry', entry_id = ?, made_by = ?, made_at = ? WHERE member_pubkey = ?").run(entryId, actor, now(), pk);
             logLine(actor, 'voucher_made', pk, 'role', 'entry');
             return undefined;
         }
-        logLine(actor, 'voucher_made', pk, null, 'entry');
-        startBudget(pk, 'entry', body.entryId as string, amount, actor);
+        logLine(actor, 'voucher_made', pk, null, byRole ? 'role' : 'entry');
+        startBudget(pk, byRole ? 'role' : 'entry', entryId, amount, actor);
         return keepVoucherNotice(pk, 'made', noticeMade(amount), amount);
     })();
     if (notice) tell?.(notice);
@@ -510,19 +544,30 @@ function openBudgetRow(pk: string): VoucherRow | undefined {
 }
 
 /**
- * Stop vouching (DELETE /api/names/vouchers/:member): a list budget only. A role budget ends with the role, and an owner
- * or admin (their role held, or held aside by a suspension) vouches by it whatever the budget's source, so theirs is
- * refused too: one made a voucher from their entry keeps vouching while they hold the role (amend2 §2(b)). A notice to them.
+ * Whether `viewer` may stop `pk`'s budget now (the card's `canStop`, stopVoucher's own rule): an open budget, not their
+ * own, the viewer on the committee; never an owner's (they vouch by the role, with no limit: amend2 §2(b)); an admin's by
+ * an owner only (slice I5), whatever its source, a budget the role gave them before that rule included.
+ */
+function mayStop(viewer: string, pk: string): boolean {
+    if (!viewer || viewer === pk || !isOnCreditCommittee(viewer) || !openBudgetRow(pk)) return false;
+    const held = heldPrivilegedRole(pk);
+    return held === 'owner' ? false : held === 'admin' ? isNodeOwner(viewer) : true;
+}
+
+/**
+ * Stop vouching (DELETE /api/names/vouchers/:member): every open hold back (the codes stay valid and carry nothing), one
+ * `stop` line, the row stopped; room already given stays given. An owner's budget is refused (409 `role_voucher`): they
+ * vouch by the role. An admin's is an owner's to stop (403 `owner_only` for a committee admin), whatever its source: a
+ * budget the role gave an admin before slice I5 stays until an owner stops it here. A member's, the committee's. A notice
+ * to them.
  */
 export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) {
     assertCommittee(actor);
     const pk = memberKey(member);
     const live = openBudgetRow(pk);
     if (!live) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
-    const held = heldPrivilegedRole(pk);
-    if (live.source === 'role' || held) {
-        throw new VoucherError(409, 'role_voucher', held === 'owner' ? ownerVoucher(callsignOf(pk)) : roleVoucher(callsignOf(pk)));
-    }
+    if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'role_voucher', ownerVoucher(callsignOf(pk)));
+    assertMayMakeOrStop(actor, pk);
     const notice = db.transaction(() => {
         stopBudget(pk, actor, 'stopped');
         return keepVoucherNotice(pk, 'stopped', VOUCHER_WORDS.noticeStopped, 0);
@@ -1037,19 +1082,51 @@ export function waitingToJoin(at = Date.now()): WaitingVoucher[] {
     return out;
 }
 
+/** Someone "+ Make someone a voucher" offers (slice I5): who, and the entry they are confirmed against when it is that section. */
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
+
+/**
+ * Whom "+ Make someone a voucher" offers `viewer` (slice I5, DESIGN-invites-vouching-review-fable.md §3 ask 1), and nobody
+ * else: `admins`, every admin whose role acts, with no live budget (an owner's to make, so empty for a committee admin,
+ * and `adminsOffered` says which: true for an owner, whose empty `admins` means every admin is a voucher already);
+ * `confirmed`, every member confirmed on the names list (seconded where two admins confirm) whom makeVoucher's entry path
+ * takes: active, no live budget, no open debt on the entry, never an owner or admin (an admin is in `admins`, and an owner
+ * vouches by the role). Never the viewer. By callsign: the names are sealed in the list, so the phone opens them by entry id.
+ */
+function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean } {
+    const noBudget = (col: string) => `NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = ${col} AND v.stopped_at IS NULL)`;
+    const adminsOffered = isNodeOwner(viewer);
+    const admins = adminsOffered
+        ? db.prepare(`SELECT nr.member_pubkey AS memberPubkey, m.callsign AS callsign FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+            WHERE nr.role = 'admin' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ? AND ${noBudget('nr.member_pubkey')}
+            ORDER BY m.callsign COLLATE NOCASE ASC, nr.member_pubkey ASC`).all(viewer) as VoucherCandidate[]
+        : [];
+    const confirmed = (db.prepare(`SELECT c.member_pubkey AS memberPubkey, m.callsign AS callsign, c.entry_id AS entryId FROM confirmations c
+            JOIN members m ON m.public_key = c.member_pubkey
+            WHERE c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL) AND m.status = 'active' AND m.is_visitor = 0
+              AND c.member_pubkey != ? AND ${noBudget('c.member_pubkey')}
+              AND NOT EXISTS (SELECT 1 FROM node_roles nr WHERE nr.member_pubkey = c.member_pubkey AND nr.role IN ('owner', 'admin'))
+              AND NOT EXISTS (SELECT 1 FROM names_debts d WHERE d.entry_id = c.entry_id AND d.status = 'open')
+            ORDER BY m.callsign COLLATE NOCASE ASC, c.member_pubkey ASC`).all(viewer) as VoucherCandidate[])
+        .filter((c) => !getMember(db, c.memberPubkey)?.isTreasury);
+    return { admins, confirmed, adminsOffered };
+}
+
 /**
  * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, owners
- * first (they vouch by role, with no limit: "Owners · no limit") and then by callsign, and `waiting`: the promised budgets
- * of invites not used yet. The names list orders entries by the names its admins' phones open, which this server never
- * reads: each row carries its entry id, and the phone puts the block in the list's own order.
+ * first (they vouch by role, with no limit: "Owners · no limit") and then by callsign, `waiting`: the promised budgets of
+ * invites not used yet, and `candidates`: whom "+ Make someone a voucher" offers this viewer (voucherCandidates). The
+ * names list orders entries by the names its admins' phones open, which this server never reads: each row carries its
+ * entry id, and the phone puts the block in the list's own order.
  */
-export function vouchersBlock() {
+export function vouchersBlock(viewer: string) {
     const keys = db.prepare(`SELECT v.member_pubkey AS pk FROM vouchers v JOIN members m ON m.public_key = v.member_pubkey
         WHERE v.stopped_at IS NULL AND m.status = 'active' AND m.is_visitor = 0 ORDER BY m.callsign COLLATE NOCASE ASC, v.member_pubkey ASC`).all() as { pk: string }[];
     const vouchers = keys.map((k) => voucherSummary(k.pk));
     return {
         vouchers: [...vouchers.filter((v) => v.noLimit), ...vouchers.filter((v) => !v.noLimit)],
         waiting: waitingToJoin(),
+        candidates: voucherCandidates(viewer),
         settings: voucherSettings(),
     };
 }
@@ -1057,7 +1134,7 @@ export function vouchersBlock() {
 /**
  * The button a profile shows an owner or admin, following the person's state (invites-vouching I4, DESIGN §3 ask 2):
  *   add       not on the names list (no live confirmation): "Add to the names list", the one-step add-and-confirm form
- *   make      confirmed, and the viewer is on the credit committee: "Make a voucher"
+ *   make      confirmed, and the viewer is on the credit committee (an owner, for an admin: slice I5): "Make a voucher"
  *   voucher   a voucher now: "Voucher · 400 left ›" (an owner: no limit), opening the card
  * A plain admin (off the committee) gets Add and the voucher card but never Make; a confirmation still waiting for its
  * second admin offers nothing. Null for anyone who is not an owner or admin, for their own profile, where a community keeps
@@ -1081,6 +1158,8 @@ export function profileVoucherButton(viewer: string | null | undefined, target: 
         .get(target) as { needs_second: number; seconded_at: string | null } | undefined;
     if (!conf) return { state: 'add' };
     if (conf.needs_second && !conf.seconded_at) return null;
+    // An admin is made a voucher by an owner only (slice I5): a committee admin gets no Make for another admin.
+    if (heldPrivilegedRole(target) === 'admin' && !isNodeOwner(viewer)) return null;
     return isOnCreditCommittee(viewer) ? { state: 'make' } : null;
 }
 
@@ -1161,7 +1240,8 @@ export function voucherCard(pk: string) {
 
 /**
  * The card for an owner or admin (owners and admins read it: §3, §5), a look logged in the known floor's log, which every
- * owner and admin reads, once per viewer and voucher a day. `canChange`: whether this viewer makes, stops and sets budgets.
+ * owner and admin reads, once per viewer and voucher a day. `canChange`: whether this viewer sets budgets; `canStop`: whether
+ * they may stop this one now (never an owner's; an admin's by an owner only).
  */
 export function readVoucherCard(viewer: string, member: unknown) {
     const pk = memberKey(member);
@@ -1172,7 +1252,7 @@ export function readVoucherCard(viewer: string, member: unknown) {
     if (!db.prepare("SELECT 1 FROM known_floor_log WHERE actor_pubkey = ? AND action = 'voucher_looked' AND member_pubkey = ? AND at > ?").get(viewer, pk, since)) {
         logLine(viewer, 'voucher_looked', pk, null, null);
     }
-    return { ...voucherCard(pk), canChange: isOnCreditCommittee(viewer) && viewer !== pk };
+    return { ...voucherCard(pk), canChange: isOnCreditCommittee(viewer) && viewer !== pk, canStop: mayStop(viewer, pk) };
 }
 
 /**

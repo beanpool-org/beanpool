@@ -3,7 +3,8 @@
  * decisions §9 to §11). Through the real HTTPS stack and its signature middleware for every route and refusal; in this
  * process for the property test and the thousand vouches.
  *
- *  1. Role budgets: an owner and an admin hold 1,000 by role from the grant, with no entry; a member holds none.
+ *  1. Role budgets: an owner holds 1,000 by role from the grant, with no entry; a new admin holds none until an owner makes
+ *     them a voucher with no names-list entry (invites-vouching I5: source the role, the grant the owner's); a member none.
  *  2. The vouchers block is the committee's; an owner puts an admin on it.
  *  3. Making a voucher from a confirmed entry: 150 and 2,100 refused, 500 made; unconfirmed, waiting, self refused; a role
  *     voucher made one from their entry gets nothing new.
@@ -14,11 +15,13 @@
  *     total or past 100 refused; a fourth voucher refused;
  *     a member below zero refused; an invite's vouch is that pair's one vouch; the credit line it gives (one offer).
  *  7. A demoted admin's held code redeems with no vouch and the sentence; the committee flag clears with the role.
- *  8. A revoked confirmation stops a list budget; a held code comes back at expiry, a redeemed one never.
+ *  8. A revoked confirmation stops a list budget; a held code comes back at expiry, a redeemed one never. A budget the role
+ *     gave an admin before I5 stays until an owner stops it by hand from the card: a committee admin can't; the owner's
+ *     stop returns its holds and writes one stop line, its code still lets its person in with no vouch; no Bean moves.
  *  9. Both departure paths: the Commons pays exactly as before (memo, amount) and the room is stamped written off.
  * 10. The password session is refused on every writer; Beans off (before any Bean moves) refuses every writer (an ask's and
  *     a knock's answer with a vouch included) and writes no role budget.
- * 11. The boot's grant (migration:vouchers) to an owner or admin who never had a budget, once.
+ * 11. The boot gives an admin made outside grantNodeRole no budget (I5); an owner the shell made gets one (11b), once.
  * 12. Property test: across random sequences no voucher's lines sum below zero and left + held never passes 2,000.
  * 13. A thousand vouches: the ledger audit sums to zero, and no Bean moved.
  * 14. A standby's copy carries the three tables.
@@ -35,9 +38,14 @@
  *     committee, to a committee admin and to an owner, the block, a set-to's and a stop's answers, the voucher's own read.
  *     Each history line says what it was for instead: held for an invite, vouched on whom, back (expired, stopped).
  * 20. An owner's or admin's budget made from their entry falls back to the role on a step-back or a revoke (same left and
- *     held, one log line); Stop vouching refuses an owner's or admin's whatever its source; nobody sets an owner's (no limit).
+ *     held, one log line); a committee admin can't make an admin a voucher from their entry, an owner can (I5); Stop vouching
+ *     refuses an owner's whatever its source; nobody sets an owner's (no limit).
  * 21. The committee flag clears when an admin is made owner, logged, and stays off when they are made admin again.
  * 22. The card's Trading line: per person, completed trades with someone outside the voucher's own, only inside, or none.
+ * 23. I5, "+ Make someone a voucher": the block's candidates offer an owner the admins with no budget and the members
+ *     confirmed on the names list, and nobody else (no voucher, no owner, no one unconfirmed or waiting for a second admin,
+ *     never the viewer); a committee admin is offered no admins. Making an admin one is an owner's: a committee admin's ask
+ *     is refused, a member is no admin, an entry and a key together are refused, and not twice.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -196,8 +204,17 @@ async function main(): Promise<void> {
     const owenLines = lines(owen.pk);
     assert(owenLines.length === 1 && owenLines[0].kind === 'grant' && owenLines[0].amount === 1000 && owenLines[0].actor === 'owner:password',
         `1. the owner holds a budget of 1,000 by role from the grant, its actor the granting owner (${JSON.stringify(owenLines)})`);
-    assert(budgetOf(ada.pk).left === 1000 && (db.prepare('SELECT source, entry_id FROM vouchers WHERE member_pubkey = ?').get(ada.pk) as any)?.source === 'role',
-        '1. an admin holds 1,000 by role too, with no entry');
+    const roleRow = (pk: string) => db.prepare('SELECT source, entry_id, made_by FROM vouchers WHERE member_pubkey = ?').get(pk) as { source: string; entry_id: string | null; made_by: string } | undefined;
+    assert(!roleRow(ada.pk) && !roleRow(dan.pk) && lines(ada.pk).length === 0 && lines(dan.pk).length === 0,
+        '1. a new admin holds no budget: an owner makes an admin a voucher by hand (Marty, 10 Nov; I5)');
+    // I5: Owen makes Ada and Dan vouchers with no names-list entry: the role is his vouch for them, so its source is the role.
+    const adaMade = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk });
+    const danMade = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: dan.pk, amount: 1000 });
+    const adaGrant = lines(ada.pk);
+    assert(adaMade.status === 201 && danMade.status === 201 && adaMade.body?.source === 'role' && adaMade.body?.entryId === null && adaMade.body?.left === 1000
+        && roleRow(ada.pk)?.made_by === owen.pk && adaGrant.length === 1 && adaGrant[0].kind === 'grant' && adaGrant[0].amount === 1000 && adaGrant[0].actor === owen.pk
+        && count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'voucher_made' AND member_pubkey = ? AND actor_pubkey = ? AND new_value = 'role'", ada.pk, owen.pk) === 1,
+        `1. an owner makes an admin a voucher with no names-list entry: the community's 1,000, source the role, the grant and the log line his (${show(adaMade)})`);
     const melMe = await call(mel, 'GET', '/api/vouchers/me');
     const owenMe = await call(owen, 'GET', '/api/vouchers/me');
     assert(melMe.status === 200 && melMe.body?.voucher === false && owenMe.body?.voucher === true && owenMe.body?.budget?.left === 1000
@@ -222,6 +239,48 @@ async function main(): Promise<void> {
         `2. an owner puts Ada on the committee, and she reads the block: Owen vouches with no limit (Marty, 9 Nov), his 100 vouched drawn from no budget (${show(adaBlock2)})`);
     const adaPutsDan = await call(ada, 'POST', '/api/names/committee', { memberPubkey: dan.pk, on: true });
     assert(adaPutsDan.status === 403 && adaPutsDan.body?.code === 'owner_only', `2. only an owner puts admins on the committee (${show(adaPutsDan)})`);
+
+    // ── 23. I5: "+ Make someone a voucher" offers admins and confirmed names, and nobody else ───────────────────────────
+    // People join on invites the engine makes here: Owen's HTTP invites are counted against the owners' daily limit (see 15).
+    const enterNow = (who: Id) => {
+        const inv = generateInvite(owen.pk)!;
+        require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
+    };
+    const [ike, liz, wyn] = [newId('Ike'), newId('Liz'), newId('Wyn')];
+    for (const who of [ike, liz, wyn]) enterNow(who);
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ike.pk, role: 'admin' }, PASSWORD())).status === 200 && !roleRow(ike.pk), 'Ike is made an admin, with no budget');
+    const lizEntry = confirm(liz, owen);
+    confirm(wyn, owen, true);
+    const sheetOf = async (who: Id) => {
+        const b = await call(who, 'GET', '/api/names/vouchers');
+        const c = b.body?.candidates;
+        return { status: b.status, admins: (c?.admins ?? []).map((x: any) => x.memberPubkey), confirmed: (c?.confirmed ?? []).map((x: any) => `${x.memberPubkey}:${x.entryId}`), adminsOffered: c?.adminsOffered, raw: c };
+    };
+    const owenSheet = await sheetOf(owen);
+    const adaSheet = await sheetOf(ada);
+    assert(owenSheet.status === 200 && JSON.stringify(owenSheet.admins) === JSON.stringify([ike.pk]) && JSON.stringify(owenSheet.confirmed) === JSON.stringify([`${liz.pk}:${lizEntry}`])
+        && owenSheet.raw?.admins?.[0]?.callsign === 'Ike' && owenSheet.raw?.confirmed?.[0]?.callsign === 'Liz',
+        `23. an owner's sheet offers Ike (an admin with no budget) and Liz (confirmed on the list), and nobody else: no voucher, no owner, not Mel (unconfirmed), not Wyn (waiting for a second admin) (${JSON.stringify(owenSheet.raw)})`);
+    assert(adaSheet.status === 200 && adaSheet.admins.length === 0 && JSON.stringify(adaSheet.confirmed) === JSON.stringify([`${liz.pk}:${lizEntry}`]),
+        `23. a committee admin's sheet offers no admins (an owner's to make) and the same confirmed names (${JSON.stringify(adaSheet.raw)})`);
+    assert(owenSheet.adminsOffered === true && adaSheet.adminsOffered === false,
+        `23. the sheet says whether admins are offered at all, so an empty admins list is read right: an owner true, a committee admin false (${JSON.stringify(owenSheet.raw?.adminsOffered)} | ${JSON.stringify(adaSheet.raw?.adminsOffered)})`);
+    const before23 = allLines();
+    const adaMakesIke = await call(ada, 'POST', '/api/names/vouchers', { memberPubkey: ike.pk });
+    const owenMakesMel = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: mel.pk });
+    const both = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ike.pk, entryId: lizEntry });
+    assert(adaMakesIke.status === 403 && adaMakesIke.body?.code === 'owner_only' && adaMakesIke.body?.error === VOUCHER_WORDS.adminOwnerOnly
+        && owenMakesMel.status === 409 && owenMakesMel.body?.code === 'not_admin' && owenMakesMel.body?.error === VOUCHER_WORDS.notAdminToMake
+        && both.status === 400 && both.body?.code === 'entry_or_member' && allLines() === before23 && !roleRow(ike.pk) && !roleRow(mel.pk),
+        `23. a committee admin can't make an admin a voucher, a member is made one only from the list, an entry and a key together are refused, nothing written (${show(adaMakesIke)} | ${show(owenMakesMel)} | ${show(both)})`);
+    const ikeMade = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ike.pk, amount: 300 });
+    const ikeAgain = await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ike.pk });
+    const lizMade = await call(owen, 'POST', '/api/names/vouchers', { entryId: owenSheet.raw?.confirmed?.[0]?.entryId, amount: 400 });
+    const owenSheet2 = await sheetOf(owen);
+    assert(ikeMade.status === 201 && ikeMade.body?.left === 300 && ikeMade.body?.source === 'role' && ikeAgain.status === 409 && ikeAgain.body?.code === 'already_voucher'
+        && lizMade.status === 201 && lizMade.body?.source === 'entry' && lizMade.body?.left === 400
+        && owenSheet2.admins.length === 0 && owenSheet2.confirmed.length === 0 && owenSheet2.adminsOffered === true,
+        `23. Owen makes Ike a voucher with 300 (not twice) and Liz from the entry the sheet named with 400, and the sheet offers neither any more (${show(ikeMade)} | ${show(ikeAgain)} | ${show(lizMade)})`);
 
     // ── 10a. Beans off, before any Bean moves (a node whose ledger moved keeps Beans on: node-profile lockToLedger) ────
     const janeEntryOff = confirm(jane, owen);
@@ -282,7 +341,7 @@ async function main(): Promise<void> {
     const adaLinesBefore = lines(ada.pk).length;
     const flip = await call(owen, 'POST', '/api/names/vouchers', { entryId: adaEntry, amount: 500 });
     assert(flip.status === 201 && flip.body?.source === 'entry' && flip.body?.left === 1000 && lines(ada.pk).length === adaLinesBefore,
-        `3. a role voucher made one from her entry gets nothing new: the source moves to the entry (${show(flip)})`);
+        `3. a role voucher (Ada, made one by Owen in 1) made one from her entry gets nothing new: the source moves to the entry (${show(flip)})`);
     const logMade = count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'voucher_made' AND member_pubkey = ?", jane.pk);
     assert(logMade === 1, '3. the appointment is a line in the known floor’s log');
 
@@ -422,17 +481,53 @@ async function main(): Promise<void> {
     require_((await call(owen, 'POST', `/api/names/confirmations/${beaConf.id}/revoke`, {})).status === 200, 'Bea’s confirmation is revoked');
     assert((db.prepare('SELECT stop_reason FROM vouchers WHERE member_pubkey = ?').get(bea.pk) as any)?.stop_reason === 'revoked' && sumLines(bea.pk) === 0,
         '8. a revoked confirmation stops a list budget');
-    // Round 2 (deciding review finding 2(c)): this asserted that Stop vouching stops Ada's budget once it was moved to her
-    // entry, while she is still an admin. That left an admin with no budget, and was the way past the role's refusal: an
-    // owner or admin vouches by the role whatever the source (amend2 §2(b)), so both are refused now. Stop vouching still
-    // stops a member's list budget (Nia's in 7, Jen's in 18).
-    const adaBefore8 = budgetOf(ada.pk);
-    const roleStop = await call(owen, 'DELETE', `/api/names/vouchers/${ada.pk}`);
+    // An owner vouches by the role whatever the source (amend2 §2(b)): Stop vouching refuses theirs. An admin's budget is an
+    // owner's to stop since I5 (Marty, 10 Nov), whatever its source: see the next lines.
     const ownerStop = await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`);
-    const adaRow8 = db.prepare('SELECT source, stopped_at FROM vouchers WHERE member_pubkey = ?').get(ada.pk) as { source: string; stopped_at: string | null };
-    assert(roleStop.status === 409 && roleStop.body?.code === 'role_voucher' && ownerStop.status === 409 && ownerStop.body?.code === 'role_voucher'
-        && adaRow8.stopped_at === null && adaRow8.source === 'entry' && budgetOf(ada.pk).left === adaBefore8.left,
-        `8. Stop vouching refuses an admin's budget moved to her entry (Ada's) and an owner's by role, nothing stopped (${roleStop.status} ${roleStop.body?.code} | ${ownerStop.status} ${ownerStop.body?.code})`);
+    const owenRow8 = db.prepare('SELECT stopped_at FROM vouchers WHERE member_pubkey = ?').get(owen.pk) as { stopped_at: string | null };
+    assert(ownerStop.status === 409 && ownerStop.body?.code === 'role_voucher' && owenRow8.stopped_at === null,
+        `8. Stop vouching refuses an owner's budget, nothing stopped (${ownerStop.status} ${ownerStop.body?.code})`);
+    // I5, no conversion code: a budget the role gave an admin before the rule (as the boot's migration:vouchers grant wrote
+    // Byron's) stays until an owner stops it by hand. Ed holds one, written here as that grant wrote it, with 50 held.
+    const ed = newId('Ed');
+    enterNow(ed);
+    grantNodeRole(ed.pk, 'admin', owen.pk);
+    require_(!roleRow(ed.pk), 'Ed, made an admin, is given no budget');
+    const edAt = new Date().toISOString();
+    db.prepare("INSERT INTO vouchers (member_pubkey, source, entry_id, made_by, made_at) VALUES (?, 'role', NULL, ?, ?)").run(ed.pk, VOUCHERS_MIGRATION_ACTOR, edAt);
+    db.prepare("INSERT INTO voucher_allocations (id, member_pubkey, kind, amount, actor, ref, at) VALUES (?, ?, 'grant', 1000, ?, NULL, ?)").run(crypto.randomBytes(16).toString('hex'), ed.pk, VOUCHERS_MIGRATION_ACTOR, edAt);
+    const edHeld = await generate(ed, 50);
+    require_(edHeld.status === 200 && budgetOf(ed.pk).left === 950 && budgetOf(ed.pk).held === 50, `Ed, an admin with a budget from before I5, holds 50 on an invite (${show(edHeld)})`);
+    const edCardByAda = await call(ada, 'GET', `/api/names/vouchers/${ed.pk}`);
+    const edCardByOwen = await call(owen, 'GET', `/api/names/vouchers/${ed.pk}`);
+    const owenCardByAda = await call(ada, 'GET', `/api/names/vouchers/${owen.pk}`);
+    const lizCardByAda = await call(ada, 'GET', `/api/names/vouchers/${liz.pk}`);
+    assert(edCardByAda.body?.canStop === false && edCardByOwen.body?.canStop === true && owenCardByAda.body?.canStop === false && lizCardByAda.body?.canStop === true,
+        `8. the card says who may stop: an admin's budget an owner only, an owner's nobody, a member's the committee (${[edCardByAda, edCardByOwen, owenCardByAda, lizCardByAda].map((r) => r.body?.canStop).join(' ')})`);
+    const linesBeforeEdStop = allLines();
+    const adaStopsEd = await call(ada, 'DELETE', `/api/names/vouchers/${ed.pk}`);
+    assert(adaStopsEd.status === 403 && adaStopsEd.body?.code === 'owner_only' && adaStopsEd.body?.error === VOUCHER_WORDS.adminOwnerOnly
+        && allLines() === linesBeforeEdStop && roleRow(ed.pk) && budgetOf(ed.pk).left === 950,
+        `8. a committee admin can't stop an admin's budget, nothing written (${show(adaStopsEd)})`);
+    const balancesBeforeEdStop = sumBalances();
+    const edLinesBefore = lines(ed.pk).length;
+    const owenStopsEd = await call(owen, 'DELETE', `/api/names/vouchers/${ed.pk}`);
+    const edNew = lines(ed.pk).slice(edLinesBefore);
+    const edRow = db.prepare('SELECT stopped_at, stopped_by, stop_reason FROM vouchers WHERE member_pubkey = ?').get(ed.pk) as { stopped_at: string | null; stopped_by: string; stop_reason: string };
+    const edStopAudit = runLedgerAudit();
+    assert(owenStopsEd.status === 200 && JSON.stringify(edNew.map((l) => [l.kind, l.amount, l.actor, l.ref]))
+            === JSON.stringify([['return', 50, owen.pk, edHeld.body?.invite?.code], ['stop', -1000, owen.pk, null]])
+        && sumLines(ed.pk) === 0 && edRow.stopped_at !== null && edRow.stopped_by === owen.pk && edRow.stop_reason === 'stopped'
+        && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'stop'", ed.pk) === 1
+        && count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'voucher_stopped' AND member_pubkey = ? AND actor_pubkey = ?", ed.pk, owen.pk) === 1
+        && sumBalances() === balancesBeforeEdStop && edStopAudit.ok && Math.abs(edStopAudit.sumBalances) < 0.01,
+        `8. an owner stops an admin's budget from before I5 by hand: its 50 held comes back, then one stop line for the 1,000 left (950 and the 50), the row stopped, no Bean moved and the audit sums to zero (${JSON.stringify(edNew)})`);
+    const edsJoiner = newId('Edna');
+    const edsJoinerJoins = await redeem(edsJoiner, edHeld.body?.invite?.code);
+    const edAfter = await generate(ed, 25);
+    assert(edsJoinerJoins.status === 200 && edsJoinerJoins.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded && roomOf(edsJoiner.pk) === 0
+        && edAfter.status === 403 && edAfter.body?.code === 'not_a_voucher',
+        `8. the code Ed gave out still lets its person in, with no vouch, and Ed vouches no more (${show(edsJoinerJoins)} | ${show(edAfter)})`);
     const janeHeldBefore = budgetOf(jane.pk);
     const heldCode = h100a.body?.invite?.code as string;
     db.prepare("UPDATE invite_codes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-31 days') WHERE code = ?").run(heldCode);
@@ -513,14 +608,11 @@ async function main(): Promise<void> {
     assert(cardAdmin.status === 200 && cardAdmin.body?.memberPubkey === owen.pk && cardAdmin.body?.left === budgetOf(owen.pk).left,
         `10. /api/local/admin/known-floor/vouchers/member/:pubkey returns voucher card (${show(cardAdmin)})`);
 
-    // ── 11. The boot's grant to an owner or admin who never had a budget ──────────────────────────────────────
+    // ── 11. The boot's grant: to an owner who never had a budget, never to an admin (I5) ─────────────────────────────
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(kai.pk);
     const granted = grantMissingRoleBudgets();
-    const kaiLines = lines(kai.pk);
-    assert(granted === 2 && kaiLines.length === 1 && kaiLines[0].amount === 1000 && kaiLines[0].actor === VOUCHERS_MIGRATION_ACTOR
-        && lines(lou.pk).length === 1 && lines(lou.pk)[0].actor === VOUCHERS_MIGRATION_ACTOR,
-        `11. at boot an admin made outside grantNodeRole gets 1,000, actor migration:vouchers, and so does one made while Beans were off (${granted}: ${JSON.stringify(kaiLines)})`);
-    assert(grantMissingRoleBudgets() === 0, '11. once: the next boot grants nothing');
+    assert(granted === 0 && lines(kai.pk).length === 0 && lines(lou.pk).length === 0 && !roleRow(kai.pk) && !roleRow(lou.pk),
+        `11. at boot an admin made outside grantNodeRole, and one made while Beans were off, get no budget: an owner makes an admin a voucher (I5) (${granted})`);
 
     // ── 11b. A role the server's shell changed (beanpool recover / claim write node_roles on their own connection) ──
     const committeeOf = (pk: string) => (db.prepare('SELECT credit_committee AS c FROM members WHERE public_key = ?').get(pk) as { c: number | null }).c;
@@ -648,18 +740,18 @@ async function main(): Promise<void> {
 
     // ── 15. The ask's answer and the knock's answer carry a vouch (the design §2's four places; amend2 §4) ─────────
     // Owen's HTTP invites above reached the owners' daily invite limit: from here people join on invites the engine makes
-    // (as §12 and §13 do), and Lou, an admin with the 1,000 the boot gave him, answers through the routes.
+    // (as §12 and §13 do), and Lou, an admin Owen makes a voucher with the community's 1,000 (I5), answers through the routes.
     const enter = (who: Id) => {
         const inv = generateInvite(owen.pk)!;
         require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
     };
+    makeVoucher(owen.pk, { memberPubkey: lou.pk });
     require_(budgetOf(lou.pk).left === 1000, `Lou, an admin, holds 1,000 (${JSON.stringify(budgetOf(lou.pk))})`);
-    // An admin with no budget: one the shell made outside grantNodeRole, before the next boot's grant (§11). (Ada's budget
-    // was the one here before round 2; an admin's is never stopped while they hold the role now: see 8 and 20.)
+    // An admin with no budget: one no owner made a voucher (the shell's here, outside grantNodeRole; §11, I5).
     const ned = newId('Ned');
     enter(ned);
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(ned.pk);
-    require_(!db.prepare('SELECT 1 FROM vouchers WHERE member_pubkey = ?').get(ned.pk), 'Ned, an admin the shell made, has no budget yet');
+    require_(!db.prepare('SELECT 1 FROM vouchers WHERE member_pubkey = ?').get(ned.pk), 'Ned, an admin the shell made, has no budget');
     const doorBefore = getDoor();
     setDoor('admins');
     const asked = await call(mel, 'POST', '/api/invite/asks', { firstName: 'Ivy', howKnown: 'Ivy keeps the stall by the station' });
@@ -857,15 +949,19 @@ async function main(): Promise<void> {
         `19. the code Wren gave out before the stop still lets its person in, with no vouch (${stoppedStill.status})`);
 
     // ── 20. An owner's or admin's budget from their entry (deciding review round 2, finding 2) ─────────────────────────
-    // (a) Abe, an admin, is made a voucher from his entry (his budget's source moves to it), then steps back from it: he
-    // keeps the budget, by the role.
+    // (a) Abe, an admin, is made a voucher from his entry by an owner (I5: never by a committee admin), then steps back from
+    // it: he keeps the budget, by the role.
     const rowOf = (pk: string) => db.prepare('SELECT source, entry_id, stopped_at FROM vouchers WHERE member_pubkey = ?').get(pk) as { source: string; entry_id: string | null; stopped_at: string | null };
     const sourceLines = (pk: string) => db.prepare("SELECT actor_pubkey AS actor, old_value AS old, new_value AS new FROM known_floor_log WHERE action = 'voucher_source' AND member_pubkey = ?").all(pk) as { actor: string; old: string; new: string }[];
     const abe = newId('Abe');
     enter(abe);
     grantNodeRole(abe.pk, 'admin', owen.pk);
-    const abeFlip = await call(ada, 'POST', '/api/names/vouchers', { entryId: confirm(abe, owen) });
-    require_(abeFlip.status === 201 && rowOf(abe.pk).source === 'entry' && budgetOf(abe.pk).left === 1000, `Abe, an admin, is made a voucher from his entry: the source moves, nothing new (${abeFlip.status})`);
+    const abeEntry = confirm(abe, owen);
+    const adaMakesAbe = await call(ada, 'POST', '/api/names/vouchers', { entryId: abeEntry });
+    assert(adaMakesAbe.status === 403 && adaMakesAbe.body?.code === 'owner_only' && !rowOf(abe.pk),
+        `20. (a) a committee admin can't make an admin a voucher from his entry either (I5), nothing written (${show(adaMakesAbe)})`);
+    const abeFlip = await call(owen, 'POST', '/api/names/vouchers', { entryId: abeEntry });
+    require_(abeFlip.status === 201 && rowOf(abe.pk).source === 'entry' && budgetOf(abe.pk).left === 1000, `Owen makes Abe, an admin, a voucher from his entry (${abeFlip.status})`);
     const abeBudget = budgetOf(abe.pk);
     const abeLines = lines(abe.pk).length;
     const abeBack = await call(abe, 'POST', '/api/names/step-back', {});
@@ -989,9 +1085,9 @@ async function main(): Promise<void> {
     const noVouch = await raiseTo(pam, tz, 50);
     assert(noVouch.status === 409 && noVouch.body?.code === 'no_vouch_yet', `23. a raise for someone you never vouched for is refused (${show(noVouch)})`);
     const linesBeforeBoth = allLines();
-    const both = await call(pam, 'POST', '/api/vouch', { memberPubkey: pat.pk, vouchAmount: 25, raiseTo: 75 });
-    assert(both.status === 400 && both.body?.code === 'bad_body' && both.body?.error === VOUCHER_WORDS.vouchOrRaise && allLines() === linesBeforeBoth,
-        `23. a vouch amount and a raise target together are refused, nothing written (${show(both)})`);
+    const amountAndTarget = await call(pam, 'POST', '/api/vouch', { memberPubkey: pat.pk, vouchAmount: 25, raiseTo: 75 });
+    assert(amountAndTarget.status === 400 && amountAndTarget.body?.code === 'bad_body' && amountAndTarget.body?.error === VOUCHER_WORDS.vouchOrRaise && allLines() === linesBeforeBoth,
+        `23. a vouch amount and a raise target together are refused, nothing written (${show(amountAndTarget)})`);
     // The retired boolean is not read: with only an amount, a second vouch for the same person is the plain already_vouched.
     const oldShape = await call(tia, 'POST', '/api/vouch', { memberPubkey: tx.pk, vouchAmount: 25, raise: true });
     assert(oldShape.status === 409 && oldShape.body?.code === 'already_vouched', `23. the old raise flag adds nothing: an amount is a first vouch only (${show(oldShape)})`);

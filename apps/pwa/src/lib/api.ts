@@ -926,12 +926,20 @@ export interface VoucherCardData extends VoucherSummary {
         trading: 'others' | 'inside' | 'none';
     }[];
     canChange?: boolean;
+    /** Whether this viewer may stop this budget now: never an owner's; an admin's by an owner only (invites-vouching I5). */
+    canStop?: boolean;
 }
+
+/** Someone "+ Make someone a voucher" offers (I5): an admin (no entry needed), or someone confirmed on the names list. */
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
 
 export interface VouchersBlockData {
     vouchers: VoucherSummary[];
     /** Invites not used yet that promise a voucher budget, by names-list entry id (the name is on the phone). */
     waiting?: WaitingVoucherRow[];
+    /** Whom "+ Make someone a voucher" offers this viewer (I5): admins (an owner's to make) and confirmed names.
+     *  `adminsOffered`: the node offers this viewer admins at all (an owner); false: only an owner makes an admin a voucher. */
+    candidates?: { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean };
     settings: {
         voucherBudget: number;
         memberGift: number;
@@ -974,6 +982,16 @@ export async function setVoucherBudget(
     level: number,
 ): Promise<VoucherCardData & { changed: boolean }> {
     return request('POST', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}/budget`, { level });
+}
+
+/** Make a voucher (I5): someone confirmed on the names list by its entry, or an admin by their key (an owner only). */
+export async function makeVoucher(who: { entryId: string } | { memberPubkey: string }, amount: number): Promise<VoucherCardData> {
+    return request('POST', '/api/names/vouchers', { ...who, amount });
+}
+
+/** Stop vouching: the budget ends, its open holds come back; the credit lines given stay. */
+export async function stopVoucher(memberPubkey: string): Promise<VoucherCardData> {
+    return request('DELETE', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}`);
 }
 
 export async function getTrustProfile(targetPubkey: string): Promise<any> {

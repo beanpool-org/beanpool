@@ -63,6 +63,40 @@ export function waitingRowWords(w: Pick<WaitingVoucherRow, 'level'>, name: strin
     return t('{who} · waiting to join · budget {level} ›', { who, level: formatCount(w.level) });
 }
 
+// ── "+ Make someone a voucher" (slice I5, DESIGN §3 ask 1; Marty, 10 Nov: admins are vouchers only when an owner makes them one) ──
+// A sheet with two sections, Admins (anyone with the role, no names-list entry needed: an owner's to make) and Confirmed on
+// the names list, then a budget stepper prefilled with the community's default. Both apps, the same words.
+
+export const makeVoucherSheetTitle = (): string => t('Make someone a voucher');
+export const makeVoucherAdminsHeading = (): string => t('Admins · no names-list entry needed');
+export const makeVoucherConfirmedHeading = (): string => t('Confirmed on the names list');
+export const makeVoucherNobody = (): string => t('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
+/** For a viewer the node offers no admins (a committee admin: only an owner makes an admin a voucher), so it can't say every admin is one already. */
+export const makeVoucherNobodyForCommittee = (): string =>
+    t('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
+/** The sheet's line when it has nobody to list: the true one for this viewer (the node's `adminsOffered`; not heard yet: the owner's). */
+export const makeVoucherNobodyWords = (candidates: { adminsOffered?: boolean } | null | undefined): string =>
+    candidates && candidates.adminsOffered === false ? makeVoucherNobodyForCommittee() : makeVoucherNobody();
+/** Said where a committee admin asks to make an admin a voucher (the names list's deep link): the node answers 403 `owner_only` to the same. */
+export const ownerMakesAdminVoucherWords = (): string => t('Only an owner makes an admin a voucher.');
+
+/** A row: "Dee Dee · @dee" where the phone opened the name from the names list, else "@dee". */
+export function voucherCandidateWords(callsign: string, name?: string | null): string {
+    const handle = callsign ? `@${callsign}` : t('a member');
+    const n = name?.trim();
+    return n ? t('{name} · {callsign}', { name: n, callsign: handle }) : handle;
+}
+
+/** The stepper's line: "Budget: 1,000 Beans". */
+export const makeVoucherBudgetWords = (amount: number): string => t('Budget: {amount} Beans', { amount: formatCount(amount) });
+
+/** The button: "Make @dee a voucher". */
+export const makeVoucherButtonWords = (who: string): string => t('Make {who} a voucher', { who });
+
+/** After it is done: "@dee is a voucher now, with a budget of 1,000 Beans." */
+export const madeVoucherWords = (who: string, amount: number): string =>
+    t('{who} is a voucher now, with a budget of {amount} Beans.', { who, amount: formatCount(amount) });
+
 /** The numbers a voucher's card puts first (engine/vouchers.ts voucherSummary). */
 export interface VoucherHeadlineSource {
     vouched: number;

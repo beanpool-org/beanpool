@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     inviteFromNamesListWords, isProfileVoucherButton, ownerRowWords, ownersHeading, profileVoucherButtonWords, voucherCardHeadline, voucherRowWords,
-    vouchersBlockSections, waitingHeading, waitingRowWords,
+    vouchersBlockSections, waitingHeading, waitingRowWords, makeVoucherSheetTitle, makeVoucherAdminsHeading, makeVoucherConfirmedHeading,
+    makeVoucherNobody, makeVoucherNobodyForCommittee, makeVoucherNobodyWords, ownerMakesAdminVoucherWords, voucherCandidateWords, makeVoucherBudgetWords, makeVoucherButtonWords, madeVoucherWords,
 } from './vouchers-block.js';
 
 // The Vouchers block and the profile button (invites-vouching I4; DESIGN-invites-vouching-review-fable.md §3 asks 1, 2, 4, 5(b)).
@@ -96,5 +97,35 @@ describe('no balance figure anywhere in these words', () => {
             profileVoucherButtonWords({ state: 'voucher', left: 400, noLimit: false }), inviteFromNamesListWords(),
         ];
         for (const line of all) expect(line).not.toMatch(/balance/i);
+    });
+});
+
+// + Make someone a voucher (invites-vouching I5; Marty, 10 Nov: admins are vouchers only when an owner makes them one).
+describe('the make-voucher sheet’s words, one set for both apps', () => {
+    it('two sections and one sentence for nobody', () => {
+        expect(makeVoucherSheetTitle()).toBe('Make someone a voucher');
+        expect(makeVoucherAdminsHeading()).toBe('Admins · no names-list entry needed');
+        expect(makeVoucherConfirmedHeading()).toBe('Confirmed on the names list');
+        expect(makeVoucherNobody()).toBe('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
+    });
+    it('the sentence for nobody is the true one for the viewer: an owner is told every admin is one; a committee admin is told only an owner makes an admin one (review, 10 Nov)', () => {
+        expect(makeVoucherNobodyWords({ adminsOffered: true })).toBe(makeVoucherNobody());
+        expect(makeVoucherNobodyWords(null)).toBe(makeVoucherNobody());
+        expect(makeVoucherNobodyWords(undefined)).toBe(makeVoucherNobody());
+        expect(makeVoucherNobodyWords({ adminsOffered: false })).toBe(makeVoucherNobodyForCommittee());
+        expect(makeVoucherNobodyForCommittee()).toBe('Nobody confirmed on the names list is waiting to be made a voucher. Only an owner makes an admin a voucher.');
+        expect(makeVoucherNobodyForCommittee()).not.toMatch(/every admin/i);
+        expect(ownerMakesAdminVoucherWords()).toBe('Only an owner makes an admin a voucher.');
+    });
+    it('a row names the person from the list where the phone opened it, else by callsign', () => {
+        expect(voucherCandidateWords('liz', 'Liz Moreau')).toBe('Liz Moreau · @liz');
+        expect(voucherCandidateWords('liz', '  ')).toBe('@liz');
+        expect(voucherCandidateWords('liz', null)).toBe('@liz');
+    });
+    it('the stepper, the button and the done line, numbers grouped, no balance', () => {
+        expect(makeVoucherBudgetWords(1000)).toBe('Budget: 1,000 Beans');
+        expect(makeVoucherButtonWords('@liz')).toBe('Make @liz a voucher');
+        expect(madeVoucherWords('@liz', 1500)).toBe('@liz is a voucher now, with a budget of 1,500 Beans.');
+        for (const line of [makeVoucherBudgetWords(1000), madeVoucherWords('@liz', 1500), makeVoucherNobody()]) expect(line).not.toMatch(/balance/i);
     });
 });

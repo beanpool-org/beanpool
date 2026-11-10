@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, useRef } from 'react';
 import { formatNumber, formatDate, t, tn, formatHistoryLine, voucherCardHeadline, VOUCH_PRESET_WORDS } from '@beanpool/core';
-import { getVoucherCard, setVoucherBudget, type VoucherCardData } from '../lib/api';
+import { getVoucherCard, setVoucherBudget, stopVoucher, type VoucherCardData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
 export interface VoucherCardModalProps {
@@ -54,6 +54,23 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
             onUpdated?.();
         } catch (e: any) {
             setError(e?.message || e?.error || t('Could not set budget'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Stop vouching (an owner, for an admin's budget: I5): the node says whether this viewer may (`canStop`).
+    const handleStop = async () => {
+        if (!card || saving) return;
+        if (!window.confirm(t('Stop @{name} from vouching? Their budget ends. The credit lines they gave stay with the people they gave them to.', { name: card.callsign }))) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const updated = await stopVoucher(memberPubkey);
+            setCard((prev) => (prev ? { ...prev, ...updated } : updated));
+            onUpdated?.();
+        } catch (e: any) {
+            setError(e?.message || e?.error || t('Could not stop this budget'));
         } finally {
             setSaving(false);
         }
@@ -255,6 +272,17 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                             {saving ? t('Saving...') : t('Set budget to: {level}', { level: formatNumber(targetLevel) })}
                                         </button>
                                     </div>
+                                )}
+                                {card.canStop === true && !card.stoppedAt && (
+                                    <button
+                                        type="button"
+                                        onClick={handleStop}
+                                        disabled={saving}
+                                        data-testid="voucher-stop"
+                                        className="w-full min-h-[44px] py-2 px-4 rounded-xl text-sm font-bold bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {t('Stop vouching')}
+                                    </button>
                                 )}
                             </div>
                         )}

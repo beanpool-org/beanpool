@@ -167,6 +167,8 @@ async function main(): Promise<void> {
     for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [dan, 'admin']] as const) {
         require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
     }
+    // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada and Dan vouchers.
+    require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201 && (await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: dan.pk })).status === 201, 'Owen makes Ada and Dan, admins, vouchers');
 
     // ── 1. Beans off, before any Bean moves ─────────────────────────────────────────────────────────────────────────
     vouchFromProfile(owen.pk, { memberPubkey: sam.pk, vouchAmount: 50 });

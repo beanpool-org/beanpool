@@ -406,7 +406,8 @@ export function tellVoucherNotice(n: VoucherNotice, hooks: VoucherNoticeHooks): 
  * deleted, given back after a suspension), inside the change's transaction where there is one: an owner with no live
  * budget gets one (the community's setting, actor who granted it); an admin keeps what they hold and is given nothing
  * (an owner makes an admin a voucher by hand: Marty, 10 Nov, slice I5), so an owner stepping down to admin keeps the
- * budget the role gave them until an owner stops it; anyone else loses a budget whose source is the role. The place on the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
+ * budget the role gave them until an owner stops it; anyone else loses a budget whose source is the role. The place on
+ * the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
  * no admin clears it with a `committee` line, a promotion to owner too (an owner is on it by role), so a later demotion
  * back to admin never brings it back unasked. Never throws; nothing on a standby or with Beans off.
  */

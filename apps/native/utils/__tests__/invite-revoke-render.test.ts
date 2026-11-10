@@ -90,7 +90,7 @@ function renderPending(onRevoke?: (inv: InviteRowSource) => Promise<boolean>) {
     act(() => root.render(createElement(PendingInvites, {
         invites: [plain, bound, ticket], now: NOW, names: new Map([['e1', 'Dee Dee']]),
         qrValue: (c: string) => `https://x/?invite=${c}`, shareSlot: () => createElement('span', null, 'share'), onRevoke,
-    })));
+    }) as any));
 }
 const openRow = async (n: number) => {
     await click(q('invites-pending-fold'));
@@ -103,7 +103,7 @@ describe('Revoke on an open Pending invite', () => {
         renderPending(async (inv) => { revoked.push(inv.code); return true; });
         // Pending lists newest first by the node's order: find the bound row by its words.
         await click(q('invites-pending-fold'));
-        const rows = [...host.querySelectorAll('[data-testid="invite-pending-row"]')];
+        const rows = Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]'));
         await click(rows.find((r) => r.textContent?.includes('Dee Dee')) ?? null);
         expect(q('invite-sheet')).not.toBeNull();
         await click(q('invite-revoke'));
@@ -121,7 +121,7 @@ describe('Revoke on an open Pending invite', () => {
         const revoked: string[] = [];
         renderPending(async (inv) => { revoked.push(inv.code); return true; });
         await click(q('invites-pending-fold'));
-        const rows = [...host.querySelectorAll('[data-testid="invite-pending-row"]')];
+        const rows = Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]'));
         await click(rows.find((r) => r.textContent?.includes('100 vouch')) ?? null);
         await click(q('invite-revoke'));
         expect(alerts.said[0].text).toBe('Whoever has the link can’t use it.');
@@ -133,7 +133,7 @@ describe('Revoke on an open Pending invite', () => {
     it('a revoke the community refused keeps the sheet open', async () => {
         renderPending(async () => false);
         await click(q('invites-pending-fold'));
-        const rows = [...host.querySelectorAll('[data-testid="invite-pending-row"]')];
+        const rows = Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]'));
         await click(rows.find((r) => r.textContent?.includes('100 vouch')) ?? null);
         await click(q('invite-revoke'));
         await pressAlert('Revoke');
@@ -143,7 +143,7 @@ describe('Revoke on an open Pending invite', () => {
     it('an offline ticket offers no Revoke (the community has never seen it), nor does any invite without onRevoke', async () => {
         renderPending(async () => true);
         await click(q('invites-pending-fold'));
-        const rows = [...host.querySelectorAll('[data-testid="invite-pending-row"]')];
+        const rows = Array.from(host.querySelectorAll('[data-testid="invite-pending-row"]'));
         await click(rows.find((r) => r.textContent?.includes(ticket.code)) ?? null);
         expect(q('invite-sheet')).not.toBeNull();
         expect(q('invite-revoke')).toBeNull();
@@ -159,7 +159,7 @@ describe('Revoke on an open Pending invite', () => {
 
 describe('Revoke on the made card', () => {
     const card = (invite: InviteRowSource, who: string | null, onRevoke?: (inv: InviteRowSource) => Promise<boolean>) =>
-        act(() => root.render(createElement(InviteMadeCard, { who, invite, now: NOW, qrValue: 'x', shareSlot: createElement('span', null, 'share'), onRevoke })));
+        act(() => root.render(createElement(InviteMadeCard, { who, invite, now: NOW, qrValue: 'x', shareSlot: createElement('span', null, 'share'), onRevoke }) as any));
 
     it('names the person for a bound invite and revokes that invite', async () => {
         const revoked: string[] = [];

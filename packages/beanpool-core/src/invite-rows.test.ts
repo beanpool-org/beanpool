@@ -156,7 +156,7 @@ describe('Revoke (invites-vouching I2)', () => {
     it('is offered on an unused code the community holds, never on a used one or an offline ticket', () => {
         expect(inviteRevocable(inv(1))).toBe(true);
         expect(inviteRevocable(inv(1, { usedBy: 'ab'.repeat(32) }))).toBe(false);
-        expect(inviteRevocable({ code: 'BP-eyJ0aWNrZXQiOnRydWV9', createdAt: made(1) })).toBe(false);
+        expect(inviteRevocable({ code: 'BP-eyJ0aWNrZXQiOnRydWV9' })).toBe(false);
     });
 
     it('says an entry’s invite is out, by whom and for how long, until it is used or lapses', () => {

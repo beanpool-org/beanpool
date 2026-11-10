@@ -340,7 +340,7 @@ export interface CommunityInfo {
     memberCount: number;
     postCount: number;
     transactionCount: number;
-    commonsBalance: number;
+    commonsBalance_c: number;
     /** What kind of node this is, and what it does (config/node-profile.ts). Absent on a node older than both. */
     profile?: 'local' | 'global';
     /**
@@ -863,7 +863,7 @@ export interface MyVouching {
 
 export interface VoucherHistoryLine {
     kind: string;
-    amount: number;
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
@@ -905,7 +905,7 @@ export interface VoucherCardData extends VoucherSummary {
         memberPubkey: string;
         callsign: string;
         joinedAt: string | null;
-        amount: number;
+        amount_c: number;
         raised: boolean;
         byInvite: boolean;
         belowZero: boolean;
@@ -1317,7 +1317,7 @@ export enum SystemMessageType {
 }
 
 export interface SystemMessageMetadata {
-    amount?: number;        // The Beans involved
+    amount_c?: number;        // The Beans involved
     postId: string;         // Link back to the original post
     actorPubkey: string;    // Who triggered the event (Buyer/Seller)
     txHash?: string;        // The ledger transaction ID for verification
@@ -1494,17 +1494,17 @@ export interface TierInfo {
 }
 
 export interface BalanceInfo {
-    balance: number;
-    floor: number;
+    balance_c: number;
+    floor_c: number;
 
     tier: TierInfo;
-    tierCredit?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
-    earnedCredit?: number;
+    tierCredit_c?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
+    earnedCredit_c?: number;
     grantedCredit?: number;   // genesis/admin grants (separate lane, no vote weight)
     qualifiedValue?: number;  // diversity-capped trade value behind the earned score
     avgRating?: number;       // reputation multiplier inputs
     reviewCount?: number;
-    commonsBalance: number;
+    commonsBalance_c: number;
     commons?: number;
     callsign: string;
     trustStats?: {
@@ -1533,11 +1533,11 @@ export interface BalanceInfo {
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
     hasLiveOffer?: boolean;
     /** Trust Model v3 — the floor you may actually reach now = shallower of earned limit & what your live Offers unlock. */
-    usableFloor?: number;
+    usableFloor_c?: number;
     /** Trust Model v3 — count of currently-live Offers (drives the offer-band credit ladder). */
     liveOffers?: number;
     /** The known floor's part of the limit (community modes slice 4): one live Offer unlocks all of it. Absent from an older node. */
-    knownGrant?: number;
+    knownGrant_c?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
     /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */
@@ -1546,7 +1546,7 @@ export interface BalanceInfo {
     vouchedBy?: Array<{
         memberPubkey: string;
         callsign: string;
-        amount: number;
+        amount_c: number;
         at: string;
     }>;
 }
@@ -1555,8 +1555,8 @@ export interface Transaction {
     id: string;
     from: string;
     to: string;
-    amount: number;
-    taxFee?: number;
+    amount_c: number;
+    fee_c?: number;
     memo: string;
     timestamp: string;
 }
@@ -1595,7 +1595,7 @@ export interface MarketplacePost {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    price_c: number;
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorPublicKey: string;
     authorCallsign: string;
@@ -1698,7 +1698,7 @@ export interface MarketplaceTransaction {
     buyerCallsign: string;
     sellerPublicKey: string;
     sellerCallsign: string;
-    credits: number;
+    amount_c: number;
     hours?: number;
     status: 'requested' | 'rejected' | 'pending' | 'completed' | 'cancelled';
     createdAt: string;
@@ -1717,7 +1717,7 @@ export interface MarketplaceTransaction {
     standingId?: string;
     periodNo?: number;
     standingPhase?: StandingPhase;
-    standingBeans?: number;
+    standingBeans_c?: number;
     standingUnit?: StandingPeriodUnit;
     standingMaxPeriods?: number | null;
     standingNextDueAt?: string;
@@ -1791,7 +1791,7 @@ export async function createMarketplacePost(post: {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    amount_c: number;
     priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorPublicKey: string;
     lat?: number;
@@ -2159,7 +2159,7 @@ export interface CommissionCapacity {
     /** How much of the allowance is credit already earned rather than fresh discretion. */
     redeemable: number;
     treasuryBalance: number;
-    commonsBalance: number;
+    commonsBalance_c: number;
 }
 
 /**
@@ -2182,8 +2182,8 @@ export async function getCommissionCapacity(): Promise<{ links: CommissionCapaci
  */
 export async function commissionListing(postId: string, amount?: number): Promise<{
     status: 'settled' | 'pending' | 'refused' | 'reversed';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     drawnFromCommons: number;
     commissionedBy: string;
     peer: string;
@@ -2206,7 +2206,7 @@ export async function updateMarketplacePost(
         category?: string;
         title?: string;
         description?: string;
-        credits?: number;
+        price_c?: number;
         priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
         lat?: number;
         lng?: number;
@@ -2537,7 +2537,7 @@ export interface MemberCard {
     nodeRole?: string | null;
     avatarUrl?: string | null;
     profileUpdatedAt?: string | null;
-    earnedCredit?: number;
+    earnedCredit_c?: number;
     archetype?: string | null;
     distanceKm?: number | null;
 }
@@ -2886,17 +2886,17 @@ export interface Treasury {
     callsign?: string;
     avatar?: string | null;
     avatarUrl?: string | null;
-    balance: number;
-    creditLine: number;
-    floor?: number;
-    usableFloor?: number;
+    balance_c: number;
+    creditLine_c: number;
+    floor_c?: number;
+    usableFloor_c?: number;
     liveOffers: number;
-    earnedSurplus?: number;
-    workingCapitalCeiling?: number | null;
+    earnedSurplus_c?: number;
+    workingCapitalCeiling_c?: number | null;
     purpose?: string | null;
     description?: string | null;
-    goalAmount?: number | null;
-    currentAmount?: number | null;
+    goalAmount_c?: number | null;
+    currentAmount_c?: number | null;
     deadlineAt?: string | null;
     /** When the node gave a project's backers their Beans back, its goal not reached a week after its end date; else null. */
     pledgesReturnedAt?: string | null;
@@ -2905,7 +2905,7 @@ export interface Treasury {
     paused?: boolean;
     pausedAt?: string | null;
     pausedBy?: string | null;
-    pausedFloorSnapshot?: number | null;
+    pausedFloorSnapshot_c?: number | null;
     pauseExpiresAt?: string | null;
     pauseDaysRemaining?: number | null;
     pauseExpiringSoon?: boolean;
@@ -2945,8 +2945,8 @@ export interface EnterpriseLedgerEntry {
     id: string;
     timestamp: string;
     direction: 'income' | 'spend';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     netAmount: number;
     counterparty: string;
     counterpartyName: string;
@@ -2971,7 +2971,7 @@ export interface EnterpriseLedgerResponse {
         purpose: string | null;
         status: string;
         paused: boolean;
-        balance: number;
+        balance_c: number;
     };
     period: {
         since: string | null;
@@ -3102,11 +3102,11 @@ export async function createEnterprise(data: {
     photos?: string[];
     purpose?: string;
     description?: string;
-    goalAmount?: number | null;
+    goalAmount_c?: number | null;
     deadlineAt?: string | null;
     lifecycle?: 'ongoing' | 'bounded';
-    creditLine?: number;
-    workingCapitalCeiling?: number | null;
+    creditLine_c?: number;
+    workingCapitalCeiling_c?: number | null;
 }): Promise<any> {
     return request('POST', '/api/treasury', data);
 }
@@ -3184,7 +3184,7 @@ export interface KeeperRequestItem {
     id: string;
     enterprisePubkey: string;
     memberPubkey: string;
-    pledgedBacking: number;
+    pledgedBacking_c: number;
     status: 'pending' | 'approved' | 'declined';
     createdAt: string;
     decidedAt?: string | null;
@@ -3194,7 +3194,7 @@ export interface KeeperRequestItem {
     /** On a pending request, whether approving it would go through as far as the applicant's standing goes (null on a closed one): all the lead keeper learns of it. */
     canBackPledge?: boolean | null;
     /** What the applicant has left to back with: only on their own request (myPendingRequest), never on a keeper's list. */
-    availableToBack?: number;
+    availableToBack_c?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window. */
     pendingChange?: KeeperChangeItem | null;
 }
@@ -3207,7 +3207,7 @@ export interface KeeperChangeItem {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
-    pledgedBacking: number;
+    pledgedBacking_c: number;
     /** True when pledgedBacking is the pledge's named part only, as a keeper other than the lead reads it. */
     namedBackingOnly?: boolean;
     proposedBy: string;

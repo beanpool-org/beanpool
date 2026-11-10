@@ -2340,7 +2340,6 @@
   "This community no longer has your account. Use your 12 words or another way back.": "Komunitas ini tidak lagi memiliki akunmu. Pakai 12 katamu atau cara kembali lainnya.",
   "This community takes new members with an invite from one of them.": "Komunitas ini menerima anggota baru dengan undangan dari salah satu anggota mereka.",
   "This community's main address is now {address}. This address keeps working.": "Alamat utama komunitas ini sekarang adalah {address}. Alamat ini tetap berfungsi.",
-  "This community's server doesn't have Home yet. The Market and the other tabs work as before.": "Server komunitas ini belum punya Beranda. Pasar dan tab lainnya berfungsi seperti biasa.",
   "This deletes {name}'s key and its 12 words from this browser for good. The community says it never took that join, so no account there is lost, but this can't be undone.": "Ini akan menghapus kunci milik {name} dan 12 katanya dari browser ini untuk selamanya. Komunitas menyatakan tidak pernah menerima pendaftaran tersebut, jadi tidak ada akun di sana yang hilang, tetapi ini tidak dapat dibatalkan.",
   "This device now holds your account: your Beans, your name and your history.": "Perangkat ini sekarang menampung akunmu: kacangmu, namamu, dan riwayatmu.",
   "This enterprise has closed, so it isn’t taking pledges.": "Usaha ini telah ditutup, jadi tidak menerima komitmen.",
@@ -2803,9 +2802,6 @@
   "Your account was deleted, but this browser couldn't be cleared ({reason}). Use Sign Out (Device Only) to finish.": "Akunmu telah dihapus, tetapi browser ini tidak dapat dibersihkan ({reason}). Gunakan Keluar (Hanya Perangkat) untuk menyelesaikan.",
   "Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.": "Admin menyatakan perangkat ini bukan milikmu, jadi tidak ada yang berubah. Minta mereka untuk mencoba lagi saat kamu ada di sana.",
   "Your area": "Wilayahmu",
-  "Your block list is full, so {n} block is kept in this browser only. Unblock someone to make room for it.|Your block list is full, so {n} blocks are kept in this browser only. Unblock someone to make room for them.": {
-    "other": "Daftar blokirmu penuh, jadi {n} blokir hanya disimpan di browser ini. Buka blokir seseorang untuk memberi ruang."
-  },
   "Your community": "Komunitas Anda",
   "Your community (optional)": "Komunitasmu (opsional)",
   "Your community could not save that. Try again.": "Komunitasmu tidak dapat menyimpannya. Coba lagi.",
@@ -2816,7 +2812,6 @@
   "Your community's admins have frozen the part of your credit line that comes from being a confirmed member; the rest works as before. To ask why, ask one of the admins.": "Administrator komunitas Anda telah membekukan bagian dari jalur kredit Anda yang berasal dari status anggota terkonfirmasi; sisanya berfungsi seperti sebelumnya. Untuk menanyakan alasannya, hubungi salah satu administrator.",
   "Your community's admins have frozen your credit line, so for now you can't spend into debit. You can still sell and receive Beans, and spend what you hold above zero. To ask why, or to have it opened again, ask one of the admins.": "Administrator komunitas Anda telah membekukan jalur kredit Anda, sehingga saat ini Anda tidak dapat berbelanja hingga saldo debit. Anda masih dapat menjual dan menerima kacang, dan membelanjakan apa yang Anda miliki di atas nol. Untuk menanyakan alasannya, atau agar dibuka kembali, hubungi salah satu administrator.",
   "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Server komunitasmu belum dapat menyimpan salinan, jadi untuk saat ini data hanya tersimpan di browser ini.",
-  "Your community's server needs an update before your cards follow you to other devices.": "Server komunitas Anda memerlukan pembaruan sebelum kartu Anda disinkronkan ke perangkat lain.",
   "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Server komunitasmu tidak lagi menyimpan salinan alat ini, jadi hanya disimpan di browser ini. Kamu bisa mengaktifkan salinannya lagi di Pengaturan.",
   "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Separuh dari salinanmu disimpan di brankas kunci BeanPool, yang hanya bisa dijangkau aplikasi ponsel. Minta kode baru kepada admin, lalu pakai kode itu di aplikasi ponsel.",
   "Your credit line is frozen": "Jalur kredit Anda dibekukan",
@@ -4526,7 +4521,6 @@
   "Your browser blocked them for this site: allow them from the icon by the address.": "Browser-mu memblokirnya untuk situs ini: izinkan dari ikon di dekat alamat.",
   "Your name here": "Namamu di sini",
   "your browser": "browser-mu",
-  "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Server {community} lebih lama daripada aplikasi ini dan belum bisa menemukan akunmu dari login. Minta admin {community} untuk memperbarui, atau pakai 12 katamu.",
   "✓ We'll tell you here when {name} answers.": "✓ Kami akan memberitahumu di sini saat {name} menjawab.",
   "Make another invite": "Buat undangan lain",
   "A note for you, kept on your community's server": "Catatan untuk Anda, disimpan di server komunitas Anda",

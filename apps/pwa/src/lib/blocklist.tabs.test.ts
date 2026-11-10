@@ -130,10 +130,8 @@ function watch(keys: () => string[], unblocked: () => string[] = () => []) {
     };
 }
 
-describe('two tabs, and a node that takes time to answer', () => {
+describe('a node that takes time to answer', () => {
     const stops: (() => void)[] = [];
-    /** The runs a sweep below is making: the next test starts only once they have stopped. */
-    let sweeping: Promise<void> = Promise.resolve();
 
     beforeEach(() => {
         localStorage.clear();
@@ -146,12 +144,11 @@ describe('two tabs, and a node that takes time to answer', () => {
         node.thereQueue = {};
         node.ringAfter = 10;
         node.sent = [];
-        // The module says each lost move and refused change on the console; the sweep below makes hundreds.
+        // The module says each refused change on the console.
         vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     afterEach(async () => {
-        await sweeping.catch(() => { /* its test has failed already */ });
         stops.splice(0).forEach(stop => stop());
         vi.restoreAllMocks();
         vi.useRealTimers();

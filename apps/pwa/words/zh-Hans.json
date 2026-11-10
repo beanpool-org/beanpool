@@ -2340,7 +2340,6 @@
   "This community no longer has your account. Use your 12 words or another way back.": "此社区已不再有你的账户。请使用你的 12 个助记词或其他找回方式。",
   "This community takes new members with an invite from one of them.": "此社区需要现有成员的邀请才能加入。",
   "This community's main address is now {address}. This address keeps working.": "该社区的主要地址现为 {address}。此地址仍可正常使用。",
-  "This community's server doesn't have Home yet. The Market and the other tabs work as before.": "此社区的服务器还没有首页功能。市集和其他标签页照常可用。",
   "This deletes {name}'s key and its 12 words from this browser for good. The community says it never took that join, so no account there is lost, but this can't be undone.": "这将从此浏览器中永久删除 {name} 的密钥及其 12 个词。社区显示从未接受该加入申请，因此那里的账户不会丢失，但此操作无法撤销。",
   "This device now holds your account: your Beans, your name and your history.": "此设备现在保存着你的账户：你的豆子、你的姓名和你的历史记录。",
   "This enterprise has closed, so it isn’t taking pledges.": "该企业已关闭，不再接受认捐。",
@@ -2803,9 +2802,6 @@
   "Your account was deleted, but this browser couldn't be cleared ({reason}). Use Sign Out (Device Only) to finish.": "你的账户已被删除，但此浏览器未能清除数据（{reason}）。请使用“退出登录（仅此设备）”完成操作。",
   "Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.": "你的管理员表明此设备不是你的，因此未作任何更改。请在你在场时让他们重试。",
   "Your area": "你的区域",
-  "Your block list is full, so {n} block is kept in this browser only. Unblock someone to make room for it.|Your block list is full, so {n} blocks are kept in this browser only. Unblock someone to make room for them.": {
-    "other": "你的屏蔽列表已满，因此有 {n} 个屏蔽仅保存在此浏览器中。请取消屏蔽某些用户以腾出空间。"
-  },
   "Your community": "你的社区",
   "Your community (optional)": "你的社区（可选）",
   "Your community could not save that. Try again.": "你的社区无法保存该设置。请重试。",
@@ -2816,7 +2812,6 @@
   "Your community's admins have frozen the part of your credit line that comes from being a confirmed member; the rest works as before. To ask why, ask one of the admins.": "社区管理员已冻结你作为确认成员所获得的那部分信用额度；其余部分照常运作。如需询问原因，请联系管理员。",
   "Your community's admins have frozen your credit line, so for now you can't spend into debit. You can still sell and receive Beans, and spend what you hold above zero. To ask why, or to have it opened again, ask one of the admins.": "社区管理员已冻结你的信用额度，因此你目前无法进行透支消费。你仍然可以出售商品、接收豆子并使用零以上的持有额度。如需了解原因或申请重新开放，请联系管理员。",
   "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "你所在社区的服务器暂时无法保存副本，因此目前仅保留在此浏览器中。",
-  "Your community's server needs an update before your cards follow you to other devices.": "需要更新社区服务器，卡片配置才能同步至其他设备。",
   "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "你所在社区的服务器不再保留此工具的副本，因此它仅保存在此浏览器中。你可以在“设置”中重新开启该副本。",
   "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "你的副本有一半保存在 BeanPool 密钥保管库，只有手机应用能访问。请向管理员要一个新代码，然后在手机应用中使用。",
   "Your credit line is frozen": "你的信用额度已被冻结",
@@ -4526,7 +4521,6 @@
   "Your browser blocked them for this site: allow them from the icon by the address.": "你的浏览器已针对此网站屏蔽了它们：请从地址栏旁的图标允许它们。",
   "Your name here": "在此输入你的名字",
   "your browser": "你的浏览器",
-  "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} 的服务器比这个应用旧，目前还无法通过登录找到你的账户。请让它的管理员更新，或使用你的 12 个助记词。",
   "✓ We'll tell you here when {name} answers.": "✓ {name} 回复时，我们会在这里通知你。",
   "Make another invite": "再创建一个邀请",
   "A note for you, kept on your community's server": "给你自己的备注，保存在你所在社区的服务器上",

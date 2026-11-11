@@ -23,6 +23,7 @@ import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupInvitedList } from './GroupInvitedList';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
@@ -81,6 +82,8 @@ export function GroupDetailModal({
     // Where anyone can join in a minute (openMembership) the roster is its members': anyone else is told to join
     // (join_to_see), and sees the count and why, never "Roster (N)" over an empty box (#1939 review N5).
     const [rosterRefused, setRosterRefused] = useState(false);
+    // Counts the times the roster was read, so "Invited, not joined yet" reads again with it (a join moves a person out of it).
+    const [rosterReads, setRosterReads] = useState(0);
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -137,6 +140,7 @@ export function GroupDetailModal({
             const m = await getGroupMembers(group.id);
             setMembers(Array.isArray(m) ? m : []);
             setRosterRefused(false);
+            setRosterReads(n => n + 1);
         } catch (err: any) {
             setRosterRefused(err?.code === 'join_to_see');
             console.warn('[GroupDetail] Failed to load roster:', err);
@@ -667,6 +671,16 @@ export function GroupDetailModal({
                                     );
                                 })}
                             </div>
+                        )}
+
+                        {/* Under the members: who is invited and has not joined, as this member may see it (the node decides). */}
+                        {isMember && !rosterRefused && !closed && (
+                            <GroupInvitedList
+                                groupId={groupData.id}
+                                myPubkey={myPubkey}
+                                reloadKey={rosterReads}
+                                onChanged={onMembershipChanged}
+                            />
                         )}
                     </div>
 

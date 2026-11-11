@@ -9,9 +9,9 @@
  *    vote closes, if it is still too few then. Left alone, the pause lifts as today.
  *
  * Boots the real server; the owner's decision goes over HTTPS through the real admin sessions (an admin's key session, an
- * owner's from a computer and from the phone's Manage hand-off, an owner's automation token, the password with a 2FA
- * code). The members' card is read through the real signature middleware. Expo and the owners' alert channel (a stand-in
- * ntfy on loopback) are answered here: nothing leaves this machine.
+ * owner's from a computer and from the phone's Manage hand-off, an owner's automation token; the node has no admin
+ * password). The members' card is read through the real signature middleware. Expo and the owners' alert channel (a
+ * stand-in ntfy on loopback) are answered here: nothing leaves this machine.
  *
  *  1. The design's table: electorates of 3 (a family of 4), 4, 6 (castlemaine: 7 active, 6 without the subject), 7 and 25
  *     (mullum): each one's quorum, which tallies pass, and what the tick does with them. 2 Yes to 1 No passed before this
@@ -24,7 +24,7 @@
  *     refused before any proof; from the phone just now it is recorded. Members read the reason, never the owner's key;
  *     the member is told; the owners are told, never whom. Once only. The vote closes: the grace window opens, its record
  *     "Decided by the owner: too few members to vote.", and Settings says an owner decided it, not that the community voted
- *     for it; the grace window ends: the member is removed. The password decides another with its current code.
+ *     for it; the grace window ends: the member is removed.
  *  4. When the owner's decision does not stand: enough members voted by the close (a dormant member's vote made it 3),
  *     the owner who decided lost the role, no decision at all, a vote on someone holding a server role, a vote with enough
  *     voters, a standby (refused at the door, before the proof), votes off. Two that keep it standing: an owner who moves
@@ -130,7 +130,7 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id, payload?: unkno
     }));
 }
 
-/** An admin route under `session`'s headers (a key session, or the password with a 2FA code). */
+/** An admin route under `session`'s headers (a key session or a token). */
 async function admin(p: string, session: Record<string, string>, payload?: unknown): Promise<Answer> {
     return answerOf(await fetch(`${BASE}${p}`, {
         method: 'POST',
@@ -140,7 +140,6 @@ async function admin(p: string, session: Record<string, string>, payload?: unkno
 }
 
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
-const ADMIN_PW = 'Removal-Small-Admin-Pw-63!';
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
@@ -155,8 +154,8 @@ async function main() {
     const { resetAdminAuthTarpit, TOKEN_REFUSED_CODE, FRESH_PROOF_PHONE_REQUIRED_CODE } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { ownerSessionHeaders, ownerPhoneSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
+    const { ownerSessionHeaders, ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, STEP_UP_REQUIRED_CODE } = await import('./admin-key-auth.js');
     const { issueAutomationToken } = await import('./automation-tokens.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
@@ -173,9 +172,7 @@ async function main() {
     se.initStateEngine();
     // This machine's own disk may be full enough to alert: the lines here are the votes'.
     setSimulatedDiskUsageForTesting(10);
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Small Test Commons' });
-    const twoFa = turnOn2faForTests(ADMIN_PW);
+    updateLocalConfig({ communityName: 'Small Test Commons' });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -215,7 +212,6 @@ async function main() {
     const ottoSession = ownerSessionHeaders(otto.pubKeyHex);          // an owner from a computer: no fresh proof
     const ottoPhone = () => ownerPhoneSessionHeaders(otto.pubKeyHex);  // pressed Manage on the phone just now
     const gwenSession = ownerSessionHeaders(gen.pubKeyHex);
-    const password = () => twoFa.headers();
     const ottoPhoneStale = () => {
         const headers = ottoPhone();
         backdateAdminSessionForTests(headers['X-Admin-Session'], 10 * 60_000);
@@ -466,18 +462,6 @@ async function main() {
     db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), samVote);
     de.tickDecisions();
     assert(row(samVote).status === 'executed' && statusOf(sam) === 'pruned', `the grace window ends: Sam is removed (${row(samVote).status}, ${statusOf(sam)})`);
-
-    // The password decides another, with its current code as the fresh proof.
-    const val = seed('ValVane');
-    const valVote = pauseOf(val);
-    r = await decide(password(), valVote, 'Only two members could vote, and Val told both of them he is leaving');
-    assert(r.status === 200 && row(valVote).owner_decided_by === 'owner:password', `the password, with its current code, decides another (${r.status} ${r.text.slice(0, 120)})`);
-    await settle();
-    assert(decidedLines().some(e => e.detail === 'A vote on removing a member, which too few members could vote on, was decided in the last day, by the admin password.'),
-        "the owners are told it was the password's");
-    closeNow(valVote);
-    assert(row(valVote).status === 'execution_pending_grace' && !!row(valVote).owner_decision_carried_at, `and it is carried out at the close (${row(valVote).status})`);
-    gone([val]);
 
     // ── 4. When an owner's decision does not stand, or can't be made ─────────────────────────────────────────────────
     console.log("\n4. When it doesn't stand, or can't be made");

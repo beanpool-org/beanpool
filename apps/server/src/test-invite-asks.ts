@@ -24,14 +24,16 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState, adminPruneUser, setUserStatusRow, purgeMemberSelf, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
+import { initStateEngine, exportSyncState, adminPruneUser, setUserStatusRow, purgeMemberSelf, COMMUNITY_DECISION_ACTOR, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { setNodeRole } from './config/node-role.js';
 import { NODE_PROFILE_KEY } from './config/node-profile.js';
 import { setDoor } from './config/door.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { TABLES } from './engine/replication-manifest.js';
@@ -44,9 +46,8 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { ownerAdminLimit } from './engine/owner-admin-limit.js';
 
 let BASE = '';
-const ADMIN_PW = 'Invite-Asks-Admin-Pw-71!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -102,22 +103,23 @@ async function main(): Promise<void> {
     await ensureGenesis();
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes every other role with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mod, mel, pat, gus] = ['Ada', 'Mod', 'Mel', 'Pat', 'Gus'].map(newId);
     for (const who of [ada, mod, mel, pat, gus]) {
         const made = await call(owen, 'POST', '/api/invite/generate', { publicKey: owen.pk });
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [mod, 'moderator']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin'], [mod, 'moderator']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
 
     // ── 1. Who may ask ───────────────────────────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ async function main(): Promise<void> {
     db.prepare(`DELETE FROM node_roles WHERE member_pubkey = ?`).run(ada.pk);
     const stoodDown = await call(ada, 'POST', `/api/invite/asks/${askId}/no`, {});
     assert(stoodDown.status === 403, `5. an admin stood down can't answer: the role now, not a claim (${show(stoodDown)})`);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, PASSWORD())).status === 200, 'Ada is admin again');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, OWNER())).status === 200, 'Ada is admin again');
     assert(rows() === 1, '5. and none of those touched the ask');
 
     // ── 6. Send invite ───────────────────────────────────────────────────────────────────────────

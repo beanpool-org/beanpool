@@ -38,11 +38,10 @@ import { approximateLocation, roundToRoughly100m } from '@beanpool/core';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
-let settingsAdmin: Record<string, string> = {}; // an owner's automation token, made in main() (step 7c)
+let settingsAdmin: Record<string, string> = {}; // an owner's automation token, made in main()
 let BASE = '';
 
 let run = 0, passed = 0;
@@ -176,14 +175,7 @@ async function main() {
         assert(flockRow.location_auth_signer === adminId.pubKeyHex, 'Flock location_auth_signer recorded as admin');
 
         // Admin can also set location via Settings app endpoint (/api/local/admin/treasury/:treasury/location)
-        const { hash: adminHash, salt } = hashPassword('correct-horse-battery-staple-1234');
-        saveLocalConfig({
-            ...getLocalConfig(),
-            adminHash,
-            salt,
-        });
-        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' route is called with an
-        // owner's automation token.
+        // Settings' route is called with an owner's automation token (the node has no admin password).
         settingsAdmin = ownerTokenHeaders('admin');
         const adminHttpRes = await fetch(`${BASE}/api/local/admin/treasury/${flock}/location`, {
             method: 'POST',
@@ -193,7 +185,7 @@ async function main() {
             },
             body: JSON.stringify({ lat: -28.5525, lng: 153.5045 }),
         });
-        assert(adminHttpRes.ok, `Admin password endpoint successfully updates location (${adminHttpRes.status})`);
+        assert(adminHttpRes.ok, `The Settings endpoint successfully updates location (${adminHttpRes.status})`);
         const flockAdminRow = db.prepare('SELECT lat, lng, location_auth_signer FROM members WHERE public_key = ?').get(flock) as any;
         assert(flockAdminRow.lat === -28.5525 && flockAdminRow.lng === 153.5045, 'Flock location updated via admin endpoint');
 

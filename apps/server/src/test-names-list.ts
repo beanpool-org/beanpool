@@ -30,9 +30,9 @@
  *      key, keeps every statement and share signed by it as it was, and the phones make a new key without it.
  *   8. The server never holds a readable name: the planted names are in no byte of the database or its WAL, of a
  *      snapshot, or of the whole copy a standby pulls, which carries the sealed entries, the history and the shares.
- *   9. Whoever runs the server: a statement and a share written straight into the tables (A1), a key the owner password
- *      makes an admin signing a real statement (A2), the same key added properly by a check and a vouch (B3), and the
- *      owner password moving Ada's account to the operator's key, over HTTP (A3).
+ *   9. Whoever runs the server: a statement and a share written straight into the tables (A1), a key the owner's key
+ *      session makes an admin, which no phone has checked, signing a real statement (A2), the same key added properly by
+ *      a check and a vouch (B3), and an owner's key session moving Ada's account to the operator's key, over HTTP (A3).
  *  10. Two admins to confirm with exactly two admins (F7): each can confirm the other, and a member waits for the second.
  *  11. The only holder of the newest key, made a moderator and an admin again, makes a new key dropping nobody (C6); a
  *      server put back to an older history is refused by a phone that took a newer one, and the phone puts it back
@@ -60,22 +60,22 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 const sha512 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha512').update(b).digest());
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState } from './state-engine.js';
+import { initStateEngine, exportSyncState, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createSnapshot, SNAPSHOTS_DIR } from './services/snapshot-scheduler.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 
 let BASE = '';
-const ADMIN_PW = 'Names-List-Admin-Pw-62!';
-// Step 7c: the password alone opens no admin route with 2FA off, so the suite turns 2FA on and sends a code with it.
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
 let run = 0, passed = 0;
@@ -235,23 +235,24 @@ async function main(): Promise<void> {
     COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
     // The community.
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, abe, bea, mo, mel, nia] = ['Ada', 'Abe', 'Bea', 'Mo', 'Mel', 'Nia'].map(newId);
     for (const who of [ada, abe, bea, mo, mel, nia]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [abe, 'admin'], [bea, 'admin'], [mo, 'moderator']] as const) {
-        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD());
+    for (const [who, role] of [[ada, 'admin'], [abe, 'admin'], [bea, 'admin'], [mo, 'moderator']] as const) {
+        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER());
         require_(granted.status === 200, `${who.name} is made ${role} (${show(granted)})`);
     }
     const stranger = newId('Stranger');
@@ -483,7 +484,7 @@ async function main(): Promise<void> {
     const abeKey1 = abeP.key(k1);
     const logMark = lastLogRow();
     const abeHeldOwnWord = (await state(owen)).body.admins.find((a: any) => a.pubkey === abe.pk).keyIds.includes(k1);
-    const removed = await call(null, 'DELETE', `/api/local/admin/node-roles/${abe.pk}/admin`, undefined, PASSWORD());
+    const removed = await call(null, 'DELETE', `/api/local/admin/node-roles/${abe.pk}/admin`, undefined, OWNER());
     require_(removed.status === 200, `6. Owen removes Abe's admin role (${show(removed)})`);
     const abeNow = await state(abe);
     assert(abeNow.status === 403 && abeNow.body?.code === 'admins_only', `6. Abe is refused at once (${show(abeNow)})`);
@@ -524,16 +525,16 @@ async function main(): Promise<void> {
         assert(r.plan.kind === 'refused' && r.plan.reason === 'untrusted_maker' && r.plan.maker === abe.pk, `6. a generation 3 Abe really signed, written in, is refused by ${p.id.name}'s phone (${JSON.stringify(r.plan)})`);
     }
     db.prepare('DELETE FROM names_generations WHERE id = ?').run(abeGen.id);
-    await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: abe.pk, role: 'admin' }, PASSWORD());
+    await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: abe.pk, role: 'admin' }, OWNER());
     const o6b = await owenP.open();
     assert(!sharedTo(o6b.shares).includes(abe.pk) && owenP.pin!.dropped[abe.pk] === k2, // by the dropping statement's id (Addendum 2)
         "6. made an admin again, Abe gets nothing from Owen's phone: it dropped him, and only a check in person brings him back");
 
     // ── 7. A member leaving, and re-keys ─────────────────────────────────────────────────────────
-    await call(null, 'DELETE', `/api/local/admin/node-roles/${abe.pk}/admin`, undefined, PASSWORD());
+    await call(null, 'DELETE', `/api/local/admin/node-roles/${abe.pk}/admin`, undefined, OWNER());
     // An admin removes a member outright only where community votes are switched off (removal by vote S3).
     setSwitchOverride('decisions', false);
-    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, PASSWORD());
+    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, OWNER());
     setSwitchOverride('decisions', true);
     require_(pruned.status === 200, `7. an admin removes Nia (${show(pruned)})`);
     const niaRow = db.prepare('SELECT revoked_at, revoke_reason FROM confirmations WHERE member_pubkey = ? AND id = ?').get(nia.pk, c3.body.id) as any;
@@ -597,11 +598,11 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM names_generations WHERE id = ?').run(forged.id);
     db.prepare('DELETE FROM names_shares WHERE from_pubkey = ? AND to_pubkey = ?').run(owen.pk, adaNew.pk);
     require_((await owenP.open()).plan.kind === 'ready' && (await adaNewP.open()).plan.kind === 'ready', '9. (the rows taken out again, both phones are ready)');
-    // A2: a key the owner password makes an admin.
+    // A2: a key the owner's key session makes an admin, which no phone has checked.
     const oscar = newId('Oscar');
     const oscarInvite = await generate(owen);
     require_(oscarInvite.status === 200 && (await redeem(oscar, oscarInvite.body?.invite?.code)).status === 200, '9. Oscar joins');
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: oscar.pk, role: 'admin' }, PASSWORD())).status === 200, "9. the owner password with a 2FA code makes Oscar an admin: the server's word alone");
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: oscar.pk, role: 'admin' }, OWNER())).status === 200, "9. the owner's key session makes Oscar an admin over HTTP: to the phones, the server's word alone");
     const oscarP = new Phone(oscar);
     const oscarGen = makeNamesGeneration({ communityId: COMMUNITY, n: 4, parentId: k3, drops: [owen.pk, adaNew.pk] }, oscarP.signer);
     const oscarMakes = await postGen(oscar, oscarGen);
@@ -621,12 +622,12 @@ async function main(): Promise<void> {
     require_((await oscarP.open()).plan.kind === 'ready', "9. B3 Oscar's phone opens the list");
     await adaNewP.open();
     assert(adaNewP.pin!.trusted.includes(oscar.pk), "9. B3 Ada's phone trusts Oscar from Owen's signed header");
-    // A3: the owner password alone moves Ada's account to a key the operator holds, over HTTP.
+    // A3: an owner's key session moves Ada's account to a key the operator holds, over HTTP.
     const op = newId('Ada');
-    const issued = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/issue-code`, {}, PASSWORD());
-    const moved = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/complete`, { code: issued.body?.code, newPubkey: op.pk }, PASSWORD());
-    require_(issued.status === 200 && issued.body?.operator === 'owner:password' && moved.status === 200,
-        `9. A3 the owner password with a 2FA code, and no key, re-keys Ada's account to a key the operator holds (${show(issued)} | ${show(moved)})`);
+    const issued = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/issue-code`, {}, OWNER());
+    const moved = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/complete`, { code: issued.body?.code, newPubkey: op.pk }, OWNER());
+    require_(issued.status === 200 && issued.body?.operator === owen.pk && moved.status === 200,
+        `9. A3 an owner's key session, and no key of Ada's, re-keys Ada's account to a key the operator holds (${show(issued)} | ${show(moved)})`);
     const o9b = await owenP.open();
     const k4 = owenP.head();
     assert(o9b.made?.status === 201 && readNamesGeneration(o9b.state.generations.find((g: any) => g.id === k4), COMMUNITY)?.drops.join() === adaNew.pk,
@@ -636,8 +637,8 @@ async function main(): Promise<void> {
     const adaReal = newId('Ada');
     assert(!namesKeyCheckMatches(namesKeyQr(adaReal.pk), op.pk) && !namesKeyCheckMatches(namesKeyCode(adaReal.pk), op.pk),
         "9. A3 checked in person, the real Ada's phone shows a key and code that aren't the one under her name");
-    const issued2 = await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/issue-code`, {}, PASSWORD());
-    require_((await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/complete`, { code: issued2.body?.code, newPubkey: adaReal.pk }, PASSWORD())).status === 200,
+    const issued2 = await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/issue-code`, {}, OWNER());
+    require_((await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/complete`, { code: issued2.body?.code, newPubkey: adaReal.pk }, OWNER())).status === 200,
         "9. A3 the owner moves Ada's account to her real new phone");
     const adaRealP = new Phone(adaReal);
     meet(owenP, adaRealP, COMMUNITY);
@@ -648,7 +649,7 @@ async function main(): Promise<void> {
     assert(adaRealOpen.plan.kind === 'ready' && allOpen, "9. A3 and it opens every entry");
 
     // ── 10. Two admins to confirm, with exactly two admins (F7) ──────────────────────────────────
-    for (const gone of [oscar, bea]) require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${gone.pk}/admin`, undefined, PASSWORD())).status === 200, `10. ${gone.name} stops being an admin`);
+    for (const gone of [oscar, bea]) require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${gone.pk}/admin`, undefined, OWNER())).status === 200, `10. ${gone.name} stops being an admin`);
     require_((await owenP.open()).plan.kind === 'ready' && (await adaRealP.open()).plan.kind === 'ready', '10. Owen and Ada are the only two, and both phones are ready');
     require_((await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: true })).status === 200, '10. Owen asks for two admins to confirm');
     const free = (db.prepare('SELECT e.id FROM names_entries e WHERE NOT EXISTS (SELECT 1 FROM confirmations c WHERE c.entry_id = e.id AND c.revoked_at IS NULL) ORDER BY e.id').all() as { id: string }[]).map((r) => r.id);
@@ -670,10 +671,10 @@ async function main(): Promise<void> {
     require_((await adaRealP.postMine(mN.generation, st11, [])).status === 201, "11. Ada's phone makes a new key and its answer lands (after saying, in her own header, which keys she holds), but it sends nothing more");
     await adaRealP.sync();
     require_(adaRealP.head() === mN.generation.id && !!adaRealP.key(), '11. her phone holds it');
-    require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${adaReal.pk}/admin`, undefined, PASSWORD())).status === 200
-        && (await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaReal.pk, role: 'moderator' }, PASSWORD())).status === 200, '11. the owner makes Ada a moderator');
+    require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${adaReal.pk}/admin`, undefined, OWNER())).status === 200
+        && (await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaReal.pk, role: 'moderator' }, OWNER())).status === 200, '11. the owner makes Ada a moderator');
     require_((await state(owen)).status === 200, '11. (the next names-list request marks her)');
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaReal.pk, role: 'admin' }, PASSWORD())).status === 200, '11. and an admin again');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaReal.pk, role: 'admin' }, OWNER())).status === 200, '11. and an admin again');
     const outBack = (await state(adaReal)).body;
     assert(outBack.nobodyHoldsKey === true && outBack.newKeyNeeded === true && JSON.stringify(outBack.droppedHolders) === JSON.stringify([adaReal.pk]),
         `11. C6 nobody holds the key as far as the server knows, and it lists Ada herself as dropped (${JSON.stringify({ nobody: outBack.nobodyHoldsKey, dropped: outBack.droppedHolders })})`);

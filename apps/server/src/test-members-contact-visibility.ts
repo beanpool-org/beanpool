@@ -37,7 +37,6 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 
-const ADMIN_PW = 'ContactTest123!';
 let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -360,17 +359,16 @@ async function main() {
 
     console.log('\n── the admin dashboard\'s member list ──');
     {
-        // Step 7c: with the node's 2FA off the password alone reads nothing; with 2FA on it goes with a fresh code.
-        const alone = await post('/api/local/admin/data', { password: ADMIN_PW });
-        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && secretsIn(alone.text).size === 0,
-            `2FA off: the password alone → 403 password_needs_2fa, no member rows (got ${alone.status} ${alone.body?.code})`);
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        const tfa = turnOn2faForTests(ADMIN_PW);
-        const r = await post('/api/local/admin/data', { password: ADMIN_PW, totpCode: tfa.code() });
-        assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
-        // The password proves no member, and Community, Trade Partners and Friends all need a member viewer.
+        // The node has no admin password: an owner reads the list with their key session, a member's own key. The admin
+        // rows carry no contact details all the same, whatever a member viewer could read elsewhere (Community, say).
+        const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+        const asOwner = ownerSessionHeaders();
+        const res = await fetch(`${BASE}/api/local/admin/data`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: '{}' });
+        const text = await res.text();
+        const r = { status: res.status, text, body: (() => { try { return JSON.parse(text); } catch { return undefined; } })() as any };
+        assert(r.status === 200, `an owner reads /api/local/admin/data (got ${r.status})`);
         const seen = secretsIn(r.text);
-        assert(seen.size === 0, `an admin, signed in with the password and no member key, is sent no contact details (saw ${fmt(seen)})`);
+        assert(seen.size === 0, `an owner, signed in with their key, is sent no contact details in the admin rows (saw ${fmt(seen)})`);
         const row = (r.body?.members || []).find((m: any) => m.publicKey === owners.hidden.pubKeyHex);
         assert(!!row && !('contactValue' in row) && !('contactVisibility' in row), 'the admin member rows carry no contact fields');
         assert(!!row && row.invitedBy === 'seed' && typeof row.status === 'string', 'the admin rows still carry what the manager draws from (invitedBy, status)');

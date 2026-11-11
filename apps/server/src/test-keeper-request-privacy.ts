@@ -11,7 +11,7 @@
  *   1. the lead keeper, on the enterprise read and on the requests list: a yes, no figure
  *   2. another keeper, an unrelated member, no one signed in: no request rows, and the list is refused
  *   3. the applicant: their own figure on myPendingRequest, and no one else's rows
- *   4. a node admin (signed), an owner's key session, an admin automation token, the admin password session: never the figure
+ *   4. a node admin (signed), an owner's key session, an admin automation token: never the figure
  *   5. the applicant's known grant lowered below the pledge: the lead keeper sees a no; approving is refused in words
  *      that do not carry the figure, and the applicant still sees their own
  *   6. a sole keeper approves an applicant whose own debt is using their known floor (#1638 review B1): the row said no,
@@ -34,7 +34,7 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, createTreasury, adminAssignTreasuryOperator, getAvailableBacking, getBalance, applyDueKeeperChanges, transfer } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
     const anaList = await list(ana);
     assert(anaList.status === 403, `Ana is refused the requests list (${show(anaList)})`);
 
-    // ── 4. a node admin, an owner's session, a token, the password ─────────────────────────────
+    // ── 4. a node admin, an owner's session, a token ───────────────────────────────────────────
     console.log('── 4. admins, sessions and tokens ──');
     const adminDetail = await detail(ada);
     const adminRow = adminDetail.body?.keeperRequests?.[0];
@@ -238,12 +238,10 @@ async function main(): Promise<void> {
     assert(adminList.status === 200 && rowsCarryNoFigure(adminList) && adminList.body?.requests?.[0]?.canBackPledge === true,
         `and the same on the list (${show(adminList)})`);
 
-    const twoFa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
     const viaHeaders: Array<[string, Record<string, string>]> = [
         ['an owner\'s key session', ownerSession],
         ['a node admin\'s key session', adaAdmin],
         ['an admin automation token', adminToken],
-        ['the admin password', twoFa.headers()],
     ];
     for (const [label, headers] of viaHeaders) {
         const d = await detail(null, headers);

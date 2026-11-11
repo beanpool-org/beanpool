@@ -32,22 +32,21 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, generateInvite } from './state-engine.js';
+import { initStateEngine, generateInvite, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { approveKnock, declineKnock } from './engine/knocks.js';
 import { getFunnel } from './engine/funnel.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 
 let BASE = '';
-const ADMIN_PW = 'Door-Setting-Admin-Pw-48!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The owner's password goes with a
-// fresh code once main() has turned 2FA on.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
-const PASSWORD = (): Record<string, string> => (tfa ? tfa.headers() : { 'X-Admin-Password': ADMIN_PW });
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -144,27 +143,24 @@ const adminsOnly = (r: Res) => r.status === 403 && r.body?.code === 'admins_only
 async function main(): Promise<void> {
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const alone = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
-    assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.success,
-        `2FA off: the owner's password alone → 403 password_needs_2fa, no invite (${show(alone)})`);
-    tfa = turnOn2faForTests(ADMIN_PW);
-
-    // The community: Owen (owner), Ada (admin), Mo (moderator), Mel (a member).
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The community: Owen (owner), Ada (admin), Mo (moderator), Mel (a member). The node has no admin password: Owen
+    // claims the community as its claim code lets the first phone do (claim-code.ts claimNode: his member row, then the
+    // owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the fresh node's seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mo, mel] = ['Ada', 'Mo', 'Mel'].map(newId);
     for (const who of [ada, mo, mel]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [mo, 'moderator']] as const) {
-        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD());
+    for (const [who, role] of [[ada, 'admin'], [mo, 'moderator']] as const) {
+        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER());
         require_(granted.status === 200, `${who.name} is made ${role} (${show(granted)})`);
     }
 
@@ -191,7 +187,7 @@ async function main(): Promise<void> {
     const unsigned = await setDoorAs(null, { door: 'admins' });
     assert(unsigned.status === 401 && doorRow() === null, `unsigned → 401, nothing stored (${show(unsigned)})`);
     const storedBefore = publishHealthNow();
-    const oldWay = await call(null, 'POST', '/api/local/admin/node/config', { door: 'admins', publishHealth: false }, PASSWORD());
+    const oldWay = await call(null, 'POST', '/api/local/admin/node/config', { door: 'admins', publishHealth: false }, OWNER());
     assert(oldWay.status === 400 && oldWay.body?.code === 'moved_to_community_shape' && doorRow() === null && publishHealthNow() === storedBefore,
         `node/config's old door is refused, and nothing in that request is written (${show(oldWay)})`);
     const adaSession = await keySession(ada);
@@ -200,11 +196,11 @@ async function main(): Promise<void> {
     const byAdmin = await setDoorAs({ 'x-admin-session': adaSession! }, { door: 'admins', publishHealth: false });
     assert(byAdmin.status === 403 && /Only an owner/.test(byAdmin.body?.error ?? '') && doorRow() === null && publishHealthNow() === before,
         `an admin's key session → 403 (an owner's choice), and nothing in that request is written (${show(byAdmin)})`);
-    const open = await setDoorAs(PASSWORD(), { door: 'open' });
+    const open = await setDoorAs(OWNER(), { door: 'open' });
     assert(open.status === 409 && open.body?.code === 'door_open_refused' && /strangers would hold credit/.test(open.body?.error ?? '') && doorRow() === null,
         `the owner asking for an open door on a community with Beans → 409, and why (${show(open)})`);
     for (const bad of ['everyone', 'ADMINS', 1, null, true]) {
-        const r = await setDoorAs(PASSWORD(), { door: bad });
+        const r = await setDoorAs(OWNER(), { door: bad });
         assert(r.status === 400 && r.body?.code === 'bad_setting' && r.body?.setting === 'join' && doorRow() === null, `door ${JSON.stringify(bad)} → 400 (${show(r)})`);
     }
     const owenSession = await keySession(owen);
@@ -281,7 +277,7 @@ async function main(): Promise<void> {
     const tomJoins = await redeemTicket(tom, adaTicket);
     assert(adaTicketCheck.body?.valid === true && tomJoins.status === 200 && memberRow(tom.pk)?.invited_by === ada.pk,
         `a ticket the admin signed passes the pre-flight and joins someone (${show(adaTicketCheck)} | ${show(tomJoins)})`);
-    const seedNow = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    const seedNow = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, OWNER());
     assert(seedNow.status === 200 && typeof seedNow.body?.code === 'string', `the seed invite works as on every door (${show(seedNow)})`);
 
     // Underneath the routes. Uma's knock is planted: this address has knocked 3 times today, the most it may.
@@ -300,9 +296,9 @@ async function main(): Promise<void> {
 
     // ── 4. back to members ───────────────────────────────────────────────────────────────────────
     console.log('\n── 4. back to any member ──');
-    const back = await setDoorAs(PASSWORD(), { door: 'members' });
+    const back = await setDoorAs(OWNER(), { door: 'members' });
     assert(back.status === 200 && doorOf(back) === 'members' && doorRow() === null && (await info())?.features?.door === 'members',
-        `the owner (password) sets members again: the row goes, and info says members (${show(back)})`);
+        `the owner sets members again: the row goes, and info says members (${show(back)})`);
     const melAgain = await generate(mel);
     const melReads = await knocks(mel);
     const sueNow = await redeemTicket(sue, melTicket);
@@ -315,8 +311,8 @@ async function main(): Promise<void> {
     process.env.NODE_PROFILE = 'global';
     const g = await info();
     const gConfig = await nodeConfig();
-    const gSet = await setDoorAs(PASSWORD(), { door: 'admins' });
-    const gOpen = await setDoorAs(PASSWORD(), { door: 'open' });
+    const gSet = await setDoorAs(OWNER(), { door: 'admins' });
+    const gOpen = await setDoorAs(OWNER(), { door: 'open' });
     assert(g?.features?.door === 'open' && g?.features?.invites === false && gConfig?.door === 'open',
         `info and config say open (${JSON.stringify({ door: g?.features?.door, invites: g?.features?.invites, config: gConfig?.door })})`);
     assert(gSet.status === 409 && gSet.body?.code === 'profile' && gOpen.status === 409 && doorRow() === null,

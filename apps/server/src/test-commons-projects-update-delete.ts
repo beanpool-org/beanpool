@@ -20,8 +20,7 @@ import { initStateEngine, createProject, getAllProjects } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -76,9 +75,6 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
-    const { hash, salt } = hashPassword(ADMIN_PASSWORD);
-    saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -180,15 +176,14 @@ async function main() {
     const aliasStatuses = (await signedFetch('GET', '/api/treasuries/statuses', attacker)).body;
     assert(!aliasStatuses?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Other member does not see a rejected project on /api/treasuries/statuses');
 
-    // 0c5. Manager password read: /api/local/admin/treasury lists rejected, suspended and disabled rows
+    // 0c5. The manager's read (an owner's key session): /api/local/admin/treasury lists rejected, suspended and disabled rows
     const unauthAdminRes = await fetch(`${BASE}/api/local/admin/treasury`);
     assert(unauthAdminRes.status === 401 || unauthAdminRes.status === 403, `Unauthenticated request refused from /api/local/admin/treasury (got ${unauthAdminRes.status})`);
-    const badAdminRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: { 'X-Admin-Password': 'wrong-password' } });
-    assert(badAdminRes.status === 401 || badAdminRes.status === 403, `Wrong password refused from /api/local/admin/treasury (got ${badAdminRes.status})`);
+    const badAdminRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: { 'X-Admin-Password': 'correct-horse-battery-staple-1234' } });
+    assert(badAdminRes.status === 401 || badAdminRes.status === 403, `An old admin password is no credential on /api/local/admin/treasury (got ${badAdminRes.status})`);
 
-    const twoFa = turnOn2faForTests(ADMIN_PASSWORD);
-    const adminTreasuriesRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: twoFa.headers() });
-    assert(adminTreasuriesRes.status === 200, `Manager password sign-in answers 200 on /api/local/admin/treasury (got ${adminTreasuriesRes.status})`);
+    const adminTreasuriesRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: ownerSessionHeaders() });
+    assert(adminTreasuriesRes.status === 200, `An owner's key session answers 200 on /api/local/admin/treasury (got ${adminTreasuriesRes.status})`);
     const adminBody = await adminTreasuriesRes.json();
     const adminTreasuries = adminBody.treasuries ?? [];
     assert(adminTreasuries.some((t: any) => t.publicKey === rejProj!.id), 'Manager lists rejected project in /api/local/admin/treasury');

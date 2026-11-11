@@ -19,8 +19,9 @@
  *     gave an admin before I5 stays until an owner stops it by hand from the card: a committee admin can't; the owner's
  *     stop returns its holds and writes one stop line, its code still lets its person in with no vouch; no Bean moves.
  *  9. Both departure paths: the Commons pays exactly as before (memo, amount) and the room is stamped written off.
- * 10. The password session is refused on every writer; Beans off (before any Bean moves) refuses every writer (an ask's and
- *     a knock's answer with a vouch included) and writes no role budget.
+ * 10. An owner's key session (an admin credential, no member's signature) is refused on every member writer, and an admin
+ *     who is no voucher on a seed invite's vouch; Beans off (before any Bean moves) refuses every writer (an ask's and a
+ *     knock's answer with a vouch included) and writes no role budget.
  * 11. The boot gives an admin made outside grantNodeRole no budget (I5); an owner the shell made gets one (11b), once.
  * 12. Property test: across random sequences no voucher's lines sum below zero and left + held never passes 2,000.
  * 13. A thousand vouches: the ledger audit sums to zero, and no Bean moved.
@@ -60,12 +61,13 @@ import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, exportSyncState, getBalance, adminPruneUser, purgeMemberSelf, transfer, createPost as rawCreatePost,
-    generateInvite, redeemInvite, runLedgerAudit, usableFloor, COMMUNITY_DECISION_ACTOR, adminSetCreditFrozen, adminSetUserStatus,
+    generateInvite, redeemInvite, runLedgerAudit, usableFloor, COMMUNITY_DECISION_ACTOR, adminSetCreditFrozen, adminSetUserStatus, broadcast,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride, getProfileSwitches } from './config/node-profile.js';
@@ -74,7 +76,7 @@ import { TABLES } from './engine/replication-manifest.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pruneUnusedInvites } from './engine/writer-bounds.js';
 import {
-    VOUCHER_WORDS, VOUCHERS_MIGRATION_ACTOR, budgetOf, grantMissingRoleBudgets, makeVoucher, setBudgetLevel, stopVoucher,
+    VOUCHER_WORDS, VOUCHERS_MIGRATION_ACTOR, CLAIM_ACTOR, budgetOf, grantMissingRoleBudgets, makeVoucher, setBudgetLevel, stopVoucher,
     vouchFromProfile, returnLapsedHolds, isOnCreditCommittee, vouchingAfterRoleChange,
 } from './engine/vouchers.js';
 import { deliverRecoverNotices, RECOVER_ACTOR } from './recover-command.js';
@@ -89,9 +91,8 @@ import { localFetch } from './keepalive-test-fetch.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 let BASE = '';
-const ADMIN_PW = 'Vouchers-Suite-Admin-Pw-77!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -196,25 +197,26 @@ async function main(): Promise<void> {
     await ensureGenesis();
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, dan, mel, jane, bea, sam, tom, uma, vic, kai, lou] = ['Ada', 'Dan', 'Mel', 'Jane', 'Bea', 'Sam', 'Tom', 'Uma', 'Vic', 'Kai', 'Lou'].map(newId);
     for (const who of [ada, dan, mel, jane, bea, sam, tom, kai, lou]) await join(owen, who);
 
     // ── 1. Role budgets ──────────────────────────────────────────────────────────────────────────────────────
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [dan, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin'], [dan, 'admin']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
     const owenLines = lines(owen.pk);
-    assert(owenLines.length === 1 && owenLines[0].kind === 'grant' && owenLines[0].amount_c === hc(1000) && owenLines[0].actor === 'owner:password',
-        `1. the owner holds a budget of 1,000 by role from the grant, its actor the granting owner (${JSON.stringify(owenLines)})`);
+    assert(owenLines.length === 1 && owenLines[0].kind === 'grant' && owenLines[0].amount_c === hc(1000) && owenLines[0].actor === CLAIM_ACTOR,
+        `1. the owner holds a budget of 1,000 by role from the grant, its actor the grant's: the claim that made him owner, as node:claim (${JSON.stringify(owenLines)})`);
     const roleRow = (pk: string) => db.prepare('SELECT source, entry_id, made_by FROM vouchers WHERE member_pubkey = ?').get(pk) as { source: string; entry_id: string | null; made_by: string } | undefined;
     assert(!roleRow(ada.pk) && !roleRow(dan.pk) && lines(ada.pk).length === 0 && lines(dan.pk).length === 0,
         '1. a new admin holds no budget: an owner makes an admin a voucher by hand (Marty, 10 Nov; I5)');
@@ -259,7 +261,7 @@ async function main(): Promise<void> {
     };
     const [ike, liz, wyn] = [newId('Ike'), newId('Liz'), newId('Wyn')];
     for (const who of [ike, liz, wyn]) enterNow(who);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ike.pk, role: 'admin' }, PASSWORD())).status === 200 && !roleRow(ike.pk), 'Ike is made an admin, with no budget');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ike.pk, role: 'admin' }, OWNER())).status === 200 && !roleRow(ike.pk), 'Ike is made an admin, with no budget');
     const lizEntry = confirm(liz, owen);
     confirm(wyn, owen, true);
     const sheetOf = async (who: Id) => {
@@ -324,7 +326,7 @@ async function main(): Promise<void> {
     assert(offRedeem.status === 200 && offRedeem.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded && roomOf(offJoiner.pk) === 0
         && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'return' AND ref = ?", madeBeforeOff.body?.invite?.code) === 1,
         `10. a vouched invite redeemed with Beans off joins with no room, its hold back to its maker (${show(offRedeem)})`);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: lou.pk, role: 'admin' }, PASSWORD())).status === 200, 'Lou is made an admin while Beans are off');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: lou.pk, role: 'admin' }, OWNER())).status === 200, 'Lou is made an admin while Beans are off');
     assert(!db.prepare('SELECT 1 FROM vouchers WHERE member_pubkey = ?').get(lou.pk), '10. a role granted with Beans off writes no budget');
     setSwitchOverride('beans', true);
     require_(getProfileSwitches().beans, 'Beans are on again');
@@ -463,7 +465,7 @@ async function main(): Promise<void> {
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: dan.pk, on: true })).status === 200, 'Dan is put on the committee');
     const danHeld = await generate(dan, 50);
     require_(danHeld.status === 200 && budgetOf(dan.pk).held === hc(50), 'Dan, an admin, holds 50 on an invite');
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dan.pk, role: 'moderator' }, PASSWORD())).status === 200, 'Dan is made a moderator');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dan.pk, role: 'moderator' }, OWNER())).status === 200, 'Dan is made a moderator');
     const danRow = db.prepare('SELECT stopped_at, stop_reason FROM vouchers WHERE member_pubkey = ?').get(dan.pk) as any;
     const danCommittee = (db.prepare('SELECT credit_committee FROM members WHERE public_key = ?').get(dan.pk) as any)?.credit_committee;
     assert(danRow?.stop_reason === 'role_lost' && sumLines(dan.pk) === 0 && danCommittee === 0
@@ -577,19 +579,20 @@ async function main(): Promise<void> {
     assert(umaDebt > 0 && umaStamped.n === umaDebt && !!db.prepare("SELECT 1 FROM transactions WHERE to_pubkey = ? AND memo LIKE 'Settle bad debt for self-purged user:%'").get(uma.pk),
         `9. a member's own account deletion stamps the room too, the Commons paying as before (${umaStamped.n} of ${umaDebt})`);
 
-    // ── 10. The password, and Beans off ─────────────────────────────────────────────────────────────────────────
+    // ── 10. An owner's key session is no member's signature; an admin who is no voucher; Beans off ──────────────
     const linesBefore10 = allLines();
     const writers: Array<[Method, string, unknown]> = [
         ['POST', '/api/names/vouchers', { entryId: janeEntry, amount_c: hc(500) }], ['DELETE', `/api/names/vouchers/${jane.pk}`, undefined],
         ['POST', `/api/names/vouchers/${jane.pk}/budget`, { level: hc(500) }], ['POST', '/api/names/vouchers/settings', { voucherBudget: hc(500) }],
         ['POST', '/api/names/committee', { memberPubkey: ada.pk, on: false }], ['POST', '/api/vouch', { memberPubkey: mel.pk, vouchAmount: hc(25) }],
-        ['POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: hc(25) }],
     ];
-    const byPassword = await Promise.all(writers.map(([m, p, b]) => call(null, m, p, b, PASSWORD())));
-    assert(byPassword.every((r) => r.status === 401 || r.status === 403) && allLines() === linesBefore10,
-        `10. the password session is refused on every writer, nothing written (${byPassword.map((r) => r.status).join(' ')})`);
-    assert(byPassword[6].status === 403 && (byPassword[6].body as any)?.code === 'not_a_voucher',
-        `10. seed-invite with vouchAmount under password session is refused 403 not_a_voucher (${byPassword[6].status})`);
+    const bySession = await Promise.all(writers.map(([m, p, b]) => call(null, m, p, b, OWNER())));
+    assert(bySession.every((r) => r.status === 401 || r.status === 403) && allLines() === linesBefore10,
+        `10. an owner's key session (no member's signature) is refused on every member writer, nothing written (${bySession.map((r) => r.status).join(' ')})`);
+    // Lou is an admin with no budget (made one while Beans were off): no voucher, so his seed invite carries no vouch.
+    const louSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: hc(25) }, ownerSessionHeaders(lou.pk));
+    assert(louSeed.status === 403 && (louSeed.body as any)?.code === 'not_a_voucher' && allLines() === linesBefore10,
+        `10. seed-invite with vouchAmount under the key session of an admin who is no voucher is refused 403 not_a_voucher, nothing written (${show(louSeed)})`);
 
     // A signed voucher owner/admin CAN vouch via seed-invite:
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
@@ -612,9 +615,6 @@ async function main(): Promise<void> {
     const meAdmin = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, owenAdminSession);
     assert(meAdmin.status === 200 && meAdmin.body?.voucher === true && meAdmin.body?.budget?.left === budgetOf(owen.pk).left,
         `10. /api/local/admin/vouchers/me under key session returns voucher status (${show(meAdmin)})`);
-    const mePw = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, PASSWORD());
-    assert(mePw.status === 200 && mePw.body?.voucher === false && mePw.body?.presets?.length === 4,
-        `10. /api/local/admin/vouchers/me under password session returns voucher: false (${show(mePw)})`);
     const cardAdmin = await call(null, 'GET', `/api/local/admin/known-floor/vouchers/member/${owen.pk}`, undefined, owenAdminSession);
     assert(cardAdmin.status === 200 && cardAdmin.body?.memberPubkey === owen.pk && cardAdmin.body?.left === budgetOf(owen.pk).left,
         `10. /api/local/admin/known-floor/vouchers/member/:pubkey returns voucher card (${show(cardAdmin)})`);

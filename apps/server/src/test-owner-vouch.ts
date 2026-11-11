@@ -27,11 +27,11 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, generateInvite, redeemInvite } from './state-engine.js';
+import { initStateEngine, generateInvite, redeemInvite, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -43,9 +43,6 @@ const OWNER_VOUCH_ACTOR = String((vouchersModule as Record<string, unknown>).OWN
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
-const ADMIN_PW = 'Owner-Vouch-Suite-Admin-Pw-91!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -128,22 +125,21 @@ async function main(): Promise<void> {
     await ensureGenesis();
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role).
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
     const enter = (who: Id) => {
         const inv = generateInvite(owen.pk)!;
         require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
     };
     const [ada, dan, jane, ora, mel, sam, tom, kai, uma] = ['Ada', 'Dan', 'Jane', 'Ora', 'Mel', 'Sam', 'Tom', 'Kai', 'Uma'].map(newId);
     for (const who of [ada, dan, jane, ora, mel, sam, tom, kai, uma]) enter(who);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: owen.pk, role: 'owner' }, PASSWORD())).status === 200, 'Owen is made owner');
     grantNodeRole(ada.pk, 'admin', owen.pk);
     grantNodeRole(dan.pk, 'admin', owen.pk);
     grantNodeRole(ora.pk, 'owner', owen.pk);

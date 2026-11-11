@@ -23,21 +23,21 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 const sha512 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha512').update(b).digest());
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState, getBalance } from './state-engine.js';
+import { initStateEngine, exportSyncState, getBalance, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createSnapshot, SNAPSHOTS_DIR } from './services/snapshot-scheduler.js';
 import { TABLES } from './engine/replication-manifest.js';
 
 let BASE = '';
-const ADMIN_PW = 'Names-List-Admin-Pw-62!';
-// Step 7c: the password alone opens no admin route with 2FA off, so the suite turns 2FA on and sends a code with it.
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
 let run = 0, passed = 0;
@@ -163,22 +163,23 @@ async function main(): Promise<void> {
     COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mel] = ['Ada', 'Mel'].map(newId);
     for (const who of [ada, mel]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
     const owenP = new Phone(owen);
     const opened = await owenP.open();
@@ -290,7 +291,7 @@ async function main(): Promise<void> {
     assert(byMelTicket.status === 200 && !liveConfirmation(vee.pk), `7a. a member's ticket bound to an entry: the joiner is a member, unconfirmed (the maker isn't an admin) (${show(byMelTicket)})`);
 
     // ── 7b. With the known floor on, a bound invite confirms the joiner, who holds the known floor ──
-    const dial = async (on: boolean) => call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on } } }, PASSWORD());
+    const dial = async (on: boolean) => call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on } } }, OWNER());
     require_((await dial(true)).status === 200, '7b. the community turns on the known floor');
     const wes = await addEntry(owenP, { name: 'Wes by the weir', note: '' });
     const bothMade = await call(owen, 'POST', `/api/names/entries/${wes.entryId}/invite`, {});

@@ -22,7 +22,8 @@
  *      amount; money is the frozen line's; restoring the default clears both; the log reads 50 → frozen → 50. Another
  *      member reading the board gets the badge (the tier's least credit) and the trust profile their Trust Points, never
  *      the line itself (50, 1,500, 1,000 less pledges)
- *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
+ *   8. one member's exception needs an owner's or admin's own key session: no automation token (the node has no
+ *      admin password)
  *   10. a change that changes nothing (the same amount, the same freeze, the default restored where it is) answers 200
  *      and writes no line; a freeze at the same amount, an unfreeze, an exception at the community's floor still do
  *
@@ -41,7 +42,7 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator, getPosts } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -501,12 +502,7 @@ async function main(): Promise<void> {
     const token = ownerTokenHeaders('admin');
     const byToken = await exception(token, { memberPubkey: kim.pk, amount_c: hc(2000) });
     assert(byToken.status === 403 && byToken.body?.code === 'key_session_only', `an automation token can't set one (${show(byToken)})`);
-    const twoFa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
-    const pwRead = await call('GET', null, '/api/local/admin/known-floor', undefined, twoFa.headers());
-    const byPassword = await exception(twoFa.headers(), { memberPubkey: kim.pk, amount_c: hc(2000) });
-    assert(pwRead.status === 200 && byPassword.status === 403 && byPassword.body?.code === 'key_session_only',
-        `the node password reads the settings but can't set one: it names nobody, so nobody could be kept from setting their own (${pwRead.status}; ${show(byPassword)})`);
-    assert(ownLines((await read()).body?.log as { action: string }[]).length === linesBefore, 'and neither wrote a line in the log');
+    assert(ownLines((await read()).body?.log as { action: string }[]).length === linesBefore, 'and it wrote no line in the log');
     const byOwnerKey = await exception(owner, { memberPubkey: kim.pk, clear: true });
     assert(byOwnerKey.status === 200, `an owner's key session still can (${show(byOwnerKey)})`);
 
@@ -540,13 +536,12 @@ async function main(): Promise<void> {
         && kimLog[2]?.action === 'exception_frozen' && kimLog.every(l => typeof l.at === 'string' && !('memberPubkey' in l)),
         `her line carries her lines in the log: who changed it, from what to what, when (${JSON.stringify(kimLog.slice(0, 3))})`);
     // Where the node would refuse a change, the line says so first (#1614 review r4178406974), so the screen shows why in
-    // place of the controls: the node password and a token name nobody, and nobody sets their own.
-    const pwLine = await lineOf(twoFa.headers(), kim);
+    // place of the controls: a token names nobody, and nobody sets their own.
     const tokenLine = await lineOf(token, kim);
     const adaOwn = await lineOf(adaAdmin, ada);
     const adaOnKim = await lineOf(adaAdmin, kim);
-    assert(pwLine.status === 200 && pwLine.body?.changeRefused === 'key_session_only' && tokenLine.status === 200 && tokenLine.body?.changeRefused === 'key_session_only',
-        `the node password and a token read the line marked key_session_only (${show(pwLine)}; ${show(tokenLine)})`);
+    assert(tokenLine.status === 200 && tokenLine.body?.changeRefused === 'key_session_only',
+        `a token reads the line marked key_session_only (${show(tokenLine)})`);
     assert(adaOwn.status === 200 && adaOwn.body?.changeRefused === 'own_floor' && adaOnKim.body?.changeRefused === null,
         `an admin's own line is marked own_floor, another member's isn't (${show(adaOwn)}; ${show(adaOnKim)})`);
     const adaSetsOwn = await exception(adaAdmin, { memberPubkey: ada.pk, amount_c: hc(10) });

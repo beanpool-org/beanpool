@@ -5,7 +5,8 @@
  *   1. a member an owner invited reads "Invited by" that owner, named, with the role word: kind `member`, role `owner`
  *      (it read kind `admin`, "Invited directly by the system admin", for anyone an owner or admin invited)
  *   2. one an admin invited names the admin, role `admin`; one a plain member invited, role null
- *   3. a seed invite made under the node password reads kind `card` and names nobody
+ *   3. a seed invite made under an owner's key hangs off that owner, so whoever joins with it names them, role `owner`
+ *      (the node has no admin password, so no seed invite is made under one: none reads as an invite card any more)
  *   4. a seed invite made under an admin's key hangs off that admin (created_by), so whoever joins with it names them
  *   5. the founder stays `founder`
  *   6. the member's switch (PUT /api/profile/privacy): off, a plain member reads no inviter; the member themself, an owner,
@@ -26,7 +27,6 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -130,19 +130,18 @@ async function main(): Promise<void> {
     assert(quinSeen.body?.vouchedInBy?.kind === 'member' && quinSeen.body?.vouchedInBy?.callsign === 'Pat' && quinSeen.body?.vouchedInBy?.role === null,
         `2b. Quin reads "Invited by @Pat", no role word (${show(quinSeen)})`);
 
-    // ── 3. a seed invite made under the node password: an owner's invite card ───────────────────
-    console.log("── 3. an owner's invite card ──");
-    const tfa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
-    const card = await call('POST', null, '/api/admin/seed-invite', { type: 'standard' }, tfa.headers());
-    assert(card.status === 200 && typeof card.body?.code === 'string', `3. the password makes a seed invite (${show(card)})`);
+    // ── 3. a seed invite made under an owner's key hangs off the owner ──────────────────────────
+    console.log("── 3. a seed invite under an owner's key ──");
+    const card = await call('POST', null, '/api/admin/seed-invite', { type: 'standard' }, keySessionHeaders(olive.pk, 'owner'));
+    assert(card.status === 200 && typeof card.body?.code === 'string', `3. Olive's key session makes a seed invite (${show(card)})`);
     const cara = keypair('Cara');
-    // Typed in small letters, as a joiner may: the redeem matches it without case, and the card's words must too.
+    // Typed in small letters, as a joiner may: the redeem matches it without case, and its words must too.
     const caraRedeem = await call('POST', cara, '/api/invite/redeem', { code: String(card.body.code).toLowerCase(), publicKey: cara.pk, callsign: 'Cara' });
     assert(caraRedeem.status === 200 && caraRedeem.body?.success === true, `3a. Cara joins with it (${show(caraRedeem)})`);
     const caraSeen = await profile(vic, cara);
     const caraBy = caraSeen.body?.vouchedInBy;
-    assert(caraBy?.kind === 'card' && caraBy?.publicKey === null && caraBy?.callsign === null && caraBy?.role === null,
-        `3b. Cara reads kind card, naming nobody: "Invited with an owner's invite card" (${show(caraSeen)})`);
+    assert(caraBy?.kind === 'member' && caraBy?.publicKey === olive.pk && caraBy?.callsign === 'Olive' && caraBy?.role === 'owner',
+        `3b. Cara reads "Invited by @Olive · owner": the invite hangs off the owner who made it (${show(caraSeen)})`);
 
     // ── 4. a seed invite made under an admin's key hangs off the admin ──────────────────────────
     console.log("── 4. a seed invite under an admin's key ──");
@@ -156,9 +155,9 @@ async function main(): Promise<void> {
     const danSeen = await profile(vic, dan);
     assert(danSeen.body?.vouchedInBy?.kind === 'member' && danSeen.body?.vouchedInBy?.publicKey === ada.pk && danSeen.body?.vouchedInBy?.role === 'admin',
         `4c. Dan reads "Invited by @Ada · admin" (${show(danSeen)})`);
-    // The password's card still hangs off the genesis member, as before: no person is known.
+    // Olive's code too: created_by and issued_by her key, never the genesis member's.
     const cardRow = db.prepare('SELECT created_by, issued_by FROM invite_codes WHERE code = ?').get(card.body.code) as { created_by: string; issued_by: string };
-    assert(cardRow?.created_by === founder.pk && cardRow?.issued_by === 'owner:password', `4d. the password's card hangs off the founder (${JSON.stringify(cardRow)})`);
+    assert(cardRow?.created_by === olive.pk && cardRow?.issued_by === olive.pk, `4d. the owner's code hangs off Olive, not the founder (${JSON.stringify(cardRow)})`);
 
     // ── 5. the founder ──────────────────────────────────────────────────────────────────────────
     console.log('── 5. the founder ──');
@@ -210,7 +209,7 @@ async function main(): Promise<void> {
     assert(oliveByVic.status === 200 && oliveByVic.body?.broughtIn === undefined && !('broughtIn' in (oliveByVic.body ?? {})),
         `7. a plain member viewing someone else reads no Brought in (${show(oliveByVic)})`);
     const oliveOwn = await profile(olive, olive);
-    assert(oliveOwn.body?.broughtIn === 1, `7a. Olive reads her own: 1 (Mia) (${oliveOwn.body?.broughtIn})`);
+    assert(oliveOwn.body?.broughtIn === 2, `7a. Olive reads her own: 2 (Mia, and Cara with her seed invite in 3) (${oliveOwn.body?.broughtIn})`);
     const adaOfAda = await profile(ada, ada);
     const oliveOfAda = await profile(olive, ada);
     assert(adaOfAda.body?.broughtIn === 2 && oliveOfAda.body?.broughtIn === 2, `7b. Ada brought in 2 (Ben, Dan): she and an owner read 2 (${adaOfAda.body?.broughtIn}, ${oliveOfAda.body?.broughtIn})`);
@@ -242,7 +241,7 @@ async function main(): Promise<void> {
     // a row from before the switch names nobody to anyone. Same rows, same readers as above; only the profile changes.
     console.log('── 9. invites off (global) ──');
     const before = await profile(olive, mia);
-    assert(before.body?.vouchedInBy?.publicKey === olive.pk && (await profile(olive, olive)).body?.broughtIn === 1,
+    assert(before.body?.vouchedInBy?.publicKey === olive.pk && (await profile(olive, olive)).body?.broughtIn === 2,
         `9. on a local node, the same rows: Olive reads Mia's inviter and her own Brought in (${show(before)})`);
     process.env.NODE_PROFILE = 'global';
     try {

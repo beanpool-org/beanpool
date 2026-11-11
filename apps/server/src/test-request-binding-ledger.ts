@@ -1,6 +1,7 @@
 /**
  * A Beans send made in the request-binding format (format 2, @beanpool/core request-signing.ts) keeps its authorship
- * re-verifiable on a backup (SRV-20), as an old-format one does.
+ * re-verifiable on a backup (SRV-20). An old-format send (an app from before binding) is refused, 426 app_too_old, and
+ * writes nothing (the cutover, 1.4.0, CUT4).
  *
  * The signature middleware stores the text a transfer was signed as on its row (`auth_payload`), and a backup running
  * with ENFORCE_LEDGER_AUTH=true re-checks every member-to-member row it imports (engine/sync.ts
@@ -9,14 +10,15 @@
  * body after line 6, not line 4; before this the backup read it as the old format and skipped every such send.
  *
  * Over real HTTPS through the real middleware on this node (as the main server), then as its own backup:
- *   1. a format-2 send and an old-format send are both accepted, and the format-2 row stores its text (host included);
- *   2. both rows, removed and imported back from a signed snapshot with ENFORCE_LEDGER_AUTH=true, pass;
+ *   1. a format-2 send is accepted and its row stores its text (host included); an old-format send gets 426 app_too_old
+ *      and writes no row;
+ *   2. the row, removed and imported back from a signed snapshot with ENFORCE_LEDGER_AUTH=true, passes;
  *   3. a row whose amount was changed after signing is skipped, so the check did run;
  *   4. a send whose signature is written in hex is refused, as on origin/main (the row would store the hex, which this
  *      check reads as base64, so the backup would skip a real send), and the backup imports every send accepted.
  *
- * The switch is this node's own (the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it is set for the run), and the
- * old-format send is made with the switch clock pinned just before it, so the suite holds for any date.
+ * The old-format send is made with the clock pinned just before this node's one date (UNCONFIGURED_HOSTS_UNTIL), so it is
+ * refused for its shape, not for a date.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding-ledger.ts
  */
@@ -51,7 +53,7 @@ async function main(): Promise<void> {
     const { startP2P } = await import('./p2p.js');
     const { addConnector, removeConnector } = await import('./connector-manager.js');
     const { db } = await import('./db/db.js');
-    const { setSignatureSwitchClockForTests, unboundSignaturesCutoff } = await import('./engine/member-signature.js');
+    const { setSignatureSwitchClockForTests, UNCONFIGURED_HOSTS_UNTIL } = await import('./engine/member-signature.js');
 
     console.log('A format-2 Beans send stays re-verifiable on a backup (ENFORCE_LEDGER_AUTH=true)\n');
     initAdminPassword();
@@ -87,12 +89,11 @@ async function main(): Promise<void> {
     };
 
     try {
-        // ── 1. Both formats accepted, the text stored ──
+        // ── 1. Format 2 accepted, the text stored; the old format refused ──
         const v2Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(4), memo: 'format 2 send' });
         const v2 = await post(await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: v2Body, publicKeyHex: mia.pk, sign: mia.sign }), v2Body);
         assert(v2.status === 200 && v2.body?.transaction?.id, `a format-2 send is accepted (${v2.status} ${JSON.stringify(v2.body).slice(0, 120)})`);
-        const cutoff = unboundSignaturesCutoff();
-        if (typeof cutoff !== 'number') throw new Error('this node refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        const cutoff = Date.parse(`${UNCONFIGURED_HOSTS_UNTIL}T00:00:00Z`);
         setSignatureSwitchClockForTests(() => cutoff - 1);
         const v1Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(2), memo: 'old format send' });
         const ts = String(Date.now());
@@ -102,17 +103,18 @@ async function main(): Promise<void> {
             'X-Public-Key': mia.pk, 'X-Timestamp': ts, 'X-Nonce': nonce,
             'X-Signature': Buffer.from(ed25519.sign(core.utf8Bytes(v1Text), mia.seed)).toString('base64'),
         }, v1Body);
-        assert(v1.status === 200 && v1.body?.transaction?.id, `an old-format send is accepted before the switch (${v1.status})`);
+        const v1Rows = (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE memo = 'old format send'").get() as { n: number }).n;
+        assert(v1.status === 426 && v1.body?.code === 'app_too_old' && /too old/.test(v1.body?.error) && !v1.body?.transaction && v1Rows === 0,
+            `an old-format send is refused, 426 app_too_old, and writes no row (${v1.status} ${JSON.stringify(v1.body).slice(0, 160)}; ${v1Rows} rows)`);
         setSignatureSwitchClockForTests(null);
         const v2Id = v2.body.transaction.id as string;
-        const v1Id = v1.body.transaction.id as string;
         const hexBody = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'hex-spelled send' });
         const hexHeaders = await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: hexBody, publicKeyHex: mia.pk, sign: mia.sign });
         const hex = await post({ ...hexHeaders, 'X-Signature': Buffer.from(hexHeaders['X-Signature'], 'base64').toString('hex') }, hexBody);
         const hexRows = (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE memo = 'hex-spelled send'").get() as { n: number }).n;
         assert(hex.status === 403 && hexRows === 0, `a send whose signature is written in hex is refused, as on main, and writes no row (${hex.status}, ${hexRows} rows)`);
         /** Every send the main server accepted: its backup must import each one. */
-        const accepted = [v2Id, v1Id, ...(hex.body?.transaction?.id ? [hex.body.transaction.id as string] : [])];
+        const accepted = [v2Id, ...(v1.body?.transaction?.id ? [v1.body.transaction.id as string] : []), ...(hex.body?.transaction?.id ? [hex.body.transaction.id as string] : [])];
         const row = db.prepare('SELECT auth_signer, auth_signature, auth_payload FROM transactions WHERE id = ?').get(v2Id) as any;
         assert(row?.auth_signer === mia.pk && String(row?.auth_payload).startsWith('beanpool-request/2\nledger.test\nPOST\n/api/ledger/transfer\n')
             && String(row.auth_payload).endsWith(`\n${v2Body}`),
@@ -133,11 +135,10 @@ async function main(): Promise<void> {
             const result: any = await se.importRemoteState(payload);
             const back = (txId: string) => !!db.prepare('SELECT 1 FROM transactions WHERE id = ?').get(txId);
             assert(back(v2Id), 'the format-2 send is imported: its authorship verifies (0xFF put back, body after line 6)');
-            assert(back(v1Id), 'the old-format send is imported too');
             assert(accepted.every(back), `the backup imports every send the main server accepted (${accepted.filter(back).length} of ${accepted.length})`);
             assert(!back(tampered.id), 'a format-2 row whose amount was changed after signing is skipped: the check ran');
-            assert(result?.newTransactions === 2 && Number(result?.conflictsSkipped) >= 1,
-                `the import wrote exactly the two real sends and counted the changed one as skipped (${JSON.stringify({ n: result?.newTransactions, s: result?.conflictsSkipped })})`);
+            assert(result?.newTransactions === 1 && Number(result?.conflictsSkipped) >= 1,
+                `the import wrote exactly the one real send and counted the changed one as skipped (${JSON.stringify({ n: result?.newTransactions, s: result?.conflictsSkipped })})`);
         } finally {
             unpinMainServerForTests();
         }

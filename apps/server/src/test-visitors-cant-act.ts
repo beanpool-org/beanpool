@@ -95,7 +95,8 @@ import {
 } from './state-engine.js';
 import { runEventReminderSweep, reminderPushTitle } from './engine/event-reminders.js';
 import { EVENT_UPDATED_PUSH_TITLE, EVENT_CANCELLED_PUSH_TITLE } from './engine/posts.js';
-import { createPairing, declinePairing, approvePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
+import { createPairing, declinePairing, approvePairing, describePairing } from './settings-signin-pairing.js';
+import { adminSigninFields, settingsSigninFields, signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { createCrowdfundProject } from './db/db.js';
 import { createDecision } from './decisions-engine.js';
@@ -181,9 +182,9 @@ async function call(method: string, id: Id | null, path: string, body?: unknown)
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -207,8 +208,8 @@ type Sock = { ws: WebSocket; events: any[] };
 function socket(id: Id): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s: Sock = { ws, events: [] };
@@ -631,7 +632,7 @@ async function main(): Promise<void> {
         const signIn = async (who: Id): Promise<Res> => {
             const c = await call('POST', null, '/api/local/admin/auth/challenge', {});
             return call('POST', null, '/api/local/admin/auth/verify-challenge', { challengeId: c.body?.challengeId, memberPubkey: who.pk,
-                signature: crypto.sign(null, Buffer.from(String(c.body?.challenge)), who.priv).toString('base64') });
+                ...adminSigninFields(who.priv, String(c.body?.challengeId), undefined, 'base64') });
         };
         const zedIn = await signIn(zed);
         const nobodyIn = await signIn(nobody);
@@ -643,7 +644,7 @@ async function main(): Promise<void> {
         const pairing = createPairing({ clientKey: 'visitors-cant-act-roles' });
         if (!pairing.ok) throw new Error(`no pairing: ${pairing.error}`);
         const approve = (id: Id) => approvePairing({ pairingId: pairing.pairingId, memberPubkey: id.pk,
-            signature: crypto.sign(null, Buffer.from(pairingMessage('approve', pairing.pairingId, pairing.shortCode)), id.priv).toString('base64') });
+            ...settingsSigninFields(id.priv, 'approve', pairing.pairingId, pairing.shortCode) });
         const pn = approve(nobody);
         const pz = approve(zed);
         assert(!pz.ok && !pn.ok && pz.status === pn.status && pz.error === pn.error && describePairing(pairing.pairingId).ok,
@@ -1448,7 +1449,7 @@ async function main(): Promise<void> {
         const pairing = createPairing({ clientKey: 'visitors-cant-act' });
         if (!pairing.ok) throw new Error(`no pairing: ${pairing.error}`);
         const decline = (id: Id) => declinePairing({ pairingId: pairing.pairingId, memberPubkey: id.pk,
-            signature: crypto.sign(null, Buffer.from(pairingMessage('decline', pairing.pairingId, pairing.shortCode)), id.priv).toString('base64') });
+            ...settingsSigninFields(id.priv, 'decline', pairing.pairingId, pairing.shortCode) });
         const visitor = keypair('PairVisitorVA');
         createConversation('dm', [carol.pk, visitor.pk], carol.pk);
         const n = decline(nobody);

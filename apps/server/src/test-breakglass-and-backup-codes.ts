@@ -35,6 +35,7 @@ import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-
 import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests, verifyAndFindBackupCodeHash } from './totp.js';
 import { logger } from './logger.js';
 import { PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -75,8 +76,8 @@ function seedMember(callsign: string): Who {
 /** A key session: a computer's, or (phone) the one the phone's Manage hand-off opens, its unlock just now. */
 function keySession(who: Who, phone = false): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), who.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: who.pub, signature });
+    const { signature, signedFor } = adminSigninFields(who.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: who.pub, signature, signedFor });
     if (!solved.ok) throw new Error(solved.error);
     const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
     if (!ex.ok) throw new Error(ex.error);
@@ -226,7 +227,8 @@ async function main() {
         const a = await signedPost(APP_ISSUE, {}, admin);
         assert(a.status === 403 && !a.body?.breakGlassCode && hashOf(admin.pub) === null, `an admin is refused (${a.status})`);
         // AUTH-01 (2026-10-16): the old format names no community, so a request an owner sent to another community could
-        // be replayed here and hand back a code. Refused with 426 app_too_old, and no code is made or stored.
+        // be replayed here and hand back a code. Refused with 426 app_too_old, and no code is made or stored: since the
+        // cutover (1.4.0, CUT4) by the signature middleware, before the route, as every old-format request is.
         const beforeOld = hashOf(owner2.pub);
         const ts = String(Date.now());
         const nonce = crypto.randomBytes(16).toString('hex');
@@ -236,7 +238,7 @@ async function main() {
             'X-Signature': crypto.sign(null, Buffer.from(oldText, 'utf-8'), owner2.priv).toString('base64'),
         };
         const old = await post(APP_ISSUE, {}, oldHeaders);
-        assert(old.status === 426 && old.body?.code === 'app_too_old' && !old.body?.breakGlassCode && hashOf(owner2.pub) === beforeOld,
+        assert(old.status === 426 && old.body?.code === 'app_too_old' && /too old/.test(old.body?.error ?? '') && !old.body?.breakGlassCode && hashOf(owner2.pub) === beforeOld,
             `an owner's old-format (unbound) request is refused 426 app_too_old, no code made (${old.status} ${JSON.stringify(old.body)})`);
         assert(noStore(old), 'a refusal (the old format, 426) is never cached either');
         const before = hashOf(owner2.pub);

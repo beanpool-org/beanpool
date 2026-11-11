@@ -2,7 +2,7 @@
  * What Settings offers an owner to confirm as this community's address, on a node that knows none of its names
  * (engine/own-addresses.ts `unconfigured`; engine/address-offers.ts).
  *
- * Until the switch such a node accepts a member's request signed for any host, counts it, and Settings offers each host
+ * Until UNCONFIGURED_HOSTS_UNTIL (engine/member-signature.ts) such a node accepts a member's request signed for any host, counts it, and Settings offers each host
  * to confirm. A confirmed host is this community's name for good (own-addresses.ts item 3). Before this, ONE member's
  * app signing for a host was enough to get it offered with one tap, another community's name included
  * (mullum.beanpool.org): an owner talked into that tap made the requests members sign for that community valid here.
@@ -43,11 +43,11 @@
  *     name confirmed before this change is not taken away). A node with a name doesn't hold back the page's host; once
  *     its confirmed names are removed it does again, in the answer to the remove too.
  *  9. A one-person node (its only member is the owner): Settings open at its domain offers it with one tap before any
- *     app reached it there, with the owner's app's count once it has, and still after the switch; one tap confirms it.
+ *     app reached it there, with the owner's app's count once it has, and still from the date; one tap confirms it.
  *     The page's host must be one a member's app could sign for here: something that isn't a host, this machine or
  *     its network, or a beanpool.org name is never offered.
  *
- * The node's switch clock is pinned just before the switch (unboundSignaturesCutoff), so the suite holds for any date.
+ * The node's clock is pinned just before UNCONFIGURED_HOSTS_UNTIL, so the suite holds for any date.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-address-offers.ts
  */
@@ -66,7 +66,7 @@ const PW = 'Address-Offers-Pw-6613!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 /** The node_config row the owner/admin sightings are kept in (engine/member-signature.ts). */
 const STAFF_ROW = 'appAddressStaffSeen';
-/** The switch (ms), read from the node once it is up. */
+/** UNCONFIGURED_HOSTS_UNTIL (ms), read from the node once it is up. */
 let SWITCH = 0;
 
 // ── The node process ───────────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ async function child(): Promise<void> {
             const rows = a.rows.map((r) => normaliseRegistryRow(r)).filter((r) => r !== null);
             return writeDirectoryRows(rows as any, new Date().toISOString()).added.length;
         },
-        switchCutoff: () => ms.unboundSignaturesCutoff(),
+        switchCutoff: () => Date.parse(`${ms.UNCONFIGURED_HOSTS_UNTIL}T00:00:00Z`),
         switchClock: (a: { at: number | null }) => {
             ms.setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
@@ -178,7 +178,6 @@ function startNode(name: string, env: Record<string, string | undefined>): Promi
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
-    // ACCEPT_UNBOUND_SIGNATURES_UNTIL is kept: a date set for the run is the node's switch.
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
@@ -300,15 +299,12 @@ async function main(): Promise<void> {
         return call(node, 'POST', core.signedPathOf(url), headers, text);
     }
     /**
-     * A signed POST in the old format, naming no host, as an app before request binding sends one: it puts no address on
-     * the list. A redeem must be signed by the key it registers.
+     * A redeem by a key with no row yet, signed for this machine (`localhost`, this node's own while it knows none of its
+     * names): it puts no address on the list, as only members' apps are counted. A redeem must be signed by the key it
+     * registers. (Before the cutover this was an old-format request; that is refused now, 426 app_too_old, CUT4.)
      */
-    async function postUnbound(node: Node, who: Id, reqPath: string, body: unknown): Promise<Reply> {
-        const text = JSON.stringify(body);
-        const timestamp = String(Date.now());
-        const nonce = crypto.randomBytes(16).toString('hex');
-        const sig = await who.sign(core.utf8Bytes(core.unboundRequestText({ method: 'POST', path: reqPath, timestamp, nonce, body: text })));
-        return call(node, 'POST', reqPath, { 'X-Public-Key': who.pk, 'X-Signature': Buffer.from(sig).toString('base64'), 'X-Timestamp': timestamp, 'X-Nonce': nonce }, text);
+    async function postJoin(node: Node, who: Id, reqPath: string, body: unknown): Promise<Reply> {
+        return postAs(node, who, 'localhost', reqPath, body);
     }
     let U: Node;
     /** The Settings report; `host` is the host Settings reached the node at, sent as it sends it. */
@@ -345,9 +341,9 @@ async function main(): Promise<void> {
         });
         adminPw = await U.send('adminToken', { owner: owner.pk });
         const cutoff = await U.send('switchCutoff');
-        if (typeof cutoff !== 'number') throw new Error('U refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        if (!Number.isFinite(cutoff)) throw new Error('U names no UNCONFIGURED_HOSTS_UNTIL: this suite needs the date');
         SWITCH = cutoff;
-        console.log(`the switch: ${new Date(SWITCH).toISOString()}; the node's clock is pinned just before it`);
+        console.log(`UNCONFIGURED_HOSTS_UNTIL: ${new Date(SWITCH).toISOString()}; the node's clock is pinned just before it`);
         await beforeSwitch(U);
         const first = await report();
         assert(first.named === false && first.addresses.length === 0, `U knows none of its names (named: ${j(first.named)}, ${j(first.addresses)})`);
@@ -358,7 +354,7 @@ async function main(): Promise<void> {
             const toMullum = await readAs(U, mia, 'mullum.beanpool.org');
             const toRandom = await readAs(U, mia, 'random-host.example');
             assert(toMullum.status === 200 && toRandom.status === 200 && toMullum.body?.publicKey === mia.pk,
-                `both requests are accepted until the switch, as before (${toMullum.status}, ${toRandom.status})`);
+                `both requests are accepted until the date, as before (${toMullum.status}, ${toRandom.status})`);
             for (let i = 0; i < 3; i++) await readAs(U, mia, 'random-host.example');
             const rep = await report();
             assert(!offered(rep, 'mullum.beanpool.org'), `mullum.beanpool.org is not offered to confirm (${j(rep.unconfirmed)})`);
@@ -431,14 +427,14 @@ async function main(): Promise<void> {
                 const gen = await postAs(U, mallory, 'mallory.example', '/api/invite/generate', { publicKey: mallory.pk });
                 const code = gen.body?.invite?.code;
                 const fresh = id(`Mallory${i + 1}`);
-                const joined = await postUnbound(U, fresh, '/api/invite/redeem', { code, publicKey: fresh.pk, callsign: fresh.callsign });
+                const joined = await postJoin(U, fresh, '/api/invite/redeem', { code, publicKey: fresh.pk, callsign: fresh.callsign });
                 assert(gen.status === 200 && typeof code === 'string' && joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember,
                     `Mallory, an ordinary member, makes invite ${i} for herself and redeems it with a fresh key (${show(gen)}; ${show(joined)})`);
                 keys.push(fresh);
             }
             const reads: number[] = [];
             for (const k of keys) reads.push((await readAs(U, k, 'mallory.example')).status);
-            assert(reads.every((st) => st === 200), `her three keys each sign a read for mallory.example: accepted until the switch, as before (${reads.join(',')})`);
+            assert(reads.every((st) => st === 200), `her three keys each sign a read for mallory.example: accepted until the date, as before (${reads.join(',')})`);
             const after = await report();
             const mal = held(after, 'mallory.example');
             assert(!offered(after, 'mallory.example') && mal?.reason === 'not-this-page' && mal.busiestDay === 3 && mal.ownerOrAdmin === false,
@@ -664,7 +660,7 @@ async function main(): Promise<void> {
             await S.send('switchClock', { at: SWITCH + 1000 });
             const refused = await readAs(S, solo, 'solo.example');
             const late = offered(await soloReport('solo.example'), 'solo.example');
-            assert(refused.status === 421 && late?.busiestDay === 1, `after the switch the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
+            assert(refused.status === 421 && late?.busiestDay === 1, `from the date the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
             const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', sAdmin, j({ address: 'solo.example' }));
             const now = await readAs(S, solo, 'solo.example');
             assert(confirmed.status === 200 && confirmed.body?.named === true && confirmed.body?.addresses?.some((a: any) => a.address === 'solo.example' && a.source === 'owner')

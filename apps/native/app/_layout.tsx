@@ -1093,6 +1093,17 @@ function RootLayoutNav() {
 /** The member's copies on the global community come into step, at most hourly (utils/show-on-global.ts). Loaded when used. */
 const tendGlobalCopies = () => loadIdentity().then(async (me) => (await import('../utils/show-on-global')).tendCopiesSoon(me)).catch(() => {});
 
+/**
+ * The member's private contacts list (utils/contacts-sync.ts): a change still waiting to leave the phone is set to go when its
+ * wait is over, and, as the app starts (`ask`), the community in use is asked the number of the copy it keeps, so a list
+ * saved from another phone comes in. Nothing is asked of a member's communities on a return: the rounds hear the others.
+ */
+const tendContacts = (ask: boolean) => loadIdentity().then(async (me) => {
+    const sync = await import('../utils/contacts-sync');
+    await sync.savePassWhenDue(me);
+    if (ask) await sync.checkContactsHere(me);
+}).catch(() => {});
+
 export default function RootLayout() {
     const appState = useRef(AppState.currentState);
 
@@ -1167,6 +1178,7 @@ export default function RootLayout() {
         // What waits at the phone's other communities: asked now, on each return and with the 5-minute sync, at most every
         // 5 minutes however often the member comes back (utils/other-communities-unread.ts).
         void askOtherCommunitiesNow();
+        void tendContacts(true);
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {
@@ -1199,6 +1211,7 @@ export default function RootLayout() {
                 // Then what waits at the other communities goes back on it, and the round brings that up to date.
                 void showBadgeSum();
                 void askOtherCommunitiesNow();
+                void tendContacts(false);
             }
             appState.current = nextAppState;
         });

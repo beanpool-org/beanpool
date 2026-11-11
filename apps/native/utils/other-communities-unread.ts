@@ -98,6 +98,11 @@ export interface RoundDeps {
     timeoutMs?: number;
     /** A deadline shared with others (sync-notices.ts `postAllNoticesFromSync`). */
     signal?: AbortSignal;
+    /**
+     * Each answer a community gave in full (its body), as it lands: the private contacts sync reads the number of the
+     * member's copy kept there from it (contacts-sync.ts `contactsHeard`), with no request of its own. Never awaited.
+     */
+    heard?: (community: string, body: unknown) => void;
 }
 
 interface RoundState {
@@ -186,6 +191,9 @@ async function countAt(community: string, account: Account, deps: RoundDeps, sig
     const answer = await signedAnswer(`${community}${UNREAD_PATH}`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, signal);
     if (!answer) return null;
     if (saysNotTheirs(answer)) return 'not-theirs';
+    if (answer.ok && deps.heard) {
+        try { deps.heard(community, answer.body); } catch (e) { console.warn('[Notices] A round\'s answer was not passed on', e); }
+    }
     const unread = answer.ok ? countIn(answer.body, 'unread') : null;
     return unread === null ? null : { unread, alerts: countIn(answer.body, 'alerts') ?? unread };
 }
@@ -379,10 +387,10 @@ export interface PhoneNotices {
  * A round while the app is open. A closed round still going finishes first: what it writes of the community in use must not
  * land after this forgets it. Throws only what `phone.mayNotify` throws.
  */
-export async function roundWhileOpen(storage: Storage, account: Account | null, phone: PhoneNotices): Promise<number> {
+export async function roundWhileOpen(storage: Storage, account: Account | null, phone: PhoneNotices, heard?: RoundDeps['heard']): Promise<number> {
     const post = (await phone.mayNotify()) ? phone.post : null;
     await running;
-    return askOtherCommunities({ storage, account, post, setBadge: phone.setBadge });
+    return askOtherCommunities({ storage, account, post, setBadge: phone.setBadge, heard });
 }
 
 /**

@@ -91,7 +91,12 @@ export async function showBadgeSum(): Promise<void> {
 export async function askOtherCommunitiesNow(): Promise<void> {
     if (AppState.currentState !== 'active') return;
     try {
-        await roundWhileOpen(AsyncStorage, await loadIdentity(), phoneNotices);
+        const me = await loadIdentity();
+        // Each answer's number of the member's locked contacts copy there (utils/contacts-sync.ts): no request of its own.
+        const heard = (community: string, body: unknown) => {
+            void import('../utils/contacts-sync').then(({ contactsHeard }) => contactsHeard(me, community, body, true)).catch(() => {});
+        };
+        await roundWhileOpen(AsyncStorage, me, phoneNotices, heard);
     } catch (e) {
         console.warn('[Notices] The other communities were not asked', e);
     }

@@ -22,6 +22,7 @@ import {
     joinGroup,
     setMemberRole,
     removeGroupMember,
+    withdrawGroupInvitation,
     handOverGroupLead,
     updateGroup,
     updateGroupPolicy,
@@ -42,11 +43,12 @@ import {
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import { circleCardFor } from '../engine/place-circles.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
+import { groupInvitationsFor } from '../engine/group-invitations.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
 } from '../engine/group-keys.js';
-import { CONVENOR_POWERS_PAUSED, unauthorized } from '@beanpool/engine';
+import { CONVENOR_POWERS_PAUSED, INVITATION_ALREADY_JOINED, INVITATION_NOT_OPEN, unauthorized } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
@@ -422,6 +424,25 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         });
     });
 
+    // 5b. Who has been invited and has not joined yet, and who said no (engine/group-invitations.ts). Each viewer is answered
+    // only what they may read, here and not in the app: a convenor sees every pending invitation and who made it; any other
+    // member only the ones they made; a declined one only its sender. An invitee, someone who asked to join and a stranger
+    // are refused. An invite-only group the caller has no live row in is not found, as for every route that names a group.
+    router.get('/api/groups/:id/invitations', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        const invitations = groupInvitationsFor(ctx.params.id, actor);
+        if (!invitations) {
+            ctx.status = 403;
+            ctx.body = { error: word('Only members of this group can see its invitations') };
+            return;
+        }
+        ctx.status = 200;
+        ctx.body = invitations;
+    });
+
     // 6. Invite a member or approve pending request (Convenor only)
     router.post('/api/groups/:id/members', async (ctx) => {
         const actor = requireAuth(ctx);
@@ -504,6 +525,31 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
             ctx.body = { error: memberErrorText(e, word('Failed to remove member')) };
+        }
+    });
+
+    // 8a. Withdraw an invitation still open (the group page's "Withdraw": a convenor, or the member who made it). Its own
+    // request, never the removal above: the page's list may be minutes old, and if the person accepted since, a removal
+    // would remove a member who has just joined (review of #3061). The node deletes only a row still 'invited', in the
+    // same transaction as the check, and otherwise answers 409 in words that say they have joined (engine withdrawGroupInvitation).
+    router.delete('/api/groups/:id/invitations/:pubkey', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
+
+        try {
+            const withdrawn = withdrawGroupInvitation(ctx.params.id, actor, ctx.params.pubkey);
+            ctx.status = 200;
+            ctx.body = { success: withdrawn };
+        } catch (e: any) {
+            const msg = String(e?.message ?? '');
+            if (msg === INVITATION_ALREADY_JOINED || msg === INVITATION_NOT_OPEN) {
+                ctx.status = 409;
+                ctx.body = { error: memberErrorText(e, msg), code: msg === INVITATION_ALREADY_JOINED ? 'already_joined' : 'invitation_not_open' };
+                return;
+            }
+            ctx.status = msg.includes('UNAUTHORIZED') ? 403 : 400;
+            ctx.body = { error: memberErrorText(e, word('Failed to withdraw the invitation')) };
         }
     });
 

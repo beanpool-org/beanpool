@@ -34,6 +34,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
+import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
@@ -9230,6 +9231,34 @@ export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem;
         console.warn('[Groups] Failed to fetch group detail:', e);
     }
     return null;
+}
+
+/**
+ * Who has been invited to a group and has not joined yet, and which of the viewer's own invitations were declined, as the
+ * node lets THIS member read them (a convenor every pending one, any other member the ones they made; the node decides,
+ * not this phone). Null when the node won't say (an older node, a refusal, no signal): the group's page then draws no list.
+ */
+export async function fetchGroupInvitations(groupId: string): Promise<GroupInvitations | null> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/invitations`);
+        if (!res.ok) return null;
+        return readGroupInvitations(await res.json());
+    } catch (e) {
+        console.warn('[Groups] Failed to fetch the invitations:', e);
+        return null;
+    }
+}
+
+/**
+ * Takes back an invitation still open: a convenor's for anyone's, the sender's for their own (the node decides). Its own
+ * request, never the member removal (DELETE …/members/:pubkey): the list on screen may be minutes old, and if the person
+ * has accepted since, a removal would remove a member who just joined. The node withdraws only a row still invited and
+ * otherwise refuses, 409, saying they have joined (the thrown error carries those words). Nobody invited is in the chat,
+ * so no key changes and no epoch is made for it.
+ */
+export async function withdrawGroupInvitationApi(groupId: string, memberPubkey: string): Promise<boolean> {
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/invitations/${encodeURIComponent(memberPubkey)}`);
+    return Boolean(res?.success);
 }
 
 export async function createGroupApi(groupData: {

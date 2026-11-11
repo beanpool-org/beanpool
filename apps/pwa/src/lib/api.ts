@@ -8,6 +8,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
+import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -2017,6 +2018,31 @@ export async function getGroupMembers(groupId: string, filter?: { status?: strin
     if (filter?.role) params.set('role', filter.role);
     const qs = params.toString();
     return request('GET', `/api/groups/${encodeURIComponent(groupId)}/members${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * Who has been invited to a group and has not joined yet, and which of the viewer's own invitations were declined, as the
+ * node lets THIS member read them (a convenor every pending one, any other member the ones they made; the node decides,
+ * not this app). Null when the node won't say (an older node, a refusal, no signal): the group's page then draws no list.
+ * Withdrawing a pending one is withdrawGroupInvitation (its own request, refused once they have joined), never removeGroupMember.
+ */
+export async function getGroupInvitations(groupId: string): Promise<GroupInvitations | null> {
+    try {
+        return readGroupInvitations(await request('GET', `/api/groups/${encodeURIComponent(groupId)}/invitations`));
+    } catch (e) {
+        console.warn('[Groups] Failed to fetch the invitations:', e);
+        return null;
+    }
+}
+
+/**
+ * Takes back an invitation still open: a convenor's for anyone's, the sender's for their own (the node decides). Its own
+ * request, never removeGroupMember: the list on screen may be minutes old, and if the person has accepted since, a
+ * removal would remove a member who just joined. The node withdraws only a row still invited and otherwise refuses, 409,
+ * saying they have joined (the thrown error carries those words).
+ */
+export async function withdrawGroupInvitation(groupId: string, memberPubkey: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/invitations/${encodeURIComponent(memberPubkey)}`);
 }
 
 export async function approveGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean; member: GroupMember }> {

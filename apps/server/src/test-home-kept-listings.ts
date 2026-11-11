@@ -30,7 +30,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { tierForCredit } from '@beanpool/core';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { localFetch } from './keepalive-test-fetch.js';
-import { signRequest } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -54,7 +54,7 @@ async function request(method: 'GET' | 'POST', pathAndQuery: string, body: unkno
         const nonce = crypto.randomBytes(16).toString('hex');
         const canonical = { method, path: pathAndQuery.split('?')[0], timestamp: ts, nonce, body: bodyString };
         Object.assign(headers, {
-            'X-Public-Key': id.pubKeyHex, 'X-Signature': signRequest(id.privateKey, canonical),
+            'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         });
     }

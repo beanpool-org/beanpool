@@ -28,7 +28,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { POST_PHOTO_FORMAT_ERROR } from './engine/posts.js';
-import { signRequest } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 const fails: string[] = [];
@@ -49,7 +49,7 @@ function newId(): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
     const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
-    return { 'X-Public-Key': id.pk, 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    return { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 let beforeCall: () => void = () => {};
 async function req(method: string, p: string, id?: Id, body?: any, extraHeaders?: Record<string, string>): Promise<{ status: number; body: any }> {

@@ -34,7 +34,7 @@ import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -78,7 +78,7 @@ async function getAs(path: string, id: { pk: string; privateKey: crypto.KeyObjec
     const nonce = crypto.randomBytes(16).toString('hex');
     const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
     const res = await fetch(`${BASE}${path}`, { headers: {
-        'X-Public-Key': id.pk, 'X-Signature': signRequest(id.privateKey, canonical),
+        'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical),
         'X-Timestamp': String(ts), 'X-Nonce': nonce,
     } });
     let json: any = null;

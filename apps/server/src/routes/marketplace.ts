@@ -857,9 +857,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
             : createPost(
             // A listing put in a shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
             type, category || newListingCategory(shopId) || 'other', title, description || '',
-            // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
-            // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
-            price_c ?? 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            // How the price is counted is passed as sent (one fee when none is named): the engine checks it against
+            // POST_PRICE_TYPES (assertPostFields), and a loan's against the lendable ones, so a wrong one is refused in the engine's
+            // words rather than made one fee. A weekly or monthly Offer must stay weekly or monthly: that is what makes a standing deal.
+            price_c ?? 0, priceType ?? 'fixed', authorPublicKey,
             // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,

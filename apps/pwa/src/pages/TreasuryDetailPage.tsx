@@ -44,6 +44,7 @@ import {
     ShopfrontVisitorNote,
 } from '../components/Shopfront';
 import { EnterpriseFace, EnterpriseFeatured } from '../components/EnterpriseManage';
+import { BeansSignButtons } from '../components/BeansSignButtons';
 import {
     categorySinceLine, featuredOf, hasShopfront, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
     readsAsMember, shopCategoryOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
@@ -2059,6 +2060,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {!isEffectivePreview && faceOpen && isKeeperOfThis && (
                                     <EnterpriseFeatured treasury={pubkey} shopId={typeof detail?.shop?.id === 'string' ? detail.shop.id : null} listings={ownListings}
                                         onShopOpened={() => load(true)} onReadAgain={readListings} onFeatured={featuredHere} />
+                                )}
+                                {/* The "Beans accepted here" signs for its window or stall: its keepers' (components/BeansSignButtons.tsx). */}
+                                {!isEffectivePreview && faceOpen && isKeeperOfThis && (
+                                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
+                                        <BeansSignButtons />
+                                    </div>
                                 )}
                             </div>
                         ) : (

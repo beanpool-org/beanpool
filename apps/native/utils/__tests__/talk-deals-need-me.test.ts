@@ -155,7 +155,7 @@ describe('a standing deal asks no Release anywhere the phone lists deals (U2, fa
         standingRow('sd-m3', 'pending', 3, 'paid', '2026-12-09T08:00:00.000Z');
     });
 
-    it("Talk's Action Required: no Release Credits item for any period; the first period's review only", async () => {
+    it("Talk's Action Required: no Release Beans item for any period; the first period's review only", async () => {
         const items = await getActionableDeals(ME);
         expect(Object.fromEntries(items.map(d => [d.txId, d.action]))).toEqual({ 'sd-m1': 'review' });
     });

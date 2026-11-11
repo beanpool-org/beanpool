@@ -21,7 +21,7 @@ Nothing is decided by the server on its own. Held beans are never released autom
 
 ## Before you rule
 
-Message both people. Most stuck deals are a buyer who forgot to press **Release Credits**. A ruling is the last step, not the first.
+Message both people. Most stuck deals are a buyer who forgot to press **Release Beans**. A ruling is the last step, not the first.
 
 ## The three rulings
 

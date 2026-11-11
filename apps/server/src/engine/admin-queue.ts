@@ -16,6 +16,7 @@ import { serverAlertCount } from '../services/alerts.js';
 import { suggestionCountFor } from '../agent/suggestions.js';
 import { actionableKnockCount } from './knocks.js';
 import { inviteAskCount } from './invite-asks.js';
+import { knowledgeDraftCount } from './knowledge-drafts.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -25,7 +26,7 @@ export const ADMIN_SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decis
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];
 
 export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby' | 'server_alert'
-    | 'agent_suggestions' | 'knocks' | 'invite_asks';
+    | 'agent_suggestions' | 'knocks' | 'invite_asks' | 'knowledge_drafts';
 
 export interface AdminQueueItem {
     kind: AdminQueueKind;
@@ -63,8 +64,11 @@ const OWNER_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['standby', 'serv
  * asker's key, whose own AI assistant's suggestions wait for them alone to approve (agent/suggestions.ts); none without it.
  * `inviteAsks`: a member's asks that an admin invite someone (engine/invite-asks.ts), a count only, for an owner or admin
  * whose app answers them: an older app has nowhere to land it, and the assistant's reads leave it out.
+ * `knowledgeDrafts`: members' suggestions of Local knowledge waiting for an owner or admin (engine/knowledge-drafts.ts), a
+ * count only, for an app that opens To check in Learn (an older app has nowhere to land it; Settings can't answer one) and
+ * for the assistant's overview. Never a moderator's: they don't approve.
  */
-export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean; forMember?: string | null; inviteAsks?: boolean } = {}): AdminQueue {
+export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean; forMember?: string | null; inviteAsks?: boolean; knowledgeDrafts?: boolean } = {}): AdminQueue {
     const shutdown = getShutdownStatus();
     const raw: Array<Omit<AdminQueueItem, 'settingsPath'>> = [
         {
@@ -135,6 +139,12 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
             kind: 'invite_asks',
             count: opts.inviteAsks ? inviteAskCount() : 0,
             label: 'Members asking you to invite someone',
+            section: 'home',
+        },
+        {
+            kind: 'knowledge_drafts',
+            count: opts.knowledgeDrafts ? knowledgeDraftCount() : 0,
+            label: 'Local knowledge to check',
             section: 'home',
         },
     ];

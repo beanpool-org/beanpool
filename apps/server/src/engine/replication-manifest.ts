@@ -528,6 +528,12 @@ export const TABLES: Record<string, TableEntry> = {
     // A member's ask that an admin invite someone (engine/invite-asks.ts): a promoted standby still has it to answer, and
     // every delete (answered, taken back, 30 days old, the member gone) goes with a tombstone, so it leaves the standby too.
     invite_asks: plain('id asker_pubkey first_name how_known asked_at updated_at'),
+    // Local knowledge's waiting list (engine/knowledge-drafts.ts, DESIGN-local-knowledge-fable.md §4.1, slice K3): a member's
+    // waiting suggestion, its photos (in the row, so the copy carries them) and "This helped" taps (K5) survive a take-over,
+    // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
+    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
+    knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
+    knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

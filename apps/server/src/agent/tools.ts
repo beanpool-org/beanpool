@@ -310,7 +310,8 @@ export const AGENT_TOOLS: AgentTool[] = [
         }),
         run: (grant) => {
             const counts = communityCountsCached();
-            const queue = getAdminQueue({ forOwner: grant.role === 'owner' });
+            // Members' suggestions of Local knowledge are a count the admin's assistant may say (design §5.1); invite asks stay out.
+            const queue = getAdminQueue({ forOwner: grant.role === 'owner', knowledgeDrafts: true });
             return {
                 ok: true, rows: 1,
                 result: {

@@ -154,6 +154,11 @@ export const PUSH_NOTICE_KINDS = {
     'community.knock-shared': { body: word('Someone asked to join after a listing you shared.'), tab: 'settings' },
     // To a member whose ask to invite someone was answered (server engine/invite-asks.ts). Never the code, the reason or a name.
     'community.invite-ask': { body: word('An admin answered your ask to invite someone.'), tab: 'people' },
+    // Local knowledge's waiting list (server engine/knowledge-drafts.ts, slice K3). Home, where Learn opens: to a community's
+    // owners and admins when a member suggests a page (no name and no title here; its details name both), and to the
+    // member when one of them answers it (never the answer, the reason or who answered).
+    'community.knowledge': { body: word('A member suggested local knowledge for you to check.'), tab: 'home' },
+    'community.knowledge-answer': { body: word('Your local knowledge suggestion has an answer.'), tab: 'home' },
     // To the browser that asked to join and tapped "Tell me when they answer" on the waiting page, when a member says yes (server
     // engine/knocks.ts approveKnock; web push W1). A decline sends nothing: it reads as waiting, by design. Home: the waiting
     // page, which reads the request's own status and offers Join.

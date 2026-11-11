@@ -165,6 +165,11 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('chat_mutes', 'member_pubkey');
     // Their asks that an admin invite someone (engine/invite-asks.ts), still theirs to read and take back.
     move('invite_asks', 'asker_pubkey');
+    // Their suggestions of Local knowledge, still theirs to read and take back, who answered one, and their "This helped"
+    // taps (engine/knowledge-drafts.ts).
+    move('knowledge_drafts', 'member_pubkey');
+    move('knowledge_drafts', 'answered_by');
+    move('knowledge_helped', 'member_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
     // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its

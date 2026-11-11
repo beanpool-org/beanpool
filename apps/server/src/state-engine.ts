@@ -64,6 +64,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
+import { dropKnowledgeOf } from './engine/knowledge-drafts.js';
 import { tidyEndedPins } from './engine/pins.js';
 import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
@@ -9138,6 +9139,9 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         scrubKnocksOf(publicKey);
         // Their asks that an admin invite someone go whole, with a tombstone each (engine/invite-asks.ts).
         deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
+        // And their suggestions of Local knowledge, those photos and their "This helped" taps (engine/knowledge-drafts.ts); the
+        // pages already showing are cancelled with all their posts.
+        dropKnowledgeOf(publicKey);
         // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
         // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
@@ -9342,6 +9346,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
+        dropKnowledgeOf(publicKey);
         dropKeptNoticesOf(publicKey);
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).

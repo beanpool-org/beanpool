@@ -16,7 +16,7 @@
  * Pure and universal: no Node built-ins, no Intl, no regular expressions (the barrel is bundled for the phone).
  */
 import { featureMode, type FeatureMode } from './features.js';
-import { word } from './words.js';
+import { t, word, type Words } from './words.js';
 
 /** The post type, as `posts.type` stores it and `types=` names it. */
 export const KNOWLEDGE_TYPE = 'knowledge' as const;
@@ -222,6 +222,108 @@ export function compareKnowledge(
 /** A sorted copy (the list given is not changed). */
 export function sortKnowledge<T extends KnowledgeOrderFacts>(rows: readonly T[], compareTitles?: (x: string, y: string) => number): T[] {
     return [...rows].sort((a, b) => compareKnowledge(a, b, compareTitles));
+}
+
+// ── The waiting list (slice K3) ──────────────────────────────────────────────────────────
+
+/**
+ * A member's suggestions (§2.4): at most 3 waiting at once, and 5 sent in any 24 hours whether taken back, answered or
+ * not. An answer is kept for My suggestions for 30 days, then the row goes. An owner's or admin's own page waits for
+ * nobody: it publishes at once (POST /api/knowledge/posts).
+ */
+export const KNOWLEDGE_DRAFT_LIMITS = Object.freeze({
+    waiting: 3,
+    perDay: 5,
+    answeredDays: 30,
+});
+
+/** A new page, or a fix to one showing (slice K5). */
+export type KnowledgeDraftKind = 'new' | 'fix';
+
+/** One of a member's own suggestions (GET /api/knowledge/drafts/mine), as My suggestions draws it. Never who answered. */
+export interface KnowledgeDraftMine {
+    id: string;
+    kind: KnowledgeDraftKind;
+    title: string;
+    topic: string;
+    state: 'waiting' | 'approved' | 'declined';
+    createdAt: string;
+    answeredAt: string | null;
+    /** The page it made or changed, once added. */
+    postId: string | null;
+    /** Why it wasn't added (a KNOWLEDGE_DECLINE_REASONS id), and the owner's or admin's own few words. */
+    reason: KnowledgeDeclineReason | null;
+    reasonWords: string | null;
+}
+
+/** One row of To check (GET /api/knowledge/drafts, owners and admins), the longest waiting first. */
+export interface KnowledgeDraftToCheck {
+    id: string;
+    kind: KnowledgeDraftKind;
+    title: string;
+    topic: string;
+    /** The member who sent it, or the owner or admin an assistant gathered it for. */
+    from: { pubkey: string; name: string };
+    /** The assistant's name when an owner's or admin's assistant gathered it (slice K6); null from the app. */
+    assistant: string | null;
+    createdAt: string;
+}
+
+/** One suggestion whole, as the checking screen shows it (GET /api/knowledge/drafts/:id). */
+export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
+    body: string;
+    place: string | null;
+    sources: KnowledgeSource[];
+    lang: string | null;
+    /** What an assistant said it is about: place, service or how_to (K6); null from the app. */
+    about: string | null;
+    /** A fix's "What changed?" (K5); null for a new page. */
+    note: string | null;
+    /** Its photos as data URLs, metadata stripped: the sender's own, at most 3. */
+    photos: string[];
+    /** Approving waits for the tick "I opened the sources and they say this.": an assistant's draft. */
+    needsSourcesTicked: boolean;
+}
+
+/**
+ * The words of the waiting list's notices (§3.4 and §5.6, as amended). A kept notice and a push's details name nobody who
+ * answered; the member reads the page's title, the reason's label and the owner's or admin's own words, if any.
+ */
+export const KNOWLEDGE_DRAFT_WORDS = Object.freeze({
+    addedTitle: word('Your local knowledge is in'),
+    addedBody: word('"{title}" is now in Learn. Thank you.'),
+    declinedTitle: word("Your local knowledge wasn't added"),
+    declinedBody: word('"{title}" wasn\'t added. Reason: {reason}.'),
+    declinedBodyWords: word('"{title}" wasn\'t added. Reason: {reason}. {words}'),
+    /** To owners and admins, when a member suggests a page: who, what, one action. */
+    suggestedTitle: word('Local knowledge to check'),
+    suggestedBody: word('{name} suggested local knowledge: "{title}". Check it in Learn.'),
+});
+
+/**
+ * The notice a member keeps when an owner or admin answers their suggestion, in `words`' language: the node keeps it in
+ * English (wordsFor('en')), and an app writes the same from the same facts in its member's. An unknown reason reads as
+ * "Another reason".
+ */
+export function knowledgeAnswerNotice(
+    answer: { outcome: 'approved' | 'declined'; title: string; reason?: string | null; words?: string | null },
+    words: Pick<Words, 't'> = { t },
+): { title: string; body: string } {
+    if (answer.outcome === 'approved') {
+        return { title: words.t(KNOWLEDGE_DRAFT_WORDS.addedTitle), body: words.t(KNOWLEDGE_DRAFT_WORDS.addedBody, { title: answer.title }) };
+    }
+    const reason = KNOWLEDGE_DECLINE_REASONS.find((r) => r.id === answer.reason) ?? KNOWLEDGE_DECLINE_REASONS[KNOWLEDGE_DECLINE_REASONS.length - 1];
+    const said = typeof answer.words === 'string' ? answer.words.trim() : '';
+    const values = { title: answer.title, reason: words.t(reason.label), words: said };
+    return {
+        title: words.t(KNOWLEDGE_DRAFT_WORDS.declinedTitle),
+        body: said ? words.t(KNOWLEDGE_DRAFT_WORDS.declinedBodyWords, values) : words.t(KNOWLEDGE_DRAFT_WORDS.declinedBody, values),
+    };
+}
+
+/** The Needs-you line for an owner or admin with suggestions to check (§5.1): a count, never a name. */
+export function knowledgeToCheckLine(count: number, words: Pick<Words, 't'> = { t }): string {
+    return words.t('Local knowledge to check: {n}', { n: count });
 }
 
 // ── The feature ──────────────────────────────────────────────────────────────────────────

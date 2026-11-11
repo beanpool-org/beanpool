@@ -15,6 +15,11 @@
       "import": "./dist/brand-colours.js",
       "default": "./dist/brand-colours.js"
     },
+    "./qr-matrix": {
+      "types": "./dist/qr-matrix.d.ts",
+      "import": "./dist/qr-matrix.js",
+      "default": "./dist/qr-matrix.js"
+    },
     "./ed25519-key": {
       "types": "./dist/ed25519-key.d.ts",
       "import": "./dist/ed25519-key.js",
@@ -97,6 +102,7 @@
     "@noble/hashes": "^2.0.1",
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
+    "qrcode": "1.5.4",
     "shamir-secret-sharing": "^0.0.4",
     "uint8arrays": "^5.1.0"
   }

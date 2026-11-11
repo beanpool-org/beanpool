@@ -31,6 +31,7 @@ import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { Sentence } from '../components/Sentence';
 import { ManageFace, ManageFeatured } from '../components/shopfront/Manage';
+import { BeansSignButtons } from '../components/BeansSignButtons';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { useTheme, useStyles } from './ThemeContext';
 import { signedRequestWords } from '../components/signed-request-lines';
@@ -901,6 +902,13 @@ export default function TreasuryManageScreen() {
                         <ManageFace treasury={treasuryKey} detail={detail} lead={leadsIt(detail)} keeper={isKeeperOfThis} project={project} logoUrl={detail?.avatar} onSaved={load} />
                         {isKeeperOfThis && <ManageFeatured treasury={treasuryKey} shopId={shopId} offers={offers} onOffers={setOffers} onShopChanged={load} />}
                     </>
+                )}
+
+                {/* The "Beans accepted here" signs for its window or stall: its keepers' (components/BeansSignButtons.tsx). */}
+                {isKeeperOfThis && (
+                    <View style={styles.pad}>
+                        <BeansSignButtons colors={colors} />
+                    </View>
                 )}
 
                 <View style={[styles.pad, { marginTop: 6 }]}>

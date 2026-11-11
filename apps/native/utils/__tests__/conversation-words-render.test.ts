@@ -333,13 +333,13 @@ describe('a direct message in the pseudo-locale: every word came through t() (wo
         await renderIn('en');
         expect(bracketed()).toBe(0);
         expect(host.textContent).toContain('5 Beans held in trust.');
-        expect(host.textContent).toContain('⚠️ Action Required: Release Credits');
+        expect(host.textContent).toContain('⚠️ Action needed: release the Beans');
         expect(host.textContent).toContain('⏳ Awaiting release');
         expect(host.textContent).toContain('🔒 End-to-end encrypted');
         expect(host.textContent).toContain('PENDING');
         expect(host.textContent).toContain('5 Beans / hr');
         expect(host.textContent).toContain('! not delivered');
-        expect(byLabel('Release credits for Borrow a long ladder')).toBeNull(); // in the release bar, not the strip
+        expect(byLabel('Release Beans for Borrow a long ladder')).toBeNull(); // in the release bar, not the strip
         expect(byLabel('Leave a review for deal')).not.toBeNull();
         // Read by value: the selector engine trips on an emoji inside an attribute selector.
         expect(Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label'))).toContain('1 reaction: 👍');
@@ -372,14 +372,14 @@ describe('a one-off deal held in trust in a chat with no listing of its own (U2 
 
     it('its payer sees the Action Required bar with Release and Cancel; the standing row (listed first) offers neither', async () => {
         await renderIn('en');
-        expect(host.textContent).toContain('⚠️ Action Required: Release Credits');
+        expect(host.textContent).toContain('⚠️ Action needed: release the Beans');
         const texts = Array.from(host.querySelectorAll('button')).map((b) => b.textContent ?? '');
         expect(texts.filter((x) => /^Release\b/.test(x)), 'the bar\'s Release').toHaveLength(1);
         expect(texts.filter((x) => x === 'Cancel'), 'the bar\'s Cancel').toHaveLength(1);
         // The bar is the ladder's (5 Beans), never the standing deal's 50.
         expect(texts.find((x) => /^Release\b/.test(x))).toMatch(/5/);
         expect(texts.find((x) => /^Release\b/.test(x))).not.toMatch(/50/);
-        expect(byLabel('Release credits for Vehicle Storage')).toBeNull();
+        expect(byLabel('Release Beans for Vehicle Storage')).toBeNull();
         // The deal held for me (Duck eggs) waits on Kofi.
         expect(host.textContent).toContain('⏳ Awaiting release');
     });

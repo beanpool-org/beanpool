@@ -46,6 +46,7 @@ export * from './geo.js';
 export * from './member-area-words.js';
 export * from './community-card.js';
 export * from './lights-out-poster.js';
+export * from './beans-sign.js';
 export * from './address-reach.js';
 export * from './android-on-node-words.js';
 export * from './first-trade-words.js';

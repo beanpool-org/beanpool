@@ -66,7 +66,7 @@ import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, knockStillAnswerable, withVisitCancelled, type RememberedKnock } from '../../utils/knock';
 import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
-import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
+import { fabClearanceDp, fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
@@ -187,7 +187,7 @@ export default function HomeScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const lookingAround = useLookingAround();
-    const { width: winW, height: winH } = useWindowDimensions();
+    const { width: winW, height: winH, fontScale } = useWindowDimensions();
     const s = homeStyles(colors);
     const manage = useManageNode();
 
@@ -367,10 +367,18 @@ export default function HomeScreen() {
     const regions = useRef(new Map<string, CardActionsAt>());
     const [fabAside, setFabAside] = useState(false);
     const [bandVersion, setBandVersion] = useState(0);
+    // Where this screen ends in window coordinates (the tab bar sits under it): the button floats 32dp above THIS edge, and
+    // the actions are measured in window coordinates, so the band is measured from it too. The window's height until measured.
+    const sceneBottom = useRef<number | null>(null);
     const updateFab = useCallback(() => {
-        const aside = fabStepsAsideAny(regions.current.values(), scrollY.current, winH);
+        const aside = fabStepsAsideAny(regions.current.values(), scrollY.current, sceneBottom.current ?? winH);
         setFabAside(prev => (prev === aside ? prev : aside));
     }, [winH]);
+    const measureScene = useCallback(() => {
+        rootRef.current?.measureInWindow?.((_x, y, _w, h) => {
+            if (h > 0 && sceneBottom.current !== y + h) { sceneBottom.current = y + h; updateFab(); }
+        });
+    }, [updateFab]);
     useEffect(() => { updateFab(); }, [updateFab]);
     const band: FabBand = useMemo(() => ({
         report: (key, at) => {
@@ -1496,7 +1504,7 @@ export default function HomeScreen() {
 
     return (
         <FabBandContext.Provider value={band}>
-            <View ref={rootRef} onLayout={drag.onRootLayout} style={{ flex: 1, backgroundColor: colors.surface.page }}>
+            <View ref={rootRef} onLayout={() => { drag.onRootLayout(); measureScene(); }} style={{ flex: 1, backgroundColor: colors.surface.page }}>
                 <ScrollView
                     ref={scrollRef}
                     onScroll={onScroll}
@@ -1504,7 +1512,7 @@ export default function HomeScreen() {
                     // Off while a card is carried, so the list never takes the finger (the hold began with it still).
                     scrollEnabled={drag.scrollEnabled}
                     onContentSizeChange={(_w, h) => { drag.setContentHeight(h); setBandVersion(v => v + 1); }}
-                    contentContainerStyle={st.content}
+                    contentContainerStyle={[st.content, { paddingBottom: fabClearanceDp(fontScale) }]}
                     // Off with it: Android's swipe-to-refresh wraps the list, ignores the list's own scrollEnabled and the drag's
                     // block, and would take a card carried down from the top (#2895 review).
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} enabled={drag.scrollEnabled} />}

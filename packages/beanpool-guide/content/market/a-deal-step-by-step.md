@@ -35,12 +35,12 @@ In the web app, **Withdraw Request** is **Cancel Offer** and **Approve & Commit*
 
 ## While the beans are held
 
-A standing deal holds nothing, so none of this applies to it: it has no **Release Credits** and no button to call a hold off. See "Standing deals".
+A standing deal holds nothing, so none of this applies to it: it has no **Release Beans** and no button to call a hold off. See "Standing deals".
 
 Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, the button to call it off is **Cancel Hold**.
 
 - Do the job, or hand over the thing.
-- The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at. Before they confirm, the app says how many beans will go and to whom, such as **Transferring 100 B to Kofi**.
+- The person paying taps **Release Beans**, then **Release Beans** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at. Before they confirm, the app says how many beans will go and to whom, such as **Transferring 100 B to Kofi**.
 - The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons.
 
 Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder.
@@ -51,11 +51,11 @@ The price on the post cannot change while someone is asking for it or their bean
 
 The post itself shows your deal, so you never need to go looking for it. It says the same in the phone app and the web app.
 
-- **You took up someone's Offer:** **You took this up on 24 Oct · 45 Beans held in trust**, with **Release Credits** and the button to call it off.
+- **You took up someone's Offer:** **You took this up on 24 Oct · 45 Beans held in trust**, with **Release Beans** and the button to call it off.
 - **You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you**, or **no Beans held** on a free Need, and **Pending Release by** their name. Do the job; they release the beans.
 - **You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.
-- **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.
-- **A standing deal is running on it:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then when this month was paid and when the next goes, with **Stop…** and **Message**. Both of you see it, and neither has a **Release Credits**. See "Standing deals".
+- **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Beans** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.
+- **A standing deal is running on it:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then when this month was paid and when the next goes, with **Stop…** and **Message**. Both of you see it, and neither has a **Release Beans**. See "Standing deals".
 - **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
 - **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
 
@@ -65,7 +65,7 @@ An alert about a deal, and a deal on Home or in the top bar, opens the post at t
 
 If you are a keeper of an enterprise, its posts show its deals to you as if you had posted them, with **You act for** the enterprise's name **here.** above them.
 
-- Where the enterprise pays (a Need it posted), you can **Release Credits** for it. You cannot release your own pay: if you are the one doing the job, another keeper releases it.
+- Where the enterprise pays (a Need it posted), you can **Release Beans** for it. You cannot release your own pay: if you are the one doing the job, another keeper releases it.
 - You can **Approve** or **Deny** the requests on its posts, except your own. If you asked to borrow its thing or offered to help with its Need yourself, that request shows as yours, with the button to withdraw it.
 - You cannot call off a deal for the enterprise. The other person in the deal can, as anyone can on their own deal.
 - You do not see **Accept Offer** on its posts.

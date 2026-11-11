@@ -180,6 +180,7 @@ export const billLines = {
     notWaiting: () => t("This bill isn't waiting to be paid any more."),
     notYours: () => t('This bill is not yours.'),
     idReused: () => t('That bill id was already used for a different bill. Nothing was sent.'),
+    badId: () => t("A bill's id is 8 to 128 letters, digits, - or _. Nothing was sent."),
     billerGone: () => t("This bill can't be paid: its sender's account is closed or paused."),
 
     // The owners' notice when three members' reports hold a sender's bills (§4.4): who, how many, one action.

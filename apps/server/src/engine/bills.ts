@@ -31,7 +31,7 @@
 // HELD BY REPORTS. A payer may report a bill (POST /api/reports with targetBillId): it is declined, and the report goes to the
 // owners' queue naming the sender, what for and how much. Three different members' open reports on one sender's bills within
 // 7 days hold that sender's bills: no new one goes, and none of theirs is listed or paid, until an owner or admin handles the
-// reports in the queue (dismissed or actioned, each is no longer open). The owners and admins are told once, when it holds.
+// reports in the queue (dismissed or actioned, each is no longer open). The owners are told once, when it holds.
 //
 // WHERE. A main server with Beans on and the `bills` switch on (config/node-profile.ts): Beans off answers 403
 // profile_no_beans, bills off 404 feature_off. A standby refuses every write (routes/standby-ledger-gate.ts) and moves nothing.
@@ -108,7 +108,7 @@ const isEnterprise = (key: string): boolean => memberRow(key)?.is_treasury === 1
  * Whether `payer` may pay `biller`'s bill from their credit line (design §4.1): the two have finished a deal on a listing,
  * either way round, or have a standing deal running. Else a bill between them is paid with Beans held only.
  */
-export function dealtWith(payer: string, biller: string): boolean {
+function dealtWith(payer: string, biller: string): boolean {
     return !!db.prepare(`SELECT 1 FROM marketplace_transactions WHERE status = 'completed'
                            AND ((buyer_pubkey = @a AND seller_pubkey = @b) OR (buyer_pubkey = @b AND seller_pubkey = @a)) LIMIT 1`).get({ a: payer, b: biller })
         || !!db.prepare(`SELECT 1 FROM standing_deals WHERE phase != 'ended'
@@ -129,7 +129,7 @@ const hiddenFrom = (payer: string, bill: Pick<BillRow, 'biller_pubkey' | 'sent_b
  * filed reports on their bills that are still open in the owners' queue. Handling those reports (dismissed or actioned)
  * lifts it. Returns the reporters in the window that holds it, or 0.
  */
-export function billsHeldBy(biller: string): number {
+function billsHeldBy(biller: string): number {
     const rows = db.prepare(`SELECT ar.reporter_pubkey AS reporter, ar.created_at AS at FROM bills b
                                JOIN abuse_reports ar ON ar.id = b.report_id
                                JOIN members m ON m.public_key = ar.reporter_pubkey AND m.status = 'active'
@@ -164,8 +164,10 @@ function tell(hooks: Pick<BillHooks, 'broadcast' | 'dispatchPushNotification'>, 
             console.warn('[Bills] A live notice failed:', e?.message || e);
         }
         try {
-            const screen = typeof n.data.postId === 'string' ? { screen: 'post', postId: n.data.postId } : { screen: n.data.screen ?? 'bill', billId: n.data.bill };
-            hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, screen, 'escrow', kind, false, keptNoticeDetails([n]));
+            // Where a tap lands: the bill's own sheet (slice B2; an app before it opens the tab for the push's kind), or the
+            // owners' Settings for a hold.
+            const lands = n.data.screen === 'settings' ? { screen: 'settings' } : { screen: 'bill', billId: n.data.bill };
+            hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, lands, 'escrow', kind, false, keptNoticeDetails([n]));
         } catch (e: any) {
             console.warn('[Bills] A push failed:', e?.message || e);
         }
@@ -187,7 +189,7 @@ const titleOf = (postId: string | null): string | null =>
 const senderState = (s: BillState): BillState => (s === 'declined' ? 'sent' : s);
 
 /** A bill as one of its sides reads it (core BillView). The payer's read carries `known` and `creditOpen`. */
-export function billViewFor(b: BillRow, role: 'to-pay' | 'sent'): BillView {
+function billViewFor(b: BillRow, role: 'to-pay' | 'sent'): BillView {
     const payer = b.payer_pubkey ?? '';
     const base: BillView = {
         id: b.id, role, billerPublicKey: b.biller_pubkey, billerName: nameOf(b.biller_pubkey), payerPublicKey: payer, payerName: payer ? nameOf(payer) : '',
@@ -292,7 +294,7 @@ export function sendBill(hooks: BillHooks, signer: string, body: BillSend, now: 
     assertBillsHere();
     assertPlainTablesWritable();
     const id = body.id;
-    if (typeof id !== 'string' || !BILL_ID.test(id)) throw refuse(400, 'bill_id', billLines.idReused());
+    if (typeof id !== 'string' || !BILL_ID.test(id)) throw refuse(400, 'bill_id', billLines.badId());
     const ent = body.enterprise === undefined || body.enterprise === null || body.enterprise === '' ? null : String(body.enterprise);
     const biller = ent ?? signer;
     if (!activeHere(signer)) throw refuse(403, 'bill_sender', billLines.notAMember());
@@ -395,8 +397,9 @@ export function payBill(hooks: BillHooks, payer: string, billId: string, request
 
     const creditOpen = dealtWith(payer, bill.biller_pubkey);
     const read = hooks.getBalance(payer) as ReturnType<BillHooks['getBalance']> & { liveOffers?: number };
+    const until = new Date(Date.parse(bill.expires_at!)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const line = billMoneyLine(bill.amount_c, { balance_c: read.balance_c, usableFloor_c: read.usableFloor_c, floor_c: read.floor_c, liveOffers: read.liveOffers ?? 0 },
-        creditOpen, new Date(Date.parse(bill.expires_at!)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
+        creditOpen, until);
     if (!line.canPay) throw refuse(409, `bill_${line.case}`, line.line);
 
     const paidAt = iso(now);
@@ -406,14 +409,14 @@ export function payBill(hooks: BillHooks, payer: string, billId: string, request
         const moved = db.prepare(`UPDATE bills SET state = 'paid', answered_at = ? WHERE id = ? AND state = 'sent' AND payer_pubkey = ?`).run(paidAt, bill.id, payer);
         if (moved.changes !== 1) throw refuse(409, 'bill_not_waiting', billLines.notWaiting());
         const tx = hooks.transfer(payer, bill.biller_pubkey, bill.amount_c, billLines.memo(bill.what_for), 'escrow', false, { signer: payer, payload: `bill:${bill.id}` });
-        if (!tx) throw refuse(409, 'bill_cant_pay', line.line);
+        if (!tx) throw refuse(409, 'bill_cant_pay', billLines.nothingToPay(bill.amount_c, until));
         // The first-bill rule's second read, after the move: a first bill never leaves its payer below zero.
-        if (!creditOpen && hooks.getBalance(payer).balance_c < 0) throw refuse(409, 'bill_first_bill', billLines.firstBillHeldOnly(Math.max(0, read.balance_c), ''));
+        if (!creditOpen && hooks.getBalance(payer).balance_c < 0) throw refuse(409, 'bill_first_bill', billLines.firstBillHeldOnly(Math.max(0, read.balance_c), until));
         db.prepare('UPDATE bills SET ledger_tx_id = ? WHERE id = ?').run(tx.id, bill.id);
         answer = { bill: billViewFor(readBill(bill.id)!, 'to-pay'), transactionId: tx.id };
         if (request) recordAnswer(request, answer);
         // The sender hears it was paid: the keeper who sent it for an enterprise (an enterprise keeps no notices).
-        told = [keep(bill.sent_by, billLines.paidToSender(nameOf(payer), bill.what_for, bill.amount_c), { kind: 'bill_paid', bill: bill.id, screen: 'bill' })];
+        told = [keep(bill.sent_by, billLines.paidToSender(nameOf(payer), bill.what_for, bill.amount_c), { kind: 'bill_paid', bill: bill.id })];
     });
     tell(hooks, told, 'trade.update');
     return answer!;
@@ -430,14 +433,14 @@ export function declineBill(payer: string, billId: string, now: number = Date.no
 }
 
 /**
- * POST /api/bills/:id/withdraw: the sender (or a keeper of the enterprise that sent it) takes back a bill not paid. A
+ * POST /api/bills/:id/withdraw: the sender (or a keeper of the enterprise that sent it, while they keep it) takes back a bill not paid. A
  * declined one too, so withdrawing never tells them it was declined. The payer's row leaves, silently.
  */
 export function withdrawBill(hooks: Pick<BillHooks, 'canOperateTreasury'>, signer: string, billId: string, now: number = Date.now()): BillView {
     assertBillsHere();
     assertPlainTablesWritable();
     const bill = readBill(billId);
-    const mine = !!bill && (bill.biller_pubkey === signer || bill.sent_by === signer || (isEnterprise(bill.biller_pubkey) && hooks.canOperateTreasury(signer, bill.biller_pubkey)));
+    const mine = !!bill && (bill.biller_pubkey === signer || (isEnterprise(bill.biller_pubkey) && hooks.canOperateTreasury(signer, bill.biller_pubkey)));
     if (!bill || !mine) throw refuse(404, 'bill_gone', billLines.notYours());
     const moved = db.prepare(`UPDATE bills SET state = 'withdrawn', answered_at = ? WHERE id = ? AND state IN ('sent', 'declined')`).run(iso(now), bill.id);
     if (moved.changes !== 1) throw refuse(409, 'bill_not_waiting', billLines.notWaiting());
@@ -462,7 +465,7 @@ export function billReportReason(reason: string, bill: BillRow): string {
 /**
  * A report filed on a bill (routes/community.ts POST /api/reports with targetBillId), after the report is kept: the bill is
  * declined if it is still waiting, and names the report. When this makes three reporters within 7 days, the sender's bills
- * are held and every owner and admin is told once: who, how many, and where to look.
+ * are held and every owner is told once (design §4.4, "one owner alert"): who, how many, and where to look.
  */
 export function billReported(hooks: Pick<BillHooks, 'broadcast' | 'dispatchPushNotification'>, bill: BillRow, reportId: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
@@ -473,10 +476,10 @@ export function billReported(hooks: Pick<BillHooks, 'broadcast' | 'dispatchPushN
         db.prepare(`UPDATE bills SET state = 'declined', answered_at = ? WHERE id = ? AND state = 'sent'`).run(iso(now), bill.id);
         const after = billsHeldBy(bill.biller_pubkey);
         if (before === 0 && after > 0) {
-            const keepers = db.prepare(`SELECT nr.member_pubkey AS key FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
-                                         WHERE nr.role IN ('owner', 'admin') AND m.status = 'active'`).all() as { key: string }[];
+            const owners = db.prepare(`SELECT nr.member_pubkey AS key FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+                                        WHERE nr.role = 'owner' AND m.status = 'active'`).all() as { key: string }[];
             const body = billLines.heldForOwners(nameOf(bill.biller_pubkey), after);
-            told = keepers.map((k) => keep(k.key, body, { kind: 'bills_on_hold', member: bill.biller_pubkey, screen: 'settings' }));
+            told = owners.map((o) => keep(o.key, body, { kind: 'bills_on_hold', member: bill.biller_pubkey, screen: 'settings' }));
             console.log(`🧾 Member ${bill.biller_pubkey.slice(0, 12)}…'s bills are held: ${after} members reported them within ${BILL_RULES.reportWindowDays} days.`);
         }
     })();

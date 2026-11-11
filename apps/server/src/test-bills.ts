@@ -483,6 +483,8 @@ async function main(): Promise<void> {
     assert(mine.status === 200 && mine.body?.bill?.postId === uma.jam.id && mine.body.bill.postTitle === "Uma's jam" && notMine.status === 400 && notMine.body?.code === 'bill_about'
         && noStanding.status === 400 && noStanding.body?.code === 'bill_about',
         `about the sender's own listing only, or the standing deal between them (${mine.status}, ${notMine.status}, ${noStanding.status})`);
+    const badId = await post(rob, '/api/bills', { id: 'x', to: kim.pk, amount_c: hc(2), whatFor: 'Short id' });
+    assert(badId.status === 400 && badId.body?.code === 'bill_id' && /8 to 128 letters/.test(badId.body?.error ?? ''), `a bill's id is the app's own, in its shape (${show(badId)})`);
     const badWhat = await bill(rob, kim, 2, 'ab');
     const badAmount = await bill(rob, kim, 2001, 'Too much');
     const self = await bill(rob, rob, 2, 'Myself');

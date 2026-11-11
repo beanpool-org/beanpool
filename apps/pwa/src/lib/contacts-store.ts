@@ -286,7 +286,8 @@ async function pull(me: ContactsKeys): Promise<void> {
     const say = (next: Partial<ContactsSnapshot>) => { if (snapshot.key === key) publish(next); };
     if (answer.kind === 'failed') {
         const held = await readHeld(key);
-        if (held && held.seq !== held.kept) { say({ where: 'retry' }); scheduleSave(me, RETRY_MS); }
+        // A list this community keeps none of stays device-only: nothing is tried, so nothing says "will try again".
+        if (held && whereOf(held, address) !== 'device-only' && held.seq !== held.kept) { say({ where: 'retry' }); scheduleSave(me, RETRY_MS); }
         return;
     }
     if (answer.kind === 'refused') {
@@ -339,10 +340,12 @@ async function push(me: ContactsKeys, round = 0): Promise<ContactsWhere> {
     if (!held || (held.at === address && (held.kept === held.seq || held.refused))) return whereOf(held, address);
     const answer = await ask('PUT', held.copy);
     try {
-        if (answer.kind === 'ok') {
-            const seq = typeof answer.body.seq === 'number' ? answer.body.seq : held.seq;
+        // Saved only when the community names this copy's number (design §6.4: sign-out removes this browser's copy once
+        // the server has the same number). A 2xx naming none or another, such as a page from something in front of it,
+        // is tried again like a save that didn't arrive.
+        if (answer.kind === 'ok' && answer.body.seq === held.seq) {
             const savedAt = readContactsCopy(held.copy);
-            const marked = await markKept(key, address, { kept: seq, keptAt: savedAt.ok ? savedAt.copy.savedAt : null, refused: false });
+            const marked = await markKept(key, address, { kept: held.seq, keptAt: savedAt.ok ? savedAt.copy.savedAt : null, refused: false });
             // A change made while the save was on its way has its own wait.
             if (marked && marked.seq !== marked.kept) scheduleSave(me);
             return settle(key, marked, address);
